@@ -35,10 +35,6 @@ import pychell.rvs.model_components as pcmodelcomponents # the data objects
 import pychell.utils as pcutils # random helpful functions
 import pychell.rvs.rvcalc as pcrvcalc
 
-# Optimization
-import optimparameters.parameters as OptimParameters
-from neldermead.neldermead import NelderMead
-
 # Main function
 def fit_target(user_forward_model_settings, user_model_blueprints):
 

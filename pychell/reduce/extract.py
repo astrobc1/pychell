@@ -22,10 +22,11 @@ import matplotlib.pyplot as plt
 import pychell.utils as pcutils
 import pychell.maths as pcmath
 import pychell.reduce.calib as pccalib
-import pychell.nelder_mead as nelder_mead
 import pychell.reduce.order_map as pcomap
-import pychell.parameters as pcparams
 import pychell.reduce.data2d as pcdata
+
+import optimparameters.parameters as OptimParams
+from robustneldermead.neldermead import NelderMead
 
 # This function extracts all N orders and will be ran in parallel
 def extract_full_image(data, general_settings, calib_settings, extraction_settings):
@@ -106,7 +107,7 @@ def extract_full_image(data, general_settings, calib_settings, extraction_settin
 
     # Each entry has shape=(height, 2), the first col is the y pixels, the second col is the profile
     trace_profiles = np.empty(shape=(ny*M, n_orders), dtype=np.float64)
-    trace_profile_pars = np.empty(n_orders, dtype=pcparams.Parameters)
+    trace_profile_pars = np.empty(n_orders, dtype=OptimParams.Parameters)
     trace_profile_fits = np.empty(shape=(ny*M, n_orders), dtype=np.float64)
     
     # Estimate the SNR of the exposure
@@ -256,7 +257,7 @@ def extract_full_image(data, general_settings, calib_settings, extraction_settin
     
     # Save Trace profiles and models
     np.savez(data.out_file_trace_profiles, pars=trace_profile_pars, models=trace_profile_fits)
-    trace_profile_pars = np.empty(n_orders, dtype=pcparams.Parameters)
+    trace_profile_pars = np.empty(n_orders, dtype=OptimParams.Parameters)
     trace_profile_fits = np.empty(shape=(ny*M, n_orders), dtype=np.float64)
     
     print(' Extracted Spectrum ' + str(data.img_num+1) + ' of ' + str(data.n_tot_imgs) + ' in ' + str(round(stopwatch.time_since()/60, 3)) + ' min', flush=True)
@@ -485,14 +486,15 @@ def model_trace_profile(order_image, trace_profile, M=1):
     d = 1.0
     
     # Construct Parameter objects
-    init_pars = pcparams.Parameters()
-    init_pars.add_parameter(pcparams.Parameter(name='amp', value=amp, minv=0.9*amp, maxv=1.1*amp))
-    init_pars.add_parameter(pcparams.Parameter(name='mu', value=mu, minv=mu-2, maxv=mu+2))
-    init_pars.add_parameter(pcparams.Parameter(name='sigma', value=sig, minv=sig*0.5, maxv=sig*1.5))
-    init_pars.add_parameter(pcparams.Parameter(name='d', value=d, minv=0.6, maxv=1.4))
+    init_pars = OptimParams.Parameters()
+    init_pars.add_parameter(OptimParams.Parameter(name='amp', value=amp, minv=0.9*amp, maxv=1.1*amp))
+    init_pars.add_parameter(OptimParams.Parameter(name='mu', value=mu, minv=mu-2, maxv=mu+2))
+    init_pars.add_parameter(OptimParams.Parameter(name='sigma', value=sig, minv=sig*0.5, maxv=sig*1.5))
+    init_pars.add_parameter(OptimParams.Parameter(name='d', value=d, minv=0.6, maxv=1.4))
     
     # Run the Nelder-Mead solver
-    fit_result = nelder_mead.simps(init_pars, pcmath.gauss_modified_solver, args_to_pass=(yarr, trace_profile_maxnorm))
+    solver = NelderMead(pcmath.gauss_modified_solver, init_pars, args_to_pass=(yarr, trace_profile_maxnorm))
+    fit_result = solver.solve()
     best_pars = fit_result[0]
 
     # Re-construct the best fit trace profile
@@ -699,11 +701,12 @@ def refine_trace_position(order_image, ypositions, trace_profile, trace_pos_poly
         sig = (right_cut[0] - left_cut[-1]) / 3
         
         # Initiate the parameters
-        init_pars = pcparams.Parameters()
-        init_pars.add_parameter(pcparams.Parameter(name='amp', value=1.0, minv=0.8, maxv=1.2))
-        init_pars.add_parameter(pcparams.Parameter(name='mu', value=best_lag_val, minv=best_lag_val-2, maxv=best_lag_val+2))
-        init_pars.add_parameter(pcparams.Parameter(name='sigma', value=sig, minv=sig*0.5, maxv=sig*1.5))
-        fit_result = nelder_mead.simps(init_pars, pcmath.gauss_solver, args_to_pass=(lags, xcorr))
+        init_pars = OptimParams.Parameters()
+        init_pars.add_parameter(OptimParams.Parameter(name='amp', value=1.0, minv=0.8, maxv=1.2))
+        init_pars.add_parameter(OptimParams.Parameter(name='mu', value=best_lag_val, minv=best_lag_val-2, maxv=best_lag_val+2))
+        init_pars.add_parameter(OptimParams.Parameter(name='sigma', value=sig, minv=sig*0.5, maxv=sig*1.5))
+        solver = NelderMead(pcmath.gauss_solver, init_pars, args_to_pass=(lags, xcorr))
+        fit_result = solver.solve()
         best_pars = fit_result[0]
         ypos_deviations[x] = best_pars['mu'].value
        

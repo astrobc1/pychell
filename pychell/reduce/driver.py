@@ -134,14 +134,14 @@ def init_night(user_general_settings, user_extraction_settings, user_calib_setti
     extraction_settings.update(pcconfig.extraction_settings)
     
     # Update with the default instrument dictionaries
-    instrument_module = importlib.import_module('pychell.spectrographs.' + user_general_settings['instrument'].lower())
-    general_settings.update(instrument_module.general_settings)
-    calib_settings.update(instrument_module.calibration_settings)
-    extraction_settings.update(instrument_module.extraction_settings)
+    spec_module = importlib.import_module('pychell.spectrographs.' + user_general_settings['spectrograph'].lower())
+    general_settings.update(spec_module.general_settings)
+    calib_settings.update(spec_module.calibration_settings)
+    extraction_settings.update(spec_module.extraction_settings)
     
     # Header keys
     if header_keys is None:
-        header_keys = instrument_module.header_keys
+        header_keys = spec_module.header_keys
         
     # User settings
     general_settings.update(user_general_settings)
