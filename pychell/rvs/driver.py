@@ -51,7 +51,7 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
         
         # Construct the forward models object
         # This will construct the individual forward model objects (single spectrum)
-        forward_models = pcforwardmodels.ForwardModels(forward_model_settings, model_blueprints, order_num) # basically a fancy list
+        forward_models = pcforwardmodels.NightlyForwardModels(forward_model_settings, model_blueprints, order_num) # basically a fancy list
         
         # Get better estimations for some parameters (eg xcorr for star)
         forward_models.opt_init_params()
