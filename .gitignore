@@ -1,0 +1,6 @@
+.gitnore
+build/
+dist/
+*egg*
+.DS_Store
+__pycache__/

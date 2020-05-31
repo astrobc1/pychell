@@ -1,0 +1,149 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Overview &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Quickstart" href="quickstart.html" />
+    <link rel="prev" title="Installation" href="installation.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="overview">
+<span id="id1"></span><h1>Overview<a class="headerlink" href="#overview" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="reduction">
+<h2>Reduction<a class="headerlink" href="#reduction" title="Permalink to this headline">¶</a></h2>
+<p>As of now, reduction can be performed on well-behaved spectrographs with an assumed a single trace per echelle order.  Orders are traced with a density clustering algorithm (sklearn.cluster.DBSCAN). Flats are grouped together according to their “density” (metric ~ angular separation + time separation). Objects are mapped to a master flat according to the closest flat in space and time.</p>
+<div class="section" id="calibration">
+<h3>Calibration<a class="headerlink" href="#calibration" title="Permalink to this headline">¶</a></h3>
+<p>Flat, bias, and dark calibration is performed when provided. Wavelength calibartion via ThAr lamps or LFC’s are not currently provided.</p>
+</div>
+<div class="section" id="extraction">
+<h3>Extraction<a class="headerlink" href="#extraction" title="Permalink to this headline">¶</a></h3>
+<p>The trace profile (seeing profile) is estimated by rectifying the order and taking a median crunch in the spectral direction on a high resolution grid. The background sky, <em>sky(x)</em> is computed by considering regions of low flux within the trace profile. The profile is then interpolated back into 2d space according to the order locations, <em>y(x)</em>. An optimal extraction is iteratively performed on the non-rectified data. Depending on the nature of the user’s work, this may not be suitable and one should rely on using an instrument specific reduction package.</p>
+<p>Tested Support Status:</p>
+<ol class="arabic simple">
+<li><p>iSHELL (Kgas, K2, J2 modes, empirical and flat field order tracing)</p></li>
+<li><p>CHIRON (highres mode, R~136k, <em>under development</em>)</p></li>
+<li><p>NIRSPEC (K band, <em>under development</em>)</p></li>
+<li><p>Generic (single trace per order, minimal support)</p></li>
+</ol>
+</div>
+</div>
+<div class="section" id="radial-velocities">
+<h2>Radial Velocities<a class="headerlink" href="#radial-velocities" title="Permalink to this headline">¶</a></h2>
+<p>Computes radial velocities from reduced echelle spectra by forward modeling the individual orders. Only certain instruments are supported, however adding support for a new instrument is relatively straightforward (see below).</p>
+<p>Tested Support Status:</p>
+<ol class="arabic simple">
+<li><p>iSHELL (Kgas mode, methane gas cell)</p></li>
+<li><p>CHIRON (highres mode, R~136k, iodine gas cell)</p></li>
+<li><p>Minerva-Australis (ThAr Lamp calibrated, soon iodine gas cell)</p></li>
+<li><p>NIRSPEC (K band, <em>under development</em>)</p></li>
+</ol>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Overview</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#reduction">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#radial-velocities">Radial Velocities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="installation.html" title="previous chapter">Installation</a></li>
+      <li>Next: <a href="quickstart.html" title="next chapter">Quickstart</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/overview.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

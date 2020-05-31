@@ -1,0 +1,237 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>pychell API reference &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="pychell API reference" href="template_generation_api.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="pychell-api-reference">
+<h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-pychell.rvs.rvcalc">
+<span id="computing-rvs"></span><h2>Computing RVs<a class="headerlink" href="#module-pychell.rvs.rvcalc" title="Permalink to this headline">¶</a></h2>
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.cc_wrapper">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">cc_wrapper</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_model</span></em>, <em class="sig-param"><span class="n">n_spec_tot</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.cc_wrapper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Cross correlation wrapper for a single spectrum.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>forward_model</strong> (<em>ForwardModel</em>) – A single forward model object.</p></li>
+<li><p><strong>n_spec_tot</strong> (<em>int</em>) – The total number of spectra.</p></li>
+<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to use.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.compute_bisector_span">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">compute_bisector_span</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">cc_vels</span></em>, <em class="sig-param"><span class="n">ccf</span></em>, <em class="sig-param"><span class="n">n_bs</span><span class="o">=</span><span class="default_value">1000</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.compute_bisector_span" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the bisector span of a given cross-correlation (RMS brute force) function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cc_vels</strong> (<em>np.ndarray</em>) – The velocities used for cross-correlation.</p></li>
+<li><p><strong>ccf</strong> (<em>int</em>) – The corresponding 1-dimensional RMS curve.</p></li>
+<li><p><strong>n_bs</strong> (<em>int</em>) – The number of depths to use in calculating the BIS, defaults to 1000</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The line bisectors of the ccf.
+bisector_span (float): The bisecor span of the line bisector (commonly referred to as the BIS).</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>line_bisectors (np.ndarray)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.cross_correlate_all">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">cross_correlate_all</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.cross_correlate_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Cross correlation wrapper for all spectra.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects.</p></li>
+<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to use.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.cross_correlate_star">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">cross_correlate_star</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_model</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.cross_correlate_star" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>forward_model</strong> (<em>ForwardModel</em>) – A single forward model object.</p></li>
+<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to use.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The forward model object with cross-correlation results stored in place.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>forward_model (ForwardModel)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.generate_rvs">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">generate_rvs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.generate_rvs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed along with the line bisector and BIS.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects.</p></li>
+<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to generate RVs from.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.get_nightly_jds">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">get_nightly_jds</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">jds</span></em>, <em class="sig-param"><span class="n">sep</span><span class="o">=</span><span class="default_value">0.5</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.get_nightly_jds" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes nightly (average) JDs (or BJDs) for a time-series observation over several nights.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>jds</strong> (<em>np.ndarray</em>) – An array of sorted JDs (or BJDs).</p></li>
+<li><p><strong>sep</strong> (<em>float</em>) – The minimum separation in days between two different nights of data, defaults to 0.5.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.plot_rvs">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">plot_rvs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.plot_rvs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plots all RVs and cross-correlation analysis after forward modeling all spectra.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects.</p></li>
+<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to use.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="rvs_api.html">Radial Velocities</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="rvs_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="template_generation_api.html" title="previous chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/rvs_sub_api.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

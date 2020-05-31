@@ -1,0 +1,186 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Quickstart &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Extending" href="extending.html" />
+    <link rel="prev" title="Overview" href="overview.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="quickstart">
+<span id="id1"></span><h1>Quickstart<a class="headerlink" href="#quickstart" title="Permalink to this headline">¶</a></h1>
+<p>pychell may be run in a modular sort of way, where the user executes each sub-command to run the analyses, or from a python script. The follwoing tutorials execute pre-generated scripts from the command line. To see more on running the code from the command line, see the API.</p>
+<div class="section" id="reduction">
+<h2>Reduction<a class="headerlink" href="#reduction" title="Permalink to this headline">¶</a></h2>
+<p>Below is a quick-start guide which reduces a single spectrum of Vega using raw spectra from the iSHELL spectrograph in Kgas mode (~2.3 microns). Flat division is performed. Neither dark or bias subtraction are performed. Copy the example folder Vega_reduction to a new location of your choice. Open a terminal window in this new location. Run:</p>
+<p><code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">vega_ishell_reduction_example.py</span></code></p>
+<p>The code will print helpful messages as it processes the single image. An output directory will be created in an output folder <code class="docutils literal notranslate"><span class="pre">reduce/Vega</span></code>. Each sub folder contains the following:</p>
+<ol class="arabic simple">
+<li><p><strong>calib</strong> - Master calibration images. Darks are named according to exposure times. Flats are named according to the individual image numbers it was created from.</p></li>
+<li><p><strong>previews</strong> - Images of the full frame reduced spectra (all orders).</p></li>
+<li><p><strong>spectra</strong> - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons.</p></li>
+<li><p><strong>trace_profiles</strong> - Trace profiles (seeing profiles) for all full frame science images.</p></li>
+</ol>
+</div>
+<div class="section" id="radial-velocities">
+<h2>Radial Velocities<a class="headerlink" href="#radial-velocities" title="Permalink to this headline">¶</a></h2>
+<p>Below is a quick-start guide which fits 4 nights (8 spectra) of Barnard’s Star spectra using reduced spectra from the iSHELL spectrograph. Only orders 11, 13, and 15 are fit. The wavelength solution and LSF are constrained from the isotopic methane gas cell, which is provided in the default_templates folder.</p>
+<p>Copy the example folder GJ_699_rvs to a new location of your choice. Open a terminal window in this new location. Run:</p>
+<p><code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">gj699_ishell_rvs_example.py</span></code></p>
+<p>The code will immediately provide a summary of the run. Summaries of fits are printed after each fit. An output directory will also be created in an output folder <code class="docutils literal notranslate"><span class="pre">GJ_699_default_test_run</span></code>. This folder contains the global parameters dictionary (stored in an .npz file) used throughout the code and sub folders for each order. Each sub folder contains the following:</p>
+<ol class="arabic">
+<li><dl>
+<dt><strong>Fits</strong> - Contains the forward model plots for each iteration. The spectral numbers are in chronological order. Also contains .npz files with the following keys:</dt><dd><ul class="simple">
+<li><p><em>wave</em> : The wavelegnth solutions for this spectrum, np.ndarray, shape=(n_data_pix, n_template_fits)</p></li>
+<li><p><em>models</em> : The best fit constructed forward models for this spectrum, np.ndarray, shape=(n_data_pix, n_template_fits)</p></li>
+<li><p><em>residuals</em> : The residuals for this spectrum (data - model), np.ndarray, shape=(n_data_pix, n_template_fits)</p></li>
+<li><p><em>data</em> : The data for this observation, np.ndarray, shape=(n_data_pix, 3), col1 is flux, col2 is flux_unc, col3 is badpix</p></li>
+</ul>
+<p>Lastly, this folder contains pickled forward model objects that can be loaded in with full access to the forward models builds. The above and below arrays are also stored here as instance variables.</p>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>Opt</strong> - Contains the optimization results from the Nelder-Mead fitting stored in .npz files. This must be loaded with allow_pickle=True. Keys are:</dt><dd><ul class="simple">
+<li><p><em>best_fit_pars</em> : The best fit parameters, np.ndarray, shape=(n_template_fits,). Each entry is a Parameters object.</p></li>
+<li><p><em>opt</em> : np.ndarray, shape=(n_template_fits, 2). col1=final RMS returned by the solver. col2=total target function calls.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>RVs</strong> - Contains the RVs for this order. Fits for each iteration are in .png files. The RVs are stored in the per iteration .npz files with the following keys:</dt><dd><ul class="simple">
+<li><p><em>rvs</em> : The best fit RVs, np.ndarray, shape=(n_spec, n_template_fits)</p></li>
+<li><p><em>rvs_nightly</em> : The co-added (“nightly”) RVs, np.ndarray, shape=(n_nights, n_template_fits)</p></li>
+<li><p><em>rvs_unc_nightly</em> : The corresponding 1 sigma error bars for the nightly RVs, shape=(n_nights, n_template_fits)</p></li>
+<li><p><em>BJDS</em> : The bary-centric Julian dates which correspond to the single RVs.</p></li>
+<li><p><em>BJDS_nightly</em> : The nightly BJDS which correspond to the nightly RVs.</p></li>
+<li><p><em>n_obs_nights</em> : The number of observation observed on each night, np.ndarray, shape=(n_nights,)</p></li>
+<li><p><em>rvs_xcorr</em> : The cross-correlation RVs if do_xcorr=True, np.ndarray, shape=(n_spec, n_template_fits)</p></li>
+<li><p><em>rvs_xcorr_nightly</em> : The co-added (“nightly”) cross-correlation RVs if do_xcorr=True, np.ndarray, shape=(n_nights, n_template_fits)</p></li>
+<li><p><em>rvs_xcorr_unc_nightly</em> : The corresponding 1 sigma error bars for the nightly cross-correlation RVs, shape=(n_nights, n_template_fits)</p></li>
+<li><p><em>xcorr_vels</em> : The cross correlation velocity grid, shape=(n_vels, n_template_fits)</p></li>
+<li><p><em>xcorrs</em> : The corresponding cross correlations, shape=(n_vels, n_template_fits)</p></li>
+<li><p><em>line_bisectors</em> : The line bisectors as a function of ccf depth, shape=(n_bs, n_template_fits)</p></li>
+<li><p><em>bisector_spans</em> : The corresponding line bisectors (BIS), shape=(n_template_fits,)</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="simple">
+<dt><strong>Stellar_Templates</strong> - Contains the stellar template over iterations. Contains a single .npz file with key:</dt><dd><ul class="simple">
+<li><p><em>stellar_templates</em> : The stellar template used in each iteration, np.ndarray, shape=(n_model_pix, n_template_fits+1). col1 is wavelength, remaining cols are flux.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+</ol>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Quickstart</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#reduction">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#radial-velocities">Radial Velocities</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="overview.html" title="previous chapter">Overview</a></li>
+      <li>Next: <a href="extending.html" title="next chapter">Extending</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/quickstart.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

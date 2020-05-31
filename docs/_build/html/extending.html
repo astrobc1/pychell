@@ -1,0 +1,242 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Extending &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="api.html" />
+    <link rel="prev" title="Quickstart" href="quickstart.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="extending">
+<h1>Extending<a class="headerlink" href="#extending" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="defining-new-instruments">
+<h2>Defining New Instruments<a class="headerlink" href="#defining-new-instruments" title="Permalink to this headline">¶</a></h2>
+<p>It is recommended a user define a new instrument if there is no current support. <strong>First</strong>, create a new file, <em>insname.py</em>, within the <em>spectrographs</em> folder. This file must contain several dictionaries. Some of these dictionaries overwrite settings in <em>config.py</em>. Every option found here may be overwritten at user run time in their config file, with similar dictionaries.</p>
+<p>First we import some modules and define the default templates path which will be helpful for later.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Basic imports</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pychell.rvs</span>
+</pre></div>
+</div>
+<p><strong>general_settings</strong> stores instrument defaults which will be used in one or both of the RVs and reduction code. Required and optional keys are listed. If one only wishes to implement one of reduction or RVs, then certain settings may be anything, however the recommended is <code class="docutils literal notranslate"><span class="pre">NotImplemented</span></code>.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">general_settings</span> <span class="o">=</span> <span class="p">{</span>
+
+    <span class="c1">## REQUIRED</span>
+
+    <span class="c1"># The spectrograph name. Can be anything.</span>
+    <span class="s1">&#39;spectrograph&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># The name of the observatory.</span>
+    <span class="c1"># Must be a recognized astropy EarthLocation if not computing own barycenter info.</span>
+    <span class="s1">&#39;observatory&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1">## OPTIONAL, but highly recommended for readability.</span>
+
+    <span class="c1"># The tags to recognize science, bias, dark, and flat field images</span>
+    <span class="s1">&#39;sci_tag&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;bias_tag&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;darks_tag&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;flats_tag&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span>
+
+    <span class="c1"># The name of the filename parser function (see above).</span>
+    <span class="c1"># This function must be defined in</span>
+    <span class="s1">&#39;filename_parser&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span> <span class="ow">or</span> <span class="o">&lt;</span><span class="n">function</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># Gain of primary detector</span>
+    <span class="c1"># Reduction</span>
+    <span class="s1">&#39;gain&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># Dark current of primary detector</span>
+    <span class="c1"># Only required if performing dark subtraction, default=1.0</span>
+    <span class="s1">&#39;dark_current&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># Read noise of the primary detector</span>
+    <span class="c1"># Reduction, default=1</span>
+    <span class="s1">&#39;read_noise&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># The orientation of the spectral axis for 2d images. &#39;x&#39; for aligned with detector rows, &#39;y&#39; for columns.</span>
+    <span class="c1"># Reduction, default=&#39;x&#39;</span>
+    <span class="s1">&#39;orientation&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># increasing =&gt; left to right, decreasing =&gt; right to left</span>
+    <span class="c1"># Reduction and RVs, default=&#39;increasing&#39;</span>
+    <span class="s1">&#39;wave_direction&#39;</span><span class="p">:</span> <span class="p">,</span><span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># The time offset used in the headers</span>
+    <span class="c1"># Reduction, default=0</span>
+    <span class="s1">&#39;time_offset&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">float</span><span class="o">&gt;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>header_keys</strong> are only used in reduction as of now, since the data load method is truly instrument specific and must be implemented for every instrument. The keys of this dictionary are used throughout the code. The items they point to (lists), contain the actual header key found in the instrument header, item[0], and a default value if that key is not found, item[1]. A default header_keys instrument is provided in config.py and copied below, however it is highly recommended the user implement their own.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">header_keys</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;target&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;TCS_OBJ&#39;</span><span class="p">,</span> <span class="s1">&#39;NA&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;RA&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;TCS_RA&#39;</span><span class="p">,</span> <span class="s1">&#39;00:00:00&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;DEC&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;TCS_DEC&#39;</span><span class="p">,</span> <span class="s1">&#39;00:00:00&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;slit&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;SLIT&#39;</span><span class="p">,</span> <span class="s1">&#39;NA&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;wavelength_range&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;WAVELENGTH&#39;</span><span class="p">,</span> <span class="s1">&#39;NA&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;gas_cell&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;GASCELL&#39;</span><span class="p">,</span> <span class="s1">&#39;NA&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;exp_time&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;ITIME&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="s1">&#39;time_of_obs&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;TIME&#39;</span><span class="p">,</span> <span class="mi">2457000</span><span class="p">],</span>
+    <span class="s1">&#39;NDR&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;NDR&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+    <span class="s1">&#39;BZERO&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;BZERO&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+    <span class="s1">&#39;BSCALE&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;BSCALE&#39;</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>calibration_settings</strong> contains the default calibration settings for this instrument. As of now, only the usual bias, dark, flat corrections are implemented. The default is False for all settings.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">calibration_settings</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;dark_subtraction&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">bool</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;flat_division&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">bool</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;bias_subtraction&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">bool</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;wavelength_calibration&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">bool</span><span class="o">&gt;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>extraction_settings</strong> contains the settings used in the actual optimal extraction process.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">extraction_settings</span> <span class="o">=</span> <span class="p">{</span>
+
+    <span class="c1"># Order map algorithm (options: &#39;from_flats, &#39;empirical&#39;), default=&#39;empirical&#39;</span>
+    <span class="s1">&#39;order_map&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># Pixels to mask on the top, bottom, left, and right edges, default=20 for all.</span>
+    <span class="s1">&#39;mask_left_edge&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;mask_right_edge&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;mask_top_edge&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;mask_bottom_edge&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># The height of an order is defined as where the flat is located.</span>
+    <span class="c1"># This masks additional pixels on each side of the initial trace profile before moving forward.</span>
+    <span class="c1"># The profile is further masked after the sky background is estimated and data extracted.</span>
+    <span class="c1"># Default=3</span>
+    <span class="s1">&#39;mask_trace_edges&#39;</span><span class="p">:</span>  <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># The degree of the polynomial to fit the individual order locations, default=2</span>
+    <span class="s1">&#39;trace_pos_polyorder&#39;</span> <span class="p">:</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># Whether or not to perform a sky subtraction, default=True</span>
+    <span class="c1"># The number of rows used to estimate the sky background (lowest n_sky_rows in the trace profile are used), default=8</span>
+    <span class="s1">&#39;sky_subtraction&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">bool</span><span class="o">&gt;</span><span class="p">,</span>
+    <span class="s1">&#39;n_sky_rows&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span><span class="p">,</span>
+
+    <span class="c1"># The trace profile is constructed using oversampled data via interpolation with cubic splines.</span>
+    <span class="c1"># Use 1 to not oversample.</span>
+    <span class="c1"># This is the oversample factor, default=16</span>
+    <span class="s1">&#39;oversample&#39;</span><span class="p">:</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+<p><strong>forward_model_settings</strong> contains basic information for forward modeling the spectra to generate RVs. Nothing is required here.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span>
+</pre></div>
+</div>
+<p><strong>model_blueprints</strong> <em>coming soon…</em></p>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Extending pychell</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#defining-new-instruments">Defining New Instruments</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="quickstart.html" title="previous chapter">Quickstart</a></li>
+      <li>Next: <a href="api.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/extending.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

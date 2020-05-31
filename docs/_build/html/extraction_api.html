@@ -1,0 +1,305 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>pychell API reference &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="rvs_api.html" />
+    <link rel="prev" title="pychell API reference" href="calib_api.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="pychell-api-reference">
+<h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-pychell.reduce.extract">
+<span id="spectral-extraction"></span><h2>Spectral Extraction<a class="headerlink" href="#module-pychell.reduce.extract" title="Permalink to this headline">¶</a></h2>
+<dl class="py function">
+<dt id="pychell.reduce.extract.boxcar_extraction">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">boxcar_extraction</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">order_image</span></em>, <em class="sig-param"><span class="n">profile_2d</span></em>, <em class="sig-param"><span class="n">sky</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">badpix_mask</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">gain</span><span class="o">=</span><span class="default_value">1.0</span></em>, <em class="sig-param"><span class="n">units</span><span class="o">=</span><span class="default_value">'PE'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.boxcar_extraction" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a boxcar extraction on the nonrectified data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>order_image</strong> (<em>np.ndarray</em>) – The data image.</p></li>
+<li><p><strong>profile_2d</strong> (<em>np.ndarray</em>) – The curved 2-dimensional profile, used to correct for bad pixels in the weighted sum.</p></li>
+<li><p><strong>sky</strong> (<em>np.ndarray</em>) – The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).</p></li>
+<li><p><strong>badpix_mask</strong> – The bad pixel image mask, defaults to None (all finite pixels are considered).</p></li>
+<li><p><strong>gain</strong> (<em>float</em>) – The gain of the detector.</p></li>
+<li><p><strong>units</strong> (<em>str</em>) – The units to perform the extraction in. ‘PE’ for photoelectron, ‘ADU’ for analog to digital. Defaults to ‘PE’</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The optimally extracted 1-dimensional spectrum.
+spec_unc (np.ndarray): The corresponding uncertainty.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>spec (np.ndarray)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.extract.create_2d_trace_profile">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">create_2d_trace_profile</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">order_image</span></em>, <em class="sig-param"><span class="n">trace_profile</span></em>, <em class="sig-param"><span class="n">ypositions</span></em>, <em class="sig-param"><span class="n">M1</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">M2</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.create_2d_trace_profile" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a curved 2-dimensional trace profile given an input order image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>order_image</strong> (<em>np.ndarray</em>) – A data image.</p></li>
+<li><p><strong>trace_profile</strong> (<em>np.ndarray</em>) – The 1-dimensional trace profile.</p></li>
+<li><p><strong>ypositions</strong> (<em>np.ndarray</em>) – The locations of the trace on the detector, y(x).</p></li>
+<li><p><strong>M1</strong> (<em>int</em>) – The initial oversample factor, defaults to 1.</p></li>
+<li><p><strong>M2</strong> (<em>int</em>) – The desired oversample factor, defaults to 1.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.extract.estimate_sky">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">estimate_sky</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">straight_order_image</span></em>, <em class="sig-param"><span class="n">trace_profile</span></em>, <em class="sig-param"><span class="n">n_sky_rows</span><span class="o">=</span><span class="default_value">8</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.estimate_sky" title="Permalink to this definition">¶</a></dt>
+<dd><p>Estimates the sky background, sky(x), from a rectifed image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>straight_order_image</strong> (<em>np.ndarray</em>) – The rectified data image.</p></li>
+<li><p><strong>trace_profile</strong> (<em>np.ndarray</em>) – The 1-dimensional trace profile.</p></li>
+<li><p><strong>n_sky_rows</strong> (<em>int</em>) – The number of rows to consider in estimating the sky background, sky(x).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.extract.extract_full_image">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">extract_full_image</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">general_settings</span></em>, <em class="sig-param"><span class="n">calib_settings</span></em>, <em class="sig-param"><span class="n">extraction_settings</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.extract_full_image" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs calibration, traces orders if not already done so from flats, then optimally extracts the echelle orders. Results are written to files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>general_settings</strong> (<em>dict</em>) – The general settings dictionary.</p></li>
+<li><p><strong>calib_settings</strong> (<em>dict</em>) – The calibration settings dictionary.</p></li>
+<li><p><strong>extraction_settings</strong> (<em>dict</em>) – The extraction settings dictionary.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.extract.flag_bad_pixels">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">flag_bad_pixels</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">order_image</span></em>, <em class="sig-param"><span class="n">current_spectrum</span></em>, <em class="sig-param"><span class="n">profile_2d</span></em>, <em class="sig-param"><span class="n">badpix_mask</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">sky</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">gain</span><span class="o">=</span><span class="default_value">1.0</span></em>, <em class="sig-param"><span class="n">bad_thresh</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.flag_bad_pixels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Flags bad pixels in the data by convolving the flux back into 2d space with the curved trace profile and comparing to the data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>order_image</strong> (<em>np.ndarray</em>) – The data image.</p></li>
+<li><p><strong>current_spectrum</strong> (<em>np.ndarray</em>) – The current extracted 1-dimensional spectrum.</p></li>
+<li><p><strong>profile_2d</strong> (<em>np.ndarray</em>) – The curved 2-dimensional profile, used to correct for bad pixels in the weighted sum.</p></li>
+<li><p><strong>badpix_mask</strong> – The current bad pixel image mask, defaults to None (all finite pixels are considered).</p></li>
+<li><p><strong>sky</strong> (<em>np.ndarray</em>) – The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).</p></li>
+<li><p><strong>gain</strong> (<em>float</em>) – The gain of the detector.</p></li>
+<li><p><strong>bad_thresh</strong> (<em>float</em>) – The threshhold for bad pixels. Deviations larger than this in the data are flagged.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.extract.model_trace_profile">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">model_trace_profile</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">order_image</span></em>, <em class="sig-param"><span class="n">trace_profile</span></em>, <em class="sig-param"><span class="n">M</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.model_trace_profile" title="Permalink to this definition">¶</a></dt>
+<dd><p>Models the trace profile with a modified Gaussian (exponent is free to vary).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>order_image</strong> (<em>np.ndarray</em>) – The data image.</p></li>
+<li><p><strong>trace_profile</strong> (<em>np.ndarray</em>) – The 1-dimensional trace profile.</p></li>
+<li><p><strong>M</strong> (<em>int</em>) – The oversample factor, defaults to 1.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.extract.optimal_extraction">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">optimal_extraction</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data_image</span></em>, <em class="sig-param"><span class="n">profile_2d</span></em>, <em class="sig-param"><span class="n">badpix_mask</span></em>, <em class="sig-param"><span class="n">exp_time</span></em>, <em class="sig-param"><span class="n">sky</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">n_sky_rows</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">gain</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">read_noise</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">dark_current</span><span class="o">=</span><span class="default_value">0</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.optimal_extraction" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs optimal extraction on the nonrectified data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data_image</strong> (<em>np.ndarray</em>) – The data image.</p></li>
+<li><p><strong>profile_2d</strong> (<em>np.ndarray</em>) – The curved 2-dimensional profile, used to correct for bad pixels in the weighted sum.</p></li>
+<li><p><strong>badpix_mask</strong> (<em>np.ndarray</em>) – The bad pixel image mask, defaults to None (all finite pixels are considered).</p></li>
+<li><p><strong>exp_time</strong> (<em>float</em>) – The exposure time.</p></li>
+<li><p><strong>sky</strong> (<em>np.ndarray</em>) – The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).</p></li>
+<li><p><strong>n_sky_rows</strong> (<em>int</em>) – The number of rows the sky was estimated from.</p></li>
+<li><p><strong>gain</strong> (<em>float</em>) – The gain of the detector, defaults to 1.</p></li>
+<li><p><strong>read_noise</strong> (<em>float</em>) – The read noise of the detector, defaults to 0.</p></li>
+<li><p><strong>dark_current</strong> (<em>float</em>) – The dark current of the detector, defaults to 0.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The optimally extracted 1-dimensional spectrum.
+spec_unc (np.ndarray): The corresponding uncertainty.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>spec (np.ndarray)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.extract.rectify_trace">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">rectify_trace</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">order_image</span></em>, <em class="sig-param"><span class="n">ypositions</span></em>, <em class="sig-param"><span class="n">M</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.rectify_trace" title="Permalink to this definition">¶</a></dt>
+<dd><p>Rectifies (straightens) the trace.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>order_image</strong> (<em>np.ndarray</em>) – The data image.</p></li>
+<li><p><strong>ypositions</strong> (<em>np.ndarray</em>) – The locations of the trace on the detector, y(x).</p></li>
+<li><p><strong>M</strong> (<em>int</em>) – The desired oversample factor, defaults to 1.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.extract.refine_trace_position">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">refine_trace_position</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">order_image</span></em>, <em class="sig-param"><span class="n">ypositions</span></em>, <em class="sig-param"><span class="n">trace_profile</span></em>, <em class="sig-param"><span class="n">trace_pos_polyorder</span><span class="o">=</span><span class="default_value">2</span></em>, <em class="sig-param"><span class="n">M</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.refine_trace_position" title="Permalink to this definition">¶</a></dt>
+<dd><p>Refines the location of the trace on the detector.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>order_image</strong> (<em>np.ndarray</em>) – The data image.</p></li>
+<li><p><strong>ypositions</strong> (<em>np.ndarray</em>) – The current locations of the trace on the detector.</p></li>
+<li><p><strong>trace_profile</strong> (<em>np.ndarray</em>) – The 1-dimensional trace profile.</p></li>
+<li><p><strong>M</strong> (<em>int</em>) – The oversample factor, defaults to 1.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.extract.upsample_data">
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">upsample_data</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">order_image</span></em>, <em class="sig-param"><span class="n">M</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.upsample_data" title="Permalink to this definition">¶</a></dt>
+<dd><p>Upsamples the data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>order_image</strong> (<em>np.ndarray</em>) – The data image.</p></li>
+<li><p><strong>M</strong> (<em>int</em>) – The desired oversample factor.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rvs_api.html">Radial Velocities</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="reduce_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="calib_api.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="rvs_api.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/extraction_api.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

@@ -1,0 +1,880 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>pychell API reference &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="template_generation_api.html" />
+    <link rel="prev" title="pychell API reference" href="data1d_api.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="pychell-api-reference">
+<h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-pychell.rvs.forward_models">
+<span id="forward-models"></span><h2>Forward Models<a class="headerlink" href="#module-pychell.rvs.forward_models" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="pychell.rvs.forward_models.ForwardModels">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.forward_models.</code><code class="sig-name descname">ForwardModels</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_model_settings</span></em>, <em class="sig-param"><span class="n">model_blueprints</span></em>, <em class="sig-param"><span class="n">order_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></p>
+<dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.sort">
+<code class="sig-name descname">sort</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.sort" title="Permalink to this definition">¶</a></dt>
+<dd><p>Stable sort <em>IN PLACE</em>.</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+<div class="section" id="module-pychell.rvs.model_components">
+<span id="model-components"></span><h2>Model Components<a class="headerlink" href="#module-pychell.rvs.model_components" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="pychell.rvs.model_components.BasicFringingModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">BasicFringingModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.BasicFringingModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.EmpiricalMult" title="pychell.rvs.model_components.EmpiricalMult"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.EmpiricalMult</span></code></a></p>
+<p>A basic Fabry-Perot cavity model.</p>
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.EmpiricalMult">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">EmpiricalMult</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.EmpiricalMult" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.MultModelComponent" title="pychell.rvs.model_components.MultModelComponent"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.MultModelComponent</span></code></a></p>
+<p>Base class for an empirically derived multiplicative (or log-additive) spectral component (i.e., based purely on parameters, no templates involved).</p>
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.FullBlazeModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">FullBlazeModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.FullBlazeModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.EmpiricalMult" title="pychell.rvs.model_components.EmpiricalMult"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.EmpiricalMult</span></code></a></p>
+<p>A full blaze transmission model. A sinc^(d) and an additive cubic spline correction are used.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.FullBlazeModel.n_splines">
+<code class="sig-name descname">n_splines</code><a class="headerlink" href="#pychell.rvs.model_components.FullBlazeModel.n_splines" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of wavelength splines.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.FullBlazeModel.n_delay_splines">
+<code class="sig-name descname">n_delay_splines</code><a class="headerlink" href="#pychell.rvs.model_components.FullBlazeModel.n_delay_splines" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of iterations to delay the splines.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.FullBlazeModel.splines_enabled">
+<code class="sig-name descname">splines_enabled</code><a class="headerlink" href="#pychell.rvs.model_components.FullBlazeModel.splines_enabled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether or not the splines are enabled.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.FullBlazeModel.blaze_wave_estimate">
+<code class="sig-name descname">blaze_wave_estimate</code><a class="headerlink" href="#pychell.rvs.model_components.FullBlazeModel.blaze_wave_estimate" title="Permalink to this definition">¶</a></dt>
+<dd><p>The estimate of the blaze wavelegnth. If not provided, defaults to the average of the wavelength grid provided in the build method.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.FullBlazeModel.spline_set_points">
+<code class="sig-name descname">spline_set_points</code><a class="headerlink" href="#pychell.rvs.model_components.FullBlazeModel.spline_set_points" title="Permalink to this definition">¶</a></dt>
+<dd><p>The location of the spline knots.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.GasCellModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">GasCellModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.GasCellModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.TemplateMult" title="pychell.rvs.model_components.TemplateMult"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.TemplateMult</span></code></a></p>
+<p>A gas cell model which is consistent across orders.</p>
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.GasCellModelOrderDependent">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">GasCellModelOrderDependent</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.GasCellModelOrderDependent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.TemplateMult" title="pychell.rvs.model_components.TemplateMult"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.TemplateMult</span></code></a></p>
+<p>A gas cell model which is not consistent across orders.</p>
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.LSFHermiteModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">LSFHermiteModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">dl</span></em>, <em class="sig-param"><span class="n">nx_model</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.LSFHermiteModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.LSFModel" title="pychell.rvs.model_components.LSFModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.LSFModel</span></code></a></p>
+<p>A Hermite Gaussin LSF model. The model is a sum of Gaussians of constant width but coefficients to enforce orthonormality.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.LSFHermiteModel.hermdeg">
+<code class="sig-name descname">hermdeg</code><a class="headerlink" href="#pychell.rvs.model_components.LSFHermiteModel.hermdeg" title="Permalink to this definition">¶</a></dt>
+<dd><p>The degree of the hermite model</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.LSFModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">LSFModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">dl</span></em>, <em class="sig-param"><span class="n">nx_model</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.LSFModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.SpectralComponent" title="pychell.rvs.model_components.SpectralComponent"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.SpectralComponent</span></code></a></p>
+<p>A base class for an LSF (line spread function) model.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.LSFModel.compress">
+<code class="sig-name descname">compress</code><a class="headerlink" href="#pychell.rvs.model_components.LSFModel.compress" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of lsf points is equal to the number of model pix / compress.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.LSFModel.dl">
+<code class="sig-name descname">dl</code><a class="headerlink" href="#pychell.rvs.model_components.LSFModel.dl" title="Permalink to this definition">¶</a></dt>
+<dd><p>The step size of the high resolution fidicual wavelength grid the model is convolved on. Must be evenly spaced.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.LSFModel.nx_model">
+<code class="sig-name descname">nx_model</code><a class="headerlink" href="#pychell.rvs.model_components.LSFModel.nx_model" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of model pixels in the high resolution fidicual wavelength grid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.LSFModel.nx">
+<code class="sig-name descname">nx</code><a class="headerlink" href="#pychell.rvs.model_components.LSFModel.nx" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of points in the lsf grid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.LSFModel.x">
+<code class="sig-name descname">x</code><a class="headerlink" href="#pychell.rvs.model_components.LSFModel.x" title="Permalink to this definition">¶</a></dt>
+<dd><p>The lsf grid.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.LSFModelKnown">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">LSFModelKnown</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">dl</span></em>, <em class="sig-param"><span class="n">nx_model</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.LSFModelKnown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.LSFModel" title="pychell.rvs.model_components.LSFModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.LSFModel</span></code></a></p>
+<p>A container for a known LSF. In reality this can and probably should not be used and avoided.</p>
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.MultModelComponent">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">MultModelComponent</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.MultModelComponent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.SpectralComponent" title="pychell.rvs.model_components.SpectralComponent"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.SpectralComponent</span></code></a></p>
+<p>Base class for a multiplicative (or log-additive) spectral component.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.MultModelComponent.wave_bounds">
+<code class="sig-name descname">wave_bounds</code><a class="headerlink" href="#pychell.rvs.model_components.MultModelComponent.wave_bounds" title="Permalink to this definition">¶</a></dt>
+<dd><p>The approximate left and right wavelength endpoints of the considered data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.MultModelComponent.flux_logspace">
+<code class="sig-name descname">flux_logspace</code><a class="headerlink" href="#pychell.rvs.model_components.MultModelComponent.flux_logspace" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether or not this model is generated in logspace. It is recommended the log is accounted for in the corresponding build_full method, not here (for now).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.MultModelComponent.base_par_names">
+<code class="sig-name descname">base_par_names</code><a class="headerlink" href="#pychell.rvs.model_components.MultModelComponent.base_par_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>The base parameter names (constant) for this model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.MultModelComponent.par_names">
+<code class="sig-name descname">par_names</code><a class="headerlink" href="#pychell.rvs.model_components.MultModelComponent.par_names" title="Permalink to this definition">¶</a></dt>
+<dd><p>The full parameter names for this specific run.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.ResidualBlazeModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">ResidualBlazeModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.ResidualBlazeModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.EmpiricalMult" title="pychell.rvs.model_components.EmpiricalMult"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.EmpiricalMult</span></code></a></p>
+<p>Residual blaze transmission model, ideally used after a flat field correction. A quadratic and an additive cubic spline correction are used.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.ResidualBlazeModel.n_splines">
+<code class="sig-name descname">n_splines</code><a class="headerlink" href="#pychell.rvs.model_components.ResidualBlazeModel.n_splines" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of wavelength splines.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.ResidualBlazeModel.n_delay_splines">
+<code class="sig-name descname">n_delay_splines</code><a class="headerlink" href="#pychell.rvs.model_components.ResidualBlazeModel.n_delay_splines" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of iterations to delay the splines.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.ResidualBlazeModel.splines_enabled">
+<code class="sig-name descname">splines_enabled</code><a class="headerlink" href="#pychell.rvs.model_components.ResidualBlazeModel.splines_enabled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether or not the splines are enabled.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.ResidualBlazeModel.blaze_wave_estimate">
+<code class="sig-name descname">blaze_wave_estimate</code><a class="headerlink" href="#pychell.rvs.model_components.ResidualBlazeModel.blaze_wave_estimate" title="Permalink to this definition">¶</a></dt>
+<dd><p>The estimate of the blaze wavelegnth. If not provided, defaults to the average of the wavelength grid provided in the build method.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.ResidualBlazeModel.spline_set_points">
+<code class="sig-name descname">spline_set_points</code><a class="headerlink" href="#pychell.rvs.model_components.ResidualBlazeModel.spline_set_points" title="Permalink to this definition">¶</a></dt>
+<dd><p>The location of the spline knots.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.SpectralComponent">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">SpectralComponent</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.SpectralComponent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>Base class for a general spectral component model.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.SpectralComponent.blueprint">
+<code class="sig-name descname">blueprint</code><a class="headerlink" href="#pychell.rvs.model_components.SpectralComponent.blueprint" title="Permalink to this definition">¶</a></dt>
+<dd><p>The blueprints to construct this component from.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.SpectralComponent.order_num">
+<code class="sig-name descname">order_num</code><a class="headerlink" href="#pychell.rvs.model_components.SpectralComponent.order_num" title="Permalink to this definition">¶</a></dt>
+<dd><p>The image order number.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.SpectralComponent.enabled">
+<code class="sig-name descname">enabled</code><a class="headerlink" href="#pychell.rvs.model_components.SpectralComponent.enabled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether or not this model is enabled.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.SpectralComponent.name">
+<code class="sig-name descname">name</code><a class="headerlink" href="#pychell.rvs.model_components.SpectralComponent.name" title="Permalink to this definition">¶</a></dt>
+<dd><p>The name of this model, may be anything.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.StarModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">StarModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.StarModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.TemplateMult" title="pychell.rvs.model_components.TemplateMult"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.TemplateMult</span></code></a></p>
+<p>A star model which may or may not have started from a synthet template.</p>
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.StarModelOrderDependent">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">StarModelOrderDependent</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.StarModelOrderDependent" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.SpectralComponent" title="pychell.rvs.model_components.SpectralComponent"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.SpectralComponent</span></code></a></p>
+<p>A star model which is order dependent. For now this is only used for Minerva-Australis.</p>
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.TelluricModelTAPAS">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">TelluricModelTAPAS</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.TelluricModelTAPAS" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.TemplateMult" title="pychell.rvs.model_components.TemplateMult"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.TemplateMult</span></code></a></p>
+<p>A telluric model based on Templates obtained from TAPAS. These templates should be pre-fetched from TAPAS and specific to the observatory. Each species has a unique depth, but the model is locked to a common Doppler shift.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.TelluricModelTAPAS.species">
+<code class="sig-name descname">species</code><a class="headerlink" href="#pychell.rvs.model_components.TelluricModelTAPAS.species" title="Permalink to this definition">¶</a></dt>
+<dd><p>The names (strings) of the telluric species.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.TelluricModelTAPAS.n_species">
+<code class="sig-name descname">n_species</code><a class="headerlink" href="#pychell.rvs.model_components.TelluricModelTAPAS.n_species" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of telluric species.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.TelluricModelTAPAS.species_enabled">
+<code class="sig-name descname">species_enabled</code><a class="headerlink" href="#pychell.rvs.model_components.TelluricModelTAPAS.species_enabled" title="Permalink to this definition">¶</a></dt>
+<dd><p>A dictionary with species as keys, and boolean values for items (True=enabled, False=disabled)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.TelluricModelTAPAS.species_input_files">
+<code class="sig-name descname">species_input_files</code><a class="headerlink" href="#pychell.rvs.model_components.TelluricModelTAPAS.species_input_files" title="Permalink to this definition">¶</a></dt>
+<dd><p>A list of input files (strings) for the individual species.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.TemplateMult">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">TemplateMult</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.TemplateMult" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.MultModelComponent" title="pychell.rvs.model_components.MultModelComponent"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.MultModelComponent</span></code></a></p>
+<p>A base class for a template based multiplicative model.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.TemplateMult.input_file">
+<code class="sig-name descname">input_file</code><a class="headerlink" href="#pychell.rvs.model_components.TemplateMult.input_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>If provided, stores the full path + filename of the input file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.WaveModelKnown">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">WaveModelKnown</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">pix_bounds</span></em>, <em class="sig-param"><span class="n">nx</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.WaveModelKnown" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.WavelengthSolutionModel" title="pychell.rvs.model_components.WavelengthSolutionModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.WavelengthSolutionModel</span></code></a></p>
+<p>Class for a wavelength solution which starts from some pre-derived solution (say a ThAr lamp).</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveModelKnown.n_splines">
+<code class="sig-name descname">n_splines</code><a class="headerlink" href="#pychell.rvs.model_components.WaveModelKnown.n_splines" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of wavelength splines.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveModelKnown.n_delay_splines">
+<code class="sig-name descname">n_delay_splines</code><a class="headerlink" href="#pychell.rvs.model_components.WaveModelKnown.n_delay_splines" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of iterations to delay the splines.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveModelKnown.splines_enabled">
+<code class="sig-name descname">splines_enabled</code><a class="headerlink" href="#pychell.rvs.model_components.WaveModelKnown.splines_enabled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether or not the splines are enabled.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveModelKnown.spline_pixel_set_points">
+<code class="sig-name descname">spline_pixel_set_points</code><a class="headerlink" href="#pychell.rvs.model_components.WaveModelKnown.spline_pixel_set_points" title="Permalink to this definition">¶</a></dt>
+<dd><p>The location of the spline knots.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.WaveSolModelFull">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">WaveSolModelFull</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">pix_bounds</span></em>, <em class="sig-param"><span class="n">nx</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.WaveSolModelFull" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.WavelengthSolutionModel" title="pychell.rvs.model_components.WavelengthSolutionModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.WavelengthSolutionModel</span></code></a></p>
+<p>Class for a full wavelength solution. A “base” solution is provided by a quadratic through set points, and a cubic spline offset is added on to capture any local perturbations.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveSolModelFull.n_splines">
+<code class="sig-name descname">n_splines</code><a class="headerlink" href="#pychell.rvs.model_components.WaveSolModelFull.n_splines" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of wavelength splines.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveSolModelFull.n_delay_splines">
+<code class="sig-name descname">n_delay_splines</code><a class="headerlink" href="#pychell.rvs.model_components.WaveSolModelFull.n_delay_splines" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of iterations to delay the splines.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveSolModelFull.splines_enabled">
+<code class="sig-name descname">splines_enabled</code><a class="headerlink" href="#pychell.rvs.model_components.WaveSolModelFull.splines_enabled" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether or not the splines are enabled.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveSolModelFull.base_pixel_set_points">
+<code class="sig-name descname">base_pixel_set_points</code><a class="headerlink" href="#pychell.rvs.model_components.WaveSolModelFull.base_pixel_set_points" title="Permalink to this definition">¶</a></dt>
+<dd><p>The three pixel points to use as set points in the quadratic.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveSolModelFull.base_wave_zero_points">
+<code class="sig-name descname">base_wave_zero_points</code><a class="headerlink" href="#pychell.rvs.model_components.WaveSolModelFull.base_wave_zero_points" title="Permalink to this definition">¶</a></dt>
+<dd><p>Estimates of the corresonding zero points of base_pixel_set_points.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WaveSolModelFull.spline_pixel_set_points">
+<code class="sig-name descname">spline_pixel_set_points</code><a class="headerlink" href="#pychell.rvs.model_components.WaveSolModelFull.spline_pixel_set_points" title="Permalink to this definition">¶</a></dt>
+<dd><p>The location of the spline knots.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.model_components.WavelengthSolutionModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.model_components.</code><code class="sig-name descname">WavelengthSolutionModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">blueprint</span></em>, <em class="sig-param"><span class="n">wave_bounds</span></em>, <em class="sig-param"><span class="n">pix_bounds</span></em>, <em class="sig-param"><span class="n">nx</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_logspace</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flux_logspace</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.model_components.WavelengthSolutionModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.model_components.SpectralComponent" title="pychell.rvs.model_components.SpectralComponent"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.model_components.SpectralComponent</span></code></a></p>
+<p>A base class for a wavelength solution (i.e., conversion from pixels to wavelength).</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WavelengthSolutionModel.pix_bounds">
+<code class="sig-name descname">pix_bounds</code><a class="headerlink" href="#pychell.rvs.model_components.WavelengthSolutionModel.pix_bounds" title="Permalink to this definition">¶</a></dt>
+<dd><p>The left and right pixel bounds which correspond to wave_bounds.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.model_components.WavelengthSolutionModel.nx">
+<code class="sig-name descname">nx</code><a class="headerlink" href="#pychell.rvs.model_components.WavelengthSolutionModel.nx" title="Permalink to this definition">¶</a></dt>
+<dd><p>The total number of data pixels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p>Base initialization for a model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>blueprint</strong> (<em>dict</em>) – The blueprints to construct this component from.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="rvs_api.html">Radial Velocities</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="rvs_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="data1d_api.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="template_generation_api.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/model_building_api.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
