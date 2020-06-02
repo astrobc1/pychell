@@ -196,7 +196,7 @@ forward_model_blueprints = {
         'base_quad': {'init': [-5.5E-5, -2E-6, 5.5E-5], 'commonality': 'none'},
         'base_lin': {'init': [-0.001, 1E-5, 0.001], 'commonality': 'none'},
         'base_zero': {'init': [0.96, 1.0, 1.08], 'commonality': 'none'},
-        'spline': {'init': [-0.135, 0.01, 0.135], 'commonality': 'nights'},
+        'spline': {'init': [-0.135, 0.01, 0.135], 'commonality': 'none'},
         'n_delay_splines': 0,
         
         # Blaze is centered on the blaze wavelength. Crude estimates
@@ -210,8 +210,8 @@ forward_model_blueprints = {
         'hermdeg': 6,
         'n_delay': 0,
         'compress': 64,
-        'width': {'init': [0.055, 0.12, 0.2], 'commonality': 'nights'}, # LSF width, in angstroms
-        'ak': {'init': [-0.03, 0.001, 0.2], 'commonality': 'nights'} # Hermite polynomial coefficients
+        'width': {'init': [0.055, 0.12, 0.2], 'commonality': 'none'}, # LSF width, in angstroms
+        'ak': {'init': [-0.03, 0.001, 0.2], 'commonality': 'none'} # Hermite polynomial coefficients
     },
     
     # Quadratic (Lagrange points) + splines
@@ -236,16 +236,16 @@ forward_model_blueprints = {
         
         'n_splines': 6,
         'n_delay_splines': 0,
-        'base': {'init': [-0.35, -0.05, 0.2], 'commonality': 'nights'},
-        'spline': {'init': [-0.15, 0.01, 0.15], 'commonality': 'nights'}
+        'base': {'init': [-0.35, -0.05, 0.2], 'commonality': 'none'},
+        'spline': {'init': [-0.15, 0.01, 0.15], 'commonality': 'none'}
     },
     
     # Fabry Perot cavity with two parameters
     'fringing': {
         'name': 'fringing',
         'class_name': 'BasicFringingModel',
-        'd': {'init': [183900000.0, 183911000.0, 183930000.0], 'commonality': 'nights'},
-        'fin': {'init': [0.01, 0.04, 0.08], 'commonality': 'nights'},
+        'd': {'init': [183900000.0, 183911000.0, 183930000.0], 'commonality': 'none'},
+        'fin': {'init': [0.01, 0.04, 0.08], 'commonality': 'none'},
         'n_delay': np.inf # To delay indefinitely, user may wish to enable.
     }
 }
