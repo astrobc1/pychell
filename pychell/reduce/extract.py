@@ -1,4 +1,4 @@
-import torch
+
 # Python default modules
 import os
 import glob
@@ -163,7 +163,7 @@ def extract_full_image(data, general_settings, calib_settings, extraction_settin
         
         # Estimate sky and remove from profile
         if extraction_settings['sky_subtraction']:
-            sky = estimate_sky(order_image_hr_straight, trace_profile, n_sky_rows=extraction_settings['n_sky_rows'])
+            sky = estimate_sky(order_image_hr_straight, trace_profile, n_sky_rows=extraction_settings['n_sky_rows'], M=M)
             trace_profile -= np.nanmedian(sky) # subtrace off baseline estimate from sky
         else:
             trace_profile = np.copy(trace_profile)
@@ -341,7 +341,7 @@ def flag_bad_pixels(order_image, current_spectrum, profile_2d, badpix_mask=None,
     
     for x in range(nx):
         good = np.where(np.isfinite(current_spec_smooth_2d[:, x]) & np.isfinite(data_pe[:, x]) & (badpix_mask[:, x] == 1))[0]
-        if good.size < 5:
+        if good.size <= 3:
             continue
         med_val = pcmath.weighted_median(current_spec_smooth_2d[:, x] * badpix_mask[:, x], med_val=0.99)
         deviations[:, x] = np.abs(current_spec_smooth_2d[:, x] - data_pe[:, x]) / med_val
@@ -426,7 +426,7 @@ def rectify_trace(order_image, ypositions, M=1):
     return order_image2
     
 # Sky = Sky(lambda) or Sky(x_pixel). i.e., no y dependence.
-def estimate_sky(straight_order_image, trace_profile, n_sky_rows=8):
+def estimate_sky(order_image_hr_straight, trace_profile, n_sky_rows=8, M=1):
     """Estimates the sky background, sky(x), from a rectifed image.
 
     Args:
@@ -434,15 +434,12 @@ def estimate_sky(straight_order_image, trace_profile, n_sky_rows=8):
         trace_profile (np.ndarray): The 1-dimensional trace profile.
         n_sky_rows (int): The number of rows to consider in estimating the sky background, sky(x).
     """
-    
-    # Normalize the trace profile
-    trace_profile_maxnorm = trace_profile / np.nanmax(trace_profile)
 
     # Estimate the sky by considering where the flux is less than 10 percent the max value
-    sky_locs = np.argsort(trace_profile_maxnorm)[0:n_sky_rows]
+    sky_locs = np.argsort(trace_profile)[0:int(n_sky_rows*M)]
     
     # Create a smoothed image
-    smoothed_image = pcmath.median_filter2d(straight_order_image, width=3, preserve_nans=True)
+    smoothed_image = pcmath.median_filter2d(order_image_hr_straight, width=3, preserve_nans=True)
     
     # Estimate the sky background from this smoothed image
     sky_init = np.nanmedian(smoothed_image[sky_locs, :], axis=0)
@@ -560,6 +557,10 @@ def optimal_extraction(data_image, profile_2d, badpix_mask, exp_time, sky=None, 
         
         # Normalize the weights such that sum=1
         weights_x = weights_x / np.nansum(weights_x)
+        
+        good = np.where(weights_x > 0)[0]
+        if good.size <= 3:
+            continue
         
         # 1d final flux at column x
         spec[x] = np.nansum(S_x * weights_x) / np.nansum(profile_x_sum_norm * weights_x)

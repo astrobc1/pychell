@@ -98,6 +98,16 @@ def reduce_night(user_general_settings, user_extraction_settings, user_calib_set
         for sci_data in raw_data['science']:
             sci_data.trace_orders(output_dir=general_settings['output_dir_root'] + 'calib' + os.sep, extraction_settings=extraction_settings, src=extraction_settings['order_map'])
 
+
+
+    # Co-add any images before extraction
+    #if extraction_settings['coadd']:
+    #    print('Co-adding Images ...', flush=True)
+        
+        
+        
+
+
     # Extraction of science spectra
     if general_settings['n_cores'] > 1:
         
