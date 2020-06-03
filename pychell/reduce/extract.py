@@ -1,4 +1,4 @@
-
+import torch
 # Python default modules
 import os
 import glob
@@ -10,7 +10,6 @@ import warnings
 import numpy as np
 import scipy.interpolate
 from astropy.io import fits
-import torch
 
 # LLVM
 from numba import njit, jit, prange
