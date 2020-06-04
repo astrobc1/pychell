@@ -115,6 +115,9 @@ def extract_full_image(data, general_settings, calib_settings, extraction_settin
     # Loop over orders
     for o in range(n_orders):
         
+        if o != 15:
+            continue
+        
         # Stopwatch
         stopwatch.lap(str(o))
         
@@ -322,7 +325,7 @@ def flag_bad_pixels(order_image, current_spectrum, profile_2d, badpix_mask=None,
     
     # Sky
     if sky is None:
-        sky = np.ones(nx)
+        sky = np.zeros(nx)
     
     # Normalize trace profile
     profile_2d_sum_norm = profile_2d / np.nansum(profile_2d, axis=0)
@@ -377,7 +380,7 @@ def create_2d_trace_profile(order_image, trace_profile, ypositions, M1=1, M2=1):
     for x in range(nx):
         
         good_data = np.where(np.isfinite(order_image[:, x]))[0]
-        if good_data.size < 5:
+        if good_data.size <= 3:
             continue
             
         profile_2d[:, x] = scipy.interpolate.CubicSpline(yarr1[good_trace] - trace_max_pos_y + ypositions[x], trace_profile[good_trace], extrapolate=False)(yarr2)
@@ -419,7 +422,7 @@ def rectify_trace(order_image, ypositions, M=1):
     
     for x in range(nx):
         good = np.where(np.isfinite(order_image[:, x]))[0]
-        if good.size < 5:
+        if good.size <= 3:
             continue
         order_image2[:, x] = scipy.interpolate.CubicSpline(yarr1[good] - ypositions[x], order_image[good, x], extrapolate=False)(yarr2)
         
@@ -517,8 +520,10 @@ def optimal_extraction(data_image, profile_2d, badpix_mask, exp_time, sky=None, 
         spec_unc (np.ndarray): The corresponding uncertainty.
     """
     data_image = data_image * gain # Convert the actual data to PEs
-    sky = sky * gain # same for background sky
-    sky_err = np.sqrt(sky / (n_sky_rows - 1))
+    
+    if sky is not None:
+        sky = sky * gain # same for background sky
+        sky_err = np.sqrt(sky / (n_sky_rows - 1))
     
     eff_read_noise = read_noise + dark_current * exp_time
 
@@ -533,7 +538,10 @@ def optimal_extraction(data_image, profile_2d, badpix_mask, exp_time, sky=None, 
         badpix_x = badpix_mask[:, x]
         data_x = data_image[:, x] # The data (includes sky) in units of PEs
 
-        S_x = data_x - sky[x] # Star is trace - sky
+        if sky is not None:
+            S_x = data_x - sky[x] # Star is trace - sky
+        else:
+            S_x = np.copy(data_x)
         
         if np.all(~np.isfinite(S_x)) or np.nansum(badpix_x) == 0:
             spec[x] = np.nan
@@ -549,7 +557,10 @@ def optimal_extraction(data_image, profile_2d, badpix_mask, exp_time, sky=None, 
         profile_x_sum_norm = profile_x / np.nansum(profile_x)
             
         # Variance
-        var_x = read_noise**2 + S_x + sky[x] + sky_err[x]**2
+        if sky is not None:
+            var_x = read_noise**2 + S_x + sky[x] + sky_err[x]**2
+        else:
+            var_x = read_noise**2 + S_x
         
         # Weights = P^2 / variance.
         # Using a sum or normalized trace profile here does affect things, but hardly.
@@ -623,8 +634,11 @@ def plot_full_spectrum(data, reduced_orders, boxcar_spectra, general_settings):
                 continue
             badpix = reduced_orders[o, :, 2]
             good = np.where(badpix == 1)[0]
-            axarr[row, col].plot(pixels[good], boxcar_spectra[o, good] / pcmath.weighted_median(boxcar_spectra[o, good], med_val=0.99), color='red', label='Boxcar', lw=0.5)
-            axarr[row, col].plot(pixels[good], reduced_orders[o, good, 0] / pcmath.weighted_median(reduced_orders[o, good, 0], med_val=0.99), color='black', label='Optimal', lw=0.5)
+            if good.size == 0:
+                continue
+            f, l = good[0], good[-1] + 1
+            axarr[row, col].plot(pixels[f:l], boxcar_spectra[o, f:l] / pcmath.weighted_median(boxcar_spectra[o, f:l], med_val=0.99), color='red', label='Boxcar', lw=0.5)
+            axarr[row, col].plot(pixels[f:l], reduced_orders[o, f:l, 0] / pcmath.weighted_median(reduced_orders[o, goodf:l, 0], med_val=0.99), color='black', label='Optimal', lw=0.5)
             axarr[row, col].set_title('Order ' + str(o+1))
             axarr[row, col].legend(loc='upper right', prop={'size': 4})
     
@@ -716,7 +730,7 @@ def refine_trace_position(order_image, ypositions, trace_profile, trace_pos_poly
     # Smooth the deviations
     ypos_deviations_smooth = pcmath.median_filter1d(ypos_deviations, width=9, preserve_nans=True)
     
-    # Add deviations to current estimate
+    # Remove deviations from current estimate
     y_positions_refined = ypositions - ypos_deviations_smooth
     
     # Good regions
