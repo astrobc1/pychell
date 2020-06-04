@@ -115,9 +115,6 @@ def extract_full_image(data, general_settings, calib_settings, extraction_settin
     # Loop over orders
     for o in range(n_orders):
         
-        if o != 15:
-            continue
-        
         # Stopwatch
         stopwatch.lap(str(o))
         
