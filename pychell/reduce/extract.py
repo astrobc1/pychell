@@ -635,7 +635,7 @@ def plot_full_spectrum(data, reduced_orders, boxcar_spectra, general_settings):
                 continue
             f, l = good[0], good[-1] + 1
             axarr[row, col].plot(pixels[f:l], boxcar_spectra[o, f:l] / pcmath.weighted_median(boxcar_spectra[o, f:l], med_val=0.99), color='red', label='Boxcar', lw=0.5)
-            axarr[row, col].plot(pixels[f:l], reduced_orders[o, f:l, 0] / pcmath.weighted_median(reduced_orders[o, goodf:l, 0], med_val=0.99), color='black', label='Optimal', lw=0.5)
+            axarr[row, col].plot(pixels[f:l], reduced_orders[o, f:l, 0] / pcmath.weighted_median(reduced_orders[o, f:l, 0], med_val=0.99), color='black', label='Optimal', lw=0.5)
             axarr[row, col].set_title('Order ' + str(o+1))
             axarr[row, col].legend(loc='upper right', prop={'size': 4})
     
