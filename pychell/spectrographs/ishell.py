@@ -124,7 +124,7 @@ extraction_settings = {
     
     # The trace profile is constructed using oversampled data.
     # This is the oversample factor.
-    'oversample': 16
+    'oversample': 4
 }
 
 
