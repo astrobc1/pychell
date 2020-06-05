@@ -193,12 +193,12 @@ class ResidualBlazeModel(EmpiricalMult):
         
     def init_parameters(self, templates_dict):
         self.initial_parameters = OptimParameters.Parameters()
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['base_quad']['init'][1], minv=self.blueprint['base_quad']['init'][0], maxv=self.blueprint['base_quad']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base_quad']['commonality']))
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base_lin']['init'][1], minv=self.blueprint['base_lin']['init'][0], maxv=self.blueprint['base_lin']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base_lin']['commonality']))
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base_zero']['init'][1], minv=self.blueprint['base_zero']['init'][0], maxv=self.blueprint['base_zero']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base_zero']['commonality']))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['base_quad'][1], minv=self.blueprint['base_quad'][0], maxv=self.blueprint['base_quad'][2], mcmcscale=0.1, vary=True))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base_lin'][1], minv=self.blueprint['base_lin'][0], maxv=self.blueprint['base_lin'][2], mcmcscale=0.1, vary=True))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base_zero'][1], minv=self.blueprint['base_zero'][0], maxv=self.blueprint['base_zero'][2], mcmcscale=0.1, vary=True))
         if self.n_splines > 0:
             for i in range(self.n_splines + 1):
-                self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+3], value=self.blueprint['spline']['init'][1], minv=self.blueprint['spline']['init'][0], maxv=self.blueprint['spline']['init'][2], mcmcscale=0.001, vary=self.splines_enabled, commonality=self.blueprint['spline']['commonality']))
+                self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+3], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
     
     def __repr__(self):
         return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ' , Splines Active: ' + str(self.splines_enabled) + ']'
@@ -261,13 +261,13 @@ class FullBlazeModel(EmpiricalMult):
             
     def init_parameters(self, templates_dict):
         self.initial_parameters = OptimParameters.Parameters()
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['base_amp']['init'][1], minv=self.blueprint['base_amp']['init'][0], maxv=self.blueprint['base_amp']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base_amp']['commonality']))
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base_b']['init'][1], minv=self.blueprint['base_b']['init'][0], maxv=self.blueprint['base_b']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base_b']['commonality']))
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base_c']['init'][1], minv=self.blueprint['base_c']['init'][0], maxv=self.blueprint['base_c']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base_c']['commonality']))
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[3], value=self.blueprint['base_d']['init'][1], minv=self.blueprint['base_d']['init'][0], maxv=self.blueprint['base_d']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base_d']['commonality']))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['base_amp'][1], minv=self.blueprint['base_amp'][0], maxv=self.blueprint['base_amp'][2], mcmcscale=0.1, vary=True))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base_b'][1], minv=self.blueprint['base_b'][0], maxv=self.blueprint['base_b'][2], mcmcscale=0.1, vary=True))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base_c'][1], minv=self.blueprint['base_c'][0], maxv=self.blueprint['base_c'][2], mcmcscale=0.1, vary=True))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[3], value=self.blueprint['base_d'][1], minv=self.blueprint['base_d'][0], maxv=self.blueprint['base_d'][2], mcmcscale=0.1, vary=True))
         if self.n_splines > 0:
             for i in range(self.n_splines + 1):
-                self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+4], value=self.blueprint['spline']['init'][1], minv=self.blueprint['spline']['init'][0], maxv=self.blueprint['spline']['init'][2], mcmcscale=0.001, vary=self.splines_enabled, commonality=self.blueprint['spline']['commonality']))
+                self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+4], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
     
     # To enable/disable splines.
     def update(self, forward_model, iter_num):
@@ -301,8 +301,8 @@ class BasicFringingModel(EmpiricalMult):
     
     def init_parameters(self, templates_dict):
         self.initial_parameters = OptimParameters.Parameters()
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['d']['init'][1], minv=self.blueprint['d']['init'][0], maxv=self.blueprint['d']['init'][2], mcmcscale=0.1, vary=self.enabled, commonality=self.blueprint['d']['commonality']))
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['fin']['init'][1], minv=self.blueprint['fin']['init'][0], maxv=self.blueprint['fin']['init'][2], mcmcscale=0.1, vary=self.enabled, commonality=self.blueprint['fin']['commonality']))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['d'][1], minv=self.blueprint['d'][0], maxv=self.blueprint['d'][2], mcmcscale=0.1, vary=self.enabled))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['fin'][1], minv=self.blueprint['fin'][0], maxv=self.blueprint['fin'][2], mcmcscale=0.1, vary=self.enabled))
     
     
 class TemplateMult(MultModelComponent):
@@ -351,8 +351,8 @@ class GasCellModel(TemplateMult):
     
     def init_parameters(self, templates_dict):
         self.initial_parameters = OptimParameters.Parameters()
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['shift']['init'][1], minv=self.blueprint['shift']['init'][0], maxv=self.blueprint['shift']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['shift']['commonality']))
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['depth']['init'][1], minv=self.blueprint['depth']['init'][0], maxv=self.blueprint['depth']['init'][2], mcmcscale=0.001, vary=True, commonality=self.blueprint['shift']['commonality']))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['shift'][1], minv=self.blueprint['shift'][0], maxv=self.blueprint['shift'][2], mcmcscale=0.1, vary=True))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['depth'][1], minv=self.blueprint['depth'][0], maxv=self.blueprint['depth'][2], mcmcscale=0.001, vary=True))
 
 
 class GasCellModelOrderDependent(TemplateMult):
@@ -390,8 +390,8 @@ class GasCellModelOrderDependent(TemplateMult):
     def init_parameters(self, templates_dict):
         self.initial_parameters = OptimParameters.Parameters()
         shift = self.blueprint['shifts'][self.order_num - 1]
-        depth = self.blueprint['depth']['init']
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=shift, minv=shift - self.blueprint['shift_range']['init'][0], maxv=shift + self.blueprint['shift_range']['init'][1], mcmcscale=0.1, vary=True))
+        depth = self.blueprint['depth']
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=shift, minv=shift - self.blueprint['shift_range'][0], maxv=shift + self.blueprint['shift_range'][1], mcmcscale=0.1, vary=True))
         self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=depth[1], minv=depth[0], maxv=depth[2], mcmcscale=0.001, vary=True))
     
 
@@ -427,7 +427,7 @@ class StarModel(TemplateMult):
     
     def init_parameters(self, templates_dict):
         self.initial_parameters = OptimParameters.Parameters()
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel']['init'][1], minv=self.blueprint['vel']['init'][0], maxv=self.blueprint['vel']['init'][2], mcmcscale=0.1, vary=self.enabled, commonality=self.blueprint['vel']['commonality']))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1, vary=self.enabled))
         
     def load_template(self, nx, pad=15):
         wave_even = np.linspace(self.wave_bounds[0] - pad, self.wave_bounds[1] + pad, num=nx)
@@ -557,7 +557,7 @@ class TelluricModelTAPAS(TemplateMult):
         self.initial_parameters = OptimParameters.Parameters()
         
         # Shift
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel']['init'][1], minv=self.blueprint['vel']['init'][0], maxv=self.blueprint['vel']['init'][2], mcmcscale=0.1, commonality=self.blueprint['vel']['commonality']))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1))
         
         # Components
         for itell, tell in enumerate(self.species):
@@ -566,7 +566,7 @@ class TelluricModelTAPAS(TemplateMult):
                 self.species_enabled[tell] = True
             else:
                 self.species_enabled[tell] = False
-            self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[itell+1], value=self.blueprint['species'][self.species[itell]]['depth']['init'][1], minv=self.blueprint['species'][self.species[itell]]['depth']['init'][0], maxv=self.blueprint['species'][self.species[itell]]['depth']['init'][2], mcmcscale=0.1, vary=self.species_enabled[tell], commonality=self.blueprint['species'][self.species[itell]]['depth']['commonality']))
+            self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[itell+1], value=self.blueprint['species'][self.species[itell]]['depth'][1], minv=self.blueprint['species'][self.species[itell]]['depth'][0], maxv=self.blueprint['species'][self.species[itell]]['depth'][2], mcmcscale=0.1, vary=self.species_enabled[tell]))
     
     def update(self, forward_model, iter_num):
         pass
@@ -680,9 +680,9 @@ class LSFHermiteModel(LSFModel):
         
     def init_parameters(self, templates_dict):
         self.initial_parameters = OptimParameters.Parameters()
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['width']['init'][1], minv=self.blueprint['width']['init'][0], maxv=self.blueprint['width']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['width']['commonality']))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['width'][1], minv=self.blueprint['width'][0], maxv=self.blueprint['width'][2], mcmcscale=0.1, vary=True))
         for i in range(self.hermdeg):
-            self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+1], value=self.blueprint['ak']['init'][1], minv=self.blueprint['ak']['init'][0], maxv=self.blueprint['ak']['init'][2], mcmcscale=0.001, vary=True, commonality=self.blueprint['ak']['commonality']))
+            self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+1], value=self.blueprint['ak'][1], minv=self.blueprint['ak'][0], maxv=self.blueprint['ak'][2], mcmcscale=0.001, vary=True))
     
     def update(self, forward_model, iter_num):
         if iter_num == self.n_delay - 1 and not self.enabled:
@@ -819,12 +819,12 @@ class WaveSolModelFull(WavelengthSolutionModel):
     
     def init_parameters(self, templates_dict):
         self.initial_parameters = OptimParameters.Parameters()
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['base']['init'][1], minv=self.blueprint['base']['init'][0], maxv=self.blueprint['base']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base']['commonality']))
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base']['init'][1], minv=self.blueprint['base']['init'][0], maxv=self.blueprint['base']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base']['commonality']))
-        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base']['init'][1], minv=self.blueprint['base']['init'][0], maxv=self.blueprint['base']['init'][2], mcmcscale=0.1, vary=True, commonality=self.blueprint['base']['commonality']))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['base'][1], minv=self.blueprint['base'][0], maxv=self.blueprint['base'][2], mcmcscale=0.1, vary=True))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base'][1], minv=self.blueprint['base'][0], maxv=self.blueprint['base'][2], mcmcscale=0.1, vary=True))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base'][1], minv=self.blueprint['base'][0], maxv=self.blueprint['base'][2], mcmcscale=0.1, vary=True))
         if self.n_splines > 0:
             for i in range(self.n_splines + 1):
-                self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+3], value=self.blueprint['spline']['init'][1], minv=self.blueprint['spline']['init'][0], maxv=self.blueprint['spline']['init'][2], mcmcscale=0.001, vary=self.splines_enabled, commonality=self.blueprint['spline']['commonality']))
+                self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+3], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
     
    # To enable/disable splines.
     def update(self, forward_model, iter_num):

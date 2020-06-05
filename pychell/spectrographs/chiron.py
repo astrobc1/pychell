@@ -5,6 +5,14 @@ import pychell.rvs
 # Path to default templates for rvs
 default_templates_path = pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep
 
+# Return the file number and date
+# Ex: chi190915.1242.fits
+def parse_filename(filename):
+    res = filename.split('.')
+    filename_info = {'number': res[1], 'date': '20' + res[0][3:]}
+    return filename_info
+
+
 ##################################################################
 ####### General Stuff ############################################
 ##################################################################
@@ -35,16 +43,19 @@ general_settings = {
     'n_data_pix': 3200,
     
     # increasing => left to right, decreasing => right to left
-    'wave_direction': NotImplemented,
+    'wave_direction': 'increasing',
     
-    # The time offset used in the headers
+    # The time offset used in the headers, used in reduction
     'time_offset': NotImplemented,
     
     # The tags to recognize science, bias, dark, and flat field images
     'sci_tag': NotImplemented,
     'bias_tag': NotImplemented,
     'darks_tag': NotImplemented,
-    'flats_tag': NotImplemented
+    'flats_tag': NotImplemented,
+    
+    # The file name parser
+    'filename_parser': NotImplemented
 }
 
 
@@ -61,43 +72,19 @@ calibration_settings = NotImplemented
 # Extraction settings
 extraction_settings = NotImplemented
 
-# Return the file number and date
-# chi190915.1242.fits
-def parse_filename(filename):
-    res = filename.split('.')
-    filename_info = {'number': res[1], 'date': '20' + res[0][3:]}
-    return filename_info
-
-
 ####################################################################
 ####### RADIAL VELOCITIES ##########################################
 ####################################################################
 
 # Default forward model settings
 # Default forward model settings
-# Number of orders
 forward_model_settings = {
     
     # The cropped pixels
-    'crop_pix': [200, 200],
-    
-    # The number of template fits
-    'n_template_fits': 5,
-    
-    # The number of bad pixels to flag
-    'flag_n_worst_pixels': 20,
+    'crop_data_pix': [200, 200],
     
     # The units for plotting
-    'plot_wave_unit': 'nm',
-    
-    # Cross corr analysis range (+/-) and step size in m/s
-    'do_xcorr': False,
-    'xcorr_range': 10*1000,
-    'xcorr_step': 10,
-    'n_bs' : 1000,
-    
-    # Target Function
-    'target_function': 'simple_rms'
+    'plot_wave_unit': 'nm'
 }
 
 # Forward model blueprints for RVs
@@ -123,10 +110,10 @@ forward_model_blueprints = {
     
     # Tellurics (from TAPAS)
     'tellurics': {
-        'name': 'vis_tellurics', # NOTE: full parameter names are name + component + base_name.
+        'name': 'vis_tellurics', # NOTE: full parameter names are name + species + base_name.
         'class_name': 'TelluricModelTAPAS',
         'vel': [-250, -100, 250],
-        'components': {
+        'species': {
             'water': {
                 'input_file': default_templates_path + 'telluric_water_tapas_ctio.npz',
                 'depth': [0.01, 1.5, 4.0]

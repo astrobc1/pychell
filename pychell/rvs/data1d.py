@@ -51,7 +51,6 @@ class SpecData1d:
             crop_pix (list): Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.
             wave_direction (str): Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.
         """
-        
         # Store the input file, spec, and order num
         self.input_file = input_file
         self.base_input_file = os.path.basename(self.input_file)
@@ -223,11 +222,11 @@ class SpecDataCHIRON(SpecData1d):
         fits_data = fits.open(self.input_file)[0]
         fits_data.verify('fix')
         
-        self.wave_grid, self.flux = fits_data.data[self.order_num, :, 0].astype(np.float64), fits_data.data[self.order_num, :, 1].astype(np.float64)
+        self.wave_grid, self.flux = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
         self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
         
         # For CHIRON, generate a dumby uncertainty grid and a bad pix array that will be updated or used
-        self.flux_unc = np.zeros_like(self.flux.size) + 1E-3
+        self.flux_unc = np.zeros_like(self.flux) + 1E-3
         self.badpix = np.ones_like(self.flux)
         
         # Flip the data so wavelength is increasing if necessary

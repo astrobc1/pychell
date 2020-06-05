@@ -46,7 +46,7 @@ def generate_rvs(forward_models, iter_num):
         rvs_xcorr = np.array([forward_models[ispec].rvs_xcorr[k3] for ispec in range(forward_models.n_spec)], dtype=np.float64)
 
     # The RMS from the forward model fit
-    rms = np.array([forward_models[ispec].opt[-1][0] for ispec in range(forward_models.n_spec)], dtype=np.float64)
+    rms = np.array([forward_models[ispec].opt[k1][0] for ispec in range(forward_models.n_spec)], dtype=np.float64)
 
     # Co-add to get nightly RVs
     # If only one spectrum and no initial guess, no rvs!
@@ -242,7 +242,7 @@ def cc_wrapper(forward_model, n_spec_tot, iter_num):
     """
     stopwatch = pcutils.StopWatch()
     cross_correlate_star(forward_model, iter_num)
-    print('    Cross Correlated Spectrum ' + str(forward_model.data.spec_num+1) + ' of ' + str(n_spec_tot) + ' in ' + str(round((stopwatch.time_since()), 2)) + ' sec', flush=True)
+    print('    Cross Correlated Spectrum ' + str(forward_model.data.spec_num) + ' of ' + str(n_spec_tot) + ' in ' + str(round((stopwatch.time_since()), 2)) + ' sec', flush=True)
     return forward_model
 
 
@@ -305,7 +305,7 @@ def cross_correlate_star(forward_model, iter_num):
         pars = copy.deepcopy(forward_model.initial_parameters)
         vels = np.arange(-250000, 250000, 500)
     else:
-        pars = copy.deepcopy(forward_model.best_fit_pars[-1])
+        pars = copy.deepcopy(forward_model.best_fit_pars[k1])
         v0 = pars[forward_model.models_dict['star'].par_names[0]].value
         vels = np.linspace(v0-forward_model.xcorr_range, v0+forward_model.xcorr_range, num=forward_model.n_xcorr_vels)
 

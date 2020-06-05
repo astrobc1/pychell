@@ -64,22 +64,21 @@ class ForwardModels(list):
 
         # The order number
         self.order_num = order_num
+        
+        # The proper tag
+        self.tag = self.star_name + '_' + self.tag
+        
+        # Create output directories
+        self.create_output_dirs(output_path_root=self.output_path_root)
 
         # Initiate the data, models, and outputs
-        
         self.init(forward_model_settings, model_blueprints)
 
         # Remaining instance members
 
-        # The proper tag
-        self.tag = self.star_name + '_' + self.tag
-
         # The number of iterations for rvs and template fits
         self.n_iters_rvs = self.n_template_fits
         self.n_iters_fits = self.n_iters_rvs + int(not self[0].models_dict['star'].from_synthetic)
-
-        # Create output directories
-        self.create_output_dirs(output_path_root=self.output_path_root)
         
         # Save the global parameters dictionary to the output directory
         with open(self.run_output_path + os.sep + 'global_parameters_dictionary.pkl', 'wb') as f:
@@ -117,8 +116,7 @@ class ForwardModels(list):
         print('Loading in data and constructing forward model objects for order ' + str(self.order_num) + ' ...')
         
         # The input files
-        input_files = [self.input_path + f for f in np.genfromtxt(self.input_path + self.flist_file, dtype='<U100').tolist()]
-        
+        input_files = [self.input_path + f for f in np.atleast_1d(np.genfromtxt(self.input_path + self.flist_file, dtype='<U100').tolist())]
         self.n_spec = len(input_files)
         
         # The inidividual forward model object init
@@ -151,6 +149,11 @@ class ForwardModels(list):
         else:
             bc_computer = self[0].data.__class__.calculate_bc_info_all
             self.BJDS, self.bc_vels = bc_computer(self, obs_name=self.observatory, star_name=self.star_name)
+            
+
+        if self.compute_bc_only:
+            np.savetxt(self.run_output_path + 'bary_corrs_' + self.star_name + '.txt', np.array([self.BJDS, self.bc_vels]).T, delimiter=',')
+            sys.exit("Compute BC info only is set!")
         
         # Compute the nightly BJDs and n obs per night
         self.BJDS_nightly, self.n_obs_nights = pcrvcalc.get_nightly_jds(self.BJDS)
@@ -368,148 +371,6 @@ class ForwardModels(list):
 
         # Return new forward model object since we possibly fit in parallel
         return forward_model
-
-class NightlyForwardModels(ForwardModels):
-
-
-    def fit_spectra(self, iter_num):
-        
-        # Timer
-        stopwatch = pcutils.StopWatch()
-        
-        # Get the solver wrapper, instance dependent
-        solver_wrapper = self.solver_wrapper
-
-        # Parallel fitting
-        if self.n_cores > 1:
-
-            # Construct the arguments
-            args_pass = []
-            kwargs_pass = []
-            for inight in range(self.n_nights):
-                inds = self[0].get_all_spec_indices_from_night(inight, self.n_obs_nights)
-                args_pass.append(([self[i] for i in inds], iter_num, self.n_spec, self.n_nights, self.n_obs_nights))
-                kwargs_pass.append({'output_path_plot': self.run_output_path_spectral_fits, 'verbose_print': self.verbose_print, 'verbose_plot': self.verbose_plot})
-            
-            # Call the parallel job via joblib.
-            presults = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(solver_wrapper)(*args_pass[inight], **kwargs_pass[inight]) for inight in range(self.n_nights))
-            for inight in range(self.n_nights):
-                inds = self[0].get_all_spec_indices_from_night(inight, self.n_obs_nights)
-                for i in range(len(inds)):
-                    self[inds[i]] = presults[inight][i]
-
-        else:
-            # Fit one night at a time
-            for inight in range(self.n_nights):
-                print('    Performing Nelder-Mead Fit For Night '  + str(inight+1) + ' of ' + str(self.n_nights), flush=True)
-                inds = self[0].get_all_spec_indices_from_night(inight, self.n_obs_nights)
-                result = solver_wrapper([copy.deepcopy(self[i]) for i in inds], iter_num, self.n_spec, self.n_nights, self.n_obs_nights, output_path_plot=self.run_output_path_spectral_fits, verbose_print=self.verbose_print, verbose_plot=self.verbose_plot)
-                for i in range(len(inds)):
-                    self[inds[i]] = result[i]
-            
-        # Fit in Parallel
-        print('Fitting Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
-        
-
-    # Wrapper for parallel processing. Solves and plots the forward models from a given night. Also does xcorr if set.
-    @staticmethod
-    def solver_wrapper(nightly_forward_models, iter_num, n_spec_tot, n_nights_tot, n_obs_nights, output_path_plot=None, verbose_print=False, verbose_plot=False):
-
-        # Start the timer
-        stopwatch = pcutils.StopWatch()
-        
-        # Construct the extra arguments to pass to the target function
-        args_to_pass = (nightly_forward_models, iter_num)
-        
-        initial_parameters = OptimParameters.Parameters()
-        models0 = copy.deepcopy(nightly_forward_models[0].models_dict)
-        pnames_match = {}
-        for model in models0:
-            for pname in models0[model].par_names:
-                par = models0[model].initial_parameters[pname]
-                if par.commonality == 'nights':
-                    # Single parameter for whole night
-                    initial_parameters[pname] = copy.deepcopy(par)
-                    pnames_match[pname] = pname
-                else:
-                    # Not shared, need unique names.
-                    for ispec in range(len(nightly_forward_models)):
-                        pname_temp = pname + '_spec_' + str(ispec + 1)
-                        initial_parameters[pname_temp] = OptimParameters.Parameter(name=pname_temp, value=par.value, minv=par.minv, maxv=par.maxv, mcmcscale=par.mcmcscale, vary=par.vary, commonality=par.commonality)
-                        k = nightly_forward_models[ispec].models_dict[model].par_names.index(pname)
-                        nightly_forward_models[ispec].models_dict[model].par_names[k] = pname_temp
-                        pnames_match[pname_temp] = pname
-        
-        optimizer = NelderMead(nightly_forward_models[0].target_function, initial_parameters, no_improve_break=3, args_to_pass=args_to_pass)
-        opt_result = optimizer.solve()
-            
-        # k1 = index for forward model array access
-        # k2 = Plot names for forward model objects
-        # k3 = index for RV array access
-        # k4 = RV plot names
-        k1, k2, k3, k4 = nightly_forward_models[0].iteration_indices(iter_num)
-        
-        best_global_pars = opt_result[0]
-        
-        best_fit_pars = [OptimParameters.Parameters() for _ in range(len(nightly_forward_models))]
-            
-        # Unpack
-        
-        # Loop over models
-        for model in nightly_forward_models[0].models_dict:
-            # Loop over the params for this model
-            model0_global = nightly_forward_models[0].models_dict[model]
-            for pname_global in model0_global.par_names:
-                
-                # Possibly the first (_spec_1)
-                par_global_fit = best_global_pars[pname_global]
-                
-                # Single parameter
-                if par_global_fit.commonality == 'nights':
-                    pname_single = pnames_match[pname_global]
-                    for ispec in range(len(nightly_forward_models)):
-                        best_fit_pars[ispec][pname_single] = copy.deepcopy(par_global_fit)
-                
-                # Not shared, has unique names
-                else:
-                    pname_single = pnames_match[pname_global]
-                    for ispec in range(len(nightly_forward_models)):
-                        par_unique = best_global_pars[pname_single + '_spec_' + str(ispec + 1)]
-                        best_fit_pars[ispec][pname_single] = OptimParameters.Parameter(name=pname_single, value=par_unique.value, minv=par_unique.minv, maxv=par_unique.maxv, vary=par_unique.vary, mcmcscale=par_unique.mcmcscale, commonality=par_unique.commonality)
-                        k = nightly_forward_models[ispec].models_dict[model].par_names.index(pname_single + '_spec_' + str(ispec + 1))
-                        
-                        nightly_forward_models[ispec].models_dict[model].par_names[k] = pname_single
-
-
-        # Build the best fit forward model
-        for ispec in range(len(nightly_forward_models)):
-            
-            nightly_forward_models[ispec].best_fit_pars.append(best_fit_pars[ispec])
-            nightly_forward_models[ispec].opt.append(opt_result[1:])
-            
-            wave_grid_data, best_model = nightly_forward_models[ispec].build_full(nightly_forward_models[ispec].best_fit_pars[-1], iter_num)
-
-            nightly_forward_models[ispec].wavelength_solutions.append(wave_grid_data)
-            nightly_forward_models[ispec].models.append(best_model)
-
-            # Compute the residuals between the data and model, don't flag bad pixels here. Cropped may still be nan.
-            nightly_forward_models[ispec].residuals.append(nightly_forward_models[ispec].data.flux - best_model)
-
-        
-        # Do a cross correlation analysis if set
-        if nightly_forward_models[0].do_xcorr and nightly_forward_models[0].models_dict['star'].enabled:
-            for ispec in range(len(nightly_forward_models)):
-                nightly_forward_models[ispec] = pcrvcalc.cc_wrapper(nightly_forward_models[ispec], n_spec_tot, iter_num)
-        
-        print('    Fit Night ' + str(nightly_forward_models[0].get_night_index(nightly_forward_models[0].spec_index, n_obs_nights) + 1) + ' of ' + str(n_nights_tot) + ' in ' + str(round((stopwatch.time_since())/60, 2)) + ' min', flush=True)
-
-        # Output a plot
-        if output_path_plot is not None:
-            for ispec in range(len(nightly_forward_models)):
-                nightly_forward_models[ispec].plot_model(iter_num, output_path=output_path_plot)
-
-        # Return new forward model objects since we possibly fit in parallel
-        return nightly_forward_models
 
 class ForwardModel:
     
@@ -882,7 +743,7 @@ class ForwardModel:
 class iSHELLForwardModel(ForwardModel):
 
     def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-
+        
         super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
     def build_full(self, pars, iter_num):

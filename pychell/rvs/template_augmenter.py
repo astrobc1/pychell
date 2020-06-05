@@ -36,7 +36,7 @@ import pychell.rvs.rvcalc as pcrvcalc
 
 
 def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
-    """Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid.
+    """Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. The weighting scheme includes (possible inversly) the rms of the fit, the amount of telluric absorption. Weights are also applied such that the barycenter sampling is approximately uniform from vmin to vmax.
 
     Args:
         forward_models (ForwardModels): The list of forwad model objects
@@ -54,7 +54,7 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
     # k3 = index for RV array access
     # k4 = RV plot names
     k1, k2, k3, k4 = forward_models[0].iteration_indices(iter_num)
-    
+
     current_stellar_template = np.copy(forward_models.templates_dict['star'])
     
     # Storage Arrays for the low res grid
@@ -71,7 +71,7 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
         bad = np.where(rms_weights < 100)[0]
         if bad.size > 0:
             rms_weights[bad] = 0
-            
+
     # All nights
     if nights_for_template is None or len(nights_for_template) == 0:
         template_spec_indices = np.arange(forward_models.n_spec).astype(int)
@@ -91,13 +91,12 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
         # De-shift residual wavelength scale according to the barycenter correction
         # Or best doppler shift if using a non flat initial template
         if forward_models[0].models_dict['star'].from_synthetic:
-            wave_stellar_frame = forward_models[ispec].wavelength_solutions[-1] * np.exp(-1 * forward_models[ispec].best_fit_pars[-1][forward_models[ispec].models_dict['star'].par_names[0]].value / cs.c)
-            waves_shifted_lr[:, ispec] = wave_stellar_frame
+            waves_shifted_lr[:, ispec] = forward_models[ispec].wavelength_solutions[-1] * np.exp(-1 * forward_models[ispec].best_fit_pars[-1][forward_models[ispec].models_dict['star'].par_names[0]].value / cs.c)
         else:
-            wave_stellar_frame = forward_models[ispec].wavelength_solutions[-1] * np.exp(forward_models[ispec].data.bc_vel / cs.c)
-            waves_shifted_lr[:, ispec] = wave_stellar_frame
+            waves_shifted_lr[:, ispec] = forward_models[ispec].wavelength_solutions[-1] * np.exp(forward_models[ispec].data.bc_vel / cs.c)
             
-        residuals_lr[:, ispec] = forward_models[ispec].residuals[-1]
+        residuals_lr[:, ispec] = np.copy(forward_models[ispec].residuals[-1])
+        
 
         # Telluric weights
         tell_flux_hr = forward_models[ispec].models_dict['tellurics'].build(forward_models[ispec].best_fit_pars[k1], forward_models.templates_dict['tellurics'], current_stellar_template[:, 0])
@@ -124,18 +123,18 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
     number_weights = 1 / hist_counts
     number_weights = number_weights / np.nansum(number_weights)
 
-    # Loop over spectra and check which bin an observation belongs to
-    # Then update the weights accordingly.
-    if len(nights_for_template) == 0:
+    # Loop over spectra and also weight spectra according to the barycenter sampling
+    # Here we explicitly use a multiplicative combination of weights.
+    if len(nights_for_template) == forward_models.n_nights:
         for ispec in range(forward_models.n_spec):
             vbc = forward_models[ispec].data.bc_vel
             y = np.where(histx >= vbc)[0][0] - 1
             tot_weights_lr[:, ispec] = tot_weights_lr[:, ispec] * number_weights[y]
             
-            
+    # If started from a synthetic template, try and correct the blaze.
     if iter_num == 0 and not forward_models[0].models_dict['star'].from_synthetic:
         for ispec in range(forward_models.n_spec):
-            continuum = pcmath.estimate_continuum(waves_shifted_lr[:, ispec], residuals_lr[:, ispec], width=7, n_knots=14, cont_val=0.9)
+            continuum = estimate_continuum(waves_shifted_lr[:, ispec], residuals_lr[:, ispec], width=7, n_knots=5, cont_val=0.9)
             residuals_lr[:, ispec] = residuals_lr[:, ispec] - continuum
             
     # Now to co-add residuals according to a least squares cubic spline
@@ -165,7 +164,136 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
 
     # Do the fit
     tot_weights_lr_flat /= np.nansum(tot_weights_lr_flat)
-    spline_fitter = scipy.interpolate.LSQUnivariateSpline(waves_shifted_lr_flat, residuals_lr_flat, t=knots, w=tot_weights_lr_flat, k=3, ext=1, bbox=[waves_shifted_lr_flat[0], waves_shifted_lr_flat[-1]], check_finite=True)
+    spline_fitter = scipy.interpolate.LSQUnivariateSpline(waves_shifted_lr_flat, residuals_lr_flat, t=knots[1:-1], w=tot_weights_lr_flat, k=3, ext=1, bbox=[waves_shifted_lr_flat[0], waves_shifted_lr_flat[-1]], check_finite=True)
+    
+    # Use the fit to determine the hr residuals to add
+    residuals_hr_fit = spline_fitter(current_stellar_template[:, 0])
+
+    # Remove bad regions
+    bad = np.where((current_stellar_template[:, 0] <= knots[0]) | (current_stellar_template[:, 0] >= knots[-1]))[0]
+    if bad.size > 0:
+        residuals_hr_fit[bad] = 0
+
+    # Augment the template
+    new_flux = current_stellar_template[:, 1] + residuals_hr_fit
+    
+    bad = np.where(new_flux > 1)[0]
+    if bad.size > 0:
+        new_flux[bad] = 1
+
+    forward_models.templates_dict['star'][:, 1] = new_flux
+    
+    
+    
+def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_template=None):
+    """Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. This function is identical to cubic_spline_lsq but does not include barycenter weighting.
+
+    Args:
+        forward_models (ForwardModels): The list of forwad model objects
+        iter_num (int): The iteration to use.
+        nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
+    """
+    if nights_for_template is None:
+        nights_for_template = forward_models.nights_for_template
+        
+    if iter_num is None:
+        iter_num = len(forward_models[0].best_fit_pars)
+    
+    # k1 = index for forward model array access
+    # k2 = Plot names for forward model objects
+    # k3 = index for RV array access
+    # k4 = RV plot names
+    k1, k2, k3, k4 = forward_models[0].iteration_indices(iter_num)
+
+    current_stellar_template = np.copy(forward_models.templates_dict['star'])
+    
+    # Storage Arrays for the low res grid
+    # This is for the low res reiduals where the star is constructed via a least squares cubic spline.
+    # Before the residuals are added, they are normalized.
+    waves_shifted_lr = np.empty(shape=(forward_models[0].data.flux.size, forward_models.n_spec), dtype=np.float64)
+    residuals_lr = np.empty(shape=(forward_models[0].data.flux.size, forward_models.n_spec), dtype=np.float64)
+    tot_weights_lr = np.empty(shape=(forward_models[0].data.flux.size, forward_models.n_spec), dtype=np.float64)
+    
+    # Weight by 1 / rms^2
+    rms = np.array([forward_models[ispec].opt[k1][0] for ispec in range(forward_models.n_spec)])
+    rms_weights = 1 / rms**2
+    if forward_models[0].models_dict['star'].enabled:
+        bad = np.where(rms_weights < 100)[0]
+        if bad.size > 0:
+            rms_weights[bad] = 0
+
+    # All nights
+    if nights_for_template is None or len(nights_for_template) == 0:
+        template_spec_indices = np.arange(forward_models.n_spec).astype(int)
+    # Night with highest co-added S/N
+    if nights_for_template == 'best':
+        night_index = determine_best_night(rms, forward_models.n_obs_nights)
+        template_spec_indices = list(forward_models.get_spec_indices_from_night(night_index))
+    # User specified nights
+    else:
+        template_spec_indices = []
+        for night in nights_for_template:
+            template_spec_indices += list(forward_models.get_spec_indices_from_night(night - 1))
+            
+    # Loop over spectra
+    for ispec in range(forward_models.n_spec):
+
+        # De-shift residual wavelength scale according to the barycenter correction
+        # Or best doppler shift if using a non flat initial template
+        if forward_models[0].models_dict['star'].from_synthetic:
+            waves_shifted_lr[:, ispec] = forward_models[ispec].wavelength_solutions[-1] * np.exp(-1 * forward_models[ispec].best_fit_pars[-1][forward_models[ispec].models_dict['star'].par_names[0]].value / cs.c)
+        else:
+            waves_shifted_lr[:, ispec] = forward_models[ispec].wavelength_solutions[-1] * np.exp(forward_models[ispec].data.bc_vel / cs.c)
+            
+        residuals_lr[:, ispec] = np.copy(forward_models[ispec].residuals[-1])
+        
+
+        # Telluric weights
+        tell_flux_hr = forward_models[ispec].models_dict['tellurics'].build(forward_models[ispec].best_fit_pars[k1], forward_models.templates_dict['tellurics'], current_stellar_template[:, 0])
+        tell_flux_hr_convolved = forward_models[ispec].models_dict['lsf'].convolve_flux(tell_flux_hr, pars=forward_models[ispec].best_fit_pars[-1])
+        tell_flux_lr_convolved = np.interp(forward_models[ispec].wavelength_solutions[-1], current_stellar_template[:, 0], tell_flux_hr_convolved, left=np.nan, right=np.nan)
+        tell_weights = tell_flux_lr_convolved**2
+        
+        tot_weights_lr[:, ispec] = forward_models[ispec].data.badpix * rms_weights[ispec]
+        
+        # Final weights
+        if len(nights_for_template) != 1:
+            tot_weights_lr[:, ispec] = tot_weights_lr[:, ispec] * tell_weights
+            
+    # If started from a synthetic template, try and correct the blaze.
+    if iter_num == 0 and not forward_models[0].models_dict['star'].from_synthetic:
+        for ispec in range(forward_models.n_spec):
+            continuum = estimate_continuum(waves_shifted_lr[:, ispec], residuals_lr[:, ispec], width=7, n_knots=5, cont_val=0.9)
+            residuals_lr[:, ispec] = residuals_lr[:, ispec] - continuum
+            
+    # Now to co-add residuals according to a least squares cubic spline
+    # Flatten the arrays
+    waves_shifted_lr_flat = waves_shifted_lr.flatten()
+    residuals_lr_flat = residuals_lr.flatten()
+    tot_weights_lr_flat = tot_weights_lr.flatten()
+    
+    # Remove all bad pixels.
+    good = np.where(np.isfinite(waves_shifted_lr_flat) & np.isfinite(residuals_lr_flat) & (tot_weights_lr_flat > 0))[0]
+    waves_shifted_lr_flat, residuals_lr_flat, tot_weights_lr_flat = waves_shifted_lr_flat[good], residuals_lr_flat[good], tot_weights_lr_flat[good]
+
+    # Sort the wavelengths
+    sorted_inds = np.argsort(waves_shifted_lr_flat)
+    waves_shifted_lr_flat, residuals_lr_flat, tot_weights_lr_flat = waves_shifted_lr_flat[sorted_inds], residuals_lr_flat[sorted_inds], tot_weights_lr_flat[sorted_inds]
+    
+    # Knot points are roughly the detector grid.
+    knots_init = np.linspace(waves_shifted_lr_flat[0]+0.01, waves_shifted_lr_flat[-1]-0.01, num=forward_models[0].data.flux.size)
+    bad_knots = []
+    for iknot in range(len(knots_init) - 1):
+        n = np.where((waves_shifted_lr_flat > knots_init[iknot]) & (waves_shifted_lr_flat < knots_init[iknot+1]))[0].size
+        if n == 0:
+            bad_knots.append(iknot)
+    bad_knots = np.array(bad_knots)
+    knots = np.delete(knots_init, bad_knots)
+    
+
+    # Do the fit
+    tot_weights_lr_flat /= np.nansum(tot_weights_lr_flat)
+    spline_fitter = scipy.interpolate.LSQUnivariateSpline(waves_shifted_lr_flat, residuals_lr_flat, t=knots[1:-1], w=tot_weights_lr_flat, k=3, ext=1, bbox=[waves_shifted_lr_flat[0], waves_shifted_lr_flat[-1]], check_finite=True)
     
     # Use the fit to determine the hr residuals to add
     residuals_hr_fit = spline_fitter(current_stellar_template[:, 0])
@@ -318,7 +446,7 @@ def weighted_median(forward_models, iter_num=None, nights_for_template=None):
                     #tot_weights_hr[ix, bad] = 0
                     #bad_pix_hr[ix, bad] = 0
                 residuals_median[ix] = pcmath.weighted_median(residuals_hr[ix, :], weights=tot_weights_hr[ix, :]/np.nansum(tot_weights_hr[ix, :]))
-            elif ~np.isfinite(residuals_hr[ix, 0]):
+            elif np.isfinite(residuals_hr[ix, 0]):
                 residuals_median[ix] = residuals_hr[ix, 0]
             else:
                 residuals_median[ix] = 0
@@ -343,7 +471,7 @@ def weighted_median(forward_models, iter_num=None, nights_for_template=None):
     forward_models.templates_dict['star'][:, 1] = new_flux
 
 
-def weighted_average(forward_models, iter_num, nights_for_template=None):
+def weighted_average(forward_models, iter_num=None, nights_for_template=None):
     """Augments the stellar template by considering the weighted average of the residuals on a common high resolution grid.
 
     Args:
@@ -354,16 +482,16 @@ def weighted_average(forward_models, iter_num, nights_for_template=None):
     current_stellar_template = np.copy(forward_models.templates_dict['star'])
 
     # Stores the shifted high resolution residuals (all on the star grid)
-    residuals_hr = np.empty(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=np.float64)
+    residuals_hr = np.empty(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=np.float64) + np.nan
     bad_pix_hr = np.empty(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=bool)
     tot_weights_hr = np.zeros(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=np.float64)
     
     # Stores the weighted median grid. Is set via loop, so pre-allocate.
-    residuals_median = np.empty(forward_models.n_model_pix, dtype=np.float64)
+    residuals_average = np.empty(forward_models.n_model_pix, dtype=np.float64) + np.nan
     
     # These show the min and max of of the residuals for all observations, useful for plotting if desired.
-    residuals_max = np.empty(forward_models.n_model_pix, dtype=np.float64)
-    residuals_min = np.empty(forward_models.n_model_pix, dtype=np.float64)
+    residuals_max = np.empty(forward_models.n_model_pix, dtype=np.float64) + np.nan
+    residuals_min = np.empty(forward_models.n_model_pix, dtype=np.float64) + np.nan
     
     # Weight by 1 / rms^2
     rms = np.array([forward_models[ispec].opt[iter_num][0] for ispec in range(forward_models.n_spec)]) 
@@ -463,34 +591,34 @@ def weighted_average(forward_models, iter_num, nights_for_template=None):
     # 3. If there's only one spectrum, use those residuals, unless it's nan.
     for ix in range(forward_models.n_model_pix):
         if np.nansum(tot_weights_hr[ix, :]) == 0:
-            residuals_median[ix] = 0
+            residuals_average[ix] = 0
         else:
             if forward_models.n_spec > 1:
-                # Further flag any pixels larger than 3*wstddev from a weighted average, but use the weighted median.
-                wavg = pcmath.weighted_mean(residuals_hr[ix, :], tot_weights_hr[ix, :]/np.nansum(tot_weights_hr[ix, :]))
-                wstddev = pcmath.weighted_stddev(residuals_hr[ix, :], tot_weights_hr[ix, :]/np.nansum(tot_weights_hr[ix, :]))
+                # Further flag any pixels larger than 3*wstddev from a weighted average.
+                wavg = pcmath.weighted_mean(residuals_hr[ix, :], tot_weights_hr[ix, :])
+                wstddev = pcmath.weighted_stddev(residuals_hr[ix, :], tot_weights_hr[ix, :])
                 diffs = np.abs(wavg - residuals_hr[ix, :])
                 bad = np.where(diffs > 3*wstddev)[0]
                 if bad.size > 0:
                     tot_weights_hr[ix, bad] = 0
                     bad_pix_hr[ix, bad] = 0
-                residuals_median[ix] = pcmath.weighted_mean(residuals_hr[ix, :], tot_weights_hr[ix, :]/np.nansum(tot_weights_hr[ix, :]))
-            elif ~np.isfinite(residuals_hr[ix, 0]):
-                residuals_median[ix] = residuals_hr[ix, 0]
+                residuals_average[ix] = pcmath.weighted_mean(residuals_hr[ix, :], tot_weights_hr[ix, :])
+            elif np.isfinite(residuals_hr[ix, 0]):
+                residuals_average[ix] = residuals_hr[ix, 0]
             else:
-                residuals_median[ix] = 0
+                residuals_average[ix] = 0
 
         # Store the min and max
         residuals_max[ix] = np.nanmax(residuals_hr[ix, :] * bad_pix_hr[ix, :])
         residuals_min[ix] = np.nanmin(residuals_hr[ix, :] * bad_pix_hr[ix, :])
         
     # Change any nans to zero
-    bad = np.where(~np.isfinite(residuals_median))[0]
+    bad = np.where(~np.isfinite(residuals_average))[0]
     if bad.size > 0:
-        residuals_median[bad] = 0
+        residuals_average[bad] = 0
 
     # Augment the template
-    new_flux = current_stellar_template[:, 1] + residuals_median
+    new_flux = current_stellar_template[:, 1] + residuals_average
 
     # Force the max to be less than 1.
     bad = np.where(new_flux > 1)[0]
@@ -824,3 +952,25 @@ def determine_best_night(rms, n_obs_nights):
                 
     best_night_index = np.nanargmax(nightly_snrs)
     return best_night_index
+
+################################
+#### More Helpful functions ####
+################################
+
+
+# This calculates the weighted median of a data set for rolling calculations
+def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.9):
+    nx = x.size
+
+    continuum_coarse = np.ones(nx, dtype=np.float64)
+    for ix in range(nx):
+        use = np.where((x > x[ix]-width/2) & (x < x[ix]+width/2))[0]
+        if np.all(~np.isfinite(y[use])):
+            continuum_coarse[ix] = np.nan
+        else:
+            continuum_coarse[ix] = pcmath.weighted_median(y[use], weights=None, med_val=cont_val)
+    good = np.where(np.isfinite(y))[0]
+    knot_points = x[np.linspace(good[0], good[-1], num=n_knots).astype(int)]
+    interp_fun = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=n_knots).astype(int)], extrapolate=False, bc_type='not-a-knot')
+    continuum = interp_fun(x)
+    return continuum

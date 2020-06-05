@@ -230,23 +230,6 @@ def weighted_median(data, weights=None, med_val=0.5):
             w_median = data_s[idx+1]
     return w_median
 
-# This calculates the weighted median of a data set for rolling calculations
-def estimate_continuum(x, y, width=7, n_knots=14, cont_val=0.9):
-    nx = x.size
-    continuum_coarse = np.ones(nx, dtype=np.float64)
-    for ix in range(nx):
-        use = np.where((x > x[ix]-width/2) & (x < x[ix]+width/2))[0]
-        if np.all(~np.isfinite(y[use])):
-            continuum_coarse[ix] = np.nan
-        else:
-            continuum_coarse[ix] = weighted_median(y[use], weights=None, med_val=cont_val)
-    
-    good = np.where(np.isfinite(y))[0]
-    knot_points = x[np.linspace(good[0], good[-1], num=n_knots).astype(int)]
-    interp_fun = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=14).astype(int)], extrapolate=False, bc_type='not-a-knot')
-    continuum = interp_fun(x)
-    return continuum
-
 # This calculates the unbiased weighted standard deviation of array x with weights w
 def weighted_stddev(x, w):
     weights = w / np.nansum(w)

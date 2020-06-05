@@ -1,29 +1,61 @@
 import os
 import numpy as np
 import pychell.rvs
+# Other notes for iSHELL:
+# blaze_model parameters for a sinc model (full unmodified blaze)
+# a: [1.02, 1.05, 1.08], b: [0.008, 0.01, 0.0115], c: [-5, 0.1, 5], d: [0.51, 0.7, 0.9]
 
 # Path to default templates for rvs
 default_templates_path = pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep
 
-##################################################################
-####### General Stuff ############################################
-##################################################################
+# Return the file number and date
+# ex: icm.2019B047.191109.data.00071.a.fits
+# "data" could be anything set by the user, "a" could be b, c, d.
+def parse_filename(filename):
+    return NotImplemented
 
-# Instrument parameters
-hard_settings = {
+#############################
+####### General Stuff #######
+#############################
+
+# Some general parameters
+general_settings = {
+    
+    # The spectrograph name. Can be anything.
+    'spectrograph': 'MinervaAustralis',
+    
+    # The name of the observatory, not recognized by EarthLocation
+    'observatory': 'Mt. Kent',
     
     # Gain of primary detector
-    'gain': None,
+    'gain': NotImplemented
     
     # Dark current of primary detector
-    'dark_current': None,
+    'dark_current': NotImplemented
     
     # Read noise of the primary detector
-    'read_noise': None,
+    'read_noise': NotImplemented
     
-    'orientation': None,
+     # The orientation of the spectral axis for 2d images
+    'orientation': NotImplemented
     
-    'wave_direction': None,
+    # The number of data pixels for forward modeling (includes cropped pix on the ends)
+    'n_data_pix': 2047,
+    
+    # increasing => left to right, decreasing => right to left
+    'wave_direction': 'increasing',
+    
+    # The time offset used in the headers
+    'time_offset': NotImplemented,
+    
+    # The tags to recognize science, bias, dark, and flat field images
+    'sci_tag': NotImplemented,
+    'bias_tag': NotImplemented,
+    'darks_tag': NotImplemented,
+    'flats_tag': NotImplemented,
+    
+    # The filename parser
+    'filename_parser': NotImplemented,
 }
 
 # Header keys for reduction and forward modeling
@@ -31,19 +63,7 @@ hard_settings = {
 # The items are lists.
 # item[0] = actual key in the header
 # item[1] = default values
-header_keys = {
-    'target': ['TCS_OBJ', 'STAR'],
-    'RA': ['TCS_RA', '00:00:00.0'],
-    'DEC': ['TCS_DEC', '00:00:00.0'],
-    'slit': ['SLIT', '0.0'],
-    'wavelength_range': ['XDTILT', 'NA'],
-    'gas_cell': ['GASCELL', 'NA'],
-    'exp_time': ['ITIME', 'NA'],
-    'time_of_obs': ['TCS_UTC', 'NA'],
-    'NDR': ['NDR', 1],
-    'BZERO': ['BZERO', 0],
-    'BSCALE': ['BSCALE', 1]
-}
+header_keys = NotImplemented
 
 ####################################################################
 ####### Reduction / Extraction #####################################
@@ -54,41 +74,10 @@ header_keys = {
 # 'closest_time' for flats to be applied from the closest in time, 'single' (single set)
 # 'closest_space' for flats to be applied from the closest in space angular sepration,
 # 'single' for a single set.
-calibration_settings = {
-    'dark_subtraction': False,
-    'flat_division': True,
-    'flat_correlation': 'closest_space',
-    'bias_subtraction': False,
-    'wavelength_calibration': False
-}
+calibration_settings = NotImplemented
 
 # Extraction settings
-extraction_settings = {
-    
-    # Order map algorithm (options: 'from_flats, 'empirical')
-    'order_map': 'from_flats',
-    
-    # Pixels to mask on the top, bottom, left, and right edges
-    'mask_left_edge': 200,
-    'mask_right_edge': 200,
-    'mask_top_edge': 30,
-    'mask_bottom_edge': 10,
-    
-    # The height of an order is defined as where the flat is located.
-    # This masks additional pixels on each side of the initial trace profile before moving forward.
-    # The profile is further flagged after thes sky background is estimated.
-    'mask_trace_edges':  0,
-    
-    # The degree of the polynomial to fit the individual order locations
-    'ndegree_poly_fit_trace' : 2,
-    
-    # Whether or not to perform a sky subtraction
-    'sky_subtraction': True,
-    'n_sky_rows': 8,
-    
-    # The window to search for the trace profile (+/- this value )
-    'trace_pos_window': 5
-}
+extraction_settings = NotImplemented
 
 
 ####################################################################
@@ -96,20 +85,13 @@ extraction_settings = {
 ####################################################################
 
 # Default forward model settings
-# Number of orders
 forward_model_settings = {
     
-    # The spectrograph name. Can be anything.
-    'spectrograph': 'MinervaAustralis',
-    
-    # The name of the observatory. Must be a recognized astropy EarthLocation.
-    'observatory': 'Mt. Kent',
-    
     # The cropped pixels
-    'crop_pix': [200, 200],
+    'crop_data_pix': [200, 200],
     
     # The units for plotting
-    'plot_wave_unit': 'nm'
+    'plot_wave_unit': 'microns'
 }
 
 # Forward model blueprints for RVs
@@ -122,15 +104,6 @@ forward_model_blueprints = {
         'input_dir': None,
         'vel': [-np.inf, 0, np.inf]
     },
-    
-    # The Iodine gas cell
-    #'gas_cell': {
-    #    'name': 'methane_gas_cell', # NOTE: full parameter names are name + base_name.
-    #    'class_name': 'GasCellModel',
-    #    'input_file': default_templates_path + 'methane_gas_cell_ishell_kgas.npz',
-    #    'depth': [1, 1, 1],
-    #    'shift': [0, 0, 0]
-    #},
     
     # Tellurics (from TAPAS)
     'tellurics': {
@@ -200,11 +173,3 @@ forward_model_blueprints = {
         'spline': [-0.03, 0.0005, 0.03]
     }
 }
-
-
-# Return the file number and date
-# icm.2019B047.191109.data.00071.a.fits
-#def parse_filename(filename):
-#    res = filename.split('.')
-#    filename_info = {'number': res[4], 'date': res[1][0:4] + res[2][2:]}
-#    return filename_info

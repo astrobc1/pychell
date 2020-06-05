@@ -5,124 +5,83 @@ import pychell.rvs
 # Path to default templates for rvs
 default_templates_path = pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep
 
+
 ##################################################################
 ####### General Stuff ############################################
 ##################################################################
 
-# Instrument parameters
-hard_settings = {
+# Some general parameters
+general_settings = {
     
-    # Image number locations (first, last) in the filenames
-    'image_nums': None
+    # The spectrograph name. Can be anything.
+    'spectrograph': 'PARVI',
+    
+    # The name of the observatory.
+    # Must be a recognized astropy EarthLocation if not computing own barycenter info.
+    'observatory': 'Palomar',
     
     # Gain of primary detector
-    'gain': None,
+    'gain': NotImplemented,
     
     # Dark current of primary detector
-    'dark_current': None,
+    'dark_current': NotImplemented,
     
     # Read noise of the primary detector
-    'read_noise': None,
+    'read_noise': NotImplemented,
     
-    # Whether or not the flat-field lamp illuminates the entire image (True) or not (False).
-    'full_flat_illumination': None,
+     # The orientation of the spectral axis for 2d images
+    'orientation': NotImplemented,
+    
+    # The number of data pixels for forward modeling (includes cropped pix on the ends)
+    'n_data_pix': 2038,
+    
+    # increasing => left to right, decreasing => right to left
+    'wave_direction': 'increasing',
+    
+    # The time offset used in the headers
+    'time_offset': NotImplemented,
+    
+    # The tags to recognize science, bias, dark, and flat field images
+    'sci_tag': NotImplemented,
+    'bias_tag': NotImplemented,
+    'darks_tag': NotImplemented,
+    'flats_tag': NotImplemented,
+    
+    # The file name parser
+    'filename_parser': NotImplemented
 }
 
-# Header keys for reduction and forward modeling
-header_keys = {
-    "object": None,
-    "slit": None,
-    "wavelength_range": None,
-    "gas_cell": None,
-    "exptime": None,
-    "time_of_obs": None
-}
 
-
+# Header keys for reduction
+header_keys = NotImplemented
 
 ####################################################################
 ####### Reduction / Extraction #####################################
 ####################################################################
 
 # calibration settings
- # flat_correlation options are
- # 'closest_time' for flats to be applied from the closest in time, 'single' (single set)
- # 'closest_space' for flats to be applied from the closest in space angular sepration,
- # 'single' for a single set.
-calibration_settings = {
-    'dark_subtraction': None,
-    'flat_division': None,
-    'flat_correlation': None,
-    'bias_subtraction': None,
-    'wavelength_calibration': None
-}
+calibration_settings = NotImplemented
 
 # Extraction settings
-extraction_settings = {
-    
-    # Pixels to mask on the top, bottom, left, and right edges
-    'mask_left_edge': None,
-    'mask_right_edge': None,
-    'mask_top_edge': None,
-    'mask_bottom_edge': None,
-    
-    # The height of an order is defined as where the flat is located.
-    # This masks additional pixels on each side of the initial trace profile before moving forward.
-    # The profile is further flagged after thes sky background is estimated.
-    'mask_trace_edges':  None,
-    
-    # The degree of the polynomial to fit the individual order locations
-    'ndegree_poly_fit_trace' : None,
-    
-    # Whether or not to perform a sky subtraction
-    'sky_subtraction': None,
-    'n_sky_rows': None,
-    
-    # The window to search for the trace profile (+/- this value )
-    'trace_pos_window': None
-}
-
+extraction_settings = NotImplemented
 
 ####################################################################
 ####### RADIAL VELOCITIES ##########################################
 ####################################################################
 
 # Default forward model settings
-# Number of orders
+# Default forward model settings
 forward_model_settings = {
     
-    # The spectrograph name. Can be anything.
-    'spectrograph': 'PARVI',
-    
-    # The name of the observatory. Must be a recognized astropy EarthLocation.
-    'observatory': 'Palomar',
-    
-    # The number of data pixels
-    'n_data_pix' : 2038,
-    
-    # The number of echelle orders
-    'n_orders': 29,
-    
     # The cropped pixels
-    'crop_pix': [10, 10],
+    'crop_data_pix': [10, 10],
     
     # The units for plotting
     'plot_wave_unit': 'nm'
 }
 
-# Construct the default PARVI forward model
-# Each entry must have a name and class.
-# A given model can be effectively not used if n_delay is greater than n_template_fits
-# Mandatory: Wavelength solution and star. Technically the rest are optional.
-# Keywords are special, but their classes they point to can be anything.
-# Keywords are rarely used explicitly in the code, but they are.
-# Keywords:
-# 'star' = star
-# 'wavelength_solution' = wavelength solution
-# 'lsf' = the line spread function
-# 'tellurics' = the telluric model
-# Remaining model components can have any keys, since the code won't be doing anything special with them.
-default_model_blueprints = {
+# Forward model blueprints for RVs
+forward_model_blueprints = {
     
     # The star
     'star': {
@@ -134,33 +93,33 @@ default_model_blueprints = {
     
     # Tellurics (from TAPAS)
     'tellurics': {
-        'name': 'yjhband_tellurics', # NOTE: full parameter names are name + component + base_name.
+        'name': 'vis_tellurics', # NOTE: full parameter names are name + species + base_name.
         'class_name': 'TelluricModelTAPAS',
-        'vel': [-4000, -1300, 1000],
-        'components': {
+        'vel': [-250, -100, 250],
+        'species': {
             'water': {
-                'input_file': default_templates_path + 'telluric_water_tapas_palomar.npz',
-                'depth': [0.01, 1.5, 5.0],
+                'input_file': default_templates_path + 'telluric_water_tapas_ctio.npz',
+                'depth': [0.01, 1.5, 4.0]
             },
             'methane': {
-                'input_file': default_templates_path + 'telluric_methane_tapas_palomar.npz',
-                'depth': [0.1, 1.0, 3.0],
+                'input_file': default_templates_path + 'telluric_methane_tapas_ctio.npz',
+                'depth': [0.1, 1.0, 3.0]
             },
             'nitrous_oxide': {
-                'input_file': default_templates_path + 'telluric_nitrous_oxide_tapas_palomar.npz',
-                'depth': [0.05, 0.65, 3.0],
+                'input_file': default_templates_path + 'telluric_nitrous_oxide_tapas_ctio.npz',
+                'depth': [0.05, 0.65, 3.0]
             },
             'carbon_dioxide': {
-                'input_file': default_templates_path + 'telluric_carbon_dioxide_tapas_palomar.npz',
-                'depth': [0.05, 0.65, 3.0],
+                'input_file': default_templates_path + 'telluric_carbon_dioxide_tapas_ctio.npz',
+                'depth': [0.05, 0.65, 3.0]
             },
             'oxygen': {
-                'input_file': default_templates_path + 'telluric_oxygen_tapas_palomar.npz',
-                'depth': [0.1, 1.1, 3.0],
+                'input_file': default_templates_path + 'telluric_oxygen_tapas_ctio.npz',
+                'depth': [0.1, 1.1, 3.0]
             },
             'ozone': {
-                'input_file': default_templates_path + 'telluric_ozone_tapas_palomar.npz',
-                'depth': [0.05, 0.65, 3.0],
+                'input_file': default_templates_path + 'telluric_ozone_tapas_ctio.npz',
+                'depth': [0.05, 0.65, 3.0]
             }
         }
     },
@@ -174,6 +133,7 @@ default_model_blueprints = {
         'base_lin': [-0.001, 1E-5, 0.001],
         'base_zero': [0.96, 1.0, 1.15],
         'spline': [-0.025, 0.001, 0.025],
+        'n_delay_splines': 0,
         
         # Blaze is centered on the blaze wavelength.
         'blaze_wavelengths': [14807.35118155, 14959.9938945 , 15115.82353631, 15274.96519038,
@@ -186,6 +146,7 @@ default_model_blueprints = {
         'class_name': 'LSFHermiteModel',
         'hermdeg': 4,
         'compress': 64,
+        'n_delay': 0,
         'width': [0.15, 0.21, 0.28], # LSF width, in angstroms (slightly larger than this for PARVI)
         'ak': [-0.075, 0.001, 0.075] # See cale et al 2019 or arfken et al some year for definition of ak > 0
     },
@@ -195,9 +156,7 @@ default_model_blueprints = {
         'name': 'laser_comb_wls',
         'class_name': 'WaveModelKnown',
         'n_splines': 0,
+        'n_delay_splines': 0,
         'spline': [-0.15, 0.01, 0.15]
     }
-    
 }
-    
-    

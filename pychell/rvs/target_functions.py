@@ -177,7 +177,6 @@ def simple_rms_shared(gp, forward_models, iter_num):
         weights[:, ispec] = np.copy(forward_models[ispec].data.badpix)
         lsf_mins[ispec] = np.nanmin(forward_models[ispec].models_dict['lsf'].build(gp)) >= 0 # Ensure LSF is >= zero
 
-
     good = np.where(np.isfinite(diffs2) & (weights > 0))[0]
     residuals2 = diffs2[good]
     weights = weights[good]
