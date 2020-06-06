@@ -303,6 +303,16 @@ class BasicFringingModel(EmpiricalMult):
         self.initial_parameters = OptimParameters.Parameters()
         self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['d'][1], minv=self.blueprint['d'][0], maxv=self.blueprint['d'][2], mcmcscale=0.1, vary=self.enabled))
         self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['fin'][1], minv=self.blueprint['fin'][0], maxv=self.blueprint['fin'][2], mcmcscale=0.1, vary=self.enabled))
+        
+        
+    def update(self, forward_model, iter_num):
+        if hasattr(self, 'n_delay'):
+            if iter_num + int(not (forward_model.models_dict['star'].from_synthetic)) + 1 == self.n_delay:
+                self.enabled = True
+                for pname in self.par_names:
+                    forward_model.initial_parameters[pname].vary = True
+        else:
+            pass
     
     
 class TemplateMult(MultModelComponent):

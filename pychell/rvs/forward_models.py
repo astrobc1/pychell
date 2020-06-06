@@ -116,7 +116,7 @@ class ForwardModels(list):
         print('Loading in data and constructing forward model objects for order ' + str(self.order_num) + ' ...')
         
         # The input files
-        input_files = [self.input_path + f for f in np.atleast_1d(np.genfromtxt(self.input_path + self.flist_file, dtype='<U100').tolist())]
+        input_files = [self.input_path + f for f in np.atleast_1d(np.genfromtxt(self.input_path + self.flist_file, dtype='<U100', comments='#').tolist())]
         self.n_spec = len(input_files)
         
         # The inidividual forward model object init

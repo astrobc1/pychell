@@ -115,6 +115,9 @@ def extract_full_image(data, general_settings, calib_settings, extraction_settin
     # Loop over orders
     for o in range(n_orders):
         
+        if o != 2:
+            continue
+        
         # Stopwatch
         stopwatch.lap(str(o))
         
@@ -341,7 +344,7 @@ def flag_bad_pixels(order_image, current_spectrum, profile_2d, badpix_mask=None,
     
     for x in range(nx):
         good = np.where(np.isfinite(current_spec_smooth_2d[:, x]) & np.isfinite(data_pe[:, x]) & (badpix_mask[:, x] == 1))[0]
-        if good.size <= 3:
+        if good.size <= 1:
             continue
         med_val = pcmath.weighted_median(current_spec_smooth_2d[:, x] * badpix_mask[:, x], med_val=0.99)
         deviations[:, x] = np.abs(current_spec_smooth_2d[:, x] - data_pe[:, x]) / med_val
@@ -375,11 +378,9 @@ def create_2d_trace_profile(order_image, trace_profile, ypositions, M1=1, M2=1):
     good_trace = np.where(np.isfinite(trace_profile))[0]
     
     for x in range(nx):
-        
         good_data = np.where(np.isfinite(order_image[:, x]))[0]
-        if good_data.size <= 3:
+        if good_data.size == 0:
             continue
-            
         profile_2d[:, x] = scipy.interpolate.CubicSpline(yarr1[good_trace] - trace_max_pos_y + ypositions[x], trace_profile[good_trace], extrapolate=False)(yarr2)
         
     return profile_2d
@@ -419,7 +420,7 @@ def rectify_trace(order_image, ypositions, M=1):
     
     for x in range(nx):
         good = np.where(np.isfinite(order_image[:, x]))[0]
-        if good.size <= 3:
+        if good.size == 0:
             continue
         order_image2[:, x] = scipy.interpolate.CubicSpline(yarr1[good] - ypositions[x], order_image[good, x], extrapolate=False)(yarr2)
         
@@ -528,6 +529,8 @@ def optimal_extraction(data_image, profile_2d, badpix_mask, exp_time, sky=None, 
 
     spec = np.full(nx, fill_value=np.nan, dtype=np.float64)
     spec_unc = np.full(nx, fill_value=np.nan, dtype=np.float64)
+    
+    n_used_pix = np.full(nx, fill_value=np.nan, dtype=np.float64)
 
     for x in range(nx):
         
@@ -567,13 +570,14 @@ def optimal_extraction(data_image, profile_2d, badpix_mask, exp_time, sky=None, 
         weights_x = weights_x / np.nansum(weights_x)
         
         good = np.where(weights_x > 0)[0]
-        if good.size <= 3:
+        n_used_pix[x] = good.size
+        if n_used_pix[x] <= 1:
             continue
         
         # 1d final flux at column x
         spec[x] = np.nansum(S_x * weights_x) / np.nansum(profile_x_sum_norm * weights_x)
         spec_unc[x] = np.sqrt(np.nansum(var_x)) / np.nansum(profile_x_sum_norm * weights_x)
-    
+
     return spec, spec_unc
 
 def plot_trace_profiles(data, trace_profiles, trace_profile_fits, M, general_settings):
@@ -689,7 +693,7 @@ def refine_trace_position(order_image, ypositions, trace_profile, trace_pos_poly
         
         # If not enough data points, continue
         good_data = np.where(np.isfinite(order_image[:, x]))[0]
-        if good_data.size < 8:
+        if good_data.size < 5:
             continue
         
         # Only consider good regions for cross correlation
