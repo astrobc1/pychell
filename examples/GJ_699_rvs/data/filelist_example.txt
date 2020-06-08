@@ -1,8 +1,0 @@
-icm.2016B107.161016.data.00033.a_obj_GJ699_reduced.fits
-icm.2016B107.161016.data.00035.a_obj_GJ699_reduced.fits
-icm.2016B107.161023.data.00111.a_obj_GJ699_reduced.fits
-icm.2016B107.161023.data.00114.a_obj_GJ699_reduced.fits
-icm.2016B107.161106.data.00091.a_obj_GJ699_reduced.fits
-icm.2016B107.161106.data.00095.a_obj_GJ699_reduced.fits
-icm.2016B107.161107.data.00089.a_obj_GJ699_reduced.fits
-icm.2016B107.161107.data.00090.a_obj_GJ699_reduced.fits
