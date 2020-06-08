@@ -41,9 +41,7 @@ import pychell.rvs.rvcalc as pcrvcalc
 
 # Optimization
 import optimparameters.parameters as OptimParameters
-from robustneldermead.neldermead import NelderMead as NelderMead2
-
-import pychell.nelder_mead as NelderMead
+from robustneldermead.neldermead import NelderMead
 
 
 # Stores all forward model objects useful wrapper to store all the forward model objects.
