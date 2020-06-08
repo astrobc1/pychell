@@ -205,6 +205,8 @@ class ForwardModels(list):
             self.rvs_dict['bisector_spans'] = np.empty(shape=(self.n_spec, self.n_template_fits), dtype=np.float64)
         
     def sort(self):
+        """Sorts the objects by BJD, in place.
+        """
         # Sort by BJD
         sorting_inds = np.argsort(self.BJDS)
         self.BJDS = self.BJDS[sorting_inds]
@@ -216,6 +218,8 @@ class ForwardModels(list):
     
     
     def init_parameters(self):
+        """Initializes the parameters for each forward model
+        """
         for ispec in range(self.n_spec):
             self[ispec].init_parameters()
     
@@ -223,6 +227,8 @@ class ForwardModels(list):
     # Performs a crude x corr to estimate the stellar RV
     # Sanity checks remaining parameters
     def opt_init_params(self):
+        """Perform a crude cross-correlation, and perform sanity checks on params.
+        """
 
         # Handle the star in parallel.
         if self[0].models_dict['star'].from_synthetic:
@@ -238,6 +244,8 @@ class ForwardModels(list):
     # Stores the forward model outputs in .npz files for all iterations
     # Stores the RVs in a single .npz
     def save_results(self):
+        """Saves the forward model results and RVs.
+        """
         
         # Save the RVs
         self.save_rvs()
@@ -248,7 +256,11 @@ class ForwardModels(list):
         
     # Wrapper to fit all spectra
     def fit_spectra(self, iter_num):
-
+        """Forward models all spectra and performs xcorr if set.
+        
+        Args:
+            iter_num (int): The iteration number.
+        """
         # Timer
         stopwatch = pcutils.StopWatch()
         
@@ -279,7 +291,8 @@ class ForwardModels(list):
     
     # Outputs RVs and cross corr analyses for all iterations for a given order.
     def save_rvs(self):
-        
+        """Saves the forward model results and RVs.
+        """
         # Full filename
         fname = self.run_output_path_rvs + self.tag + '_rvs_ord' + str(self[0].order_num) + '.npz'
         
@@ -290,6 +303,8 @@ class ForwardModels(list):
     # A pointer to the templates dictionary is stored in each forward model class
     # It can be accessed via forward_models.templates_dict or forward_models[ispec].templates_dict
     def load_templates(self):
+        """Load the initial templates and store in both.
+        """
         self.templates_dict = self[0].load_templates()
         for fwm in self:
             fwm.templates_dict = self.templates_dict
@@ -305,7 +320,11 @@ class ForwardModels(list):
     # Create output directories
     # output_dir_root is the root output directory.
     def create_output_dirs(self, output_path_root):
+        """Creates output dirs and filenames for outputs.
         
+        Args:
+            output_path_root (str): The root output path where this run is to be stored.
+        """
         # Order folder
         o_folder = 'Order' + str(self.order_num) + os.sep
             
@@ -326,7 +345,8 @@ class ForwardModels(list):
 
     # Post init summary
     def print_init_summary(self):
-        
+        """Print a summary for this run.
+        """
         # Print summary
         print('***************************************', flush=True)
         print('** Target: ' + self.star_name, flush=True)
@@ -341,7 +361,19 @@ class ForwardModels(list):
     # Wrapper for parallel processing. Solves and plots the forward model results. Also does xcorr if set.
     @staticmethod
     def solver_wrapper(forward_model, iter_num, n_spec_tot, output_path_plot=None, verbose_print=False, verbose_plot=False):
+        """A wrapper for forward modeling and cross-correlating a single spectrum.
 
+        Args:
+            forward_model (ForwardModel): The forward model object
+            iter_num (int): The iteration number.
+            n_spec_tot (int): The total number of spectra for printing purposes.
+            output_path_plot (str, optional): output path for plots. Defaults to None and uses object default.
+            verbose_print (bool, optional): Whether or not to print optimization results. Defaults to False.
+            verbose_plot (bool, optional): Whether or not to plot templates with the forward model. Defaults to False.
+
+        Returns:
+            forward_model (ForwardModel): The updated forward model since we possibly fit in parallel.
+        """
         # Start the timer
         stopwatch = pcutils.StopWatch()
         

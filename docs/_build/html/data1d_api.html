@@ -281,22 +281,60 @@ bc_vels (np.ndarray): The bary-center velocities of the observations.</p>
 </dd>
 </dl>
 <dl class="py method">
-<dt id="pychell.rvs.data1d.SpecDataMinervaAustralis.calculate_bc_info">
-<code class="sig-name descname">calculate_bc_info</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">gpars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaAustralis.calculate_bc_info" title="Permalink to this definition">¶</a></dt>
-<dd><p>Computes the bary-center Julian Day and bary-center velocities for this observation and stores them in place.</p>
+<dt id="pychell.rvs.data1d.SpecDataMinervaAustralis.calculate_bc_info_all">
+<em class="property">static </em><code class="sig-name descname">calculate_bc_info_all</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">star_name</span></em>, <em class="sig-param"><span class="n">obs_name</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaAustralis.calculate_bc_info_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the bary-center information for all observations, specific to Mt. Kent.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>obs_name</strong> (<em>str</em>) – The name of the observatory to be looked up on EarthLocations.</p></li>
+<li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects.</p></li>
+<li><p><strong>obs_name</strong> (<em>str</em>) – The name of the observatory, not actually used.</p></li>
 <li><p><strong>star_name</strong> (<em>str</em>) – The name of the star to be queuried on SIMBAD.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The BJDs of the observations
+bc_vels (np.ndarray): The bary-center velocities of the observations.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>bjds (np.ndarray)</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py method">
 <dt id="pychell.rvs.data1d.SpecDataMinervaAustralis.parse">
-<code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">gpars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaAustralis.parse" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'decreasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaAustralis.parse" title="Permalink to this definition">¶</a></dt>
+<dd><p>A default parse method which must be implemented for each instrument.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.data1d.SpecDataPARVI">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataPARVI</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'increasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataPARVI" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.data1d.SpecData1d" title="pychell.rvs.data1d.SpecData1d"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.data1d.SpecData1d</span></code></a></p>
+<p>Class for extracted 1-dimensional spectra from PARVI.</p>
+<p>Base initialization for this model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_file</strong> (<em>str</em>) – The full path + input file this spectrum corresponds to, possibly containing all orders.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
+<li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
+<li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
+<li><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.rvs.data1d.SpecDataPARVI.parse">
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'increasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataPARVI.parse" title="Permalink to this definition">¶</a></dt>
 <dd><p>A default parse method which must be implemented for each instrument.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>

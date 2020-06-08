@@ -175,9 +175,91 @@
 </dd></dl>
 
 <dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.create_output_dirs">
+<code class="sig-name descname">create_output_dirs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">output_path_root</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.create_output_dirs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates output dirs and filenames for outputs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>output_path_root</strong> (<em>str</em>) – The root output path where this run is to be stored.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.fit_spectra">
+<code class="sig-name descname">fit_spectra</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.fit_spectra" title="Permalink to this definition">¶</a></dt>
+<dd><p>Forward models all spectra and performs xcorr if set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>iter_num</strong> (<em>int</em>) – The iteration number.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.init_parameters">
+<code class="sig-name descname">init_parameters</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.init_parameters" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initializes the parameters for each forward model</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.load_templates">
+<code class="sig-name descname">load_templates</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.load_templates" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load the initial templates and store in both.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.opt_init_params">
+<code class="sig-name descname">opt_init_params</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.opt_init_params" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform a crude cross-correlation, and perform sanity checks on params.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.print_init_summary">
+<code class="sig-name descname">print_init_summary</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.print_init_summary" title="Permalink to this definition">¶</a></dt>
+<dd><p>Print a summary for this run.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.save_results">
+<code class="sig-name descname">save_results</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.save_results" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the forward model results and RVs.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.save_rvs">
+<code class="sig-name descname">save_rvs</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.save_rvs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves the forward model results and RVs.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.rvs.forward_models.ForwardModels.solver_wrapper">
+<em class="property">static </em><code class="sig-name descname">solver_wrapper</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_model</span></em>, <em class="sig-param"><span class="n">iter_num</span></em>, <em class="sig-param"><span class="n">n_spec_tot</span></em>, <em class="sig-param"><span class="n">output_path_plot</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">verbose_print</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">verbose_plot</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.solver_wrapper" title="Permalink to this definition">¶</a></dt>
+<dd><p>A wrapper for forward modeling and cross-correlating a single spectrum.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>forward_model</strong> (<em>ForwardModel</em>) – The forward model object</p></li>
+<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration number.</p></li>
+<li><p><strong>n_spec_tot</strong> (<em>int</em>) – The total number of spectra for printing purposes.</p></li>
+<li><p><strong>output_path_plot</strong> (<em>str</em><em>, </em><em>optional</em>) – output path for plots. Defaults to None and uses object default.</p></li>
+<li><p><strong>verbose_print</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to print optimization results. Defaults to False.</p></li>
+<li><p><strong>verbose_plot</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to plot templates with the forward model. Defaults to False.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The updated forward model since we possibly fit in parallel.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>forward_model (ForwardModel)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt id="pychell.rvs.forward_models.ForwardModels.sort">
 <code class="sig-name descname">sort</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.sort" title="Permalink to this definition">¶</a></dt>
-<dd><p>Stable sort <em>IN PLACE</em>.</p>
+<dd><p>Sorts the objects by BJD, in place.</p>
 </dd></dl>
 
 </dd></dl>

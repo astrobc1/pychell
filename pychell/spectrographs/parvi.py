@@ -95,7 +95,7 @@ forward_model_blueprints = {
     'tellurics': {
         'name': 'vis_tellurics', # NOTE: full parameter names are name + species + base_name.
         'class_name': 'TelluricModelTAPAS',
-        'vel': [-250, -100, 250],
+        'vel': [-2000, -100, 500],
         'species': {
             'water': {
                 'input_file': default_templates_path + 'telluric_water_tapas_palomar.npz',
