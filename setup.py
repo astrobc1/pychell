@@ -25,9 +25,9 @@ setuptools.setup(
     install_requires=install_requires,
     url="https://github.com/astrobc1/pychell",
     classifiers=[
-        "Programming Language :: Python :: 3",
-        "License :: GPLv3",
-        "Operating System :: Linux, MacOS",
+        "Programming Language :: Python :: 3.6",
+        "Operating System :: Unix",
+        "License :: OSI Approved :: GNU General Public License v3 (GPLv3)"
     ],
     python_requires='>=3.6'
 )
