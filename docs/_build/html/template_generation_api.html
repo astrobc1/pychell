@@ -94,7 +94,22 @@ registered hooks while the latter silently ignores them.</p>
 <dl class="py function">
 <dt id="pychell.rvs.template_augmenter.cubic_spline_lsq">
 <code class="sig-prename descclassname">pychell.rvs.template_augmenter.</code><code class="sig-name descname">cubic_spline_lsq</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">nights_for_template</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.cubic_spline_lsq" title="Permalink to this definition">¶</a></dt>
-<dd><p>Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid.</p>
+<dd><p>Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. The weighting scheme includes (possible inversly) the rms of the fit, the amount of telluric absorption. Weights are also applied such that the barycenter sampling is approximately uniform from vmin to vmax.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forwad model objects</p></li>
+<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to use.</p></li>
+<li><p><strong>nights_for_template</strong> (<em>str</em><em> or </em><em>list</em>) – The nights to consider for averaging residuals to update the stellar template. Options are ‘best’ to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.template_augmenter.cubic_spline_lsq_nobcweights">
+<code class="sig-prename descclassname">pychell.rvs.template_augmenter.</code><code class="sig-name descname">cubic_spline_lsq_nobcweights</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">nights_for_template</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.cubic_spline_lsq_nobcweights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. This function is identical to cubic_spline_lsq but does not include barycenter weighting.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -139,7 +154,7 @@ registered hooks while the latter silently ignores them.</p>
 
 <dl class="py function">
 <dt id="pychell.rvs.template_augmenter.weighted_average">
-<code class="sig-prename descclassname">pychell.rvs.template_augmenter.</code><code class="sig-name descname">weighted_average</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span></em>, <em class="sig-param"><span class="n">nights_for_template</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.weighted_average" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.rvs.template_augmenter.</code><code class="sig-name descname">weighted_average</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">nights_for_template</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.weighted_average" title="Permalink to this definition">¶</a></dt>
 <dd><p>Augments the stellar template by considering the weighted average of the residuals on a common high resolution grid.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>

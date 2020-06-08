@@ -41,6 +41,139 @@
 <dt id="pychell.rvs.forward_models.ForwardModels">
 <em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.forward_models.</code><code class="sig-name descname">ForwardModels</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_model_settings</span></em>, <em class="sig-param"><span class="n">model_blueprints</span></em>, <em class="sig-param"><span class="n">order_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></p>
+<p>Contains individual forward models in a list, and other helpful attributes, primarily for RVs.</p>
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.target_function">
+<code class="sig-name descname">target_function</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.target_function" title="Permalink to this definition">¶</a></dt>
+<dd><p>The function which optimizes the model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>function</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.template_augmenter">
+<code class="sig-name descname">template_augmenter</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.template_augmenter" title="Permalink to this definition">¶</a></dt>
+<dd><p>The function to augment the stellar template.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>function</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.order_num">
+<code class="sig-name descname">order_num</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.order_num" title="Permalink to this definition">¶</a></dt>
+<dd><p>The order number.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.tag">
+<code class="sig-name descname">tag</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.tag" title="Permalink to this definition">¶</a></dt>
+<dd><p>star name + user tag.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.n_spec">
+<code class="sig-name descname">n_spec</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.n_spec" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of spectra.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.n_nights">
+<code class="sig-name descname">n_nights</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.n_nights" title="Permalink to this definition">¶</a></dt>
+<dd><p>The number of nights.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.BJDS">
+<code class="sig-name descname">BJDS</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.BJDS" title="Permalink to this definition">¶</a></dt>
+<dd><p>The barycentric JD.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.BJDS_nightly">
+<code class="sig-name descname">BJDS_nightly</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.BJDS_nightly" title="Permalink to this definition">¶</a></dt>
+<dd><p>The nightly (average) barycentric JDs.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.n_obs_nights">
+<code class="sig-name descname">n_obs_nights</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.n_obs_nights" title="Permalink to this definition">¶</a></dt>
+<dd><p>Contains number of observations on each night.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.bc_vels">
+<code class="sig-name descname">bc_vels</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.bc_vels" title="Permalink to this definition">¶</a></dt>
+<dd><p>The barycentric velocity corrections.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.do_xcorr">
+<code class="sig-name descname">do_xcorr</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.do_xcorr" title="Permalink to this definition">¶</a></dt>
+<dd><p>Whether or not cross-correlation is performed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="pychell.rvs.forward_models.ForwardModels.rvs_dict">
+<code class="sig-name descname">rvs_dict</code><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.rvs_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Contains all RVs. Use rvs_dict.keys() to see available entries.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
 <dl class="py method">
 <dt id="pychell.rvs.forward_models.ForwardModels.sort">
 <code class="sig-name descname">sort</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.forward_models.ForwardModels.sort" title="Permalink to this definition">¶</a></dt>

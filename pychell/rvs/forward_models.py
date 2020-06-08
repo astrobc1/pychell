@@ -46,6 +46,22 @@ from robustneldermead.neldermead import NelderMead
 
 # Stores all forward model objects useful wrapper to store all the forward model objects.
 class ForwardModels(list):
+    """Contains individual forward models in a list, and other helpful attributes, primarily for RVs.
+
+    Attributes:
+        target_function (function): The function which optimizes the model.
+        template_augmenter (function): The function to augment the stellar template.
+        order_num (int): The order number.
+        tag (str): star name + user tag.
+        n_spec (int): The number of spectra.
+        n_nights (int): The number of nights.
+        BJDS (np.ndarray): The barycentric JD.
+        BJDS_nightly (np.ndarray): The nightly (average) barycentric JDs.
+        n_obs_nights (np.ndarray): Contains number of observations on each night.
+        bc_vels (np.ndarray): The barycentric velocity corrections.
+        do_xcorr (bool): Whether or not cross-correlation is performed.
+        rvs_dict (dict): Contains all RVs. Use rvs_dict.keys() to see available entries.
+    """
         
     def __init__(self, forward_model_settings, model_blueprints, order_num):
         
@@ -845,7 +861,7 @@ class PARVIForwardModel(ForwardModel):
     
     def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
 
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_index)
+        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
     def build_full(self, pars, iter_num):
         
@@ -862,9 +878,6 @@ class PARVIForwardModel(ForwardModel):
         # Blaze Model
         model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
-        # Total flux
-        #raw_flux_pre_conv = blaze * tell * star
-
         # Convolve Model with LSF
         model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
 
@@ -879,9 +892,9 @@ class PARVIForwardModel(ForwardModel):
 
 class MinervaAustralisForwardModel(ForwardModel):
 
-    def __init__(self, spec_num, order_num, models_dict, data, initial_parameters, gpars):
+    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
 
-        super().__init__(spec_num, order_num, models_dict, data, initial_parameters, gpars)
+        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
     def build_full(self, pars, templates_dict, iter_num, gpars):
         
@@ -890,28 +903,25 @@ class MinervaAustralisForwardModel(ForwardModel):
         final_hr_wave_grid = templates_dict['star'][:, 0]
 
         # Star
-        star = self.models_dict['star'].build(pars, templates_dict['star'][:, 0], templates_dict['star'][:, 1], final_hr_wave_grid)
+        model = self.models_dict['star'].build(pars, templates_dict['star'][:, 0], templates_dict['star'][:, 1], final_hr_wave_grid)
         
         # Gas Cell
         # EVENTUALLY IODINE GAS CELL
         ##gas = self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1], final_hr_wave_grid)
         
         # All tellurics
-        tell = self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
+        model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Blaze Model
-        blaze = self.models_dict['blaze'].build(pars, final_hr_wave_grid)
-
-        # Total flux
-        raw_flux_pre_conv = blaze * tell * star
+        model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Convolve Model with LSF
-        final_hr_flux = self.models_dict['lsf'].convolve_flux(raw_flux_pre_conv, pars=pars)
+        model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars, wave_grid=self.data.wave_grid)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, final_hr_flux, left=final_hr_flux[0], right=final_hr_flux[-1])
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
 
         return wavelength_solution, model_lr

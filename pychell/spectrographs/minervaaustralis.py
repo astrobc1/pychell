@@ -28,16 +28,16 @@ general_settings = {
     'observatory': 'Mt. Kent',
     
     # Gain of primary detector
-    'gain': NotImplemented
+    'gain': NotImplemented,
     
     # Dark current of primary detector
-    'dark_current': NotImplemented
+    'dark_current': NotImplemented,
     
     # Read noise of the primary detector
-    'read_noise': NotImplemented
+    'read_noise': NotImplemented,
     
      # The orientation of the spectral axis for 2d images
-    'orientation': NotImplemented
+    'orientation': NotImplemented,
     
     # The number of data pixels for forward modeling (includes cropped pix on the ends)
     'n_data_pix': 2047,

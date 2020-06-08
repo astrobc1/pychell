@@ -591,6 +591,7 @@ class OrderMapImage(SpecDataImage):
 class CoAddedImage(SpecDataImage):
     
     def __init__(self, input_file, base_images, orientation='x'):
+        
         super().__init__(input_file, orientation=orientation)
         
         # Stores the base images
@@ -598,7 +599,8 @@ class CoAddedImage(SpecDataImage):
         
     def coadd(self, method='sum'):
         """Co-adds the images
-        kwargs:
+        
+        Kwargs:
             method (str): Either sum or median.
         """
         data_cube = self.generate_data_cube(base_images)

@@ -242,36 +242,39 @@ class SpecDataCHIRON(SpecData1d):
         else:
             self.JD = Time(fits_data.header['DATE-OBS'].replace('T', ' '), scale='utc').jd + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)
         
-#class SpecDataPARVI(SpecData1d):
+class SpecDataPARVI(SpecData1d):
     
-#    def __init__(self, input_file, order_num, spec_num, gpars, init_self.header=False, init_data=False):
+    """ Class for extracted 1-dimensional spectra from PARVI.
+    
+    """
+    
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None, wave_direction='increasing'):
         
-#        super().__init__(input_file, order_num, spec_num, gpars)
+        # Call the super class
+        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix, wave_direction=wave_direction)
         
-        
-    # Below is code to parse the PARVI data for what I think is the preferred data format.
-    # Uncomment and tweak at will!
-    # def parse(self, gpars):
+    
+    def parse(self, wave_direction='increasing'):
         
         # Load the flux, flux unc, and bad pix arrays. Also load the known wavelength grid for a starting point
-        # fits_data = fits.open(gpars['data_input_path'] + self.input_file)[0]
-        #self.wave_grid, self.flux, self.flux_unc = fits_data.data[self.order_num, :, 0].astype(np.float64), fits_data.data[self.order_num, :, 5].astype(np.float64), fits_data.data[self.order_num, :, 6].astype(np.float64)
+        fits_data = fits.open(self.input_file)[0]
+        self.wave_grid, self.flux, self.flux_unc = fits_data.data[self.order_num, :, 0].astype(np.float64), fits_data.data[self.order_num, :, 5].astype(np.float64), fits_data.data[self.order_num, :, 6].astype(np.float64)
         
         # Normalize according to 98th percentile in flux
-        #continuum = pcmath.weighted_median(self.flux, med_val=0.98)
-        #self.flux /= continuum
-        #self.flux_unc /= continuum
+        continuum = pcmath.weighted_median(self.flux, med_val=0.98)
+        self.flux /= continuum
+        self.flux_unc /= continuum
         
         # Create bad pix array, further cropped later
-        #self.badpix = np.ones(gpars['n_data_pix'], dtype=np.float64)
-        # bad = np.where(self.flux)
-        #if bad.size > 0:
-        #    self.badpix[bad] = 0
+        self.badpix = np.ones(self.flux.size, dtype=np.float64)
+        bad = np.where(~np.isfinite(self.flux) | (self.flux == 0) | (self.flux_unc == 0) | (self.flux_unc > 0.5))[0]
+        if bad.size > 0:
+            self.badpix[bad] = 0
         
         # Convert wavelength grid to Angstroms, required!
-        #self.wave_grid *= 10
+        self.wave_grid *= 10
         
-        #self.JD = float(fits_data.header['JD'])
+        self.JD = float(fits_data.header['JD'])
         
         
 class SpecDataMinervaAustralis(SpecData1d):
@@ -281,7 +284,7 @@ class SpecDataMinervaAustralis(SpecData1d):
         # Call the super class
         super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix, wave_direction=wave_direction)
         
-    def parse(self, gpars):
+    def parse(self, wave_direction='decreasing'):
         
         # Load the flux, flux unc, and bad pix arrays
         # TOI257_ThAr_KiwiSpec_2019Aug05_0007_wcal_fib3
@@ -303,17 +306,34 @@ class SpecDataMinervaAustralis(SpecData1d):
         continuum = pcmath.estimate_continuum(self.wave_grid, self.flux, width=7, n_knots=14, cont_val=0.93)
         self.flux /= continuum
         
-        self.header = None
         
+    @staticmethod
+    def calculate_bc_info_all(forward_models, star_name, obs_name=None):
+        """ Computes the bary-center information for all observations, specific to Mt. Kent.
+
+        Args:
+            forward_models (ForwardModels): The list of forward model objects.
+            obs_name (str): The name of the observatory, not actually used.
+            star_name (str): The name of the star to be queuried on SIMBAD.
+        Returns:
+            bjds (np.ndarray): The BJDs of the observations
+            bc_vels (np.ndarray): The bary-center velocities of the observations.
+        """
+        # Import the barycorrpy module
+        from barycorrpy import get_BC_vel
+        from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
         
-    def calculate_bc_info(self, gpars):
+        # Extract the jds
+        jds = np.array([fwm.data.JD for fwm in forward_models], dtype=float)
         
-        if gpars['bary_corr_file'] is None and gpars['bary_corrs'] is None:
-            from barycorrpy import get_BC_vel # BC velocity correction
-            from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
-            self.BJD = JDUTC_to_BJDTDB(JDUTC=self.JD, starname=gpars['star_name'].replace('_', ' '), lat=27.7977, longi=151.8554, alt=682)[0][0]
-            self.bc_vel = get_BC_vel(JDUTC=self.JD, starname=gpars['star_name'].replace('_', ' '), lat=27.7977, longi=151.8554, alt=682)[0][0]
-        else:
-            self.BJD = gpars['BJDS'][self.spec_num]
-            self.bc_vel = gpars['bary_corrs'][self.spec_num]
+        # BJDs
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), lat=27.7977, longi=151.8554, alt=682)[0]
+        
+        # bc vels
+        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), lat=27.7977, longi=151.8554, alt=682)[0]
+        
+        for i in range(len(forward_models)):
+            forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
+        
+        return bjds, bc_vels
             
