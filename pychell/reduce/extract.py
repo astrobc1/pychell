@@ -27,7 +27,7 @@ import pychell.reduce.data2d as pcdata
 import optimparameters.parameters as OptimParams
 from robustneldermead.neldermead import NelderMead
 
-# This function extracts all N orders and will be ran in parallel
+
 def extract_full_image(data, general_settings, calib_settings, extraction_settings):
     """Performs calibration, traces orders if not already done so from flats, then optimally extracts the echelle orders. Results are written to files.
 
@@ -353,6 +353,7 @@ def flag_bad_pixels(order_image, current_spectrum, profile_2d, badpix_mask=None,
     
     return badpix_mask
 
+
 def create_2d_trace_profile(order_image, trace_profile, ypositions, M1=1, M2=1):
     """Creates a curved 2-dimensional trace profile given an input order image.
 
@@ -381,6 +382,7 @@ def create_2d_trace_profile(order_image, trace_profile, ypositions, M1=1, M2=1):
         profile_2d[:, x] = scipy.interpolate.CubicSpline(yarr1[good_trace] - trace_max_pos_y + ypositions[x], trace_profile[good_trace], extrapolate=False)(yarr2)
         
     return profile_2d
+
 
 def upsample_data(order_image, M):
     """Upsamples the data
@@ -423,7 +425,7 @@ def rectify_trace(order_image, ypositions, M=1):
         
     return order_image2
     
-# Sky = Sky(lambda) or Sky(x_pixel). i.e., no y dependence.
+
 def estimate_sky(order_image_hr_straight, trace_profile, n_sky_rows=8, M=1):
     """Estimates the sky background, sky(x), from a rectifed image.
 
@@ -448,7 +450,6 @@ def estimate_sky(order_image_hr_straight, trace_profile, n_sky_rows=8, M=1):
     return sky
 
 
-# Model Trace profile with a Gaussian with a varying width
 def model_trace_profile(order_image, trace_profile, M=1):
     """Models the trace profile with a modified Gaussian (exponent is free to vary).
 
@@ -577,6 +578,7 @@ def optimal_extraction(data_image, profile_2d, badpix_mask, exp_time, sky=None, 
         spec_unc[x] = np.sqrt(np.nansum(var_x)) / corrections[x]
 
     return spec, spec_unc
+
 
 def plot_trace_profiles(data, trace_profiles, trace_profile_fits, M, general_settings):
     
