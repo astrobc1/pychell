@@ -167,7 +167,7 @@ forward_model_blueprints = {
     'tellurics': {
         'name': 'kband_tellurics',
         'class_name': 'TelluricModelTAPAS',
-        'vel': [-250, -100, 100],
+        'vel': [-500, -100, 500],
         'species': {
             'water': {
                 'input_file': default_templates_path + 'telluric_water_tapas_maunakea.npz',

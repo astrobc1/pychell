@@ -41,7 +41,7 @@ import pychell.rvs.rvcalc as pcrvcalc
 
 # Optimization
 import optimparameters.parameters as OptimParameters
-#from robustneldermead.neldermead import NelderMead
+from robustneldermead.neldermead import NelderMead as NelderMead2
 
 import pychell.nelder_mead as NelderMead
 
@@ -334,10 +334,9 @@ class ForwardModels(list):
         # Construct the extra arguments to pass to the target function
         args_to_pass = (forward_model, iter_num)
         
-        #solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass)
-        #opt_result = solver.solve()
-        opt_result = NelderMead.simps(forward_model.initial_parameters, forward_model.target_function, no_improv_break=3, args_to_pass=args_to_pass)
-            
+        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-5)
+        opt_result = solver.solve()
+
         # k1 = index for forward model array access
         # k2 = Plot names for forward model objects
         # k3 = index for RV array access

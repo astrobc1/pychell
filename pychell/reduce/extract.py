@@ -115,9 +115,6 @@ def extract_full_image(data, general_settings, calib_settings, extraction_settin
     # Loop over orders
     for o in range(n_orders):
         
-        if o != 2:
-            continue
-        
         # Stopwatch
         stopwatch.lap(str(o))
         
@@ -529,8 +526,8 @@ def optimal_extraction(data_image, profile_2d, badpix_mask, exp_time, sky=None, 
 
     spec = np.full(nx, fill_value=np.nan, dtype=np.float64)
     spec_unc = np.full(nx, fill_value=np.nan, dtype=np.float64)
-    
-    n_used_pix = np.full(nx, fill_value=np.nan, dtype=np.float64)
+    corrections = np.full(nx, fill_value=np.nan, dtype=np.float64)
+    n_used_pix = np.full(nx, fill_value=np.nan, dtype=np.int64)
 
     for x in range(nx):
         
@@ -575,8 +572,9 @@ def optimal_extraction(data_image, profile_2d, badpix_mask, exp_time, sky=None, 
             continue
         
         # 1d final flux at column x
-        spec[x] = np.nansum(S_x * weights_x) / np.nansum(profile_x_sum_norm * weights_x)
-        spec_unc[x] = np.sqrt(np.nansum(var_x)) / np.nansum(profile_x_sum_norm * weights_x)
+        corrections[x] = np.nansum(profile_x_sum_norm * weights_x)
+        spec[x] = np.nansum(S_x * weights_x) / corrections[x]
+        spec_unc[x] = np.sqrt(np.nansum(var_x)) / corrections[x]
 
     return spec, spec_unc
 
