@@ -105,8 +105,12 @@ def reduce_night(user_general_settings, user_extraction_settings, user_calib_set
     #    print('Co-adding Images ...', flush=True)
         
         
+    # Correct master flats
+    if ('correct_fringing_in_flatfield' in calib_settings and calib_settings['correct_fringing_in_flatfield']) or ('correct_blaze_function_in_flatfield' in calib_settings and calib_settings['correct_blaze_function_in_flatfield']):
         
-
+        print('Correcting artifacts in master flat(s) ...', flush=True)
+        for sci_data in raw_data['science']:
+            sci_data.correct_flat_artifacts(output_dir=general_settings['output_dir_root'], calibration_settings=calib_settings)
 
     # Extraction of science spectra
     if general_settings['n_cores'] > 1:

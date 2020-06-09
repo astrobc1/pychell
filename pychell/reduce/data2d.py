@@ -31,6 +31,7 @@ import astropy.units as units
 import pychell.maths as pcmath # mathy equations
 import pychell.reduce.order_map as pcomap
 import pychell.reduce.extract as pcextract
+import pychell.reduce.calib as pccalib
 
 
 # Base class for a 2-dimensional echelle spectral image.
@@ -133,7 +134,6 @@ class SpecDataImage:
         
     def __lt__(self, other):
         return self.time_of_obs.jd < other.time_of_obs.jd
-
 
 
 
@@ -279,6 +279,15 @@ class ScienceImage(RawImage):
                 order_image_file = output_dir + 'order_map_' + self.file_date_str + '_' + self.target + '.fits'
                 input_file_dicts = order_image_file[0:-4] + 'pkl'
                 self.order_map = OrderMapImage.from_files(input_file_image=order_image_file, input_file_dicts=input_file_dicts)
+                
+                
+    def correct_flat_artifacts(self, output_dir, calibration_settings):
+        
+        # Check if this flat has already been corrected.
+        if not self.master_flat.is_corrected:
+            corrected_flat = pccalib.correct_flat_artifacts(self.master_flat, self.order_map, calibration_settings, output_dir)
+            self.master_flat.is_corrected = True
+            self.master_flat.save(corrected_flat)
         
     def __str__(self):
         s = 'Science Image:' + '\n'
@@ -422,6 +431,7 @@ class MasterFlatImage(MasterCalibImage):
         super().__init__(calib_images=calib_images, input_file=input_file, orientation=orientation, header_keys=header_keys)
         
         self.is_traced = False
+        self.is_corrected = False
         
     # Pairs flats based on their location on the sky
     # flats is a list of all individual flat frame objects
