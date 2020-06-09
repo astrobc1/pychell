@@ -149,26 +149,27 @@ def correct_flat_artifacts(flat, order_map, calibration_settings, output_dir):
             order_image[bad] = np.nan
         
         straight_flat_order = rectify_trace(order_image, ypositions)
-
-        # Horizontal crunch in spectral direction
-        hmedian_flat = np.nanmedian(straight_flat_order, axis=1)
+        straight_flat_order_smooth = pcmath.median_filter2d(straight_flat_order, 3)
+        straight_flat_order_smooth_norm = np.copy(straight_flat_order_smooth)
+        for x in range(nx):
+            good = np.where(np.isfinite(straight_flat_order_smooth_norm[:, x]))[0]
+            if good.size == 0:
+                continue
+            straight_flat_order_smooth_norm[:, x] = straight_flat_order_smooth_norm[:, x] / np.nanmax(straight_flat_order_smooth_norm[:, x])
         
         # Further mask regions with no data.
         flat_border_cutoff = 0.65
-        bad = np.where(hmedian_flat <= (np.nanmax(hmedian_flat) * flat_border_cutoff))[0]
-        nbad = bad.size
-        if nbad != 0:
-            straight_flat_order[bad, :] = np.nan
+        bad = np.where(straight_flat_order_smooth_norm < flat_border_cutoff)
+        if bad[0].size != 0:
+            straight_flat_order[bad] = np.nan
 
         # Create a horizontally smoothed version of the flat to bring out the lamp spectrum.
         # This will "remove" features smaller than length_scale, leaving only the blaze (ideally!)
         length_scale = 30
         straight_flat_hsmooth = pcmath.horizontal_median(straight_flat_order, length_scale)
 
-        # Estimate the lamp spectrum from this smoothed version. (blaze)
+        # Create a spectral and spatial profile
         spatial_profile = np.nanmedian(straight_flat_hsmooth, axis=1)
-
-        # Create a spectral profile
         spectral_profile = np.nanmedian(straight_flat_hsmooth, axis=0)
         
         # Extend profile across rows
@@ -189,7 +190,6 @@ def correct_flat_artifacts(flat, order_map, calibration_settings, output_dir):
 
         # Store in the 1D correction
         detector_patterns_1d[:, o] = detector_patterns_smooth
-
 
     # Model the fringing for each order.
 
@@ -240,7 +240,6 @@ def correct_flat_artifacts(flat, order_map, calibration_settings, output_dir):
     detector_patterns_no_fringing = np.nanmedian(detector_patterns_no_fringing_ord_dependent_1d, axis=1)
     
     # Plot the 1d detector pattern
-    
     out_file_plot = output_dir + 'calib' + os.sep + flat.base_input_file[0:-5] + '_detector_patterns.png'
     grid = np.arange(1, 2049, 64)
     plt.figure(1, figsize=(8, 5))
@@ -340,8 +339,8 @@ def plot_full_fringing_models(fringing_models, fringing_1d, out_file):
             o = n_cols * row + col
             if o + 1 > n_orders:
                 continue
-            axarr[row, col].plot(xarr, fringing_1d[:, o], color='black', lw=1)
-            axarr[row, col].plot(xarr, fringing_models[:, o], color='red', lw=1)
+            axarr[row, col].plot(xarr[200:-200], fringing_1d[200:-200, o], color='black', lw=1)
+            axarr[row, col].plot(xarr[200:-200], fringing_models[200:-200, o], color='red', lw=1)
     
     axarr[-1, 1].set_xlabel('X Pixels', fontweight='bold', fontsize=14)
     axarr[int(n_rows / 2), 0].set_ylabel('Norm. Flux', fontweight='bold', fontsize=14)

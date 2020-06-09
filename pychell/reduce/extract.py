@@ -250,14 +250,12 @@ def extract_full_image(data, general_settings, calib_settings, extraction_settin
     data.header['SNR'] = str(np.average(snrs))
 
     # Plot and write to fits file
-    plot_trace_profiles(data, trace_profiles, trace_profile_fits, M, general_settings['output_dir_root'])
+    #plot_trace_profiles(data, trace_profiles, trace_profile_fits, M, general_settings['output_dir_root'])
     plot_full_spectrum(data, reduced_orders, boxcar_spectra, general_settings['output_dir_root'])
     data.save_reduced_orders(reduced_orders)
     
     # Save Trace profiles and models
-    np.savez(data.out_file_trace_profiles, pars=trace_profile_pars, models=trace_profile_fits)
-    trace_profile_pars = np.empty(n_orders, dtype=OptimParams.Parameters)
-    trace_profile_fits = np.empty(shape=(ny*M, n_orders), dtype=np.float64)
+    #np.savez(data.out_file_trace_profiles, pars=trace_profile_pars, models=trace_profile_fits)
     
     print(' Extracted Spectrum ' + str(data.img_num+1) + ' of ' + str(data.n_tot_imgs) + ' in ' + str(round(stopwatch.time_since()/60, 3)) + ' min', flush=True)
     
