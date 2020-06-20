@@ -82,7 +82,7 @@ class ForwardModels(list):
         self.order_num = order_num
         
         # The proper tag
-        self.tag = self.star_name + '_' + self.tag
+        self.tag = self.star_name + '_' + self.spectrograph.lower() + '_' + self.tag
         
         # Create output directories
         self.create_output_dirs(output_path_root=self.output_path_root)
