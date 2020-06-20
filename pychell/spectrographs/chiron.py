@@ -46,7 +46,7 @@ general_settings = {
     'wave_direction': 'increasing',
     
     # The time offset used in the headers, used in reduction
-    'time_offset': NotImplemented,
+    'time_offset': 0,
     
     # The tags to recognize science, bias, dark, and flat field images
     'sci_tag': NotImplemented,
@@ -55,22 +55,41 @@ general_settings = {
     'flats_tag': NotImplemented,
     
     # The file name parser
-    'filename_parser': NotImplemented
+    'filename_parser': parse_filename
 }
 
 
 # Header keys for reduction
-header_keys = NotImplemented
+header_keys = {
+    'target': ['TCS_OBJ', 'STAR'],
+    'RA': ['RA', '00:00:00.0'],
+    'DEC': ['DEC', '00:00:00.0'],
+    'slit': ['SLIT', '0.0'],
+    'wavelength_range': ['XDTILT', 'NA'],
+    'gas_cell': ['GASCELL', 'NA'],
+    'exp_time': ['ITIME', 5],
+    'time_of_obs': ['TCS_UTC', 2458849.50000],
+    'NDR': ['NDR', 1],
+    'BZERO': ['BZERO', 0],
+    'BSCALE': ['BSCALE', 1]
+}
 
 ####################################################################
 ####### Reduction / Extraction #####################################
 ####################################################################
 
 # calibration settings
-calibration_settings = NotImplemented
+calibration_settings = {}
 
 # Extraction settings
-extraction_settings = NotImplemented
+extraction_settings = {
+    
+    'mask_left_edge': 400,
+    'mask_right_edge': 400,
+    'mask_top_edge': 150,
+    'mask_bottom_edge': 150,
+    
+}
 
 ####################################################################
 ####### RADIAL VELOCITIES ##########################################

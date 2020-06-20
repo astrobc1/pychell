@@ -96,6 +96,9 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
             if forward_models.n_nights > 1:
                 rvscd_std = np.nanstd(forward_models.rvs_dict['rvs_nightly'][:, iter_num])
                 print('  Stddev of all nightly RVs: ' + str(round(rvscd_std, 4)) + ' m/s', flush=True)
+            elif forward_models.n_spec >= 1:
+                rvs_std = np.nanstd(forward_models.rvs_dict['rvs'][:, iter_num])
+                print('  Stddev of all RVs: ' + str(round(rvs_std, 4)) + ' m/s', flush=True)
 
             # Compute the new stellar template, update parameters.
             if iter_num + 1 < forward_models.n_template_fits:

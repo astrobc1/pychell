@@ -103,7 +103,10 @@ extraction_settings = {
     
     # The trace profile is constructed using oversampled data.
     # This is the oversample factor. Use to not oversample.
-    'oversample': 4
+    'oversample': 4,
+    
+    # The optimal extraction algorithm
+    'optxalg': 'optimal_extraction_pmassey'
 }
 
 ####################################################################
@@ -134,6 +137,8 @@ forward_model_settings = {
     # Stellar template augmentation
     'template_augmenter': 'cubic_spline_lsq',
     
+    'nights_for_template': [],
+    
     # Number of iterations to update the stellar template
     'n_template_fits': 10, # a zeroth iteration (flat template) does not count towards this number.
     
@@ -142,7 +147,7 @@ forward_model_settings = {
     # if starting from a synthetic template
     'do_xcorr': False,
     'xcorr_range': 10*1000,
-    'xcorr_step': 10,
+    'xcorr_step': 50,
     'n_bs' : 1000,
     
     # Model Resolution (n_model_pixels = model_resolution * n_data_pixels)

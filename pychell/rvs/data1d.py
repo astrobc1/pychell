@@ -4,8 +4,7 @@ from abc import ABC, abstractmethod # Abstract classes
 import glob # File searching
 import os # OS 
 import sys # sys utils
-import pdb # debugging
-stop = pdb.set_trace
+from pdb import set_trace as stop # debugging
 
 # Science/math
 import numpy as np # Math, Arrays
@@ -242,6 +241,7 @@ class SpecDataCHIRON(SpecData1d):
         else:
             self.JD = Time(fits_data.header['DATE-OBS'].replace('T', ' '), scale='utc').jd + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)
         
+        
 class SpecDataPARVI(SpecData1d):
     
     """ Class for extracted 1-dimensional spectra from PARVI.
@@ -288,11 +288,11 @@ class SpecDataMinervaAustralis(SpecData1d):
         
         # Load the flux, flux unc, and bad pix arrays
         # TOI257_ThAr_KiwiSpec_2019Aug05_0007_wcal_fib3
-        self.wave_grid = np.loadtxt(gpars['data_input_path'] + self.input_file + '_wave.txt').T[:, ::-1][:, self.order_num]
-        self.flux = np.loadtxt(gpars['data_input_path'] + self.input_file + '_spec.txt').T[:, ::-1][:, self.order_num]
-        self.flux_unc = np.loadtxt(gpars['data_input_path'] + self.input_file + '_specerr.txt').T[:, ::-1][:, self.order_num]
-        self.JD = np.loadtxt(gpars['data_input_path'] + self.input_file + '_JD.txt')
-        itime = np.loadtxt(gpars['data_input_path'] + self.input_file + '_ExpLength.txt')
+        self.wave_grid = np.loadtxt(self.input_file + '_wave.txt').T[:, ::-1][:, self.order_num]
+        self.flux = np.loadtxt(self.input_file + '_spec.txt').T[:, ::-1][:, self.order_num]
+        self.flux_unc = np.loadtxt(self.input_file + '_specerr.txt').T[:, ::-1][:, self.order_num]
+        self.JD = np.loadtxt(self.input_file + '_JD.txt')
+        itime = np.loadtxt(self.input_file + '_ExpLength.txt')
         self.JD += (itime / 2) / (86400)
         
         self.badpix = np.ones(len(self.flux), dtype=np.float64)
@@ -303,8 +303,8 @@ class SpecDataMinervaAustralis(SpecData1d):
         self.flux_unc /= med_val
         
         # Remove blaze for now
-        continuum = pcmath.estimate_continuum(self.wave_grid, self.flux, width=7, n_knots=14, cont_val=0.93)
-        self.flux /= continuum
+        #continuum = pcmath.estimate_continuum(self.wave_grid, self.flux, width=7, n_knots=14, cont_val=0.93)
+        #self.flux /= continuum
         
         
     @staticmethod

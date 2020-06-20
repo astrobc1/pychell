@@ -313,11 +313,17 @@ def cross_correlate_star(forward_model, iter_num):
     rms = np.empty(vels.size, dtype=np.float64)
     
     # Weights for now are just bad pixels
-    weights_init = np.copy(forward_model.data.badpix)
+    weights = np.copy(forward_model.data.badpix * forward_model.data.flux_unc)
+    
+    # Flag regions of heavy tellurics
+    if 'tellurics' in forward_model.models_dict:
+        tell_flux = forward_model.models_dict['tellurics'].build(pars, forward_model.templates_dict['tellurics'],  forward_model.templates_dict['star'][:, 0])
+        tell_flux = forward_model.models_dict['lsf'].convolve_flux(tell_flux, pars=pars)
+        tell_flux = np.interp(forward_model.build_full(pars, iter_num)[0], forward_model.templates_dict['star'][:, 0], tell_flux, left=0, right=0)
+        tell_flux_weights = tell_flux**2
+        weights *= tell_flux_weights
         
     for i in range(vels.size):
-        
-        weights = weights_init
         
         # Set the RV parameter to the current step
         pars[forward_model.models_dict['star'].par_names[0]].setv(value=vels[i])
@@ -326,7 +332,7 @@ def cross_correlate_star(forward_model, iter_num):
         _, model_lr = forward_model.build_full(pars, iter_num)
         
         # Construct the RMS
-        rms[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights / np.nansum(weights)))
+        rms[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights))
 
     xcorr_star_vel = vels[np.nanargmin(rms)]
     xcorr_rv_init = xcorr_star_vel + forward_model.data.bc_vel # Actual RV is bary corr corrected

@@ -175,7 +175,7 @@ class ForwardModels(list):
         self.BJDS_nightly, self.n_obs_nights = pcrvcalc.get_nightly_jds(self.BJDS)
         
         # Sort by BJD
-        self.sort()
+        #self.sort()
         
         # The number of nights
         self.n_nights = len(self.BJDS_nightly)
@@ -215,6 +215,10 @@ class ForwardModels(list):
         # Also sort the list
         for ispec in range(self.n_spec):
             self[ispec] = self[sorting_inds[ispec]]
+            self[ispec].spec_index = ispec
+            self[ispec].spec_num = ispec + 1
+            self[ispec].data.spec_index = ispec
+            self[ispec].data.spec_num = ispec + 1
     
     
     def init_parameters(self):
@@ -928,21 +932,21 @@ class MinervaAustralisForwardModel(ForwardModel):
 
         super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
-    def build_full(self, pars, templates_dict, iter_num, gpars):
+    def build_full(self, pars, iter_num):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = templates_dict['star'][:, 0]
+        final_hr_wave_grid = self.templates_dict['star'][:, 0]
 
         # Star
-        model = self.models_dict['star'].build(pars, templates_dict['star'][:, 0], templates_dict['star'][:, 1], final_hr_wave_grid)
+        model = self.models_dict['star'].build(pars, self.templates_dict['star'][:, 0], self.templates_dict['star'][:, 1], final_hr_wave_grid)
         
         # Gas Cell
         # EVENTUALLY IODINE GAS CELL
         ##gas = self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1], final_hr_wave_grid)
         
         # All tellurics
-        model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
+        model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
         
         # Blaze Model
         model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)

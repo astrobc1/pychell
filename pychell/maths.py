@@ -447,7 +447,7 @@ def reduced_chi_square(x, err):
     weights = 1.0 / err**2
 
     # Calculate the reduced chi square defined around the weighted mean, 
-    # assuming we are not fitting to any parameters. 
+    # assuming we are not fitting to any parameters.
     redchisq = (1.0 / (x.size-1)) * np.nansum((x - weighted_mean(x, weights))**2 / err**2)
 
     return redchisq
@@ -603,3 +603,20 @@ def gauss_modified_solver(pars, x, data):
     good = np.where(np.isfinite(data))[0]
     rms = np.sqrt(np.nansum((data - model)**2) / good.size)
     return rms, 1
+
+
+def chi2_optimize_wrapper(model_builder, args_to_pass=None, kwargs_to_pass=None):
+    """[summary]
+
+    Args:
+        model_builder (function): [description]
+        args_to_pass (tuple): [description]. Defaults to None.
+        kwargs_to_pass (dict): [description]. Defaults to None.
+
+    Returns:
+        [type]: [description]
+    """
+    model = model_builder(args_to_pass, args_to_pass, kwargs_to_pass)
+    ng = np.where(np.isfinite(model) & np.isfinite(data))
+    rms = np.sqrt(np.nansum(data[good] - model[good])**2 / err[good] / ng)
+    return rms

@@ -9,6 +9,7 @@ import glob
 from scipy import constants as cs # cs.c = speed of light in m/s
 import numpy as np # Math, Arrays
 import sys
+from scipy.special import legendre
 import scipy.interpolate # Cubic interpolation, Akima interpolation
 
 # Graphics
@@ -134,6 +135,9 @@ class ResidualBlazeModel(EmpiricalMult):
         # Super
         super().__init__(blueprint, wave_bounds, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
+        # The base parameter names
+        self.base_par_names = ['_base_quad', '_base_lin', '_base_zero']
+        
         # The number of spline knots is n_splines + 1
         self.n_splines = blueprint['n_splines']
         
@@ -153,9 +157,6 @@ class ResidualBlazeModel(EmpiricalMult):
             self.blaze_wave_estimate = blueprint['blaze_wavelengths'][self.order_num - 1]
         else:
             self.blaze_wave_estimate = None
-        
-        # The base parameter names
-        self.base_par_names = ['_base_quad', '_base_lin', '_base_zero']
         
         # Set the spline parameter names and knots
         if self.n_splines > 0:
@@ -220,6 +221,9 @@ class FullBlazeModel(EmpiricalMult):
         # Super
         super().__init__(blueprint, wave_bounds, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
+        # The base parameter names
+        self.base_par_names = ['_base_amp', '_base_b', '_base_c', '_base_d']
+        
         # The number of spline knots is n_splines + 1
         self.n_splines = blueprint['n_splines']
         
@@ -234,9 +238,6 @@ class FullBlazeModel(EmpiricalMult):
         
         # The estimate of the blaze wavelength
         self.blaze_wave_estimate = blueprint['blaze_wavelengths'][self.order_num - 1]
-        
-        # The base parameter names
-        self.base_par_names = ['_base_amp', '_base_b', '_base_c', '_base_d']
         
         # Set the spline parameter names and knots
         if self.n_splines > 0:
@@ -287,6 +288,7 @@ class BasicFringingModel(EmpiricalMult):
         super().__init__(blueprint, wave_bounds, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
         self.base_par_names = ['_d', '_fin']
+        
         self.par_names = [self.name + s for s in self.base_par_names]
     
     def build(self, pars, wave_final):
@@ -341,6 +343,7 @@ class GasCellModel(TemplateMult):
         super().__init__(blueprint, wave_bounds, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
         self.base_par_names = ['_shift', '_depth']
+        
         self.par_names = [self.name + s for s in self.base_par_names]
     
     def build(self, pars, wave, flux, wave_final):
@@ -375,8 +378,8 @@ class GasCellModelOrderDependent(TemplateMult):
         super().__init__(blueprint, wave_bounds, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
         self.base_par_names = ['_shift', '_depth']
+        
         self.par_names = [self.name + s for s in self.base_par_names]
-        self.order_num = order_num
     
     def build(self, pars, wave, flux, wave_final):
         if self.enabled:
@@ -414,13 +417,14 @@ class StarModel(TemplateMult):
         # Call super method
         super().__init__(blueprint, wave_bounds, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
+        self.base_par_names = ['_vel']
+        
         if 'input_file' in blueprint and blueprint['input_file'] is not None:
             self.from_synthetic = True
         else:
             self.from_synthetic = False
             self.enabled = False
             
-        self.base_par_names = ['_vel']
         self.par_names = [self.name + s for s in self.base_par_names]
     
     def build(self, pars, wave, flux, wave_final):
@@ -453,7 +457,7 @@ class StarModel(TemplateMult):
         return template
 
 
-class StarModelOrderDependent(SpectralComponent):
+class StarModelOrderDependent(TemplateMult):
     """ A star model which is order dependent. For now this is only used for Minerva-Australis.
     """
         
@@ -462,18 +466,18 @@ class StarModelOrderDependent(SpectralComponent):
         # Call super method
         super().__init__(blueprint, wave_bounds, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
+        self.base_par_names = ['_vel']
+        
         if 'input_file' in blueprint:
             self.from_synthetic = True
         else:
             self.from_synthetic = False
             self.enabled = False
             
-        self.order_num = order_num
         if self.order_num < 10:
             self.ord_str = '0' + str(self.order_num)
         else:
             self.ord_str = str(self.order_num)
-        self.base_par_names = ['_vel']
         self.input_dir = blueprint['input_dir']
         self.par_names = [self.name + s for s in self.base_par_names]
     
@@ -542,6 +546,7 @@ class TelluricModelTAPAS(TemplateMult):
                 self.species_enabled[self.species[itell]] = True
                 self.base_par_names.append('_' + self.species[itell] + '_depth')
         self.par_names = [self.name + s for s in self.base_par_names]
+        
         
     # Telluric templates is a dictionary of templates.
     # Keys are the telluric names, values are nx * 2 arrays with columns wave, mean_flux
@@ -634,7 +639,10 @@ class LSFModel(SpectralComponent):
         self.nx = int(self.nx_model / self.compress)
         
         # The actual LSF x grid
-        self.x = np.arange(-(int(self.nx / 2) - 1), int(self.nx / 2) + 1, 1) * self.dl
+        if self.nx % 2 == 0:
+            self.x = np.arange(-(int(self.nx / 2) - 1), int(self.nx / 2) + 1, 1) * self.dl
+        else:
+            self.x = np.arange(-(int(self.nx / 2)), int(self.nx / 2) + 1, 1) * self.dl
         
     # Returns a delta function
     def build_fake(self):
@@ -648,7 +656,10 @@ class LSFModel(SpectralComponent):
             sys.exit("ERROR: Cannot construct LSF with no parameters")
         elif lsf is None:
             lsf = self.build(pars)
-        padded_flux = np.pad(raw_flux, pad_width=(int(self.nx/2-1), int(self.nx/2)), mode='constant', constant_values=(raw_flux[0], raw_flux[-1]))
+        if self.nx % 2 == 0:
+            padded_flux = np.pad(raw_flux, pad_width=(int(self.nx / 2 - 1), int(self.nx/2)), mode='constant', constant_values=(raw_flux[0], raw_flux[-1]))
+        else:
+            padded_flux = np.pad(raw_flux, pad_width=(int(self.nx / 2), int(self.nx/2)), mode='constant', constant_values=(raw_flux[0], raw_flux[-1]))
         convolved_flux = np.convolve(padded_flux, lsf, 'valid')
         return convolved_flux
     
@@ -665,9 +676,10 @@ class LSFHermiteModel(LSFModel):
         # Call super
         super().__init__(blueprint, dl, nx_model, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
+        self.base_par_names = ['_width']
+        
         # The Hermite degree
         self.hermdeg = blueprint['hermdeg']
-        self.base_par_names = ['_width']
         
         for k in range(self.hermdeg):
             self.base_par_names.append('_a' + str(k+1))
@@ -704,11 +716,10 @@ class LSFHermiteModel(LSFModel):
 class LSFModelKnown(LSFModel):
     """ A container for a known LSF. In reality this can and probably should not be used and avoided.
     """
+    
     def __init__(self, blueprint, dl, nx_model, order_num=None, wave_logspace=False, flux_logspace=False):
         
         super().__init__(blueprint, dl, nx_model, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
-        
-        # NOTE: No super call
         self.base_par_names = []
         self.par_names = []
         
@@ -740,6 +751,8 @@ class WavelengthSolutionModel(SpectralComponent):
         
         # The number of total data pixels present in the data
         self.nx = nx
+        
+        self.wave_bounds = wave_bounds
         
     # Should never be called. Need to implement if being used
     def build_fake(self):
@@ -788,6 +801,8 @@ class WaveSolModelFull(WavelengthSolutionModel):
         # Call super method
         super().__init__(blueprint, wave_bounds, pix_bounds, nx, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
+        self.base_par_names = ['_wave_lagrange_1', '_wave_lagrange_2', '_wave_lagrange_3']
+        
         # The number of wave splines
         self.n_splines = blueprint['n_splines']
         
@@ -803,9 +818,6 @@ class WaveSolModelFull(WavelengthSolutionModel):
         # The pixel and wavelength set points for the quadratic (base parameters offset from these lagrange points)
         self.base_pixel_set_points = np.array(blueprint['base_pixel_set_points'])
         self.base_wave_zero_points = np.array([blueprint['base_set_point_1'][self.order_num - 1], blueprint['base_set_point_2'][self.order_num - 1], blueprint['base_set_point_3'][self.order_num - 1]])
-        
-        # The base base parameters
-        self.base_par_names = ['_wave_lagrange_1', '_wave_lagrange_2', '_wave_lagrange_3']
         
         # Spline parameters
         if self.n_splines > 0:
@@ -860,6 +872,8 @@ class WaveModelKnown(WavelengthSolutionModel):
         # Call super method
         super().__init__(blueprint, wave_bounds, pix_bounds, nx, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
         
+        self.base_par_names = []
+        
         # # The number of splines
         self.n_splines = blueprint['n_splines']
         
@@ -873,7 +887,6 @@ class WaveModelKnown(WavelengthSolutionModel):
             self.splines_enabled = True
         
         # Construct spline parameter names
-        self.base_par_names = []
         if self.n_splines > 0:
             self.spline_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_splines + 1)
             for i in range(self.n_splines+1):
@@ -905,3 +918,54 @@ class WaveModelKnown(WavelengthSolutionModel):
             for i in range(self.n_splines + 1):
                 self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
     
+    
+    
+class WaveSolModelLegendre(WavelengthSolutionModel):
+    """ Class for a full wavelength solution via Legendre Polynomials.
+    
+    Attributes:
+    
+    """
+    
+    def __init__(self, blueprint, wave_bounds, pix_bounds, nx, order_num=None, wave_logspace=False, flux_logspace=False):
+        
+        # Call super method
+        super().__init__(blueprint, wave_bounds, pix_bounds, nx, order_num=order_num, wave_logspace=wave_logspace, flux_logspace=flux_logspace)
+        
+        self.base_par_names = []
+        
+        # The pixel and wavelength set points for the quadratic (base parameters offset from these lagrange points)
+        self.base_pixel_set_points = np.array(blueprint['base_pixel_set_points'])
+        self.base_wave_zero_points = np.array([blueprint['base_set_point_1'][self.order_num - 1], blueprint['base_set_point_2'][self.order_num - 1], blueprint['base_set_point_3'][self.order_num - 1]])
+        
+        self.leg_order = blueprint['leg_order']
+        
+        # Legendre Polynomial Coeffss
+        for i in range(self.leg_order + 1):
+            self.base_par_names.append('_leg_coeff_' + str(i))
+                
+        self.par_names = [self.name + s for s in self.base_par_names]
+        
+    def build(self, pars):
+        
+        # The normalized detector grid, [-1, 1] (inclusive)
+        pixel_grid = np.linspace(-self.nx, self.nx, num=self.nx) / self.nx
+        
+        # Construct Legendre polynomials
+        wave_sol = np.zeros(self.nx) + pars[self.par_names[0]].value
+        for l in range(1, self.leg_order + 1):
+            wave_sol += pars[self.par_names[l]].value * legendre(l, monic=False)(pixel_grid)
+
+        return wave_sol
+    
+    def init_parameters(self, templates_dict):
+        self.initial_parameters = OptimParameters.Parameters()
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.base_wave_zero_points[1], minv=self.base_wave_zero_points[1] - 0.5, maxv=self.base_wave_zero_points[1] + 0.5, mcmcscale=0.001, vary=True))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['coeff1'][1], minv=self.blueprint['coeff1'][0], maxv=self.blueprint['coeff1'][2], mcmcscale=0.001))
+        self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['coeff2'][1], minv=self.blueprint['coeff2'][0], maxv=self.blueprint['coeff2'][2], mcmcscale=0.001))
+    
+   # To enable/disable splines.
+    def update(self, forward_model, iter_num):
+        pass
+        
+        

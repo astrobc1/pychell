@@ -40,18 +40,19 @@ class SpecDataImage:
 
     Attributes:
         input_file (str): The full path + filename of the corresponding file.
-        base_input_file (str): The filename of the corresponding file with the path removed.
+        base_image_input_file (str): The filename of the corresponding file with the path removed.
         orientation (str): The orientation of the echelle orders on the detector. 'x' for aligned with rows, 'y' for columns. Defaults to 'x'.
     """
     
-    def __init__(self, input_file, orientation='x'):
+    def __init__(self, input_file=None, orientation='x'):
         """Default basic initializer.
 
         Args:
             input_file (str) The full path + filename of the corresponding file.
             orientation (str): The orientation of the echelle orders on the detector. 'x' for aligned with rows, 'y' for columns. Defaults to   'x'.
         """
-        self.input_file = input_file
+        if input_file is not None:
+            self.input_file = input_file
         self.base_input_file = os.path.basename(self.input_file)
         self.orientation = orientation
         
@@ -266,7 +267,7 @@ class ScienceImage(RawImage):
     def trace_orders(self, output_dir, extraction_settings, src=None):
         
         if src is None or src == 'empirical':
-            order_dicts, order_map_image = pcomap.trace_orders_emprical(self.parse_image(), extraction_settings)
+            order_dicts, order_map_image = pcomap.trace_orders_empirical(self.parse_image(), extraction_settings)
         elif src is 'from_flats':
             # Check if this flat has already been traced.
             if not self.master_flat.is_traced:
@@ -559,6 +560,81 @@ class OrderMapImage(SpecDataImage):
         # Order dictionary info
         self.order_dicts = order_dicts
         self.input_file_dicts = self.input_file[0:-4] + 'pkl'
+        
+    
+    @classmethod
+    def from_files(cls, input_file_image, input_file_dicts):
+        if input_file_dicts is not None:
+            with open(input_file_dicts, 'rb') as handle:
+                order_dicts = pickle.load(handle)
+        return cls(orientation='x', input_file=input_file_image, order_dicts=order_dicts)
+        
+    def save(self, order_map_image=None):
+        
+        # Save the order map image
+        if order_map_image is not None:
+            hdu = fits.PrimaryHDU(order_map_image)
+            hdul = fits.HDUList([hdu])
+            hdul.writeto(self.input_file, overwrite=True)
+            
+        # Save the order map dictionaries
+        with open(self.input_file_dicts, 'wb') as handle:
+            pickle.dump(self.order_dicts, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            
+    def __str__(self):
+        s = 'Order Map:' + '\n'
+        s += '    Input File' + self.base_input_file
+        return s
+    
+    
+    
+class EmpiricalOrderMap(SpecDataImage):
+    
+    def __init__(self, orientation, input_file, order_dicts):
+        
+        # Call super init
+        super().__init__(input_file=input_file, orientation=orientation)
+        
+        # Order dictionary info
+        self.order_dicts = order_dicts
+        self.input_file_dicts = self.input_file[0:-4] + 'pkl'
+        
+    
+    @classmethod
+    def from_files(cls, input_file_image, input_file_dicts):
+        if input_file_dicts is not None:
+            with open(input_file_dicts, 'rb') as handle:
+                order_dicts = pickle.load(handle)
+        return cls(orientation='x', input_file=input_file_image, order_dicts=order_dicts)
+        
+    def save(self, order_map_image=None):
+        
+        # Save the order map image
+        if order_map_image is not None:
+            hdu = fits.PrimaryHDU(order_map_image)
+            hdul = fits.HDUList([hdu])
+            hdul.writeto(self.input_file, overwrite=True)
+            
+        # Save the order map dictionaries
+        with open(self.input_file_dicts, 'wb') as handle:
+            pickle.dump(self.order_dicts, handle, protocol=pickle.HIGHEST_PROTOCOL)
+            
+    def __str__(self):
+        s = 'Order Map:' + '\n'
+        s += '    Input File' + self.base_input_file
+        return s
+    
+    
+class HardCodedOrderMap(OrderMapImage):
+    
+    def __init__(self, input_file, order_dicts_file, orientation='x'):
+        
+        # Call super init
+        #super().__init__(input_file=input_file, orientation=orientation)
+        
+        # Order dictionary info
+        with open(order_dicts_file, 'rb') as f:
+            self.order_dicts = pickle.load(f)
         
     
     @classmethod

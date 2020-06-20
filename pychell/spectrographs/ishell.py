@@ -124,7 +124,10 @@ extraction_settings = {
     
     # The trace profile is constructed using oversampled data.
     # This is the oversample factor.
-    'oversample': 4
+    'oversample': 4,
+    
+    # The optimal extraction algorithm
+    'optxalg': 'optimal_extraction_pmassey'
 }
 
 

@@ -7,7 +7,7 @@ forward_model_settings = {
     # REQUIRED:
     
     # Name of the spectrograph.
-    "instrument": "iSHELL",
+    "spectrograph": "iSHELL",
     
     # Input path to the data
     "input_path": "data/",

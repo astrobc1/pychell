@@ -17,8 +17,6 @@ import sklearn.cluster
 
 # Plotting
 import matplotlib
-#matplotlib.use("AGG")
-#matplotlib.use("MacOSX")
 import matplotlib.pyplot as plt
 
 # Pychell modules
@@ -154,9 +152,10 @@ def trace_orders_from_flat(flat_input, extraction_settings):
 
 # It's like the above with extra steps
 # This will fail if a majority of the trace is not used.
-def trace_orders_empirical(data_image, general_settings, extraction_settings):
+def trace_orders_empirical(data_image, extraction_settings):
     
     # Image dimensions
+    data_image = data_image.T
     ny, nx = data_image.shape
     
     data_image[0:extraction_settings['mask_bottom_edge'], :] = np.nan
@@ -179,12 +178,15 @@ def trace_orders_empirical(data_image, general_settings, extraction_settings):
     
     # Only consider regions where the flux is greater than 50%
     order_locations_all = np.zeros(shape=(ny, nx), dtype=float)
-    good = np.where(data_smooth > 0.5)
+    good = np.where(data_smooth > 0.96)
     order_locations_all[good] = 1
     
     # Perform the density cluster algorithm on a lower res grid to save time
-    nx_lr = nx #np.max([512, nx])
-    ny_lr = ny # np.max([2048, ny])
+    if nx < 512:
+        nx_lr = 512
+    else:
+        nx_lr = nx
+    ny_lr = ny
     Mx = int(nx / nx_lr)
     My = int(ny / ny_lr)
     first_x_lr, last_x_lr = int(first_x / Mx), int(last_x / Mx)
@@ -200,8 +202,9 @@ def trace_orders_empirical(data_image, general_settings, extraction_settings):
     good_points[:, 0], good_points[:, 1] = good_lr[1], good_lr[0]
     
     # Create the Density clustering object and run
-    density_cluster = sklearn.cluster.DBSCAN(eps=20, min_samples=5, metric='euclidean', algorithm='auto', p=None, n_jobs=general_settings['n_cores'])
+    density_cluster = sklearn.cluster.DBSCAN(eps=7, min_samples=500, metric='euclidean', algorithm='auto', p=None, n_jobs=1)
     db = density_cluster.fit(good_points)
+    
     
     # Extract the labels
     labels = db.labels_

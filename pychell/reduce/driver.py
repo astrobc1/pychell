@@ -97,12 +97,6 @@ def reduce_night(user_general_settings, user_extraction_settings, user_calib_set
         
         for sci_data in raw_data['science']:
             sci_data.trace_orders(output_dir=general_settings['output_dir_root'] + 'calib' + os.sep, extraction_settings=extraction_settings, src=extraction_settings['order_map'])
-
-
-
-    # Co-add any images before extraction
-    #if extraction_settings['coadd']:
-    #    print('Co-adding Images ...', flush=True)
         
         
     # Correct master flats
@@ -198,7 +192,7 @@ def init_night(user_general_settings, user_extraction_settings, user_calib_setti
         # Parse the bias dir
         bias_files = glob.glob(general_settings['input_dir'] + '*' + general_settings['bias_tag'] + '*.fits')
         
-        # Read in the bias and construct biasimage objects.
+        # Read in the bias and construct bias image objects.
         raw_data['bias'] = [pcdata.BiasImage(input_file=bias_files[f], header_keys=header_keys, parse_header=True, output_dir_root=general_settings['output_dir_root'], time_offset=general_settings['time_offset'], filename_parser=general_settings['filename_parser'], img_num=f, n_tot_imgs=len(bias_files)) for f in range(len(bias_files))]
         
         # Initialize a master bias object. No master bias is created yet.

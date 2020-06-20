@@ -102,7 +102,7 @@ forward_model_blueprints = {
         'name': 'star',
         'class_name': 'StarModelOrderDependent',
         'input_dir': None,
-        'vel': [-np.inf, 0, np.inf]
+        'vel': [-400000, 0, 400000]
     },
     
     # Tellurics (from TAPAS)
@@ -110,7 +110,7 @@ forward_model_blueprints = {
         'name': 'vis_tellurics', # NOTE: full parameter names are name + component + base_name.
         'class_name': 'TelluricModelTAPAS',
         'vel': [-250, -100, 250],
-        'components': {
+        'species': {
             'water': {
                 'input_file': default_templates_path + 'telluric_water_tapas_ctio.npz',
                 'depth': [0.01, 1.5, 4.0]
@@ -160,7 +160,7 @@ forward_model_blueprints = {
         'hermdeg': 0,
         'compress': 64,
         'n_delay': 0,
-        'width': [0.055, 0.12, 0.2], # LSF width, in angstroms
+        'width': [0.050, 0.12, 0.2], # LSF width, in angstroms
         'ak': [-0.03, 0.001, 0.2] # Hermite polynomial coefficients
     },
     
