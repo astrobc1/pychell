@@ -127,11 +127,11 @@ def binary_tellmask(gp, forward_model, iter_num):
         iter_num (int): The iteration to generate RVs from.
     """
     # Generate the forward model
-    wave_lr, model_lr = forward_model.build_full(gp, templates_dict, iter_num)
+    wave_lr, model_lr = forward_model.build_full(gp, iter_num)
     
     # Build weights from flux uncertainty
-    tell_flux = forward_model.models_dict['tellurics'].build(gp, templates_dict['tellurics'], wave_lr)
-    bad = np.where(tell_flux < 0.05)[0]
+    tell_flux = forward_model.models_dict['tellurics'].build(gp, forward_model.templates_dict['tellurics'], wave_lr)
+    bad = np.where(tell_flux < 0.9)[0]
     weights = np.copy(forward_model.data.badpix)
     if bad.size > 0:
         weights[bad] = 0
