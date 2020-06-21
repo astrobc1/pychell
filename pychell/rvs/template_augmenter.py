@@ -78,12 +78,12 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
     # Night with highest co-added S/N
     if nights_for_template == 'best':
         night_index = determine_best_night(rms, forward_models.n_obs_nights)
-        template_spec_indices = list(forward_models.get_all_spec_indices_from_night(night_index, forward_models.n_obs_nights))
+        template_spec_indices = list(forward_models.get_all_spec_indices_from_thisnight(night_index, forward_models.n_obs_nights))
     # User specified nights
     else:
         template_spec_indices = []
         for night in nights_for_template:
-            template_spec_indices += list(forward_models.get_all_spec_indices_from_night(night - 1, forward_models.n_obs_nights))
+            template_spec_indices += list(forward_models.get_all_spec_indices_from_thisnight(night - 1, forward_models.n_obs_nights))
             
     # Loop over spectra
     for ispec in range(forward_models.n_spec):
@@ -228,12 +228,12 @@ def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_templ
     # Night with highest co-added S/N
     if nights_for_template == 'best':
         night_index = determine_best_night(rms, forward_models.n_obs_nights)
-        template_spec_indices = list(forward_models.get_all_spec_indices_from_night(night_index))
+        template_spec_indices = list(forward_models.get_all_spec_indices_from_thisnight(night_index))
     # User specified nights
     else:
         template_spec_indices = []
         for night in nights_for_template:
-            template_spec_indices += list(forward_models.get_all_spec_indices_from_night(night - 1))
+            template_spec_indices += list(forward_models.get_all_spec_indices_from_thisnight(night - 1))
             
     # Loop over spectra
     for ispec in range(forward_models.n_spec):
@@ -506,12 +506,12 @@ def weighted_average(forward_models, iter_num=None, nights_for_template=None):
     # Night with highest co-added S/N
     elif nights_for_template == 'best':
         night_index = determine_best_night(rms, forward_models.n_obs_nights)
-        template_spec_indices = list(forward_models.get_all_spec_indices_from_night(night_index))
+        template_spec_indices = list(forward_models.get_all_spec_indices_from_thisnight(night_index))
     # User specified nights
     else:
         template_spec_indices = []
         for night in nights_for_template:
-            template_spec_indices += list(forward_models.get_all_spec_indices_from_night(night - 1))
+            template_spec_indices += list(forward_models.get_all_spec_indices_from_thisnight(night - 1))
 
     # Loop over spectra
     for ispec in range(forward_models.n_spec):
