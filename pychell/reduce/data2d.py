@@ -42,7 +42,6 @@ class SpecDataImage:
     Attributes:
         input_file (str): The full path + filename of the corresponding file.
         base_input_file (str): The filename of the corresponding file with the path removed.
-        parser (Parser): The parser object, must extend the Parser object.
         output_path (str): The root output path for this run.
     """
     
@@ -127,6 +126,13 @@ class RawImage(SpecDataImage):
     """
     
     def __init__(self, input_file, output_path, parser):
+        """Default initializer for a Raw image.
+
+        Args:
+            input_file (str):  The full path + filename of the corresponding file.
+            output_path (str): The root output path for this run.
+            parser (Parser): The parser object, must extend the Parser object.
+        """
         
         # Call super init
         super().__init__(input_file=input_file, output_path=output_path)
@@ -167,20 +173,19 @@ class RawImage(SpecDataImage):
 
 # Class for a a raw science frame
 class ScienceImage(RawImage):
+    """Base class for a general science image.
+    """
     
     def __init__(self, input_file, output_path, parser):
-        
+        """Default initializer for a Science image.
+
+        Args:
+            input_file (str):  The full path + filename of the corresponding file.
+            output_path (str): The root output path for this run.
+            parser (Parser): The parser object, must extend the Parser object.
+        """
         # Call super init
         super().__init__(input_file=input_file, output_path=output_path, parser=parser)
-                
-                
-    def correct_flat_artifacts(self, output_dir, calibration_settings):
-        
-        # Check if this flat has already been corrected.
-        if not self.master_flat.is_corrected:
-            corrected_flat = pccalib.correct_flat_artifacts(self.master_flat, self.order_map, calibration_settings, output_dir)
-            self.master_flat.is_corrected = True
-            self.master_flat.save(corrected_flat)
         
     def __str__(self):
         s = 'Science Image:' + '\n'
@@ -206,11 +211,19 @@ class ScienceImage(RawImage):
 
 # Class for raw bias frame 
 class BiasImage(RawImage):
+    """Class for a single bias image.
+    """
     
-    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_path_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
-        
+    def __init__(self, input_file, output_path, parser):
+        """Default initializer for a bias image.
+
+        Args:
+            input_file (str):  The full path + filename of the corresponding file.
+            output_path (str): The root output path for this run.
+            parser (Parser): The parser object, must extend the Parser object.
+        """
         # Call super init
-        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_path_root=output_path_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
+        super().__init__(input_file=input_file, output_path=output_path, parser=parser)
         
     def __str__(self):
         s = 'Bias:' + '\n'
@@ -220,11 +233,19 @@ class BiasImage(RawImage):
     
 # Class for raw dark frame
 class DarkImage(RawImage):
+    """Class for a single dark image.
+    """
     
-    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_path_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
-        
+    def __init__(self, input_file, output_path, parser):
+        """Default initializer for a single dark image.
+
+        Args:
+            input_file (str):  The full path + filename of the corresponding file.
+            output_path (str): The root output path for this run.
+            parser (Parser): The parser object, must extend the Parser object.
+        """
         # Call super init
-        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_path_root=output_path_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
+        super().__init__(input_file=input_file, output_path=output_path, parser=parser)
         
     def __str__(self):
         s = 'Dark:' + '\n'
@@ -235,9 +256,17 @@ class DarkImage(RawImage):
  
 # Class for raw flat frame
 class FlatImage(RawImage):
+    """Class for a single flat field image.
+    """
     
     def __init__(self, input_file, output_path, parser):
-        
+        """Default initializer for a single flat field image.
+
+        Args:
+            input_file (str):  The full path + filename of the corresponding file.
+            output_path (str): The root output path for this run.
+            parser (Parser): The parser object, must extend the Parser object.
+        """
         # Call super init
         super().__init__(input_file=input_file, output_path=output_path, parser=parser)
         
@@ -256,6 +285,10 @@ class FlatImage(RawImage):
 # Actual calibration routines are in calib.py,
 # So this is primarily a helpful container
 class MasterCalibImage(SpecDataImage):
+    """Base class for a master calib image.
+    Attributes:
+        individuals (list): The single frame images which make up this master calibration image.
+    """
     
     def __init__(self, individuals):
         
@@ -315,11 +348,12 @@ class MasterCalibImage(SpecDataImage):
     
     
 class MasterFlatImage(MasterCalibImage):
-    
+    """Class for a master flat field image.
+    """
     def __init__(self, individuals):
         """
         Args:
-            individuals (list of FlatFieldImages): The individual flat field images which generate this master flat field.
+            individuals (list): A list of the individual flat field images which generate this master flat field.
         """
         
         # Super init
@@ -334,13 +368,16 @@ class MasterFlatImage(MasterCalibImage):
     
     
 class MasterDarkImage(MasterCalibImage):
-    
-    def __init__(self, calib_images, input_file, orientation='x', header_keys=None):
+    """Class for a master dark image.
+    """
+    def __init__(self, individuals):
+        """
+        Args:
+            individuals (list): A list of the individual dark images which generate this master dark.
+        """
         
         # Super init
-        super().__init__(calib_images=calib_images, input_file=input_file, orientation=orientation, header_keys=header_keys)
-        
-        # Nothing else done, so is redundant for now ...
+        super().__init__(individuals=individuals)
         
         
     # Pairs darks based on their exposure times
@@ -371,13 +408,16 @@ class MasterDarkImage(MasterCalibImage):
     
     
 class MasterBiasImage(MasterCalibImage):
-    
-    def __init__(self, calib_images, input_file, orientation='x', header_keys=None):
+    """Class for a master bias image.
+    """
+    def __init__(self, individuals):
+        """
+        Args:
+            individuals (list): A list of the individual bias images which generate this master bias.
+        """
         
         # Super init
-        super().__init__(calib_images=calib_images, input_file=input_file, orientation=orientation, header_keys=header_keys)
-        
-        # Nothing else done, so is redundant for now ...
+        super().__init__(individuals=individuals)
     
     def __str__(self):
         s = 'Master Bias:' + '\n'
@@ -398,9 +438,18 @@ class MasterBiasImage(MasterCalibImage):
 # Each OrderMapImage corresponds to a fits file containing the labels / nans, and a dictionary with keys = labels (int), containing polynomial coffeicients (pcoeffs) and heights (height).
     
 class OrderMapImage(SpecDataImage):
-    
+    """ Base class for an order map image
+
+    Attributes:
+        data (SpecDataImage): The image this order map corresponds to.
+    """
     def __init__(self, data, input_file):
-        
+        """Initialize an order map image object.
+
+        Args:
+            data (SpecDataImage): The image this order map corresponds to.
+            input_file (str):  The full path + filename of the corresponding order map file.
+        """
         # Call super init
         super().__init__(input_file=input_file, output_path=data.output_path)
         
@@ -431,9 +480,18 @@ class OrderMapImage(SpecDataImage):
     
     
 class EmpiricalOrderMap(OrderMapImage):
+    """Base class for an empirically derived order map.
     
+    Attr:
+        trace_alg (function): The trace algorithm in order_map.py to call.
+    """
     def __init__(self, data, method):
-        
+        """Initialize an empirically derived order map.
+
+        Args:
+            data (SpecDataImage): The data this order map corresponds to
+            method (str): The name of the function in order_map.py to trace the orders.
+        """
         # Generate the filename for the median combined image
         input_file = data.output_path + 'trace' + os.sep + data.base_input_file_noext + '_order_map.fits'
         
@@ -445,12 +503,21 @@ class EmpiricalOrderMap(OrderMapImage):
     
     
     def trace_orders(self, redux_settings):
+        """Traces the orders.
+
+        Args:
+            redux_settings (dict): The merged reduction settings dictionary.
+        """
         order_map_image, orders_list = self.trace_alg(self.data, redux_settings)
         self.orders_list = orders_list
         self.save(order_map_image)
         
     def save(self, order_map_image):
-        
+        """Saves the trace map image and list of dictionaries.
+
+        Args:
+            order_map_image (np.ndarray): An image of labels for each point.
+        """
         # Save the order map image, default header
         hdu = fits.PrimaryHDU(order_map_image)
         hdul = fits.HDUList([hdu])
@@ -467,9 +534,14 @@ class EmpiricalOrderMap(OrderMapImage):
     
     
 class HardCodedOrderMap(OrderMapImage):
-    
+    """Base class for a hard coded order map already stored in files. Must have attribute input_file.
+    """
     def __init__(self, data):
-        
+        """Initialize a hard coded map.
+
+        Args:
+            data (SpecDataImage): The image this order map corresponds to.
+        """
         # Input file is stored as a class variable
         input_file = self.input_file
         
@@ -482,16 +554,21 @@ class HardCodedOrderMap(OrderMapImage):
         return s
 
 class iSHELLKGasMap(HardCodedOrderMap):
-    
+    """Map for iSHELL Kgas mode.
+    """
     input_file = os.path.dirname(spectrographs.__file__) + os.sep + 'ishell' + os.sep + 'order_map_KGAS.fits'
     
     def __init__(self, data):
-        
+        """Initialize a hard coded map.
+
+        Args:
+            data (SpecDataImage): The image this order map corresponds to.
+        """
         super().__init__(data=data)
         
         
 class CHIRONMap(HardCodedOrderMap):
-    
+
     input_file = os.path.dirname(spectrographs.__file__) + os.sep + 'chiron' + os.sep + 'chiron_order_map_master2.fits'
     
     def __init__(self, data):
@@ -500,9 +577,15 @@ class CHIRONMap(HardCodedOrderMap):
         
         
 class FlatFieldOrderMap(EmpiricalOrderMap):
-    
+    """Orders determined by a flat field order map.
+    """
     def __init__(self, data, method=None):
-        
+        """Initialize a flat field order map
+
+        Args:
+            data (SpecDataImage): The image this order map corresponds to.
+            method ([type], optional): [description]. Defaults to trace_orders_from_flat_field.
+        """
         if method is None:
             method = 'trace_orders_from_flat_field'
         
@@ -565,7 +648,8 @@ class CoAddedImage(SpecDataImage):
 #### The signature of these functions must take an input path, and return a dictionary of images where each key is a type of above image.
 
 class Parser:
-    
+    """Base class to help parse data for a given instrument.
+    """
     def __init__(self):
         # nothing is Done.
         pass
@@ -863,7 +947,7 @@ class iSHELLParser(Parser):
         data.time_of_obs = modified_header['time_of_obs']
         
         data.header = modified_header
-        
+
         
 
 # Under dev
