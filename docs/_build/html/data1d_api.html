@@ -39,7 +39,7 @@
 <span id="data"></span><h2>Data<a class="headerlink" href="#module-pychell.rvs.data1d" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
 <dt id="pychell.rvs.data1d.SpecData1d">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecData1d</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'increasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecData1d" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecData1d</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecData1d" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Base class for an extracted 1-dimensional spectrum.</p>
 <dl class="py attribute">
@@ -130,17 +130,6 @@
 </dl>
 </dd></dl>
 
-<dl class="py attribute">
-<dt id="pychell.rvs.data1d.SpecData1d.wave_direction">
-<code class="sig-name descname">wave_direction</code><a class="headerlink" href="#pychell.rvs.data1d.SpecData1d.wave_direction" title="Permalink to this definition">¶</a></dt>
-<dd><p>Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>str</p>
-</dd>
-</dl>
-</dd></dl>
-
 <p>Base initialization for this model component.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -149,7 +138,6 @@
 <li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
 <li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
 <li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
-<li><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.</p></li>
 </ul>
 </dd>
 </dl>
@@ -209,13 +197,8 @@ bc_vels (np.ndarray): The bary-center velocities of the observations.</p>
 
 <dl class="py method">
 <dt id="pychell.rvs.data1d.SpecData1d.parse">
-<code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'increasing'</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecData1d.parse" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecData1d.parse" title="Permalink to this definition">¶</a></dt>
 <dd><p>A default parse method which must be implemented for each instrument.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid.</p>
-</dd>
-</dl>
 </dd></dl>
 
 <dl class="py method">
@@ -236,7 +219,7 @@ bc_vels (np.ndarray): The bary-center velocities of the observations.</p>
 
 <dl class="py class">
 <dt id="pychell.rvs.data1d.SpecDataCHIRON">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataCHIRON</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'increasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataCHIRON" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataCHIRON</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataCHIRON" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#pychell.rvs.data1d.SpecData1d" title="pychell.rvs.data1d.SpecData1d"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.data1d.SpecData1d</span></code></a></p>
 <p>Class for extracted 1-dimensional spectra from CHIRON on the SMARTS 1.5 m telescope.</p>
 <p>Base initialization for this model component.</p>
@@ -247,26 +230,20 @@ bc_vels (np.ndarray): The bary-center velocities of the observations.</p>
 <li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
 <li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
 <li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
-<li><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
 <dt id="pychell.rvs.data1d.SpecDataCHIRON.parse">
-<code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'increasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataCHIRON.parse" title="Permalink to this definition">¶</a></dt>
-<dd><p>Parses CHIRON data and extracts the flux weighted midpoint of the exposure from the header if present, otherwise computes the mid exposure time. The flux uncertainty is not provided from CHIRON (?), so we assume all normalized uncertainties to be 0.001. The wavelength grid provided by the ThAr lamp is provided in the wave_grid attribute.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>wave_direction</strong> (<em>str</em>) – The direction of the wavelength grid (‘increasing’ or ‘decreasing’). If decreasing, the data is flipped.</p>
-</dd>
-</dl>
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataCHIRON.parse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parses CHIRON data and extracts the flux weighted midpoint of the exposure from the header if present, otherwise computes the mid exposure time. The flux uncertainty is not provided from CHIRON (?), so we assume all normalized uncertainties to arbitrarily be 0.001 (uniform). The wavelength grid provided by the ThAr lamp is provided in the wave_grid attribute.</p>
 </dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt id="pychell.rvs.data1d.SpecDataMinervaAustralis">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataMinervaAustralis</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'increasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaAustralis" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataMinervaAustralis</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaAustralis" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#pychell.rvs.data1d.SpecData1d" title="pychell.rvs.data1d.SpecData1d"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.data1d.SpecData1d</span></code></a></p>
 <p>Base initialization for this model component.</p>
 <dl class="field-list simple">
@@ -276,7 +253,6 @@ bc_vels (np.ndarray): The bary-center velocities of the observations.</p>
 <li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
 <li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
 <li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
-<li><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.</p></li>
 </ul>
 </dd>
 </dl>
@@ -304,20 +280,111 @@ bc_vels (np.ndarray): The bary-center velocities of the observations.</p>
 
 <dl class="py method">
 <dt id="pychell.rvs.data1d.SpecDataMinervaAustralis.parse">
-<code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'decreasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaAustralis.parse" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaAustralis.parse" title="Permalink to this definition">¶</a></dt>
 <dd><p>A default parse method which must be implemented for each instrument.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.data1d.SpecDataMinervaNorthT1">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataMinervaNorthT1</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaNorthT1" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.data1d.SpecData1d" title="pychell.rvs.data1d.SpecData1d"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.data1d.SpecData1d</span></code></a></p>
+<p>Class for extracted 1-dimensional spectra from the MINERVA North array.</p>
+<p>Base initialization for this model component.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid.</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_file</strong> (<em>str</em>) – The full path + input file this spectrum corresponds to, possibly containing all orders.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
+<li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
+<li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
+</ul>
 </dd>
 </dl>
+<dl class="py method">
+<dt id="pychell.rvs.data1d.SpecDataMinervaNorthT1.parse">
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaNorthT1.parse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parses MINERVA North T1 data.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.data1d.SpecDataMinervaNorthT2">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataMinervaNorthT2</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaNorthT2" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.data1d.SpecData1d" title="pychell.rvs.data1d.SpecData1d"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.data1d.SpecData1d</span></code></a></p>
+<p>Class for extracted 1-dimensional spectra from the MINERVA North array.</p>
+<p>Base initialization for this model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_file</strong> (<em>str</em>) – The full path + input file this spectrum corresponds to, possibly containing all orders.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
+<li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
+<li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.rvs.data1d.SpecDataMinervaNorthT2.parse">
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaNorthT2.parse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parses MINERVA North T1 data.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.data1d.SpecDataMinervaNorthT3">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataMinervaNorthT3</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaNorthT3" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.data1d.SpecData1d" title="pychell.rvs.data1d.SpecData1d"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.data1d.SpecData1d</span></code></a></p>
+<p>Class for extracted 1-dimensional spectra from the MINERVA North array.</p>
+<p>Base initialization for this model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_file</strong> (<em>str</em>) – The full path + input file this spectrum corresponds to, possibly containing all orders.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
+<li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
+<li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.rvs.data1d.SpecDataMinervaNorthT3.parse">
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaNorthT3.parse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parses MINERVA North T3 data.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.rvs.data1d.SpecDataMinervaNorthT4">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataMinervaNorthT4</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaNorthT4" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.rvs.data1d.SpecData1d" title="pychell.rvs.data1d.SpecData1d"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.data1d.SpecData1d</span></code></a></p>
+<p>Class for extracted 1-dimensional spectra from the MINERVA North array.</p>
+<p>Base initialization for this model component.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input_file</strong> (<em>str</em>) – The full path + input file this spectrum corresponds to, possibly containing all orders.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
+<li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
+<li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.rvs.data1d.SpecDataMinervaNorthT4.parse">
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataMinervaNorthT4.parse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parses MINERVA North T4 data.</p>
 </dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt id="pychell.rvs.data1d.SpecDataPARVI">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataPARVI</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'increasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataPARVI" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataPARVI</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataPARVI" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#pychell.rvs.data1d.SpecData1d" title="pychell.rvs.data1d.SpecData1d"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.data1d.SpecData1d</span></code></a></p>
 <p>Class for extracted 1-dimensional spectra from PARVI.</p>
 <p>Base initialization for this model component.</p>
@@ -328,26 +395,20 @@ bc_vels (np.ndarray): The bary-center velocities of the observations.</p>
 <li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
 <li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
 <li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
-<li><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
 <dt id="pychell.rvs.data1d.SpecDataPARVI.parse">
-<code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'increasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataPARVI.parse" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataPARVI.parse" title="Permalink to this definition">¶</a></dt>
 <dd><p>A default parse method which must be implemented for each instrument.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid.</p>
-</dd>
-</dl>
 </dd></dl>
 
 </dd></dl>
 
 <dl class="py class">
 <dt id="pychell.rvs.data1d.SpecDataiSHELL">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataiSHELL</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'decreasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataiSHELL" title="Permalink to this definition">¶</a></dt>
+<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.data1d.</code><code class="sig-name descname">SpecDataiSHELL</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">input_file</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">spec_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataiSHELL" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#pychell.rvs.data1d.SpecData1d" title="pychell.rvs.data1d.SpecData1d"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.rvs.data1d.SpecData1d</span></code></a></p>
 <p>Class for extracted 1-dimensional spectra from iSHELL on the NASA IRTF.</p>
 <p>Base initialization for this model component.</p>
@@ -358,19 +419,13 @@ bc_vels (np.ndarray): The bary-center velocities of the observations.</p>
 <li><p><strong>order_num</strong> (<em>int</em>) – The image order number, defaults to None.</p></li>
 <li><p><strong>spec_num</strong> (<em>int</em>) – The spectral image number, defaults to None.</p></li>
 <li><p><strong>crop_pix</strong> (<em>list</em>) – Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.</p></li>
-<li><p><strong>wave_direction</strong> (<em>str</em>) – Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
 <dt id="pychell.rvs.data1d.SpecDataiSHELL.parse">
-<code class="sig-name descname">parse</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wave_direction</span><span class="o">=</span><span class="default_value">'decreasing'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataiSHELL.parse" title="Permalink to this definition">¶</a></dt>
-<dd><p>Parses iSHELL data and computes the mid-exposure time (no exp meter -&gt; no flux-weighting).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>wave_direction</strong> (<em>str</em>) – The direction of the wavelength grid (‘increasing’ or ‘decreasing’). If decreasing, the data is flipped.</p>
-</dd>
-</dl>
+<code class="sig-name descname">parse</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.data1d.SpecDataiSHELL.parse" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parses iSHELL data and computes the mid-exposure time (no exp meter for iSHELL).</p>
 </dd></dl>
 
 </dd></dl>

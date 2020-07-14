@@ -18,7 +18,7 @@ setuptools.setup(
     author="Bryson Cale",
     author_email="bryson.cale1@gmail.com",
     description="Reduce echelle spectra and generate radial velocities",
-    longdescription=long_description,
+    long_description=long_description,
     long_description_content_type="text/x-rst",
     packages = setuptools.find_packages(),
     include_package_data=True,

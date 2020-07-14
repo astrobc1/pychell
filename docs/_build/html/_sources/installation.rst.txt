@@ -19,5 +19,5 @@ Change directories into the head pychell directory, and install with
 From PyPI
 =========
 
-Download and install with ``pip install pychell``
+As of now, pypi limits file sizes to 60 MB, so the code must be downloaded and installed via GitHub. A bypass request has not yet been made.
 
