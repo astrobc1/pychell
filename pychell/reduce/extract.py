@@ -4,11 +4,14 @@ import os
 import glob
 from pdb import set_trace as stop
 import sys
+import copy
 import warnings
 
 # Science / Math
 import numpy as np
 import scipy.interpolate
+import torch
+import scipy.signal
 from astropy.io import fits
 
 # LLVM
@@ -28,716 +31,1164 @@ import optimparameters.parameters as OptimParams
 from robustneldermead.neldermead import NelderMead
 
 
-def extract_full_image(data, general_settings, calib_settings, extraction_settings):
-    """Performs calibration, traces orders if not already done so from flats, then optimally extracts the echelle orders. Results are written to files.
+
+def extract_full_image_wrapper(data_all, index, redux_settings):
+    """A wrapper to extract a full frame image for printing purposes.
 
     Args:
-        general_settings (dict): The general settings dictionary.
-        calib_settings (dict): The calibration settings dictionary.
-        extraction_settings (dict): The extraction settings dictionary.
+        data_all (list): A list of SpecDataImage objects.
+        index (int): The index of the image in data_all to extract.
+        redux_settings (dict): The reduction settings dictionary.
     """
     
-    print(' Extracting Spectrum ' + str(data.img_num+1) + ' of ' + str(data.n_tot_imgs) + ' ...', flush=True)
-    print(' ' + str(data), flush=True)
-    
-    # Timer
+    # Initialize a timer
     stopwatch = pcutils.StopWatch()
+    
+    print('Extracting Image ' + str(index + 1) + ' of ' + str(len(data_all)) + ' ...')
+    
+    # Fetch the image from the full list
+    data = data_all[index]
+    
+    # Extract the full frame image
+    extract_full_image(data, redux_settings)
+    
+    print(' Extracted Spectrum ' + str(index+1) + ' of ' + str(len(data_all)) + ' in ' + str(round(stopwatch.time_since()/60, 3)) + ' min', flush=True)
 
+def extract_full_image(data, redux_settings):
+    """ Performs calibration and extracts a full frame image.
+
+    Args:
+        data (SpecDataImage): The data to reduce and extract.
+        redux_settings (dict): The reduction settings dictionary.
+    """
+    
+    # A stopwatch for timing
+    stopwatch = pcutils.StopWatch()
+    
     # Load the full frame raw image
     data_image = data.parse_image()
+
+    # Load the order map
+    trace_map_image, orders_list = data.order_map.load()
     
-    # Detector properties
-    gain, read_noise, dark_current = general_settings['gain'], general_settings['read_noise'], general_settings['dark_current']
+    # Standard dark, bias, flat calibration.
+    data_image = pccalib.standard_calibration(data, data_image, bias_subtraction=redux_settings['bias_subtraction'], dark_subtraction=redux_settings['dark_subtraction'], flat_division=redux_settings['flat_division'])
     
-    # Perform the order map from the data itself if set
-    if extraction_settings['order_map'] == 'empirical':
-        print('    Tracing Orders ...', flush=True)
-        data.trace_orders(general_settings['output_dir_root'], extraction_settings, src='empirical')
-        
-    # If using a hardcoded order map, load it in.
-    #if extraction_settings['order_map'] == 'hardcoded':
-        
-    # Define the order map information from the trace algorithm
-    order_dicts, order_map_image = data.order_map.order_dicts, data.order_map.parse_image()
-    
-    # Extract the image dimensions
+    # The imenage dimensions
     ny, nx = data_image.shape
     
-    # The number of orders
-    n_orders = len(order_dicts)
+    # The number of echelle orders, possibly composed of multiple traces.
+    n_orders = len(orders_list)
+    n_traces = len(orders_list[0])
     
-    # Oversample factor
-    M = extraction_settings['oversample']
+    # Mask edge pixels as nan (not an actual crop)
+    data_image = crop_image(data_image, redux_settings)
     
-    # Load the calibration images
-    if calib_settings['bias_subtraction']:
-        master_bias_image = data.master_bias.parse_image()
-    else:
-        master_bias_image = None
+    # Also flag regions in between orders
+    bad = np.where(~np.isfinite(trace_map_image))
+    if bad[0].size > 0:
+        data_image[bad] = np.nan
+    
+    # Used for science, last col is flux, flux_unc, badpix
+    reduced_orders = np.empty(shape=(n_orders, n_traces, nx, 3), dtype=float)
+    
+    # Boxcar extracted spectra (no profile weights)
+    boxcar_spectra = np.empty(shape=(n_orders, n_traces, nx), dtype=float)
+    
+    # Trace profiles and positions for each order, possibly multi-trace
+    trace_profile_csplines = np.empty(shape=(n_orders, n_traces), dtype=scipy.interpolate.CubicSpline)
+    
+    # Y Positions
+    y_positions = np.empty(shape=(n_orders, n_traces, nx), dtype=float)
+    
+    # Loop over orders, possibly multi-trace
+    for order_index, single_order_list in enumerate(orders_list):
         
-    if calib_settings['dark_subtraction']:
-        master_dark_image = data.master_dark.parse_image()
-    else:
-        master_dark_image = None
+        stopwatch.lap(order_index)
+        print('  Extracting Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' ...')
         
-    if calib_settings['flat_division']:
-        master_flat_image = data.master_flat.parse_image()
-    else:
-        master_flat_image = None
-    
-    # Standard reduction steps
-    data_image = pccalib.standard_calibration(data_image, master_flat_image=master_flat_image, master_dark_image=master_dark_image, master_bias_image=master_bias_image)
-    
-    # Mask edge pixels as nan
-    data_image[0:extraction_settings['mask_bottom_edge'], :] = np.nan
-    data_image[ny-extraction_settings['mask_top_edge']:, :] = np.nan
-    data_image[:, 0:extraction_settings['mask_left_edge']] = np.nan
-    data_image[:, nx-extraction_settings['mask_right_edge']:] = np.nan
-    
-    # Create helpful 1d position arrays
-    xarr = np.arange(nx)
-    yarr = np.arange(ny)
-
-    # Initiate storage arrays that will be useful for diagnostic plots
-    # flux (photoelectrons), flux unc (photoelectrons), badpix
-    reduced_orders = np.empty(shape=(n_orders, nx, 3), dtype=np.float64) # Optimal
-    boxcar_spectra = np.empty(shape=(n_orders, nx), dtype=np.float64) # Boxcar, no uncertainty or bad pix stored
-
-    # Each entry has shape=(height, 2), the first col is the y pixels, the second col is the profile
-    trace_profiles = np.empty(shape=(ny*M, n_orders), dtype=np.float64)
-    
-    # Estimate the SNR of the exposure
-    snrs = np.empty(n_orders, dtype=np.float64)
-
-    # Loop over orders
-    for o in range(n_orders):
-        
-        # Stopwatch
-        stopwatch.lap(str(o))
-        
-        #################################
-        ##### Trace Profile & Y Pos #####
-        #################################
-
-        # Estimate y trace positions from the given order mapping
-        y_positions_estimate = np.polyval(order_dicts[o]['pcoeffs'], xarr)
-
-        # Extract the height of the order
-        height = int(np.ceil(order_dicts[o]['height'])) + 3
-
-        # Create order_image where only the relevant order is seen, still ny x nx
-        order_image = np.copy(data_image)
-        good_order = np.where(order_map_image == order_dicts[o]['label'])
-        bad_order = np.where(order_map_image != order_dicts[o]['label'])
-        n_good_order = good_order[0].size
-        n_bad_order = bad_order[0].size
-        if n_bad_order != 0:
-            order_image[bad_order] = np.nan
+        # Orders are composed of multiple traces
+        if len(single_order_list) > 1:
             
-        # Rectify the data to get an estimate of the trace profile
-        order_image_hr_straight = rectify_trace(order_image, y_positions_estimate, M=M)
-        
-        # Estimate the trace profile from the rectified trace
-        trace_profile_estimate = np.nanmedian(order_image_hr_straight, axis=1)
-        good = np.where(np.isfinite(trace_profile_estimate))[0]
-        
-        # Refine trace position with cross correlation
-        y_positions_refined = refine_trace_position(order_image, y_positions_estimate, trace_profile_estimate, trace_pos_polyorder=extraction_settings['trace_pos_polyorder'], M=M)
-        
-        # Now with a better y positions array, re-rectify the data and estimate the trace profile.
-        order_image_hr_straight = rectify_trace(order_image, y_positions_refined, M=M)
-
-        # New trace profile from better y position.
-        trace_profile = np.nanmedian(order_image_hr_straight, axis=1)
-        trace_profile_orig = np.copy(trace_profile)
-        
-        good = np.where(np.isfinite(trace_profile))[0]
-        
-        # Estimate sky and remove from profile
-        if extraction_settings['sky_subtraction']:
-            sky = estimate_sky(order_image_hr_straight, trace_profile, n_sky_rows=extraction_settings['n_sky_rows'], M=M)
-            trace_profile -= np.nanmedian(sky) # subtrace off baseline estimate from sky
-        else:
-            trace_profile = np.copy(trace_profile)
-            
-        # Fix negative locations from sky subtraction
-        bad = np.where(trace_profile < 0)[0]
-        if bad.size > 0:
-            trace_profile[bad] = np.nan
-        
-        # Pass trace to storage array
-        trace_profiles[:, o] = trace_profile
-
-        # Estimate the S/N of the star in units of photoelectrons.
-        # PE = ADU * Gain
-        snrs[o] = np.sqrt(np.nansum(trace_profile) * gain / M)
-        
-        # Create a 2d curved profile with the refined trace position
-        trace_profile_2d = create_2d_trace_profile(order_image, trace_profile, y_positions_refined, M1=M, M2=1)
-        
-        # Create a bad pixel mask and flag pixels with less than 5 percent flux
-        badpix_mask = np.ones(shape=(ny, nx), dtype=np.float64) # ones and zeros
-        bad = np.where((trace_profile_2d / np.nanmax(trace_profile_2d, axis=0) <= 0.05) | (~np.isfinite(order_image)) | (~np.isfinite(trace_profile_2d)))
-        if bad[0].size > 0:
-            badpix_mask[bad] = 0
-            
-        ############################
-        ### "Optimal" Extraction ###
-        ############################
-        
-        # Define the optimal extraction algorithm
-        spec_extracter = eval(extraction_settings['optxalg'])
-        
-        bad_thresh = [0.5, 0.2]
-        
-        for iteration in range(2):
-
-            # Do the optimal extraction then flag bad pixels
-            opt_spectrum, err_opt_spectrum = spec_extracter(order_image, trace_profile_2d, badpix_mask, data.exp_time, sky=sky, n_sky_rows=extraction_settings['n_sky_rows'], gain=gain, read_noise=read_noise, dark_current=dark_current)
-            
-            if iteration < 2:
-                badpix_mask = flag_bad_pixels(order_image, opt_spectrum, trace_profile_2d, badpix_mask, sky, gain, bad_thresh=bad_thresh[iteration])
+            for sub_trace_index, single_trace_dict in enumerate(single_order_list):
                 
+                stopwatch.lap(sub_trace_index)
+                print('    Extracting Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(order_dict['n_traces']) + ' ...')
+                
+                reduced_orders[order_index, sub_trace_index, :, :], boxcar_spectra[order_index, sub_trace_index, :], trace_profile_csplines[order_index, sub_trace_index], y_positions[order_index, sub_trace_index, :] = extract_single_trace(data, data_image, trace_map_image, single_trace_dict, redux_settings)
+                
+                print('    Extracted Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(order_dict['n_traces']) + ' in ' + str(round(stopwatch.time_since(sub_trace_index), 3)) + ' min ')
+                
+        # Orders are composed of single trace
+        else:
+            reduced_orders[order_index, 0, :, :], boxcar_spectra[order_index, 0, :], trace_profile_csplines[order_index, 0], y_positions[order_index, 0, :] = extract_single_trace(data, data_image, trace_map_image, single_order_list[0], redux_settings)
             
-        # Also generate a boxcar spectrum
-        boxcar_spectrum = boxcar_extraction(order_image, trace_profile_2d, sky=sky, badpix_mask=badpix_mask, gain=gain, units='PE')
-        
-        ###################
-        ##### Outputs #####
-        ###################
-        
-        # Initialize a final badpix array
-        badpix_1d = np.ones(nx, dtype=int)
-        bad = np.where(~np.isfinite(opt_spectrum) | ~np.isfinite(err_opt_spectrum))[0]
-        if bad.size > 0:
-            
-            badpix_1d[bad] = 0
-            
-            # Also changes infs to nans
-            opt_spectrum[bad] = np.nan
-            err_opt_spectrum[bad] = np.nan
-            boxcar_spectrum[bad] = np.nan
-            
-        # Flag according to outliers in 1d spectrum
-        thresh = 5 / snrs[o] # ~ 5 sigma
-        opt_spectrum_smooth = pcmath.median_filter1d(opt_spectrum, 5)
-        med_val = pcmath.weighted_median(opt_spectrum_smooth, med_val=0.99)
-        bad = np.where(np.abs(opt_spectrum_smooth - opt_spectrum) > thresh*med_val)[0]
-
-        # Pass to storage arrays
-        reduced_orders[o, :, 0] = opt_spectrum
-        reduced_orders[o, :, 1] = err_opt_spectrum
-        reduced_orders[o, :, 2] = badpix_1d
-        
-        boxcar_spectra[o, :] = boxcar_spectrum
-
-        print('  Extracted Order ' + str(o+1) + ' of ' + str(n_orders) + ' in ' + str(round(stopwatch.time_since(str(o))/60, 3)) + ' min', flush=True)
-        
-    # Store the SNR in the header
-    data.header['SNR'] = str(np.average(snrs))
+        print('  Extracted Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' in ' + str(round(stopwatch.time_since(order_index) / 60, 3)) + ' min ')
 
     # Plot and write to fits file
-    plot_trace_profiles(data, trace_profiles, M, general_settings['output_dir_root'])
-    plot_full_spectrum(data, reduced_orders, boxcar_spectra, general_settings['output_dir_root'])
+    plot_trace_profiles(data, trace_profile_csplines)
+    plot_extracted_spectra(data, reduced_orders, boxcar_spectra)
     data.save_reduced_orders(reduced_orders)
     
-    # Save Trace profiles and models
-    np.savez(data.out_file_trace_profiles, trace_profiles=trace_profiles)
+    # Save Trace profiles and refined trace positions
+    fname = data.output_path + 'trace' + os.sep + data.base_input_file_noext + '_traces.npz'
+    np.savez(fname, trace_profiles=trace_profile_csplines, y_positions=y_positions)
+
+
+# Performs standard extraction
+def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_settings, refine_trace_pos=True):
+    """Extract a single trace.
+
+    Args:
+        data (SpecDataImage): The data to extract.
+        data_image (np.ndarray): The corresponding image.
+        trace_map_image (np.ndarray): The image trace map image containing labels of each individual trace.
+        trace_dict (dict): The dictionary containing location information for this trace
+        redux_settings (dict): The reduction settings dictionary.
+        refine_trace_pos (bool, optional): Whether or not to refine the trace position. Defaults to True.
+
+    Returns:
+        np.ndarray: The optimally reduced spectra with shape=(nx, 3)
+        np.ndarray: The boxcar reduced spectra with shape=(nx,)
+        CubicSpline: The trace profile defined by a CubicSpline object.
+        y_positions_refined: The refined trace positions.
+    """
+    # Stopwatch
+    stopwatch = pcutils.StopWatch()
     
-    print(' Extracted Spectrum ' + str(data.img_num+1) + ' of ' + str(data.n_tot_imgs) + ' in ' + str(round(stopwatch.time_since()/60, 3)) + ' min', flush=True)
+    # Image dimensions
+    ny, nx = data_image.shape
+    
+    # Helpful arrays
+    xarr, yarr = np.arange(nx), np.arange(ny)
+    
+    # Extract the oversample factor
+    M = redux_settings['oversample']
+    
+    #################################
+    ##### Trace Profile & Y Pos #####
+    #################################
+
+    # Estimate y trace positions from the given order mapping
+    y_positions_estimate = np.polyval(trace_dict['pcoeffs'], xarr)
+
+    # Extract the height of the trace
+    height = int(np.ceil(trace_dict['height']))
+
+    # Create trace_image where only the relevant trace is seen, still ny x nx
+    trace_image = np.copy(data_image)
+    good_data = np.where(np.isfinite(trace_image))
+    badpix_mask = np.zeros_like(trace_image)
+    badpix_mask[good_data] = 1
+    good_trace = np.where(trace_map_image == trace_dict['label'])
+    bad_trace = np.where(trace_map_image != trace_dict['label'])
+    if bad_trace[0].size > 0:
+        trace_image[bad_trace] = np.nan
+        badpix_mask[bad_trace] = 0
+        
+    # Flag obvious bad pixels
+    trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
+    med_val = pcmath.weighted_median(trace_image_smooth, med_val=0.99)
+    bad = np.where((trace_image < 0) & (trace_image > 2*med_val))
+    if bad[0].size > 0:
+        trace_image[bad] = np.nan
+        badpix_mask[bad] = 0
+        
+    # The image in units of PE
+    trace_image = convert_image_to_pe(trace_image, redux_settings['detector_props'])
+    
+    print('    Estimating Trace Profile ...', flush=True)
+    
+    # Estimate the trace profile from the current y positions
+    trace_profile_cspline_estimate = estimate_trace_profile(trace_image, y_positions_estimate, height, M=M, mask_edges=[redux_settings['mask_trace_edges'], redux_settings['mask_trace_edges']])
+    
+    if refine_trace_pos:
+        
+        print('    Refining Trace Profile ...', flush=True)
+        
+        n_iters = 3
+        y_positions_refined = np.copy(y_positions_estimate)
+        trace_profile_cspline = copy.deepcopy(trace_profile_cspline_estimate)
+        
+        for iteration in range(n_iters):
+    
+            # Refine trace position with cross correlation
+            y_positions_refined = refine_trace_position(data, trace_image, y_positions_refined, trace_profile_cspline, badpix_mask, height, redux_settings, trace_pos_polyorder=redux_settings['trace_pos_polyorder'], M=M)
+        
+            # Now with a possibly better y positions array, re-estimate the trace profile.
+            trace_profile_cspline = estimate_trace_profile(trace_image, y_positions_refined, height, M=M, mask_edges=[redux_settings['mask_trace_edges'], redux_settings['mask_trace_edges']])
+        
+    else:
+        
+        # Use the pre-constructed positions and trace profile
+        y_positions_refined = y_positions_estimate
+        trace_profile_cspline = trace_profile_cspline_estimate
     
     
-def boxcar_extraction(order_image, profile_2d, sky=None, badpix_mask=None, gain=1.0, units='PE'):
+    ###########################
+    ##### Sky Subtraction #####
+    ###########################
+    
+    # Estimate sky and remove from profile
+    if redux_settings['sky_subtraction']:
+        print('    Estimating Background Sky ...', flush=True)
+        sky = estimate_sky(trace_image, y_positions_refined, trace_profile_cspline, height, n_sky_rows=redux_settings['n_sky_rows'], M=M)
+        # subtrace off baseline estimate from trace profile as well
+        tp = trace_profile_cspline(trace_profile_cspline.x)
+        _, trace_max = estimate_trace_max(trace_profile_cspline, height)
+        sky_percentile = pcmath.weighted_median(sky, med_val=0.05) / trace_max
+        tp -= pcmath.weighted_median(tp, med_val=sky_percentile)
+        bad = np.where(tp < 0)[0]
+        if bad.size > 0:
+            tp[bad] = np.nan
+        good = np.where(np.isfinite(tp))[0]
+        trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x[good], tp[good])
+    else:
+        sky = None
+        
+    # Determine the fractions of the pixels used
+    pixel_fractions = generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions_refined, badpix_mask, height, min_profile_flux=redux_settings['min_profile_flux'])
+        
+    ############################
+    #### Optimal Extraction ####
+    ############################
+    
+    # The extraction algorithm
+    spec_extractor = eval(redux_settings['optx_alg'])
+    
+    print('    Optimally Extracting Trace ...', flush=True)
+
+    spec1d, unc1d, badpix_mask = spec_extractor(data, trace_image, y_positions_refined, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, sky=sky)
+
+    # Also generate a final boxcar spectrum
+    boxcar_spectrum1d, _ = boxcar_extraction(trace_image, y_positions_refined, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, redux_settings['detector_props'], exp_time=data.exp_time, sky=sky, n_sky_rows=redux_settings['n_sky_rows'])
+    
+    # Generate a final badpix array and flag obvious bad pixels
+    badpix1d = np.ones(nx, dtype=int)
+    bad = np.where(~np.isfinite(spec1d) | ~np.isfinite(unc1d))[0]
+    if bad.size > 0:
+        badpix1d[bad] = 0
+        spec1d[bad] = np.nan
+        unc1d[bad] = np.nan
+        boxcar_spectrum1d[bad] = np.nan
+        
+    # Flag according to outliers in 1d spectrum
+    thresh = 0.3
+    spec1d_smooth = pcmath.median_filter1d(spec1d, 3)
+    continuum = pcmath.weighted_median(spec1d_smooth, med_val=0.99)
+    bad = np.where(np.abs(spec1d_smooth - spec1d) / continuum > thresh)[0]
+    if bad.size > 0:
+        spec1d[bad] = np.nan
+        unc1d[bad] = np.nan
+        badpix1d[bad] = 0
+    
+    # Bring together the science spectrum
+    reduced_spectrum = np.empty(shape=(nx, 3), dtype=float)
+    reduced_spectrum[:, 0], reduced_spectrum[:, 1], reduced_spectrum[:, 2] = spec1d, unc1d, badpix1d
+    
+    return reduced_spectrum, boxcar_spectrum1d, trace_profile_cspline, y_positions_refined
+    
+def boxcar_extraction(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, detector_props, exp_time, sky=None, n_sky_rows=None):
     """Performs a boxcar extraction on the nonrectified data.
 
     Args:
-        order_image (np.ndarray): The data image.
-        profile_2d (np.ndarray): The curved 2-dimensional profile, used to correct for bad pixels in the weighted sum.
-        sky (np.ndarray): The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).
-        badpix_mask: The bad pixel image mask, defaults to None (all finite pixels are considered).
-        gain (float): The gain of the detector.
-        units (str): The units to perform the extraction in. 'PE' for photoelectron, 'ADU' for analog to digital. Defaults to 'PE'
-    Returns:
-        spec (np.ndarray): The optimally extracted 1-dimensional spectrum.
-        spec_unc (np.ndarray): The corresponding uncertainty.
-    """
-    ny, nx = order_image.shape
-    
-    # Create a bad pix mask is not already set
-    if badpix_mask is None:
-        badpix_mask = np.ones_like(order_image)
-        bad = np.where(~np.isfinite(order_image))
-        if bad[0].size > 0:
-            badpix_mask[bad] = 0
-            
-    # Create a dummy sky array if not set
-    if sky is None:
-       sky = np.zeros(nx) 
-    
-    # If units in pe, multiply by gain
-    if units == 'PE':
-        order_image = order_image * gain
-        sky = sky * gain
-    
-    spec = np.full(nx, fill_value=np.nan, dtype=np.float64)
-    
-    for x in prange(nx):
-        S_x = order_image[:, x] - sky[x] # Subtract sky
-        weights = badpix_mask[:, x] / np.nansum(badpix_mask[:, x]) # Normalize the weights
-        profile_x = profile_2d[:, x] / np.nansum(profile_2d[:, x]) # Normalize this profile such that sum(P) = 1
-        spec[x] = np.nansum(S_x * weights) / np.nansum(profile_x * weights) # Sum, account for unused pix.
-        
-    return spec
-
-
-def flag_bad_pixels(order_image, current_spectrum, profile_2d, badpix_mask=None, sky=None, gain=1.0, bad_thresh=1):
-    """Flags bad pixels in the data by convolving the flux back into 2d space with the curved trace profile and comparing to the data.
-
-    Args:
-        order_image (np.ndarray): The data image.
-        current_spectrum (np.ndarray): The current extracted 1-dimensional spectrum.
-        profile_2d (np.ndarray): The curved 2-dimensional profile, used to correct for bad pixels in the weighted sum.
-        badpix_mask: The current bad pixel image mask, defaults to None (all finite pixels are considered).
-        sky (np.ndarray): The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).
-        gain (float): The gain of the detector.
-        bad_thresh (float): The threshhold for bad pixels. Deviations larger than this in the data are flagged.
-    """
-    # Image dimensions
-    ny, nx = order_image.shape
-    
-    # Sky
-    if sky is None:
-        sky = np.zeros(nx)
-    
-    # Normalize trace profile
-    profile_2d_sum_norm = profile_2d / np.nansum(profile_2d, axis=0)
-
-    # Smooth the current spectrum
-    current_spec_smooth = pcmath.median_filter1d(current_spectrum, 5)
-    
-    # Extend (convolve) the 1d flux into the spatial direction according to the trace profile
-    current_spec_smooth_2d = np.outer(np.ones(ny, dtype=np.float64), current_spec_smooth) * profile_2d_sum_norm
-    
-    # Deviations
-    deviations = np.empty(shape=(ny, nx), dtype=np.float64) + np.nan
-    
-    # Convert the data to PE
-    data_pe = (order_image - np.outer(np.ones(nx), sky)) * gain
-    
-    for x in range(nx):
-        good = np.where(np.isfinite(current_spec_smooth_2d[:, x]) & np.isfinite(data_pe[:, x]) & (badpix_mask[:, x] == 1))[0]
-        if good.size <= 1:
-            continue
-        med_val = pcmath.weighted_median(current_spec_smooth_2d[:, x] * badpix_mask[:, x], med_val=0.99)
-        deviations[:, x] = np.abs(current_spec_smooth_2d[:, x] - data_pe[:, x]) / med_val
-    
-    bad = np.where(np.isfinite(deviations) & (deviations > bad_thresh))
-
-    if bad[0].size > 0:
-        badpix_mask[bad] = 0
-    
-    return badpix_mask
-
-
-def create_2d_trace_profile(order_image, trace_profile, ypositions, M1=1, M2=1):
-    """Creates a curved 2-dimensional trace profile given an input order image.
-
-    Args:
-        order_image (np.ndarray): A data image.
-        trace_profile (np.ndarray): The 1-dimensional trace profile.
-        ypositions (np.ndarray): The locations of the trace on the detector, y(x).
-        M1 (int): The initial oversample factor, defaults to 1.
-        M2 (int): The desired oversample factor, defaults to 1.
-    """
-    ny, nx = order_image.shape
-    
-    profile_2d = np.empty_like(order_image) + np.nan
-    
-    yarr1 = np.arange(0, ny, 1 / M1)
-    yarr2 = np.arange(0, ny, 1 / M2)
-
-    trace_max_pos_y = yarr1[np.nanargmax(trace_profile)]
-    
-    good_trace = np.where(np.isfinite(trace_profile))[0]
-
-    for x in range(nx):
-        good_data = np.where(np.isfinite(order_image[:, x]))[0]
-        if good_data.size <= 1:
-            continue
-        profile_2d[:, x] = scipy.interpolate.CubicSpline(yarr1[good_trace] - trace_max_pos_y + ypositions[x], trace_profile[good_trace], extrapolate=False)(yarr2)
-        
-    return profile_2d
-
-
-def upsample_data(order_image, M):
-    """Upsamples the data
-
-    Args:
-        order_image (np.ndarray): The data image.
-        M (int): The desired oversample factor.
-    """
-    ny, nx = order_image.shape
-    
-    good = np.where(np.isfinite(order_image))
-    
-    order_image_hr = scipy.interpolate.interp2d(np.arange(nx), np.arange(ny), order_image, kind='cubic', copy=True, bounds_error=False, fill_value=np.nan)(np.arange(0, ny, 1 / M), np.arange(nx))
-    
-    return order_image_hr
-
-
-def rectify_trace(order_image, ypositions, M=1):
-    """Rectifies (straightens) the trace.
-
-    Args:
-        order_image (np.ndarray): The data image.
-        ypositions (np.ndarray): The locations of the trace on the detector, y(x).
-        M (int): The desired oversample factor, defaults to 1.
-    """
-    ny, nx = order_image.shape
-    
-    yarr1 = np.arange(ny)
-    yarr2 = np.arange(0, ny, 1/M)
-    fiducial_center_y = int(ny / 2)
-    yarr2 = yarr2 - fiducial_center_y
-    
-    order_image2 = np.empty(shape=(ny*M, nx)) + np.nan
-    
-    for x in range(nx):
-        good = np.where(np.isfinite(order_image[:, x]))[0]
-        if good.size <= 1:
-            continue
-        order_image2[:, x] = scipy.interpolate.CubicSpline(yarr1[good] - ypositions[x], order_image[good, x], extrapolate=False)(yarr2)
-        
-    return order_image2
-    
-
-def estimate_sky(order_image_hr_straight, trace_profile, n_sky_rows=8, M=1):
-    """Estimates the sky background, sky(x), from a rectifed image.
-
-    Args:
-        straight_order_image (np.ndarray): The rectified data image.
-        trace_profile (np.ndarray): The 1-dimensional trace profile.
-        n_sky_rows (int): The number of rows to consider in estimating the sky background, sky(x).
-    """
-
-    # Estimate the sky by considering where the flux is less than 10 percent the max value
-    sky_locs = np.argsort(trace_profile)[0:int(n_sky_rows*M)]
-    
-    # Create a smoothed image
-    smoothed_image = pcmath.median_filter2d(order_image_hr_straight, width=3, preserve_nans=True)
-    
-    # Estimate the sky background from this smoothed image
-    sky_init = np.nanmedian(smoothed_image[sky_locs, :], axis=0)
-    
-    # Smooth the sky again
-    sky = pcmath.median_filter1d(sky_init, width=3)
-    
-    return sky
-
-
-def model_trace_profile(order_image, trace_profile, M=1, opt_fun=None):
-    """Models the trace profile with a modified Gaussian (exponent is free to vary).
-
-    Args:
-        order_image (np.ndarray): The data image.
-        trace_profile (np.ndarray): The 1-dimensional trace profile.
-        M (int): The oversample factor, defaults to 1.
-    """
-    
-    # The optimization function
-    if opt_fun is None:
-        opt_fun = pcmath.gauss_modified_solver
-    
-    yarr = np.arange(0, trace_profile.size / M, 1 / M)
-
-    # Normalize the trace to max = 1
-    trace_profile_maxnorm = trace_profile / np.nanmax(trace_profile)
-    
-    # Estimate parameters
-    
-    # Center
-    mu = yarr[np.nanargmax(trace_profile)]
-    
-    # Sigma
-    left_cut = yarr[np.where((trace_profile_maxnorm < 0.5) & (yarr < mu))[0][-1]]
-    right_cut = yarr[np.where((trace_profile_maxnorm < 0.5) & (yarr > mu))[0][0]]
-    sig = (right_cut - left_cut) / 3
-    
-    # Amplitude
-    amp = 1.0
-    
-    # Exponent
-    d = 1.0
-    
-    # Construct Parameter objects
-    init_pars = OptimParams.Parameters()
-    init_pars.add_parameter(OptimParams.Parameter(name='amp', value=amp, minv=0.9*amp, maxv=1.1*amp))
-    init_pars.add_parameter(OptimParams.Parameter(name='mu', value=mu, minv=mu-2, maxv=mu+2))
-    init_pars.add_parameter(OptimParams.Parameter(name='sigma', value=sig, minv=sig*0.5, maxv=sig*1.5))
-    init_pars.add_parameter(OptimParams.Parameter(name='d', value=d, minv=0.6, maxv=1.4))
-    
-    # Run the Nelder-Mead solver
-    solver = NelderMead(opt_fun, init_pars, args_to_pass=(yarr, trace_profile_maxnorm))
-    fit_result = solver.solve()
-    best_pars = fit_result[0]
-
-    # Re-construct the best fit trace profile
-    trace_fit = pcmath.gauss_modified(yarr, best_pars['amp'].value, best_pars['mu'].value, best_pars['sigma'].value, best_pars['d'].value)
-    
-    return best_pars, trace_fit
-
-
-def optimal_extraction_pmassey(data_image, profile_2d, badpix_mask, exp_time, sky=None, n_sky_rows=None, sky_err=None, gain=1, read_noise=0, dark_current=0):
-    """Performs optimal extraction on the nonrectified data.
-
-    Args:
-        data_image (np.ndarray): The data image.
-        profile_2d (np.ndarray): The curved 2-dimensional profile, used to correct for bad pixels in the weighted sum.
-        badpix_mask (np.ndarray): The bad pixel image mask, defaults to None (all finite pixels are considered).
+        trace_image (np.ndarray): The masked data image.
+        y_positions (np.ndarray): The trace positions for each column.
+        trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
+        pixel_fractions (np.ndarray): The fractions of each pixel to use.
+        height (int): The height of the trace.
+        redux_settings (dict): The reduction settings dictionary.
+        detector_props (list): List of detector properties to properly calculate read noise.
         exp_time (float): The exposure time.
+        badpix_mask (np.ndarray): The bad pixel image mask (1=good, 0=bad).
         sky (np.ndarray): The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).
-        n_sky_rows (int): The number of rows the sky was estimated from.
-        gain (float): The gain of the detector, defaults to 1.
-        read_noise (float): The read noise of the detector, defaults to 0.
-        dark_current (float): The dark current of the detector, defaults to 0.
+        n_sky_rows (int): The number of rows used to determine the sky background.
     Returns:
-        spec (np.ndarray): The optimally extracted 1-dimensional spectrum.
-        spec_unc (np.ndarray): The corresponding uncertainty.
+        np.ndarray: The boxcar extracted 1-dimensional spectrum.
+        np.ndarray: The corresponding uncertainty.
     """
-    data_image = data_image * gain # Convert the actual data to PEs
     
     # image dims
-    ny, nx = data_image.shape
+    ny, nx = trace_image.shape
+    
+    # Trace profile
+    trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+    good_trace_profile = np.where(np.isfinite(trace_profile))[0]
     
     # Sky background
     if sky is not None:
-        sky = sky * gain # same for background sky
+        sky_err = np.sqrt(sky / (n_sky_rows - 1))
     else:
         sky = np.zeros(nx)
-    if sky is not None and sky_err is None:
-        sky_err = np.sqrt(sky / (n_sky_rows - 1))
-    
-    # Detector read noise
-    eff_read_noise = read_noise + dark_current * exp_time
+        sky_err = sky
 
+    # Storage arrays
     spec = np.full(nx, fill_value=np.nan, dtype=np.float64)
     spec_unc = np.full(nx, fill_value=np.nan, dtype=np.float64)
     corrections = np.full(nx, fill_value=np.nan, dtype=np.float64)
-    n_used_pix = np.full(nx, fill_value=np.nan, dtype=np.int64)
+    
+    yarr = np.arange(ny)
+    
+    badpix_maskcp = np.copy(badpix_mask)
+    
+    trace_max_pos, _ = estimate_trace_max(trace_profile_cspline, height)
 
     for x in range(nx):
         
         # Define views
-        profile_x = profile_2d[:, x] # The trace profile
-        badpix_x = badpix_mask[:, x]
-        data_x = data_image[:, x] # The data (includes sky) in units of PEs
+        badpix_x = badpix_maskcp[:, x] # Bad pixels (1=good, 0=bad)
+        data_x = trace_image[:, x] # The data (includes sky) in units of PEs
 
         if sky is not None:
             S_x = data_x - sky[x] # Star is trace - sky
         else:
             S_x = np.copy(data_x)
         
-        if np.all(~np.isfinite(S_x)) or np.nansum(badpix_x) == 0:
-            spec[x] = np.nan
-            spec_unc[x] = np.nan
-            continue
-        
+        # Flag negative values after sky subtraction
         negs = np.where(S_x < 0)[0]
+        
         if negs.size > 0:
             S_x[negs] = np.nan
             badpix_x[negs] = 0
-        
-        # Normalize the trace profile
-        profile_x_sum_norm = profile_x / np.nansum(profile_x)
             
-        # Variance
-        if sky is not None:
-            var_x = read_noise**2 + S_x + sky[x] + sky_err[x]**2
-        else:
-            var_x = read_noise**2 + S_x
+        if np.all(~np.isfinite(S_x)) or np.nansum(badpix_x) == 0:
+            continue
         
-        # Weights = P^2 / variance.
-        # Using a sum or normalized trace profile here does affect things, but hardly.
-        weights_x = profile_x_sum_norm**2 / var_x * badpix_x
+        # Effective read noise
+        eff_read_noise = compute_read_noise(detector_props, x, y_positions[x], exp_time, dark_subtraction=redux_settings['dark_subtraction'])
+        
+        # Determine the full and fractional pixels to use
+        good_full_pixels = np.where(pixel_fractions[:, x] == 1)[0]
+        fractional_pixels = np.where((pixel_fractions[:, x] > 0) & (pixel_fractions[:, x] < 1))[0]
+        all_pixels = np.where(pixel_fractions[:, x] > 0)[0]
+        
+        # shift the trace profile
+        P_x = scipy.interpolate.CubicSpline(trace_profile_fiducial_grid[good_trace_profile] + y_positions[x], trace_profile[good_trace_profile], extrapolate=False)(yarr)
+        
+        # Now construct P from the fractions
+        #frac_left, frac_right = pixel_fractions[fractional_pixels[0], x], pixel_fractions[fractional_pixels[-1], x]
+        #P_use = np.concatenate(([frac_left * trace_profile_shifted[fractional_pixels[0]]], trace_profile_shifted[good_full_pixels], [frac_right * trace_profile_shifted[fractional_pixels[-1]]]))
+        #S_use = np.concatenate(([frac_left * S_x[fractional_pixels[0]]], S_x[good_full_pixels], [frac_right * S_x[fractional_pixels[-1]]]))
+        #badpix_use = badpix_x[good_full_pixels[0]-1:good_full_pixels[-1]+2]
+        
+        P_use = P_x[all_pixels]
+        badpix_use = badpix_x[all_pixels]
+        S_use = S_x[all_pixels]
+        
+        # Determine which pixels to use from the trace alone
+        P_use /= np.nansum(P_use)
+        
+        # Variance
+        var_use = eff_read_noise**2 + S_use + sky[x] + sky_err[x]**2
+        
+        # Weights = bad pixels only
+        weights_use = np.copy(badpix_use)
         
         # Normalize the weights such that sum=1
-        weights_x = weights_x / np.nansum(weights_x)
+        weights_use /= np.nansum(weights_use)
         
-        good = np.where(weights_x > 0)[0]
-        n_used_pix[x] = good.size
-        if n_used_pix[x] <= 1:
+        good = np.where(weights_use > 0)[0]
+        if good.size <= 1:
             continue
         
         # 1d final flux at column x
-        corrections[x] = np.nansum(profile_x_sum_norm * weights_x)
-        spec[x] = np.nansum(S_x * weights_x) / corrections[x]
-        spec_unc[x] = np.sqrt(np.nansum(var_x)) / corrections[x]
+        corrections[x] = np.nansum(P_use * weights_use)
+        spec[x] = np.nansum(S_use * weights_use) / corrections[x]
+        spec_unc[x] = np.sqrt(np.nansum(var_use)) / corrections[x]
 
     return spec, spec_unc
 
 
-def plot_trace_profiles(data, trace_profiles, M, general_settings):
-    
-    n_orders = trace_profiles.shape[1]
-    n_cols = 3
-    n_rows = int(np.ceil(n_orders / n_cols))
-    
-    yarr = np.arange(0, trace_profiles[:, 0].size, 1 / M)
-    
-    plot_width = 15
-    plot_height = 20
-    dpi = 300
-    
-    fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(plot_width, plot_height), dpi=dpi)
-    for row in range(n_rows):
-        for col in range(n_cols):
-            o = n_cols * row + col
-            if o + 1 > n_orders:
-                continue
-            max_val = np.nanmax(trace_profiles[:, o])
-            good = np.where(trace_profiles[:, o] > 0.1 * max_val)[0]
-            left_cut_y, right_cut_y = yarr[good[0]] - 5, yarr[good[-1]] + 5
-            good = np.where((yarr > left_cut_y) & (yarr < right_cut_y))[0]
-            x = yarr[good] - yarr[good][0]
-            axarr[row, col].plot(yarr[good], trace_profiles[good, o] / max_val, color='black', lw=1)
-            axarr[row, col].set_ylim(-0.01, 1.2)
-    
-    axarr[-1, 1].set_xlabel('Y Pixels', fontweight='bold', fontsize=14)
-    axarr[int(n_rows / 2), 0].set_ylabel('Norm. Flux', fontweight='bold', fontsize=14)
-    plt.tight_layout()
-    plt.savefig(data.out_file_trace_profile_plots)
-    plt.close()
-
-
-def plot_full_spectrum(data, reduced_orders, boxcar_spectra, general_settings):
-    
-    n_orders = reduced_orders.shape[0]
-    n_cols = 3
-    n_rows = int(np.ceil(n_orders / n_cols))
-    
-    pixels = np.arange(reduced_orders[0, :, 0].size)
-    
-    plot_width = 15
-    plot_height = 20
-    dpi = 300
-    
-    fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(plot_width, plot_height), dpi=dpi)
-    for row in range(n_rows):
-        for col in range(n_cols):
-            o = n_cols * row + col
-            if o + 1 > n_orders:
-                continue
-            badpix = reduced_orders[o, :, 2]
-            good = np.where(badpix == 1)[0]
-            if good.size == 0:
-                continue
-            f, l = good[0], good[-1] + 1
-            axarr[row, col].plot(pixels[f:l], boxcar_spectra[o, f:l] / pcmath.weighted_median(boxcar_spectra[o, f:l], med_val=0.99), color='red', label='Boxcar', lw=0.5)
-            axarr[row, col].plot(pixels[f:l], reduced_orders[o, f:l, 0] / pcmath.weighted_median(reduced_orders[o, f:l, 0], med_val=0.99), color='black', label='Optimal', lw=0.5)
-            axarr[row, col].set_title('Order ' + str(o+1))
-            axarr[row, col].legend(loc='upper right', prop={'size': 4})
-    
-    axarr[-1, 1].set_xlabel('X Pixels', fontweight='bold', fontsize=14)
-    axarr[int(n_rows / 2), 0].set_ylabel('Norm. Flux', fontweight='bold', fontsize=14)
-    plt.tight_layout()
-    plt.savefig(data.out_file_spectrum_plot)
-    plt.close()
-    
-    
-def refine_trace_position(order_image, ypositions, trace_profile, trace_pos_polyorder=2, M=1):
-    """Refines the location of the trace on the detector.
+def flag_bad_pixels(trace_image, current_spectrum, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, sky=None, nsig=6):
+    """Flags bad pixels in the data by smoothing the 1d flux and convolving it into 2d space and looking for outliers.
 
     Args:
-        order_image (np.ndarray): The data image.
-        ypositions (np.ndarray): The current locations of the trace on the detector.
-        trace_profile (np.ndarray): The 1-dimensional trace profile.
-        trace_pos_polyorder (int): The degree of the polynomial to fit the trace profile with, defaults to 2.
-        M (int): The oversample factor, defaults to 1.
+        trace_image (np.ndarray): The masked data image.
+        current_spectrum (np.ndarray): The current 1d spectrum.
+        y_positions (np.ndarray): The trace positions for each column.
+        trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
+        pixel_fractions (np.ndarray): The fractions of each pixel to use.
+        badpix_mask (np.ndarray): The bad pixel image mask (1=good, 0=bad).
+        sky (np.ndarray): The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).
+        nsig (float): Flags pixels more deviant that nsig*rms of the convovled smooth spectrum.
+    Returns:
+        np.ndarray: The updated bad pixel mask.
+    """
+    
+    # Image dimensions
+    ny, nx = trace_image.shape
+    
+    # Don't modify current mask, return new one
+    badpix_maskcp = np.copy(badpix_mask)
+    
+    # Trace profile on fiducial grid
+    trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+    good_trace = np.where(np.isfinite(trace_profile))[0]
+    
+    # Sky
+    if sky is None:
+        sky = np.zeros(nx)
+        
+    # Smooth the current spectrum
+    current_spec_smooth = pcmath.median_filter1d(current_spectrum, 5)
+    continuum = pcmath.weighted_median(current_spec_smooth, med_val=0.95)
+    
+    # Deviations
+    deviations = np.empty(shape=(ny, nx), dtype=np.float64) + np.nan
+    
+    goody, goodx = np.where(np.isfinite(badpix_mask))
+    ys, yf = np.min(goody), np.max(goody)
+    
+    yarr = np.arange(ny)
+    
+    for x in range(nx):
+        
+        # Shift the trace profile
+        trace_cspline_shifted = scipy.interpolate.CubicSpline(trace_profile_fiducial_grid[good_trace] + y_positions[x], trace_profile[good_trace], extrapolate=False)
+        ytrace = trace_profile_fiducial_grid[good_trace] + y_positions[x]
+        P_x = trace_cspline_shifted(trace_cspline_shifted.x)
+        good = ytrace[np.where(np.isfinite(P_x))[0]]
+        if good.size < 3 or np.nanmin(good) < ys or np.nanmax(good) > yf or np.nansum(badpix_maskcp[:, x]) < 3 or not np.isfinite(current_spec_smooth[x]):
+            continue
+        
+        S_x = trace_image[:, x] - sky[x]
+        badpix_x = badpix_mask[:, x]
+        
+        # Determine the full and fractional pixels to use
+        good_full_pixels = np.where(pixel_fractions[:, x] == 1)[0]
+        fractional_pixels = np.where((pixel_fractions[:, x] > 0) & (pixel_fractions[:, x] < 1))[0]
+        all_pixels = np.where(pixel_fractions[:, x] > 0)[0]
+        bad = np.where(pixel_fractions[:, x] == 0)[0]
+        
+        # Shift the trace profile
+        P_x = scipy.interpolate.CubicSpline(trace_profile_fiducial_grid[good_trace] + y_positions[x], trace_profile[good_trace], extrapolate=False)(yarr)
+        
+        # Now construct P from the fractions
+        #frac_left, frac_right = pixel_fractions[fractional_pixels[0], x], pixel_fractions[fractional_pixels[-1], x]
+        #P_use = np.concatenate(([frac_left * trace_profile_shifted[fractional_pixels[0]]], trace_profile_shifted[good_full_pixels], [frac_right * trace_profile_shifted[fractional_pixels[-1]]]))
+        #S_use = np.concatenate(([S_x[fractional_pixels[0]]], S_x[good_full_pixels], [S_x[fractional_pixels[-1]]]))
+        
+        S_x[bad] = np.nan
+        P_x[bad] = np.nan
+        badpix_x[bad] = 0
+        
+        # Convolve into 2d space
+        P_x /= np.nansum(P_x)
+        spec_conv = P_x * current_spec_smooth[x]
+        
+        # Deviations between convolved 1d spectrum and true 2d data.
+        diffs = ((S_x - spec_conv) / continuum)**2 * badpix_x
+        good = np.where(np.isfinite(diffs))[0]
+        w = badpix_x / P_x**2
+        if good.size < 3:
+            continue
+        deviations[:, x] = diffs
+        
+    
+    deviations_smooth = pcmath.median_filter2d(deviations, width=3)
+    ng = np.where(np.isfinite(deviations_smooth))[0].size
+    rms = np.sqrt(np.nansum(deviations_smooth**2) / ng)
+    bad = np.where(np.abs(deviations) > nsig*rms)
+    if bad[0].size > 0:
+        badpix_maskcp[bad] = 0
+    
+    return badpix_maskcp
+
+
+def rectify_trace(trace_image, y_positions, height, M=1):
+    """Rectifies (straightens) the trace via cubic spline interpolation.
+
+    Args:
+        trace_image (np.ndarray): The masked data image.
+        y_positions (np.ndarray): The trace positions for each column.
+        M (int): The desired oversample factor, defaults to 1.
+    Returns:
+        np.ndarray: The rectified trace image
+    """
+    
+    # The data shape
+    ny, nx = trace_image.shape
+    
+    # Low and high res grids
+    yarr1 = np.arange(ny)
+    yarr2 = np.arange(-height / 2 , height / 2 + 1, 1/M)
+    n2 = len(yarr2)
+    
+    # Shift
+    trace_image_rectified = np.empty(shape=(n2, nx)) + np.nan
+    
+    for x in range(nx):
+        good = np.where(np.isfinite(trace_image[:, x]))[0]
+        if good.size <= 3:
+            continue
+        trace_image_rectified[:, x] = scipy.interpolate.CubicSpline(yarr1[good] - y_positions[x], trace_image[good, x], extrapolate=False, bc_type='clamped')(yarr2)
+    
+    return trace_image_rectified
+    
+
+def estimate_sky(trace_image, y_positions, trace_profile_cspline, height, n_sky_rows=8, M=1):
+    """Estimates the sky background, sky(x).
+
+    Args:
+        trace_image (np.ndarray): The masked data image.    
+        y_positions (np.ndarray): The trace positions for each column.
+        trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
+        height (int): The height of the trace.
+        n_sky_rows (int, optional): The number of rows used to determine the sky background, defaults to 8.
+        M (int): The desired oversampling factor.
+    Returns:
+        np.ndarray: The computed background sky, sky(x).
     """
     
     # The image dimensions
-    ny, nx = order_image.shape
+    ny, nx = trace_image.shape
+    
+    # HR grid
+    yhr = np.arange(-height / 2, height / 2 + 1, 1 / M)
+    xarr = np.arange(nx)
+
+    # Estimate the sky by considering N rows of a rectifed trace on a high resolution grid to minimize sampling artifacts.
+    yt = trace_profile_cspline(yhr)
+    sky_locs = np.argsort(yt)[0:int(n_sky_rows*M)]
+    
+    trace_image_hr_rectified = rectify_trace(trace_image, y_positions, height, M=M)
+    
+    # Create a smoothed image
+    smoothed_image = pcmath.median_filter2d(trace_image_hr_rectified, width=3, preserve_nans=True)
+    
+    # Estimate the sky background from this smoothed image
+    sky_init = np.nanmedian(smoothed_image[sky_locs, :], axis=0)
+    
+    # Smooth the sky again
+    sky = scipy.signal.savgol_filter(sky_init, 7, 3)
+    
+    return sky
+
+
+def pmassey_wrapper(data, trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, sky=None):
+    """A wrapper for Philip Massey extraction.
+
+    Args:
+        data (SpecDataImage): The SpecData Image
+        trace_image (np.ndarray): The corresponding masked trace_image to extract.
+        y_positions (np.ndarray): The trace positions for each column.
+        trace_profile_cspline ([type]): [description]
+        pixel_fractions (np.ndarray): The fractions of each pixel to use.
+        badpix_mask ([type]): [description]
+        height ([type]): [description]
+        redux_settings (dict): The reduction settings dictionary.
+        sky (np.ndarray): The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).
+    Returns:
+        np.ndarray: The 1d flux in units of PE
+        np.ndarray: The 1d flux uncertainty in units of PE
+    """
+
+    n_iters = len(redux_settings['pmassey_settings']['bad_thresh']) + 1
+
+    for iteration in range(n_iters):
+        # Do the optimal extraction then flag bad pixels
+        spec1d, unc1d = optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, redux_settings['detector_props'], exp_time=data.exp_time, sky=sky, n_sky_rows=redux_settings['n_sky_rows'])
+        
+        if iteration + 1 < n_iters:
+            badpix_mask = flag_bad_pixels(trace_image, spec1d, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, sky=sky, nsig=redux_settings['pmassey_settings']['bad_thresh'][iteration])
+
+    return spec1d, unc1d, badpix_mask
+
+
+def optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, detector_props, exp_time, sky=None, n_sky_rows=None):
+    """Performs optimal extraction on the nonrectified data.
+
+    Args:
+        trace_image (np.ndarray): The masked data image.
+        y_positions (np.ndarray): The trace positions for each column.
+        trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
+        pixel_fractions (np.ndarray): The fractions of each pixel to use.
+        badpix_mask (np.ndarray): The bad pixel image mask (1=good, 0=bad).
+        height (int): The height of the order.
+        redux_settings (dict): The reduction settings dictionary.
+        detector_props (list): List of detector properties to properly calculate read noise.
+        exp_time (float): The exposure time.
+        sky (np.ndarray): The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).
+        n_sky_rows (int): The number of rows used to determine the sky background, defaults to None.
+    Returns:
+        spec (np.ndarray): The optimally extracted 1-dimensional spectrum.
+        spec_unc (np.ndarray): The corresponding uncertainty.
+    """
+    
+    # Trace profile
+    trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+    good_trace_profile = np.where(np.isfinite(trace_profile))[0]
+    
+    # image dims
+    ny, nx = trace_image.shape
+    
+    # Sky background
+    if sky is not None:
+        sky_err = np.sqrt(sky / (n_sky_rows - 1))
+    else:
+        sky = np.zeros(nx)
+        sky_err = sky
+
+    # Storage arrays
+    spec = np.full(nx, fill_value=np.nan, dtype=np.float64)
+    spec_unc = np.full(nx, fill_value=np.nan, dtype=np.float64)
+    corrections = np.full(nx, fill_value=np.nan, dtype=np.float64)
+    
+    yarr = np.arange(ny)
+    
+    badpix_maskcp = np.copy(badpix_mask)
+
+    for x in range(nx):
+        
+        # Define views
+        badpix_x = badpix_maskcp[:, x] # Bad pixels (1=good, 0=bad)
+        data_x = trace_image[:, x] # The data (includes sky) in units of PEs
+
+        if sky is not None:
+            S_x = data_x - sky[x] # Star is trace - sky
+        else:
+            S_x = np.copy(data_x)
+        
+        # Flag negative values after sky subtraction
+        negs = np.where(S_x < 0)[0]
+        
+        if negs.size > 0:
+            S_x[negs] = np.nan
+            badpix_x[negs] = 0
+            
+        if np.all(~np.isfinite(S_x)) or np.nansum(badpix_x) == 0:
+            continue
+        
+        # Effective read noise
+        eff_read_noise = compute_read_noise(detector_props, x, y_positions[x], exp_time, dark_subtraction=redux_settings['dark_subtraction'])
+        
+        # Determine the full and fractional pixels to use
+        good_full_pixels = np.where(pixel_fractions[:, x] == 1)[0]
+        fractional_pixels = np.where((pixel_fractions[:, x] > 0) & (pixel_fractions[:, x] < 1))[0]
+        all_pixels = np.where(pixel_fractions[:, x] > 0)[0]
+        
+        # Shift the trace profile
+        P_x = scipy.interpolate.CubicSpline(trace_profile_fiducial_grid[good_trace_profile] + y_positions[x], trace_profile[good_trace_profile], extrapolate=False)(yarr)
+        
+        P_use = P_x[all_pixels] # * pixel_fractions[all_pixels, x]
+        badpix_use = badpix_x[all_pixels]
+        S_use = S_x[all_pixels] # * pixel_fractions[all_pixels, x]
+        
+        # Determine which pixels to use from the trace alone
+        P_use /= np.nansum(P_use)
+        
+        # Variance
+        var_use = eff_read_noise**2 + S_use + sky[x] + sky_err[x]**2
+        
+        # Weights = bad pixels only
+        weights_use = P_use**2 / var_use * badpix_use
+        
+        # Normalize the weights such that sum=1
+        weights_use /= np.nansum(weights_use)
+        
+        good = np.where(weights_use > 0)[0]
+        if good.size <= 1:
+            continue
+        
+        # 1d final flux at column x
+        corrections[x] = np.nansum(P_use * weights_use)
+        spec[x] = np.nansum(S_use * weights_use) / corrections[x]
+        spec_unc[x] = np.sqrt(np.nansum(var_use)) / corrections[x]
+
+    return spec, spec_unc
+
+def generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions, badpix_mask, height, min_profile_flux=0.05):
+    """Computes the fraction of each pixel to use according to a minumum profile flux.
+
+    Args:
+        trace_image (np.ndarray): The masked data image.
+        trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
+        y_positions (np.ndarray): The trace positions for each column.
+        badpix_mask (np.ndarray): The bad pixel image mask (1=good, 0=bad).
+        height (int): The height of the trace.
+        min_profile_flux (float, optional): The minimum flux to consider in the trace profle. Defaults to 0.05 (~ 5 percent).
+
+    Returns:
+        (np.ndarray): The fractions of each pixel to use.
+    """
+    
+    # Image dimensions
+    ny, nx = trace_image.shape
+    
+    # Determine the left and right cut
+    trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+    
+    # The max flux
+    _, trace_max = estimate_trace_max(trace_profile_cspline, height)
+    
+    trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+    
+    # The left and right profile positions
+    left_trace_profile_inds = np.where(trace_profile_fiducial_grid < -1)[0]
+    right_trace_profile_inds = np.where(trace_profile_fiducial_grid > 1)[0]
+    left_trace_profile_ypos= trace_profile_fiducial_grid[left_trace_profile_inds]
+    right_trace_profile_ypos = trace_profile_fiducial_grid[right_trace_profile_inds]
+    left_trace_profile = trace_profile[left_trace_profile_inds]
+    right_trace_profile = trace_profile[right_trace_profile_inds]
+    
+    # Find where it intersections at some minimum flux value
+    left_ycut, _ = pcmath.intersection(left_trace_profile_ypos, left_trace_profile, min_profile_flux*trace_max, precision=1000)
+    right_ycut, _ = pcmath.intersection(right_trace_profile_ypos, right_trace_profile, min_profile_flux*trace_max, precision=1000)
+    
+    # Initiate y arr, pix fractions
+    yarr = np.arange(ny)
+    pixel_fractions = np.zeros_like(trace_image)
+    
+    # Good locations
+    goody, goodx = np.where(np.isfinite(badpix_mask))
+    ys, yf = np.min(goody), np.max(goody)
+    
+    # Good trace profile
+    good_trace = np.where(np.isfinite(trace_profile))[0]
+
+    for x in range(nx):
+        
+        # New y arr for this column
+        ytrace = trace_profile_fiducial_grid[good_trace] + y_positions[x]
+        
+        # Shift the trace profile
+        trace_cspline_shifted = scipy.interpolate.CubicSpline(ytrace, trace_profile[good_trace], extrapolate=False)
+        profile_x = trace_cspline_shifted(ytrace)
+        good = ytrace[np.where(np.isfinite(profile_x))[0]]
+        if good.size < 3 or np.nanmin(good) < ys or np.nanmax(good) > yf:
+            continue
+        
+        
+        # Left cuts
+        ysl = left_ycut + y_positions[x]
+        yl1, yl2 = int(np.floor(ysl)), int(np.ceil(ysl))
+        if ysl - 0.5 == yl1:
+            frac_left = 0
+        elif ysl - 0.5 > yl1:
+            frac_left = yl2 - ysl + 0.5
+        else:
+            frac_left = 0.5 - (ysl - yl1)
+            
+        # Right cuts
+        ysr = right_ycut + y_positions[x]
+        yr1, yr2 = int(np.floor(ysr)), int(np.ceil(ysr))
+        if ysr + 0.5 == yr2:
+            frac_right = 0
+        elif ysr + 0.5 > yr1:
+            frac_right = yr2 - ysr + 0.5
+        else:
+            frac_right = 0.5 - (ysr - yr2)
+        
+        
+        full_pixels = np.arange(yl2, yr1+1, 1).astype(int)
+        fractional_pixels = np.array([yl1, yr2])
+        pixel_fractions[full_pixels, x] = 1
+        pixel_fractions[fractional_pixels[0], x] = frac_left
+        pixel_fractions[fractional_pixels[1], x] = frac_right
+
+    return pixel_fractions
+
+
+def compute_read_noise(detector_props, x, y, exp_time, dark_subtraction=False):
+    """Computes the read noise according to:
+    
+          ron(x, y) + dark_current(x, y) * exp_time
+
+    Args:
+        detector_props (list): List of detector properties to properly calculate read noise.
+        x (float): The x point to consider
+        y (float): The y point to consider.
+        exp_time (float): The exposure time.
+        dark_subtraction (bool, optional): Whether or not dark subtraction was performed. If True, the dark current will not be included in the read noise calculation. Defaults to False.
+
+    Returns:
+        float: The read noise
+    """
+    
+    # Get the detector
+    detector = get_detector(detector_props, x, y)
+    
+    # Detector read noise
+    if dark_subtraction:
+        eff_read_noise = detector['read_noise']
+    else:
+        
+        return detector['read_noise'] + detector['dark_current'] * exp_time
+
+def get_detector(detector_props, x, y):
+    """ Determines which detector a given point is on.
+
+    Args:
+        detector_props ([type]): [description]
+        x (float): The x point to test.
+        y (float): The y point to test.
+
+    Returns:
+        dict: The correct detector.
+    """
+    
+    if len(detector_props) == 1:
+        return detector_props[0]
+    for detector in detector_props:
+        if (detector['xmin'] < x < detector['xmin']) and (detector['ymin'] < y < detector['ymin']):
+            return detector
+        
+    return ValueError("Point (" + str(x) + str(y) + ") not part of any detector !")
+
+def convert_image_to_pe(trace_image, detector_props):
+    """ Converts an image to photo electrons, approximately.
+
+    Args:
+        trace_image (np.ndarray): The masked data image.
+        detector_props (list): List of detector properties.
+
+    Returns:
+        np.ndarray: The image converted to PE.
+    """
+    
+    if len(detector_props) == 1:
+        return trace_image * detector_props[0]['gain']
+    else:
+        trace_image_pe = np.empty_like(trace_image) + np.nan
+        for detector in detector_props:
+            xmin, xmax, ymin, ymax = detector['xmin'], detector['xmax'], detector['ymin'], detector['ymax']
+            trace_image_pe[ymin:ymax+1, xmin:xmax + 1] = trace_image[ymin:ymax+1, xmin:xmax + 1] * detector['gain']
+
+def plot_trace_profiles(data, trace_profile_csplines):
+    """Plots the trace profiles.
+
+    Args:
+        data (SpecDataImage): The corresponding data object.
+        trace_profile_csplines (list): The list of CubicSpline objects.
+    """
+    
+    # The numbr of orders and traces
+    n_orders = trace_profile_csplines.shape[0]
+    n_traces = trace_profile_csplines.shape[1]
+    
+    # Plot settings
+    plot_width = 20
+    plot_height = 20
+    dpi = 300
+    n_cols = 3
+    n_rows = int(np.ceil(n_orders / n_cols))
+    
+    # Create a figure
+    fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(plot_width, plot_height), dpi=dpi)
+    
+    # For each subplot, plot each single trace
+    for row in range(n_rows):
+        for col in range(n_cols):
+            
+            # The order index
+            o = n_cols * row + col
+            order_num = o + 1
+            if order_num > n_orders:
+                continue
+            
+            for itrace in range(n_traces):
+                
+                # Generate the trace profile
+                if trace_profile_csplines[o, itrace] is None:
+                    continue
+                grid, tp = trace_profile_csplines[o, itrace].x, trace_profile_csplines[o, itrace](trace_profile_csplines[o, itrace].x)
+                
+                good = np.where(np.isfinite(tp))[0]
+                if good.size == 0:
+                    continue
+                f, l = good[0], good[-1] + 1
+                
+                # Plot the Trace profile for each trace
+                axarr[row, col].plot(grid[f:l], tp[f:l] / np.nanmax(tp[f:l]) + itrace, color='black', lw=1)
+                
+            # Title
+            axarr[row, col].set_title('Order ' + str(order_num))
+            
+            
+    # X and Y labels
+    fig.text(0.5, 0.01, 'Y Pixels', fontweight='bold', fontsize=14)
+    fig.text(0.01, 0.5, 'Norm. Flux', fontweight='bold', fontsize=14, rotation=90)
+    
+    # Try a tight layout, may fail
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.1, hspace=0.4)
+    
+    # Create a filename
+    fname = data.output_path + 'trace' + os.sep + data.base_input_file_noext + '_trace_profiles.png'
+    
+    # Save
+    plt.savefig(fname)
+    plt.close()
+
+def estimate_snr(trace_profile_cspline, M=1):
+    """[summary]
+
+    Args:
+        trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
+        M (int, optional): The desired oversample factor. Defaults to 1.
+
+    Returns:
+        float: The approximate S/N of the observation.
+    """
+    
+    tp = trace_profile_cspline(trace_profile_cspline.x) / M
+    snr = np.sqrt(np.nansum(tp))
+    return snr
+
+def plot_extracted_spectra(data, reduced_orders, boxcar_spectra):
+    
+    # The numbr of orders and traces
+    n_orders = reduced_orders.shape[0]
+    n_traces = reduced_orders.shape[1]
+    
+    # The number of x pixels
+    xpixels = np.arange(reduced_orders[0, 0, :, 0].size)
+    
+    # Plot settings
+    plot_width = 20
+    plot_height = 20
+    dpi = 300
+    n_cols = 3
+    n_rows = int(np.ceil(n_orders / n_cols))
+    
+    # Create a figure
+    fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(plot_width, plot_height), dpi=dpi)
+    
+    # For each subplot, plot each single trace
+    for row in range(n_rows):
+        for col in range(n_cols):
+            
+            # The order index
+            o = n_cols * row + col
+            order_num = o + 1
+            if order_num > n_orders:
+                continue
+            
+            for itrace in range(n_traces):
+                
+                # Extract the bad pixel array
+                badpix = reduced_orders[o, itrace, :, 2]
+                flux_opt = reduced_orders[o, itrace, :, 0]
+                flux_box = boxcar_spectra[o, itrace, :]
+                
+                good = np.where(badpix == 1)[0]
+                if good.size == 0:
+                    continue
+                f, l = good[0], good[-1] + 1
+                
+                
+                # Plot the boxcar extracted spectrum
+                axarr[row, col].plot(xpixels[f:l], flux_box[f:l] / pcmath.weighted_median(flux_box[f:l], med_val=0.99) + itrace, color='red', label='Boxcar', lw=0.5)
+                
+                # Plot the optimally extracted spectrum
+                axarr[row, col].plot(xpixels[f:l], flux_opt[f:l] / pcmath.weighted_median(flux_opt[f:l], med_val=0.99) + itrace, color='black', label='Optimal', lw=0.5)
+                
+            # Title
+            axarr[row, col].set_title('Order ' + str(order_num))
+            axarr[row, col].legend(loc='upper right', prop={'size': 4})
+            
+            
+    # X and Y labels
+    fig.text(0.5, 0.01, 'X Pixels', fontweight='bold', fontsize=14)
+    fig.text(0.01, 0.5, 'Norm. Flux', fontweight='bold', fontsize=14, rotation=90)
+    
+    # Try a tight layout, may fail
+    plt.tight_layout()
+    plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.1, hspace=0.4)
+    
+    # Create a filename
+    fname = data.output_path + 'spectra' + os.sep + data.base_input_file_noext + '_preview.png'
+    
+    # Save
+    plt.savefig(fname)
+    plt.close()
+    
+    
+def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, height, redux_settings, trace_pos_polyorder=2, M=1):
+    """Refines the trace positions via cross-correlating the current trace profile with the data.
+
+    Args:
+        data (SpecDataImage): The corresponding data object.
+        trace_image (np.ndarray): The masked data image.
+        y_positions (np.ndarray): The trace positions for each column.
+        trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
+        badpix_mask (np.ndarray): The bad pixel image mask (1=good, 0=bad).
+        height (int): The height of the trace.
+        redux_settings (dict): The reduction settings dictionary.
+        trace_pos_polyorder (int, optional): The polynomial to model the trace positions. Defaults to 2.
+        M (int, optional): The desired oversample factor. Defaults to 1.
+
+    Returns:
+        np.ndarray: The refined trace positions, y(x).
+    """
+
+    # The image dimensions
+    ny, nx = trace_image.shape
+    
+    # Smooth the image
+    trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
     
     # Stores the deviation from the true y position
     ypos_deviations = np.full(nx, dtype=np.float64, fill_value=np.nan)
     
     # Helpful arrays
-    yarr_lr = np.arange(ny)
-    xarr_lr = np.arange(nx)
+    yarr = np.arange(ny)
+    xarr = np.arange(nx)
     
     # CC lags
-    good = np.where(np.isfinite(trace_profile) & (trace_profile / np.nanmax(trace_profile) > 0.05))[0]
-    n_good = good.size
-    lags = np.arange(np.ceil(-n_good / 2) - 1, np.ceil(n_good / 2) + 1, 1).astype(int)
+    lags = np.arange(-height/2, height/2).astype(int)
     
-    # Create a 2d curved profile from this estimate
-    trace_profile_2d_estimate = create_2d_trace_profile(order_image, trace_profile, ypositions, M1=M, M2=1)
+    # Estimate the sky from the current profile
+    if redux_settings['sky_subtraction']:
+        sky = estimate_sky(trace_image_smooth, y_positions, trace_profile_cspline, height, n_sky_rows=redux_settings['n_sky_rows'], M=redux_settings['oversample'])
+        tp = trace_profile_cspline(trace_profile_cspline.x)
+        _, trace_max = estimate_trace_max(trace_profile_cspline, height)
+        sky_percentile = pcmath.weighted_median(sky, med_val=0.05) / trace_max
+        tp -= pcmath.weighted_median(tp, med_val=sky_percentile)
+        bad = np.where(tp < 0)[0]
+        if bad.size > 0:
+            tp[bad] = 0
+        good = np.where(np.isfinite(tp))[0]
+        trace_profile_cspline_nosky = scipy.interpolate.CubicSpline(trace_profile_cspline.x[good], tp[good])
+    else:
+        sky = None
+        trace_profile_cspline_nosky = copy.deepcopy(trace_profile_cspline)
+        
+    # Fractions of each pixel
+    pixel_fractions = generate_pixel_fractions(trace_image_smooth, trace_profile_cspline_nosky, y_positions, badpix_mask, height, min_profile_flux=redux_settings['min_profile_flux'])
+        
+    trace_profile_fiducial_grid, trace_profile = trace_profile_cspline_nosky.x, trace_profile_cspline_nosky(trace_profile_cspline_nosky.x)
+    
+    good_trace = np.where(np.isfinite(trace_profile))[0]
     
     # Estimate the initial spectrum to know which values correspond to large absorption features.
-    spectrum_1d_estimate = boxcar_extraction(order_image, trace_profile_2d_estimate, sky=None, units='ADU')
+    spectrum_1d_estimate, _ = boxcar_extraction(trace_image_smooth, y_positions, trace_profile_cspline_nosky, pixel_fractions, badpix_mask, height, redux_settings, redux_settings['detector_props'], data.exp_time, sky=sky, n_sky_rows=redux_settings['n_sky_rows'])
     
     # Smooth this initial spectrum
     spectrum_1d_estimate_smooth = pcmath.median_filter1d(spectrum_1d_estimate, width=5)
     
     # Normalize
     spectrum_1d_estimate_smooth /= pcmath.weighted_median(spectrum_1d_estimate_smooth, med_val=0.98)
-    
+
     # Cross correlate each data column with the trace profile estimate
+    y_positions_xcorr = np.zeros(nx) + np.nan
+    
     for x in range(nx):
 
         # Skip pixels where the intial spectrum has a flux of less than 50% of the max
-        if not np.isfinite(spectrum_1d_estimate_smooth[x]) or spectrum_1d_estimate_smooth[x] <= 0.2:
+        if not np.isfinite(spectrum_1d_estimate_smooth[x]) or spectrum_1d_estimate_smooth[x] <= 0.3:
             continue
         
         # If not enough data points, continue
-        good_data = np.where(np.isfinite(order_image[:, x]))[0]
-        if good_data.size < 5:
+        good_data = np.where(np.isfinite(trace_image_smooth[:, x]) & (badpix_mask[:, x] == 1))[0]
+        if good_data.size < 3:
             continue
-        
-        # Only consider good regions for cross correlation
-        consider = np.where((trace_profile_2d_estimate[:, x] > 0) & np.isfinite(trace_profile_2d_estimate[:, x]) & np.isfinite(order_image[:, x]))[0]
         
         # Cross correlation
-        xcorr = pcmath.cross_correlate(order_image[consider, x], trace_profile_2d_estimate[consider, x], lags)
-        xcorr /= pcmath.weighted_median(xcorr, med_val=0.99)
-        
-        # Fit x corr with a gaussian to precisely determine its max position
-        
-        # The best lag val
-        best_lag_val = lags[np.nanargmax(xcorr)]
-        
-        # Estimate the width
-        left_cut = np.where((xcorr < 0.5) & (lags < best_lag_val))[0]
-        right_cut = np.where((xcorr < 0.5) & (lags > best_lag_val))[0]
-        if left_cut.size < 2 or right_cut.size < 2:
+        # Shift the trace profile
+        lags = np.arange(y_positions[x]-height / 2, y_positions[x]+height/2, 1).astype(int)
+        trace_profile_shifted = scipy.interpolate.CubicSpline(trace_profile_fiducial_grid[good_trace] + y_positions[x], trace_profile[good_trace], extrapolate=False)(yarr)
+        data_no_sky = (trace_image_smooth[:, x] - sky[x]) / np.nanmax(trace_image_smooth[good_data, x] - sky[x])
+        bad = np.where(data_no_sky < 0)[0]
+        if bad.size > 0:
+            data_no_sky[bad] = np.nan
+        xcorr = pcmath.cross_correlate2(yarr, data_no_sky, trace_profile_fiducial_grid, trace_profile, lags)
+        xcorr /= np.nanmax(xcorr)
+        xcorr *= np.exp(-1*(np.arange(xcorr.size) - height / 2)**2 / (2 * lags.size**2)*3)
+        good = np.where(np.isfinite(xcorr) & (xcorr > 0.5))[0]
+        if good.size <= 2:
             continue
-        sig = (right_cut[0] - left_cut[-1]) / 3
+            
+        # Fit
+        xcorr_fit = np.polyfit(lags[good], xcorr[good], 2)
+        yfit = -1 * xcorr_fit[1] / (2 * xcorr_fit[0])
         
-        # Initiate the parameters
-        init_pars = OptimParams.Parameters()
-        init_pars.add_parameter(OptimParams.Parameter(name='amp', value=1.0, minv=0.8, maxv=1.2))
-        init_pars.add_parameter(OptimParams.Parameter(name='mu', value=best_lag_val, minv=best_lag_val-2, maxv=best_lag_val+2))
-        init_pars.add_parameter(OptimParams.Parameter(name='sigma', value=sig, minv=sig*0.5, maxv=sig*1.5))
-        solver = NelderMead(pcmath.gauss_solver, init_pars, args_to_pass=(lags, xcorr))
-        fit_result = solver.solve()
-        best_pars = fit_result[0]
-        ypos_deviations[x] = best_pars['mu'].value
-       
-        
-    # Fit with polynomial
+        if np.abs(yfit - y_positions[x]) > 1.5:
+                continue
+            
+        y_positions_xcorr[x] = yfit
     
     # Smooth the deviations
-    ypos_deviations_smooth = pcmath.median_filter1d(ypos_deviations, width=9, preserve_nans=True)
-    
-    # Remove deviations from current estimate
-    y_positions_refined = ypositions - ypos_deviations_smooth
-    
-    # Good regions
-    good = np.where(np.isfinite(y_positions_refined))[0]
-    
-    # Final trace positions
-    pfit = np.polyfit(xarr_lr[good], y_positions_refined[good], trace_pos_polyorder)
-    y_positions_refined = np.polyval(pfit, xarr_lr)
+    good = np.where(np.isfinite(y_positions_xcorr))[0]
+    if good.size < 30:
+        return y_positions
+    pfit = np.polyfit(xarr[good], y_positions_xcorr[good], trace_pos_polyorder)
+    y_positions_refined = np.polyval(pfit, xarr)
     
     return y_positions_refined
+
+def estimate_trace_max(trace_profile_cspline, height):
+    """Estimates the location of the max of the trace profile to a factor of 1000. Crude, but works.
+
+    Args:
+        trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
+        height (int): The height of the trace.
+    """
     
+    M = 1000
+    trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+    xhr = np.arange(trace_profile_fiducial_grid[0], trace_profile_fiducial_grid[-1], 1 / M)
+    tphr = trace_profile_cspline(xhr)
+    mid = np.nanmedian(trace_profile_fiducial_grid)
+    consider = np.where((xhr > mid - 10) & (xhr < mid + 10))[0]
+    trace_max_pos = xhr[consider[np.nanargmax(tphr[consider])]]
+    
+    return trace_max_pos, np.nanmax(tphr)
+
+def crop_image(data_image, redux_settings, cval=np.nan):
+    """ Masks the image according to left right, top, and bottom values.
+
+    Args:
+        data_image (np.ndarray): [description]
+        redux_settings (dict): The reduction settings dictionary.
+        cval (float, optional): The value to mask with. Defaults to np.nan.
+
+    Returns:
+        np.ndarray: The masked image.
+    """
+    
+    # The data shape
+    ny, nx = data_image.shape
+    
+    data_image[0:redux_settings['mask_bottom_edge'], :] = cval
+    data_image[ny-redux_settings['mask_top_edge']:, :] = cval
+    data_image[:, 0:redux_settings['mask_left_edge']] = cval
+    data_image[:, nx-redux_settings['mask_right_edge']:] = cval
+    return data_image
+            
+
+def estimate_trace_profile(trace_image, y_positions, height, M=16, mask_edges=None):
+    """ Estimates the trace profile
+
+    Args:
+        trace_image (np.ndarray): The masked data image.
+        y_positions (np.ndarray): The trace positions for each column.
+        height (int): The height of the trace.
+        M (int, optional): The desired oversample factor. Defaults to 16.
+        mask_edges (list): [mask_left, mask_right]; Masks additional pixels in the trace profile. Defaults to [5, 5].
+    Returns:
+        CubicSpline: The trace profile defined by a CubicSpline object.
+    """
+    
+    # The image dimensions
+    ny, nx = trace_image.shape
+    
+    if mask_edges is None:
+        mask_edges = (5, 5)
+    
+    # Rectify
+    trace_image_rectified = rectify_trace(trace_image, y_positions, height, M=M)
+    
+    # Median Crunch
+    trace_profile = np.nanmedian(trace_image_rectified, axis=1)
+    yhr = np.arange(0, ny, 1/M)
+    nt = trace_profile.size
+    good = np.where(np.isfinite(trace_profile))[0]
+    trace_profile[good[0:mask_edges[0]*M]] = np.nan
+    trace_profile[good[nt - mask_edges[1]*M:]] = np.nan
+    good = np.where(np.isfinite(trace_profile))[0]
+    cspline = scipy.interpolate.CubicSpline(yhr[good], trace_profile[good], extrapolate=False, bc_type='not-a-knot')
+    trace_max_pos, _ = estimate_trace_max(cspline, height)
+    cspline.x -= trace_max_pos
+    
+    return cspline

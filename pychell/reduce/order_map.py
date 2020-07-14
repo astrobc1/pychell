@@ -23,32 +23,33 @@ import matplotlib.pyplot as plt
 import pychell.maths as pcmath
 import pychell.reduce.data2d as pcdata
 
-
 # Traces orders through density clustering
 # Flat image is a median flat
-def trace_orders_from_flat(flat_input, extraction_settings):
+def trace_orders_from_flat_field(master_flat, redux_settings):
     """Determines the locations of echelle orders on a flat field image.
 
         Args:
             flat_input : The full path + filename of the corresponding file.
-            orientation (str): The orientation of the echelle orders on the detector. 'x' for aligned with rows, 'y' for columns. Defaults to   'x'.
+            redux_settings (dict): The reduction settings.
         """
+        
+    flat_input = master_flat.parse_image()
     
     # Image dimensions
     ny, nx = flat_input.shape
     
-    flat_input[0:extraction_settings['mask_bottom_edge'], :] = np.nan
-    flat_input[ny-extraction_settings['mask_top_edge']:, :] = np.nan
-    flat_input[:, 0:extraction_settings['mask_left_edge']] = np.nan
-    flat_input[:, nx-extraction_settings['mask_right_edge']:] = np.nan
+    flat_input[0:redux_settings['mask_bottom_edge'], :] = np.nan
+    flat_input[ny-redux_settings['mask_top_edge']:, :] = np.nan
+    flat_input[:, 0:redux_settings['mask_left_edge']] = np.nan
+    flat_input[:, nx-redux_settings['mask_right_edge']:] = np.nan
 
     # Smooth the flat.
     flat_smooth = pcmath.median_filter2d(flat_input, width=5, preserve_nans=False)
     
     # Do a horizontal normalization of the smoothed flat image to remove the blaze
     y_ranges = np.linspace(0, ny, num=10).astype(int)
-    first_x = extraction_settings['mask_left_edge']
-    last_x = nx - extraction_settings['mask_right_edge']
+    first_x = redux_settings['mask_left_edge']
+    last_x = nx - redux_settings['mask_right_edge']
     for i in range(len(y_ranges)-1):
         y_low = y_ranges[i]
         y_top = y_ranges[i+1]
@@ -101,8 +102,7 @@ def trace_orders_from_flat(flat_input, extraction_settings):
 
     # Further flag labels that don't span at least half the detector
     # If not bad, then fit.
-    pcoeffs = []
-    order_dicts = []
+    orders_list = []
     for l in range(labels_unique_init.size):
         label_locs = np.where(order_locs_lr_labeled == labels_unique_init[l])
         rx_lr_max = np.max(label_locs[1]) - np.min(label_locs[1])
@@ -126,50 +126,49 @@ def trace_orders_from_flat(flat_input, extraction_settings):
                 order_locs_lr_labeled[label_locs] = np.nan
             else:
                 pfit = np.polyfit(label_locs[1] * Mx, label_locs[0] * My, 2)
-                pcoeffs.append(pfit)
                 height = np.nanmedian(rys_lr) * My
-                order_dicts.append({'label': len(order_dicts) + 1, 'pcoeffs': pfit, 'height': height})
+                orders_list.append([{'label': len(orders_list) + 1, 'pcoeffs': pfit, 'height': height}])
 
     
     # Now fill in a full frame image
-    n_orders = len(order_dicts)
-    order_image = np.full(shape=(ny, nx), dtype=np.float64, fill_value=np.nan)
+    n_orders = len(orders_list)
+    order_image = np.full(shape=(ny, nx), dtype=float, fill_value=np.nan)
     
     for o in range(n_orders):
         for x in range(nx):
-            pmodel = np.polyval(order_dicts[o]['pcoeffs'], x)
+            pmodel = np.polyval(orders_list[o][0]['pcoeffs'], x)
             ymax = int(pmodel + height / 2)
             ymin = int(pmodel - height / 2)
             if ymin > ny - 1 or ymax < 0:
                 continue
-            if ymax > ny - 1 - extraction_settings['mask_top_edge']:
+            if ymax > ny - 1 - redux_settings['mask_top_edge']:
                 continue
-            if ymin < 0 + extraction_settings['mask_bottom_edge']:
+            if ymin < 0 + redux_settings['mask_bottom_edge']:
                 continue
-            order_image[ymin:ymax, x] = int(order_dicts[o]['label'])
-    return order_dicts, order_image
+            order_image[ymin:ymax, x] = int(orders_list[o][0]['label'])
+    return order_image, orders_list
 
 
 # It's like the above with extra steps
 # This will fail if a majority of the trace is not used.
-def trace_orders_empirical(data_image, extraction_settings):
+def trace_orders_empirical(data_image, redux_settings):
     
     # Image dimensions
     data_image = data_image.T
     ny, nx = data_image.shape
     
-    data_image[0:extraction_settings['mask_bottom_edge'], :] = np.nan
-    data_image[ny-extraction_settings['mask_top_edge']:, :] = np.nan
-    data_image[:, 0:extraction_settings['mask_left_edge']] = np.nan
-    data_image[:, nx-extraction_settings['mask_right_edge']:] = np.nan
+    data_image[0:redux_settings['mask_bottom_edge'], :] = np.nan
+    data_image[ny-redux_settings['mask_top_edge']:, :] = np.nan
+    data_image[:, 0:redux_settings['mask_left_edge']] = np.nan
+    data_image[:, nx-redux_settings['mask_right_edge']:] = np.nan
 
     # Smooth the flat.
     data_smooth = pcmath.median_filter2d(data_image, width=5, preserve_nans=True)
     
     # Do a horizontal normalization of the smoothed flat image to remove the blaze
     y_ranges = np.linspace(0, ny, num=10).astype(int)
-    first_x = extraction_settings['mask_left_edge']
-    last_x = nx - extraction_settings['mask_right_edge'] - 1
+    first_x = redux_settings['mask_left_edge']
+    last_x = nx - redux_settings['mask_right_edge'] - 1
     #for i in range(len(y_ranges)-1):
         #y_low = y_ranges[i]
         #y_top = y_ranges[i+1]
@@ -255,12 +254,12 @@ def trace_orders_empirical(data_image, extraction_settings):
             ymin = int(pmodel - height / 2)
             if ymin > ny - 1 or ymax < 0:
                 continue
-            if ymax > ny - 1 - extraction_settings['mask_top_edge']:
+            if ymax > ny - 1 - redux_settings['mask_top_edge']:
                 continue
-            if ymin < 0 + extraction_settings['mask_bottom_edge']:
+            if ymin < 0 + redux_settings['mask_bottom_edge']:
                 continue
             order_image[ymin:ymax, x] = int(order_dicts[o]['label'])
 
-    return order_dicts, order_image
+    return order_image, order_dicts
             
     

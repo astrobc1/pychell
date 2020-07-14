@@ -22,6 +22,7 @@ from astropy.io import fits
 
 # User defined/pip modules
 import pychell.maths as pcmath # mathy equations
+import pychell.rvs.template_augmenter as pcaugmenter
 
 # Base class for a reduced 1-dimensional spectrum
 class SpecData1d:
@@ -36,11 +37,10 @@ class SpecData1d:
         flux_unc (np.ndarray): The normalized flux uncertainty.
         badpix (np.ndarray): The badpix array (1=good, 0=bad)
         wave_grid (np.ndarray): If present, the known (or possibly only an initial) wavelength grid of the data.
-        wave_direction (str): Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.
     """
 
     
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None, wave_direction='increasing'):
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
         """ Base initialization for this model component.
 
         Args:
@@ -48,7 +48,6 @@ class SpecData1d:
             order_num (int): The image order number, defaults to None.
             spec_num (int): The spectral image number, defaults to None.
             crop_pix (list): Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.
-            wave_direction (str): Ordering of the wavelength grid. Nothing is done by default here, but may be useful for child-classes.
         """
         # Store the input file, spec, and order num
         self.input_file = input_file
@@ -61,9 +60,9 @@ class SpecData1d:
             self.spec_num = spec_num
         
         # Parse the data for this observation
-        self.parse(wave_direction=wave_direction)
+        self.parse()
         
-        # Enforce the pixels are cropped (ideally they are already cropped and this has no effect)
+        # Enforce the pixels are cropped (ideally they are already cropped and this has no effect, but still optional)
         if crop_pix is not None:
             self.flux[0:crop_pix[0]] = np.nan
             self.flux[self.flux.size - crop_pix[1] - 1:] = np.nan
@@ -106,11 +105,8 @@ class SpecData1d:
             self.bc_vel = bc_vel
         
 
-    def parse(self, wave_direction='increasing', **kwargs):
+    def parse(self, *args, **kwargs):
         """ A default parse method which must be implemented for each instrument.
-
-        Args:
-            wave_direction (str): Ordering of the wavelength grid.
         """
         raise NotImplementedError("Must implement a parse() routine for this instrument!")
     
@@ -156,26 +152,22 @@ class SpecData1d:
         
         for i in range(len(forward_models)):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
-        
+            
         return bjds, bc_vels
-    
+
     
 class SpecDataiSHELL(SpecData1d):
     """ Class for extracted 1-dimensional spectra from iSHELL on the NASA IRTF.
     
     """
 
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None, wave_direction='decreasing'):
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
         
         # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix, wave_direction=wave_direction)
+        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
         
-    def parse(self, wave_direction='decreasing'):
-        """ Parses iSHELL data and computes the mid-exposure time (no exp meter -> no flux-weighting).
-    
-        Args:
-            wave_direction (str): The direction of the wavelength grid ('increasing' or 'decreasing'). If decreasing, the data is flipped.
-    
+    def parse(self):
+        """ Parses iSHELL data and computes the mid-exposure time (no exp meter for iSHELL).
         """
         # Load the flux, flux unc, and bad pix arrays
         fits_data = fits.open(self.input_file)[0]
@@ -183,11 +175,10 @@ class SpecDataiSHELL(SpecData1d):
         oi = self.order_num - 1
         self.flux, self.flux_unc, self.badpix = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 1].astype(np.float64), fits_data.data[oi, :, 2].astype(np.float64)
         
-        # Flip the data so wavelength is increasing if necessary
-        if wave_direction == 'decreasing':
-            self.flux = self.flux[::-1]
-            self.badpix = self.badpix[::-1]
-            self.flux_unc = self.flux_unc[::-1]
+        # Flip the data so wavelength is increasing for iSHELL data
+        self.flux = self.flux[::-1]
+        self.badpix = self.badpix[::-1]
+        self.flux_unc = self.flux_unc[::-1]
         
         # Normalize to 99th percentile
         med_val = pcmath.weighted_median(self.flux, med_val=0.99)
@@ -203,18 +194,14 @@ class SpecDataCHIRON(SpecData1d):
     
     """
     
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None, wave_direction='increasing'):
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
         
         # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix, wave_direction=wave_direction)
+        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
         
     
-    def parse(self, wave_direction='increasing'):
-        """ Parses CHIRON data and extracts the flux weighted midpoint of the exposure from the header if present, otherwise computes the mid exposure time. The flux uncertainty is not provided from CHIRON (?), so we assume all normalized uncertainties to be 0.001. The wavelength grid provided by the ThAr lamp is provided in the wave_grid attribute.
-    
-        Args:
-            wave_direction (str): The direction of the wavelength grid ('increasing' or 'decreasing'). If decreasing, the data is flipped.
-    
+    def parse(self):
+        """ Parses CHIRON data and extracts the flux weighted midpoint of the exposure from the header if present, otherwise computes the mid exposure time. The flux uncertainty is not provided from CHIRON (?), so we assume all normalized uncertainties to arbitrarily be 0.001 (uniform). The wavelength grid provided by the ThAr lamp is provided in the wave_grid attribute.
         """
         
         # Load the flux, flux unc, and bad pix arrays
@@ -227,13 +214,6 @@ class SpecDataCHIRON(SpecData1d):
         # For CHIRON, generate a dumby uncertainty grid and a bad pix array that will be updated or used
         self.flux_unc = np.zeros_like(self.flux) + 1E-3
         self.badpix = np.ones_like(self.flux)
-        
-        # Flip the data so wavelength is increasing if necessary
-        if wave_direction == 'decreasing':
-            self.wave_grid = self.wave_grid[::-1]
-            self.flux = self.flux[::-1]
-            self.badpix = self.badpix[::-1]
-            self.flux_unc = self.flux_unc[::-1]
         
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.
         if not (fits_data.header['EMMNWB'][0:2] == '00'):
@@ -248,13 +228,13 @@ class SpecDataPARVI(SpecData1d):
     
     """
     
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None, wave_direction='increasing'):
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
         
         # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix, wave_direction=wave_direction)
+        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
         
     
-    def parse(self, wave_direction='increasing'):
+    def parse(self):
         
         # Load the flux, flux unc, and bad pix arrays. Also load the known wavelength grid for a starting point
         fits_data = fits.open(self.input_file)[0]
@@ -279,12 +259,12 @@ class SpecDataPARVI(SpecData1d):
         
 class SpecDataMinervaAustralis(SpecData1d):
 
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None, wave_direction='increasing'):
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
         
         # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix, wave_direction=wave_direction)
+        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
         
-    def parse(self, wave_direction='decreasing'):
+    def parse(self):
         
         # Load the flux, flux unc, and bad pix arrays
         # TOI257_ThAr_KiwiSpec_2019Aug05_0007_wcal_fib3
@@ -301,10 +281,6 @@ class SpecDataMinervaAustralis(SpecData1d):
         med_val = pcmath.weighted_median(self.flux, med_val=0.99)
         self.flux /= med_val
         self.flux_unc /= med_val
-        
-        # Remove blaze for now
-        #continuum = pcmath.estimate_continuum(self.wave_grid, self.flux, width=7, n_knots=14, cont_val=0.93)
-        #self.flux /= continuum
         
         
     @staticmethod
@@ -336,4 +312,124 @@ class SpecDataMinervaAustralis(SpecData1d):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
         
         return bjds, bc_vels
-            
+    
+    
+class SpecDataMinervaNorthT1(SpecData1d):
+    
+    """ Class for extracted 1-dimensional spectra from the MINERVA North array.
+    """
+    
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
+        
+        # Call the super class
+        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
+        
+    
+    def parse(self):
+        """Parses MINERVA North T1 data.
+        """
+        # Load the flux, flux unc, and bad pix arrays
+        fits_data = fits.open(self.input_file)[0]
+        fits_data.verify('fix')
+        
+        # The flux
+        self.flux = fits_data.data[0, self.order_num, :].astype(np.float64)
+        self.flux_unc = np.zeros_like(self.flux) + 1E-3
+        
+        # Normalize to 1.
+        self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
+        self.badpix = np.ones_like(self.flux)
+        
+        # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.        
+        self.JD = float(fits_data.header['JD']) + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)
+        
+        
+class SpecDataMinervaNorthT2(SpecData1d):
+    """ Class for extracted 1-dimensional spectra from the MINERVA North array.
+    """
+    
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
+        
+        # Call the super class
+        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
+        
+    
+    def parse(self):
+        """Parses MINERVA North T1 data.
+        """
+        
+        # Load the flux, flux unc, and bad pix arrays
+        fits_data = fits.open(self.input_file)[0]
+        fits_data.verify('fix')
+        
+        self.flux, self.flux_unc = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
+        
+        # Normalize to 1.
+        self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
+        self.badpix = np.ones_like(self.flux)
+        
+        # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.
+        
+        #self.JD = Time(fits_data.header['DATE-OBS'].replace('T', ' '), scale='utc').jd + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)     
+        
+        
+class SpecDataMinervaNorthT3(SpecData1d):
+    """ Class for extracted 1-dimensional spectra from the MINERVA North array.
+    """
+    
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
+        
+        # Call the super class
+        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
+        
+    
+    def parse(self):
+        """Parses MINERVA North T3 data.
+        """
+        
+        # Load the flux, flux unc, and bad pix arrays
+        fits_data = fits.open(self.input_file)[0]
+        fits_data.verify('fix')
+        
+        self.flux, self.flux_unc = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
+        
+        # Normalize to 1.
+        self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
+        self.badpix = np.ones_like(self.flux)
+        
+        # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.
+        #self.JD = Time(fits_data.header['DATE-OBS'].replace('T', ' '), scale='utc').jd + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)     
+        
+        
+class SpecDataMinervaNorthT4(SpecData1d):
+    """ Class for extracted 1-dimensional spectra from the MINERVA North array.
+    """
+    
+    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
+        
+        # Call the super class
+        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
+        
+    
+    def parse(self):
+        """Parses MINERVA North T4 data.
+        """
+        
+        # Load the flux, flux unc, and bad pix arrays
+        fits_data = fits.open(self.input_file)[0]
+        fits_data.verify('fix')
+        
+        self.flux, self.flux_unc = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
+        
+        # Normalize to 1.
+        self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
+        self.badpix = np.ones_like(self.flux)
+        
+        # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.
+        #self.JD = Time(fits_data.header['DATE-OBS'].replace('T', ' '), scale='utc').jd + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)     
+        
+        
+        
+        
+        
+        

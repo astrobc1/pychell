@@ -2,20 +2,6 @@ import numpy as np
 import os
 import pychell.rvs # to grab templates dir
 
-# Supported Instruments
-supported_instruments = {
-    'reduce': ['iSHELL', 'Generic', 'NIRSPEC (dev)'],
-    'rvs': ['iSHELL', 'CHIRON', 'MinervaAustralis (dev)', 'PARVI (dev)']
-}
-
-# Return the file number and date
-# DEFAULT FILE FORMAT for generic instrument: TAG1.DATE.TAG2.NUM.EXT
-# Registered in general_settings
-def parse_filename(filename):
-    res = filename.split('.')
-    filename_info = {'number': res[3], 'date': res[1]}
-    return filename_info
-
 ##################################
 ######## GENERAL SETTINGS ########
 ##################################
@@ -33,54 +19,21 @@ general_settings = {
     # Plotting parameters
     'dpi': 200, # the dpi used in plots
     'plot_wave_unit': 'nm', # The units for plots. Options are nm, ang, microns
-    
-    # Where templates are stored for RVs
-    'default_templates_path': pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep,
-    
-    'filename_parser': parse_filename
 }
 
 ####################################################################
 ####### Reduction / Extraction #####################################
 ####################################################################
 
-# Default header keys for reduction
-# NOTE: For now, this is only used reduction.
-# The keys are common to all instruments
-# The items are lists.
-# item[0] = actual key in the header
-# item[1] = default values
-header_keys = {
-    'target': ['TCS_OBJ', 'NA'],
-    'RA': ['TCS_RA', '00:00:00'],
-    'DEC': ['TCS_DEC', '00:00:00'],
-    'slit': ['SLIT', 'NA'],
-    'wavelength_range': ['WAVELENGTH', 'NA'],
-    'gas_cell': ['GASCELL', 'NA'],
-    'exp_time': ['ITIME', 0],
-    'time_of_obs': ['TIME', 2457000],
-    'NDR': ['NDR', 1],
-    'BZERO': ['BZERO', 0],
-    'BSCALE': ['BSCALE', 1]
-}
-
-# calibration settings
-# flat_correlation options are
-# 'closest_time' for flats to be applied from the closest in time, 'single' (single set)
-# 'closest_space' for flats to be applied from the closest in space angular sepration,
-# 'single' for a single set.
-calibration_settings = {
+redux_settings = {
+    
+    # Calibration
     'dark_subtraction': False,
     'flat_division': False,
+    'flatfield_percentile': 0.75,
     'bias_subtraction': False,
-    'wavelength_calibration': False
-}
-
-# Extraction settings
-extraction_settings = {
-    
-    # Order map algorithm (options: 'from_flats, 'empirical')
-    'order_map': 'empirical',
+    'wavelength_calibration': False, # Via ThAr, not implemented
+    'telluric_correction': False, # Via flat star, not implemented
     
     # Pixels to mask on the top, bottom, left, and right edges
     'mask_left_edge': 20,
@@ -105,9 +58,16 @@ extraction_settings = {
     # This is the oversample factor. Use to not oversample.
     'oversample': 4,
     
+    # The minimum percentile in the profile to consider.
+    'min_profile_flux': 0.05,
+    
     # The optimal extraction algorithm
-    'optxalg': 'optimal_extraction_pmassey'
+    'optx_alg': 'pmassey_wrapper',
+    'pmassey_settings': {'n_iters': 3,'bad_thresh': [100, 50, 25]}
+    
 }
+
+
 
 ####################################################################
 ####### RADIAL VELOCITIES ##########################################
@@ -116,15 +76,14 @@ extraction_settings = {
 # The default forward model settings
 forward_model_settings = {
     
-    # For dev purposes right now ...
-    'wave_logspace': False,
-    'flux_logspace': False,
-    
     # The number of pixels to crop on each side of the spectrum
     'crop_data_pix': [10, 10],
     
     # If the user only wishes to compute the BJDS and barycorrs for later.
     'compute_bc_only': False,
+    
+    # Path of the default provided templates (tellurics, gas cell)
+    'default_templates_path': pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep,
     
     # Barycenter file
     'bary_corr_file': None,
@@ -136,8 +95,8 @@ forward_model_settings = {
     
     # Stellar template augmentation
     'template_augmenter': 'cubic_spline_lsq',
-    
     'nights_for_template': [],
+    'templates_to_optimize': [],
     
     # Number of iterations to update the stellar template
     'n_template_fits': 10, # a zeroth iteration (flat template) does not count towards this number.
@@ -146,12 +105,14 @@ forward_model_settings = {
     # A cross correlation will still be run to estimate the correct overall RV before fitting
     # if starting from a synthetic template
     'do_xcorr': False,
-    'xcorr_range': 10*1000,
-    'xcorr_step': 50,
-    'n_bs' : 1000,
+    'xcorr_range': 10*1000, # m/s
+    'xcorr_step': 50, # m/s
+    'n_bs' : 1000, # 0, ..., 1 (approx)
     
+    'remove_continuum': False,
+        
     # Model Resolution (n_model_pixels = model_resolution * n_data_pixels)
     # This is only important because of the instrument line profile (LSF)
     # 8 seems sufficient.
-    'model_resolution': 8,
+    'model_resolution': 8
 }

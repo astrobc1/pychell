@@ -5,6 +5,7 @@ import importlib
 import sys
 import pdb
 import pickle
+import copy
 import time
 import json
 import warnings
@@ -32,243 +33,176 @@ import pychell.reduce.calib as pccalib
 import pychell.reduce.order_map as pcomap
 import pychell.config as pcconfig
 
-def reduce_night(user_general_settings, user_extraction_settings, user_calib_settings, header_keys=None):
+def reduce_night(user_redux_settings):
 
     # Start the main clock
     stopwatch = pcutils.StopWatch()
 
-    # Parse the input directory, return the headers and the updated global parameters
-    general_settings, calib_settings, extraction_settings, raw_data, master_calib_data = init_night(user_general_settings, user_extraction_settings, user_calib_settings, header_keys=header_keys)
+    # Parse the input directories, return data (images not loaded into memory)
+    redux_settings, data = init_night(user_redux_settings)
+    
+    #####################
+    #### Calibration ####
+    #####################
     
     # Create Master Bias (only one)
-    if calib_settings['bias_subtraction']:
+    if redux_settings['bias_subtraction']:
+        
         print('Creating Master Bias ...', flush=True)
         
-        # Generate the data cube
-        bias_cube = pcdata.SpecImage.generate_data_cube(raw_data['bias'])
-        
         # Simple median combine, probably
-        master_bias_image = pccalib.generate_master_bias(bias_cube)
+        master_bias_image = pccalib.generate_master_bias(data['master_bias'].individuals)
         
-        # Save
-        master_calib_data['flats'][i].save_master_image(master_bias_image)
+        # Save the master bias image
+        data['master_bias'].save_master_image(master_bias_image)
     
     # Create Master Darks for each unique exposure time
-    if calib_settings['dark_subtraction']:
-        print('Creating Master Dark(s) ...', flush=True)
-
-        # Generate the data cube
-        darks_cube = pcdata.SpecImage.generate_data_cube(raw_data['darks'])
+    if redux_settings['dark_subtraction']:
         
-        for i in range(len(master_calib_data['darks'])):
-            
-            # Generate the data cube
-            darks_cube = pcdata.SpecDataImage.generate_data_cube(master_calib_data['darks'][i].calib_images)
+        print('Creating Master Dark(s) ...', flush=True)
+        
+        for master_dark in data['master_darks']:
             
             # Simple median combine, probably
-            master_dark_image = pccalib.generate_master_flat(darks_cube)
+            master_dark_image = pccalib.generate_master_dark(master_dark.individuals)
             
             # Save
-            master_calib_data['darks'][i].save_master_image(master_dark_image)
+            master_dark.save(master_dark_image)
             
-        
     # Create Master Flats for each flats group
-    if calib_settings['flat_division']:
+    if redux_settings['flat_division']:
         
         print('Creating Master Flat(s) ...', flush=True)
         
-        # For loop over groups
-        for i in range(len(master_calib_data['flats'])):
-            
-            # Generate the data cube
-            flats_cube = pcdata.SpecDataImage.generate_data_cube(master_calib_data['flats'][i].calib_images)
+        for master_flat in data['master_flats']:
             
             # Simple median combine, probably
-            master_flat_image = pccalib.generate_master_flat(flats_cube)
+            master_flat_image = pccalib.generate_master_flat(master_flat.individuals, bias_subtraction=redux_settings['bias_subtraction'], dark_subtraction=redux_settings['dark_subtraction'], flatfield_percentile=redux_settings['flatfield_percentile'])
             
             # Save
-            master_calib_data['flats'][i].save(master_flat_image)
+            master_flat.save(master_flat_image)
 
-    # Order Tracing
-    # Order images and order dictionaries containing the height and polynomial coeffs for each order
-    if extraction_settings['order_map'] == 'from_flats':
+    #######################
+    #### Order Tracing ####
+    #######################
+    
+    # Order images and order dictionaries containing the name, height, and polynomial coeffs for each order
+    if redux_settings['order_map']['source'] == 'empirical_unique':
         
+        print('Empirically Deriving Trace For Each Image ...', flush=True)
+        #data['order_maps'] = []
+        #for master_flat in data['master_flats']:
+        #    data['order_maps'].append()
+            
+    #elif redux_settings['order_map']['source'] == 'empirical_flat_star':
+
+    #    for sci_data in data['science']:
+    #        sci_data.trace_orders(output_dir=general_settings['output_path_root'] + 'calib' + os.sep, extraction_settings=extraction_settings, src=extraction_settings['order_map'])
+        
+    elif redux_settings['order_map']['source'] == 'empirical_from_flat_fields':
         print('Tracing Orders From Master Flat(s) ...', flush=True)
+        data['order_maps'] = []
+        map_init = redux_settings['order_map']['method']
+        for master_flat in data['master_flats']:
+            data['order_maps'].append(pcdata.FlatFieldOrderMap(master_flat, map_init))
+            data['order_maps'][-1].trace_orders(redux_settings)
+            master_flat.order_map = data['order_maps'][-1]
+            
+            
+        # Also give the order map attributes to the science images
+        for d in data['science']:
+            d.order_map = d.master_flat.order_map
         
-        for sci_data in raw_data['science']:
-            sci_data.trace_orders(output_dir=general_settings['output_dir_root'] + 'calib' + os.sep, extraction_settings=extraction_settings, src=extraction_settings['order_map'])
+    elif redux_settings['order_map']['source'] == 'hard_coded':
         
+        data['order_maps'] = []
         
-    # Correct master flats
-    if ('correct_fringing_in_flatfield' in calib_settings and calib_settings['correct_fringing_in_flatfield']) or ('correct_blaze_function_in_flatfield' in calib_settings and calib_settings['correct_blaze_function_in_flatfield']):
+        map_init = getattr(pcdata, redux_settings['order_map']['class'])
         
-        print('Correcting artifacts in master flat(s) ...', flush=True)
-        for sci_data in raw_data['science']:
-            sci_data.correct_flat_artifacts(output_dir=general_settings['output_dir_root'], calibration_settings=calib_settings)
+        print('Using Hard Coded Order Map from Class ' + redux_settings['order_map']['class'], flush=True)
+        
+        data['order_maps'].append(map_init(data['science'][0]))
+        
+        data['science'][0].order_map = data['order_maps'][0]
+            
+        for d in data['science']:
+            d.order_map = data['science'][0].order_map
+    else:
+        raise ValueError("Order Map options not recognized")
+        
+    # Correct master flats for any artifacts (fringing, remove blaze)
+    #if redux_settings['correct_flat_field_artifacts']:
+    
+    
+    #if ('correct_fringing_in_flatfield' in redux_settings and redux_settings['correct_fringing_in_flatfield']) or ('correct_blaze_function_in_flatfield' in redux_settings and redux_settings['correct_blaze_function_in_flatfield']):
+        
+    #    print('Correcting artifacts in master flat(s) ...', flush=True)
+    #    for sci_data in raw_data['science']:
+    #        sci_data.correct_flat_artifacts(output_dir=general_settings['output_path_root'], calibration_settings=calib_settings)
 
     # Extraction of science spectra
-    if general_settings['n_cores'] > 1:
+    if redux_settings['n_cores'] > 1:
         
-        print('Extracting Spectra In Parallel Using ' + str(general_settings['n_cores']) + ' Cores ...', flush=True)
+        print('Extracting Spectra In Parallel Using ' + str(redux_settings['n_cores']) + ' Cores ...', flush=True)
         
         # Run in Parallel
-        iter_pass = []
-
-        for i in range(len(raw_data['science'])):
-            iter_pass.append((raw_data['science'][i], general_settings, calib_settings, extraction_settings))
-            
+        iter_pass = [(data['science'], i, redux_settings) for i in range(len(data['science']))]
+        
         # Call in parallel
-        Parallel(n_jobs=general_settings['n_cores'], verbose=0, batch_size=1)(delayed(pcextract.extract_full_image)(*iter_pass[i]) for i in range(len(raw_data['science'])))
+        Parallel(n_jobs=redux_settings['n_cores'], verbose=0, batch_size=1)(delayed(pcextract.extract_full_image_wrapper)(*iter_pass[i]) for i in range(len(data['science'])))
         
     else:
         # One at a time
         print('Extracting Spectra ...', flush=True)
-        for i in range(len(raw_data['science'])):
-            pcextract.extract_full_image(raw_data['science'][i], general_settings, calib_settings, extraction_settings)
+        for i in range(len(data['science'])):
+            pcextract.extract_full_image_wrapper(data['science'], i, redux_settings)
 
     print('TOTAL RUN TIME: ' + str(round((stopwatch.time_since()) / 3600, 3)) + ' Hours')
     print('ALL FINISHED !')
     
     
-def init_night(user_general_settings, user_extraction_settings, user_calib_settings, header_keys=None):
+def init_night(user_redux_settings):
     
-    # Helpful dictionaries
-    general_settings = {}
-    extraction_settings = {}
-    calib_settings = {}
-    
-    # Load in the default pipeline config
-    general_settings.update(pcconfig.general_settings)
-    extraction_settings.update(pcconfig.extraction_settings)
+    # Start with the default config
+    redux_settings = {}
+    redux_settings.update(pcconfig.redux_settings)
+    redux_settings.update(pcconfig.general_settings)
     
     # Update with the default instrument dictionaries
-    spec_module = importlib.import_module('pychell.spectrographs.' + user_general_settings['spectrograph'].lower())
-    general_settings.update(spec_module.general_settings)
-    calib_settings.update(spec_module.calibration_settings)
-    extraction_settings.update(spec_module.extraction_settings)
+    spec_module = importlib.import_module('pychell.spectrographs.' + user_redux_settings['spectrograph'].lower() + '.settings')
+    redux_settings.update(spec_module.redux_settings)
     
-    # Header keys
-    if header_keys is None:
-        header_keys = spec_module.header_keys
-        
     # User settings
-    general_settings.update(user_general_settings)
-    extraction_settings.update(user_extraction_settings)
-    calib_settings.update(user_calib_settings)
+    redux_settings.update(user_redux_settings)
 
     # Get the base input directory. The reduction (output) folder will have this same name.
-    base_input_dir = os.path.basename(os.path.normpath(general_settings['input_dir']))
-    general_settings['output_dir_root'] = general_settings['output_dir'] + base_input_dir + os.sep
+    base_input_dir = os.path.basename(os.path.normpath(redux_settings['input_path']))
+    redux_settings['run_output_path'] = redux_settings['output_path_root'] + base_input_dir + os.sep
     
-    if not os.path.isdir(general_settings['output_dir_root']):
+    # Make the output directories
+    if not os.path.isdir(redux_settings['run_output_path']):
 
         # Make the root output directory for this run
-        os.makedirs(general_settings['output_dir_root'], exist_ok=True)
+        os.makedirs(redux_settings['run_output_path'], exist_ok=True)
 
-        # Trace Profiles
-        os.makedirs(general_settings['output_dir_root'] + 'trace_profiles', exist_ok=True)
+        # Trace information (profiles, refined y positions, order maps)
+        os.makedirs(redux_settings['run_output_path'] + 'trace', exist_ok=True)
 
-        # 1-dimensional spectra in text files with headers commented out (starting with #)
-        os.makedirs(general_settings['output_dir_root'] + 'spectra', exist_ok=True)
+        # 1-dimensional spectra in fits files and 
+        os.makedirs(redux_settings['run_output_path'] + 'spectra', exist_ok=True)
 
-        # Previews (Full order figures of the above)
-        os.makedirs(general_settings['output_dir_root'] + 'previews', exist_ok=True)
-
-        # Calibration (order map, flats, darks, bias)
-        os.makedirs(general_settings['output_dir_root'] + 'calib', exist_ok=True)
-        
-    # Identify what's what. Only headers are stored here.
+        # Calibration (master bias, darks, flats, tellurics, wavecal)
+        os.makedirs(redux_settings['run_output_path'] + 'calib', exist_ok=True)
+    
+    # Identify what's what.
     print('Analyzing the input files ...')
-    raw_data = {} # science, bias, darks, flats (individual images)
-    master_calib_data = {} # bias, darks, flats (median combined images, possibly further corrected)
-    
-    # Science images
-    sci_files = glob.glob(general_settings['input_dir'] + '*' + general_settings['sci_tag'] + '*.fits')
-    raw_data['science'] = [pcdata.ScienceImage(input_file=sci_files[f], header_keys=header_keys, parse_header=True, output_dir_root=general_settings['output_dir_root'], time_offset=general_settings['time_offset'], filename_parser=general_settings['filename_parser'], img_num=f, n_tot_imgs=len(sci_files)) for f in range(len(sci_files))]
-    
-    # Bias. Assumes a single set of exposures to create a single master bias from
-    if calib_settings['bias_subtraction']:
-        
-        # Parse the bias dir
-        bias_files = glob.glob(general_settings['input_dir'] + '*' + general_settings['bias_tag'] + '*.fits')
-        
-        # Read in the bias and construct bias image objects.
-        raw_data['bias'] = [pcdata.BiasImage(input_file=bias_files[f], header_keys=header_keys, parse_header=True, output_dir_root=general_settings['output_dir_root'], time_offset=general_settings['time_offset'], filename_parser=general_settings['filename_parser'], img_num=f, n_tot_imgs=len(bias_files)) for f in range(len(bias_files))]
-        
-        # Initialize a master bias object. No master bias is created yet.
-        master_calib_data['bias'] = pcdata.MasterBiasImage(raw_data['bias'], output_dir=general_settings['output_dir_root'] + 'calib', header_keys=header_keys)
-        
-    # Darks, multiple exposure times
-    if calib_settings['dark_subtraction']:
-        
-        # Parse the darks dir
-        dark_files = glob.glob(general_settings['input_dir'] + '*' + general_settings['darks_tag'] + '*.fits')
-        
-        # Read in the darks and construct darkimage objects.
-        raw_data['darks'] = [pcdata.DarkImage(input_file=dark_files[f], header_keys=header_keys, parse_header=True, output_dir_root=general_settings['output_dir_root'], time_offset=general_settings['time_offset'], filename_parser=general_settings['filename_parser'], img_num=f, n_tot_imgs=len(dark_files)) for f in range(len(dark_files))]
-        
-        # Initialize a master flat object. No master flat is created yet.
-        master_calib_data['darks'] = pcdata.MasterDarkImage.from_all_darks(raw_data['darks'], output_dir=general_settings['output_dir_root'] + 'calib', header_keys=header_keys)
-        
-    # Flats, multiple per night possibly
-    if calib_settings['flat_division']:
-        
-        # Parse the flats dir
-        flat_files = glob.glob(general_settings['input_dir'] + '*' + general_settings['flats_tag'] + '*.fits')
-        
-        # Read in the flats and construct flatimage objects.
-        raw_data['flats'] = [pcdata.FlatImage(input_file=flat_files[f], header_keys=header_keys, parse_header=True, output_dir_root=general_settings['output_dir_root'], time_offset=general_settings['time_offset'], filename_parser=general_settings['filename_parser'], img_num=f, n_tot_imgs=len(flat_files)) for f in range(len(flat_files))]
-        
-        # Initialize a master flat object. No master flat is created yet.
-        master_calib_data['flats'] = pcdata.MasterFlatImage.from_all_flats(raw_data['flats'], output_dir=general_settings['output_dir_root'] + 'calib', header_keys=header_keys)
-        
-    # Go through science images and pair them with master dark and flat images
-    for sci_data in raw_data['science']:
+    if hasattr(pcdata, redux_settings['spectrograph'] + 'Parser'):
+        data_parser_class= getattr(pcdata, redux_settings['spectrograph'] + 'Parser')
+        data = data_parser_class()(redux_settings)
+    else:
+        raise NotImplementedError("Must use one a supported instrument for now, or implement a new instrument.")
+        #data_parser = pcdata.GeneralParser()
+        #data = data_parser.categorize()(redux_settings)
             
-        if calib_settings['dark_subtraction']:
-            sci_data.pair_master_dark(master_calib_data['darks'])
-            
-        if calib_settings['flat_division']:
-            sci_data.pair_master_flat(master_calib_data['flats'])
-            
-            
-    print_summary(raw_data)
-            
-    return general_settings, calib_settings, extraction_settings, raw_data, master_calib_data
-
-
-def print_summary(raw_data):
-    
-    n_sci_tot = len(raw_data['science'])
-    targets_all = np.array([raw_data['science'][i].target for i in range(n_sci_tot)], dtype='<U50')
-    targets_unique = np.unique(targets_all)
-    for i in range(len(targets_unique)):
-        
-        target = targets_unique[i]
-        
-        locs_this_target = np.where(targets_all == target)[0]
-        
-        sci_this_target = [raw_data['science'][j] for j in locs_this_target]
-        
-        print('Target: ' + target)
-        print('    N Exposures: ' + str(locs_this_target.size))
-        if hasattr(sci_this_target[0], 'master_bias'):
-            print('    Master Bias File(s): ')
-            print('    ' + raw_data['science'].master_bias.base_input_file)
-            
-        if hasattr(sci_this_target[0], 'master_dark'):
-            darks_this_target_all = np.array([sci.master_dark for sci in sci_this_target], dtype=pcdata.DarkImage)
-            darks_unique = np.unique(darks_this_target_all)
-            print('  Master Dark File(s): ')
-            for d in darks_unique:
-                print('    ' + d.base_input_file)
-            
-        if hasattr(sci_this_target[0], 'master_flat'):
-            flats_this_target_all = np.array([sci.master_flat for sci in sci_this_target], dtype=pcdata.FlatImage)
-            flats_unique = np.unique(flats_this_target_all)
-            print('  Master Flat File(s): ')
-            for f in flats_unique:
-                print('    ' + f.base_input_file)
-                
-        print('')
+    return redux_settings, data
     

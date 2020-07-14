@@ -28,86 +28,117 @@ import pychell.reduce.data2d as pcdata
 from robustneldermead.neldermead import NelderMead
 
 # Generate a master flat from a flat cube
-def generate_master_flat(flats_cube, master_dark=None, master_bias=None):
-    """Computes a median master flat field image from a subset of flat field images.
+def generate_master_flat(individuals, bias_subtraction=False, dark_subtraction=False, flatfield_percentile=0.75):
+    """Computes a median master flat field image from a subset of flat field images. Dark and bias subtraction is also performed if set.
 
         Args:
-            flats_cube (np.ndarray): The flats data cube, with shape=(n_flats, ny, nx)
-            master_dark (np.ndarray): The master dark image (no dark subtraction if None)
-            master_bias (np.ndarray): The master bias image (no bias subtraction if None).
+            individuals (list): The list of FlatFieldImages.
+            bias_subtraction (bool): Whether or not to perform bias subtraction. If so, each flat must have a master_bias attribute.
+            dark_subtraction (bool): Whether or not to perform dark subtraction. If so, each flat must have a master_dark attribute.
         Returns:
             master_flat (np.ndarray): The median combined and corrected master flat image
         """
-    for i in range(flats_cube.shape[0]):
-        if master_bias is not None:
+    
+    # Generate a data cube
+    n_flats = len(individuals)
+    flats_cube = pcdata.SpecDataImage.generate_data_cube(individuals)
+    
+    # For each flat, subtract master dark and bias
+    # Also normalize each image and remove obvious bad pixels
+    for i in range(n_flats):
+        if bias_subtraction:
+            master_bias = individuals[i].master_bias.parse_image()
             flats_cube[i, :, :] -= master_bias
-        if master_dark is not None:
+        if dark_subtraction:
+            master_dark = individuals[i].master_dark.parse_image()
             flats_cube[i, :, :] -= master_dark
-        flats_cube[i, :, :] /= pcmath.weighted_median(flats_cube[i, :, :], med_val=0.99)
-        bad = np.where((flats_cube[i, :, :] < 0) | (flats_cube[i, :, :] > 100))
+        flats_cube[i, :, :] /= pcmath.weighted_median(flats_cube[i, :, :], med_val=flatfield_percentile)
+        bad = np.where((flats_cube[i, :, :] < 0) | (flats_cube[i, :, :] > flatfield_percentile*100))
         if bad[0].size > 0:
             flats_cube[i, :, :][bad] = np.nan
+    
+    # Median crunch, flag one more time
     master_flat = np.nanmedian(flats_cube, axis=0)
-    bad = np.where((master_flat < 0) | (master_flat > 100))
+    bad = np.where((master_flat < 0) | (master_flat > flatfield_percentile*100))
     if bad[0].size > 0:
         master_flat[bad] = np.nan
+        
     return master_flat
 
 # Generate a master dark image
-def generate_master_dark(darks_cube):
-    """Generates a median master dark image given a darks image cube.
+def generate_master_dark(individuals, bias_subtraction=False):
+    """Computes a median master flat field image from a subset of flat field images. Dark and bias subtraction is also performed if set.
 
-    Args:
-        darks_cube (np.ndarray): The data cube of dark images, with shape=(n_bias, ny, nx)
-    Returns:
-        master_dark (np.ndarray): The master dark image.
-    """
+        Args:
+            individuals (list): The list of DarkImages.
+            bias_subtraction (bool): Whether or not to perform bias subtraction. If so, each dark must have a master_bias attribute.
+        Returns:
+            master_dark (np.ndarray): The median combined master dark image
+        """
+    darks_cube = pcdata.SpecDataImage.generate_data_cube(individuals)
+    if bias_subtraction:
+        for i in darks_cube.shape[0]:
+            master_bias = individuals[i].master_bias.parse_image()
+            darks_cube[i, :, :] -= master_bias
     master_dark = np.nanmedian(darks_cube, axis=0)
     return master_dark
 
 # Generate a master bias image
-def generate_master_bias(bias_cube):
-    """Generates a median master bias image given a bias image cube.
+def generate_master_bias(individuals):
+    """Generates a median master bias image.
 
     Args:
-        bias_cube (np.ndarray): The data cube of bias images, with shape=(n_bias, ny, nx)
+        individuals (list): The list of BiasImages.
     Returns:
         master_bias (np.ndarray): The master bias image.
     """
+    bias_cube = pcdata.SpecDataImage.generate_data_cube(individuals)
     master_bias = np.nanmedian(bias_cube, axis=0)
     return master_bias
 
 # Bias, Dark, Flat calibration
-def standard_calibration(data_image, master_bias_image=None, master_flat_image=None, master_dark_image=None):
-    """Performs standard bias, flat, and dark corrections.
+def standard_calibration(data, data_image, bias_subtraction=False, dark_subtraction=False, flat_division=False):
+    """Performs standard bias, flat, and dark corrections to science frames.
 
     Args:
-        data_image (np.ndarray): The data to calibrate.
-        master_bias_image (np.ndarray): The master bias image (no bias subtraction if None).
-        master_dark_image (np.ndarray): The master dark image (no dark subtraction if None).
-        master_flat_image (np.ndarray): The master flat image (no flat correction if None).
+        data (SpecImage): The SpecImage to calibrate
+        data_image (np.ndarray): The corresponding parsed image to calibrate.
+        bias_subtraction (bool):  Whether or not to perform bias subtraction, defaults to False.
+        dark_subtraction (bool): Whether or not to perform dark subtraction, defaults to False.
+        flat_division (bool): Whether or not to perform flat division, defaults to False.
     Returns:
         data_image (np.ndarray): The corrected data image.
     """
     
     # Bias correction
-    if master_bias_image is not None:
+    if bias_subtraction:
+        master_bias_image = data.master_bias.parse_image()
         data_image -= master_bias_image
         
     # Dark correction
-    if master_dark_image is not None:
+    if dark_subtraction:
+        master_dark_image = data.master_dark.parse_image()
         data_image -= master_dark_image
         
     # Flat division
-    if master_flat_image is not None:
+    if flat_division:
+        master_flat_image = data.master_flat.parse_image()
         data_image /= master_flat_image
 
     return data_image
 
 
 # Corrects fringing and / or the blaze transmission.
-def correct_flat_artifacts(flat, order_map, calibration_settings, output_dir):
-    
+def correct_flat_artifacts(flat, redux_settings):
+    """ Corrects artifacts present in flat fields, under dev.
+
+    Args:
+        flat (FlatFieldImage): The FlatFieldImage to correct
+        redux_settings (dict): redux_settings dictionary.
+        
+    Returns:
+        np.ndarray: The corrected flat field
+    """
     flat_image = flat.parse_image()
 
     order_dicts, order_map_image = order_map.order_dicts, order_map.parse_image()

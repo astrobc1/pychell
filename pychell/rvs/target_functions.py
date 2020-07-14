@@ -75,6 +75,8 @@ def simple_rms(gp, forward_model, iter_num):
     return rms, cons
 
 
+
+
 def weighted_data_flux(gp, forward_model, iter_num):
     """Target function which returns the RMS and constraint. The RMS is weighted by bad pixels and the provided flux uncertainties. The constraint is used to force the LSF to be positive everywhere.
 
@@ -131,7 +133,8 @@ def binary_tellmask(gp, forward_model, iter_num):
     
     # Build weights from flux uncertainty
     tell_flux = forward_model.models_dict['tellurics'].build(gp, forward_model.templates_dict['tellurics'], wave_lr)
-    bad = np.where(tell_flux < 0.9)[0]
+    tell_cut = 0.3
+    bad = np.where(tell_flux < tell_cut)[0]
     weights = np.copy(forward_model.data.badpix)
     if bad.size > 0:
         weights[bad] = 0
@@ -162,36 +165,48 @@ def binary_tellmask(gp, forward_model, iter_num):
     return wrms, cons
 
 
-def simple_rms_shared(gp, forward_models, iter_num):
-    """Target function which returns the RMS and constraint for an entire night of forward models (single order still). The RMS is weighted by bad pixels only (i.e., a binary mask). The constraint is used to force the LSF to be positive everywhere.
+def binary_tellmask_ignore(gp, forward_model, iter_num):
+    
+    """Target function which returns the RMS and constraint. The RMS is weighted by bad pixels and a binary telluric mask which flags regions of telluric absorption greater than 95 percent. The constraint is used to force the LSF to be positive everywhere.
 
     Args:
-        gp (Parameters): The Parameters object for the entire night.
+        gp (Parameters): The Parameters object.
         forward_model (ForwardModel): The forwad model object
         iter_num (int): The iteration to generate RVs from.
     """
+    # Generate the forward model
+    wave_lr, model_lr = forward_model.build_full(gp, iter_num)
+    
+    # Build weights from flux uncertainty
+    tell_flux = forward_model.models_dict['tellurics'].build(gp, forward_model.templates_dict['tellurics'], wave_lr)
+    tell_cut = 0.98
+    bad = np.where(tell_flux < tell_cut)[0]
+    weights = np.copy(forward_model.data.badpix)
+    if bad.size > 0:
+        weights[bad] = 0
 
-    # Generate the forward models
-    diffs2 = np.empty(shape=(forward_models[0].data.flux.size, len(forward_models)), dtype=float)
-    weights = np.empty(shape=(forward_models[0].data.flux.size, len(forward_models)), dtype=float)
-    lsf_mins = np.ones(len(forward_models))
-    for ispec in range(len(forward_models)):
-        _, model_lr = forward_models[ispec].build_full(gp, iter_num)
-        diffs2[:, ispec] = (forward_models[ispec].data.flux - model_lr)**2
-        weights[:, ispec] = np.copy(forward_models[ispec].data.badpix)
-        lsf_mins[ispec] = np.nanmin(forward_models[ispec].models_dict['lsf'].build(gp)) >= 0 # Ensure LSF is >= zero
-
-    good = np.where(np.isfinite(diffs2) & (weights > 0))[0]
-    residuals2 = diffs2[good]
+    # weighted RMS
+    wdiffs2 = (forward_model.data.flux - model_lr)**2 * weights
+    good = np.where(np.isfinite(wdiffs2) & (weights > 0))[0]
+    wresiduals2 = wdiffs2[good]
     weights = weights[good]
 
-    # Ignore worst nflag x nspec pixels
-    ss = np.argsort(residuals2)
-    weights[ss[-1*forward_models[0].flag_n_worst_pixels*len(forward_models):]] = 0
-    residuals2[ss[-1*forward_models[0].flag_n_worst_pixels*len(forward_models):]] = np.nan
+    # Taper the ends
+    left_taper = np.array([0.2, 0.4, 0.6, 0.8])
+    right_taper = np.array([0.8, 0.6, 0.4, 0.2])
+
+    wresiduals2[:4] *= left_taper
+    wresiduals2[-4:] *= right_taper
+
+    # Ignore worst 20 pixels
+    ss = np.argsort(wresiduals2)
+    weights[ss[-1*forward_model.flag_n_worst_pixels:]] = 0
+    wresiduals2[ss[-1*forward_model.flag_n_worst_pixels:]] = np.nan
     
-    # Compute rms
-    rms = (np.nansum(residuals2 * weights) / np.nansum(weights))**0.5
-    
+    # Compute weighted rms
+    wrms = (np.nansum(wresiduals2) / np.nansum(weights))**0.5
+    cons = np.nanmin(forward_model.models_dict['lsf'].build(gp)) # Ensure LSF is greater than zero
+
     # Return rms and constraint
-    return rms, np.nanmin(lsf_mins)
+    return wrms, cons
+

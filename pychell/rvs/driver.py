@@ -71,10 +71,9 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
                 forward_models.save_final_outputs(forward_model_settings)
                 continue
             else:
-                forward_models.template_augmenter(forward_models, iter_num=0, nights_for_template=forward_model_settings['nights_for_template'])
-                
-                stellar_templates[:, 1] = np.copy(forward_models.templates_dict['star'][:, 1])
+                forward_models.template_augmenter(forward_models, iter_num=0, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
                 forward_models.update_models(0)
+                stellar_templates[:, 1] = np.copy(forward_models.templates_dict['star'][:, 1])
 
         # Iterate over remaining stellar template generations
         for iter_num in range(forward_model_settings['n_template_fits']):
@@ -104,7 +103,7 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
             if iter_num + 1 < forward_models.n_template_fits:
                 
                 # Template Augmentation
-                forward_models.template_augmenter(forward_models, iter_num=iter_num, nights_for_template=forward_models.nights_for_template)
+                forward_models.template_augmenter(forward_models, iter_num=iter_num, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
 
                 # Update the forward model initial_parameters.
                 forward_models.update_models(iter_num)
@@ -156,8 +155,7 @@ def init_spectrograph(forward_model_settings, spectrograph=None):
         spectrograph = forward_model_settings['spectrograph']
         
     # Load in the default instrument settings and add to dict.
-    spec_module = importlib.import_module('pychell.spectrographs.' + spectrograph.lower())
-    forward_model_settings.update(spec_module.general_settings)
+    spec_module = importlib.import_module('pychell.spectrographs.' + spectrograph.lower() + '.settings')
     forward_model_settings.update(spec_module.forward_model_settings)
         
 def init_defaults(forward_model_settings):
@@ -181,7 +179,7 @@ def init_blueprints(forward_model_settings, user_model_blueprints=None, spectrog
     
     model_blueprints = {}
     
-    spec_mod = importlib.import_module('pychell.spectrographs.' + spectrograph.lower())
+    spec_mod = importlib.import_module('pychell.spectrographs.' + spectrograph.lower() + '.settings')
     model_blueprints = spec_mod.forward_model_blueprints
 
     for user_key in user_model_blueprints:

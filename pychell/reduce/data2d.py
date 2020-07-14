@@ -32,6 +32,7 @@ import pychell.maths as pcmath # mathy equations
 import pychell.reduce.order_map as pcomap
 import pychell.reduce.extract as pcextract
 import pychell.reduce.calib as pccalib
+import pychell.spectrographs as spectrographs
 
 
 # Base class for a 2-dimensional echelle spectral image.
@@ -40,21 +41,38 @@ class SpecDataImage:
 
     Attributes:
         input_file (str): The full path + filename of the corresponding file.
-        base_image_input_file (str): The filename of the corresponding file with the path removed.
-        orientation (str): The orientation of the echelle orders on the detector. 'x' for aligned with rows, 'y' for columns. Defaults to 'x'.
+        base_input_file (str): The filename of the corresponding file with the path removed.
+        parser (Parser): The parser object, must extend the Parser object.
+        output_path (str): The root output path for this run.
     """
     
-    def __init__(self, input_file=None, orientation='x'):
+    def __init__(self, input_file, output_path):
         """Default basic initializer.
 
         Args:
-            input_file (str) The full path + filename of the corresponding file.
-            orientation (str): The orientation of the echelle orders on the detector. 'x' for aligned with rows, 'y' for columns. Defaults to   'x'.
+            input_file (str):  The full path + filename of the corresponding file.
+            output_path (str): The root output path for this run.
         """
-        if input_file is not None:
-            self.input_file = input_file
+        self.input_file = input_file
         self.base_input_file = os.path.basename(self.input_file)
-        self.orientation = orientation
+        self.output_path = output_path
+        
+        # Determine image extension (if any) and remove
+        if self.base_input_file.endswith('.fits'):
+            self.input_file_noext = self.input_file[0:-5]
+        elif self.base_input_file.endswith('.fz'):
+            self.input_file_noext = self.input_file[0:-3]
+        else:
+            k = self.input_file.rfind('.')
+            if k == -1:
+                self.input_file_noext = self.base_input_file
+            else:
+                self.input_file_noext = self.base_input_file[0:k]
+                
+        self.base_input_file_noext = os.path.basename(self.input_file_noext)
+        
+    def parse_image(self):
+        return fits.open(self.input_file)[0].data.astype(float)
         
     
     # Given a list of SpecDataImage objects
@@ -77,49 +95,6 @@ class SpecDataImage:
             data_cube[idata, :, :] = data_list[idata].parse_image()
             
         return data_cube
-    
-    # Parses the raw image given some info.
-    def parse_image(self, hdu_num=0, correct_readmath=False):
-        """Parses the input file for the image only. It's assumed the header has already been parsed.
-
-        Args:
-            hdu_num (int): Which header data unit the desired image is in, default to 0.
-            correct_readmath (bool): Whether or not to correct the NDRS, BSCALE, and BZERO from the header.
-        Returns:
-            data_image (np.ndarray): The data image, with shape=(ny, nx)
-        """
-        # Parse the image
-        fits_data = fits.open(self.input_file)[hdu_num]
-        fits_data.verify('fix')
-        data_image = fits_data.data.astype(float)
-        
-        # Correct silly things
-        if correct_readmath:
-            data_image = self.correct_readmath(data_image)
-        if self.orientation != 'x':
-            data_image = data_image.T
-        return data_image
-    
-    def correct_readmath(self, data_image):
-        """Corrects the NDRS, BSCALE, and BZERO. image_returned = (image_read_in - BZERO) / BSCALE
-
-        Args:
-            data_image (np.ndarray): The data image.
-        Returns:
-            data_image (np.ndarray): The corrected data image.
-        """
-        # Number of dynamic reads, or Non-destructive reads.
-        # This reduces the read noise by sqrt(NDR)
-        if hasattr(self, 'NDR'):
-            data_image /= self.NDR
-            
-        # BZERO and BSCALE are common fits header keys for linear offsets
-        if hasattr(self, 'BZERO'):
-            data_image -= self.BZERO
-        if hasattr(self, 'BSCALE'):
-            data_image /= self.BSCALE
-
-        return data_image
     
     def __str__(self):
         s = 'Spectral Image:' + '\n'
@@ -146,92 +121,44 @@ class SpecDataImage:
 # Master calibration frames are separate.
 class RawImage(SpecDataImage):
     """Base class for a raw, unmodified spectral data image (i.e., not modified other than possible readmath).
-
-        Args:
-            data_list (list): A list of data objects.
-        Returns:
-            data_cube (np.ndarray): The generated data cube, with shape=(n_images, ny, nx).
-        """
     
-    def __init__(self, input_file, orientation='x', header_keys=None, parse_header=False, output_dir_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
+    Attributes:
+        parser (Parser): The parser object, must extend the Parser object.
+    """
+    
+    def __init__(self, input_file, output_path, parser):
         
         # Call super init
-        super().__init__(input_file=input_file, orientation=orientation)
+        super().__init__(input_file=input_file, output_path=output_path)
         
-        if img_num is not None:
-            self.img_num = img_num
-            
-        if n_tot_imgs is not None :
-            self.n_tot_imgs = n_tot_imgs
+        # Store the parser
+        self.parser = parser
         
-        # Header info
-        if header_keys is not None:
-            self.header_keys = header_keys
-        if parse_header and header_keys is not None:
-            self.parse_header(hdu_num=hdu_num, time_offset=time_offset)
-            
-            
-        # The image number and date of observation
-        if filename_parser is not None:
-            file_info = filename_parser(self.base_input_file)
-            self.file_image_num = file_info['number']
-            self.file_date_str = file_info['date']
-            
-        # Define output file directories if set and extract is true
-        if output_dir_root is not None:
-            
-            # Determine a proper base string for filenames (ie, no fits or fz file extension)
-            if self.base_input_file[-5:] == '.fits':
-                base_str = self.base_input_file[:-4]
-            elif self.base_input_file[-3:] == '.fz':
-                base_str = self.base_input_file[:-2]
-            else:
-                base_str = self.base_input_file
-                
-            # The reduced spectra for all orders (flux, unc, badpix)
-            self.out_file_spectrum = output_dir_root + 'spectra' + os.sep + base_str + self.target + str('_reduced') + '.fits'
-            
-            # The reduced spectra plots for all orders
-            self.out_file_spectrum_plot = output_dir_root + 'previews' + os.sep + base_str + self.target + str('_reduced') + '.png'
-            
-            # The trace profiles for all orders (possibly oversampled)
-            self.out_file_trace_profiles = output_dir_root + 'trace_profiles' + os.sep + base_str + self.target + str('_trace_profile') + '.npz'
-            
-            # The trace profiles for all orders (possibly oversampled)
-            self.out_file_trace_profile_plots = output_dir_root + 'trace_profiles' + os.sep + base_str + self.target + str('_trace_profile') + '.png'
+        # Parse the header and store.
+        self.parser.parse_header(self)
+        
+        # Parse the image number
+        self.parser.parse_image_num(self)
+        
+        # Parse the date of the observation
+        self.parser.parse_date(self)
     
-    # Load and store the header
-    def parse_header(self, hdu_num=0, time_offset=0):
-        
-        # Parse the header
-        fits_data = fits.open(self.input_file)[hdu_num]
-        fits_data.verify('fix')
-        self.header = fits_data.header
-        
-        # Store header keys
-        for h in self.header_keys:
-            if self.header_keys[h][0] in self.header:
-                setattr(self, h, self.header[self.header_keys[h][0]])
-            else:
-                setattr(self, h, self.header_keys[h][1])
-                
-        # Store the sky coordinate
-        self.coord = SkyCoord(ra=self.RA, dec=self.DEC, unit=(units.hourangle, units.deg))
-        
-        # Overwrite the time of observation
-        self.time_of_obs = Time(float(self.time_of_obs) + time_offset, scale='utc', format='jd')
     
     # Outputs reduced orders for this spectrum
-    def save_reduced_orders(self, data_arr, copy_keys=None, new_entries=None):
-        header_out = copy.deepcopy(self.header)
-        header_out.update(new_entries)
-        if copy_keys is not None:
-            for key in copy_keys:
-                header_out[key] = getattr(key, self)
-        hdu = fits.PrimaryHDU(data_arr, header=header_out)
+    def save_reduced_orders(self, reduced_orders):
+        header_out = fits.Header()
+        for key in self.header:
+            if type(self.header[key]) is str:
+                header_out[key] = self.header[key]
+        hdu = fits.PrimaryHDU(reduced_orders, header=header_out)
         hdul = fits.HDUList([hdu])
-        hdul.writeto(self.out_file_spectrum, overwrite=True, output_verify='ignore')
+        fname = self.output_path + 'spectra' + os.sep + self.base_input_file_noext + '_' + self.target + '_reduced' + '.fits'
+        hdul.writeto(fname, overwrite=True, output_verify='ignore')
         
+    
+    def parse_image(self):
+        return self.parser.parse_image(self)    
+    
     def __str__(self):
         s = 'Raw Image:' + '\n'
         s += '    Input File:' + self.base_input_file
@@ -241,45 +168,10 @@ class RawImage(SpecDataImage):
 # Class for a a raw science frame
 class ScienceImage(RawImage):
     
-    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_dir_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
+    def __init__(self, input_file, output_path, parser):
         
         # Call super init
-        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_dir_root=output_dir_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
-    
-    # Pairs based on the correct exposure time
-    def pair_master_dark(self, master_darks):
-        exp_times = np.array([master_darks[i].exp_time for i in range(len(master_darks))], dtype=float)
-        matching_itime = np.where(self.exp_time == exp_times)[0]
-        if matching_itime.size != 0:
-            raise ValueError(str(matching_itime.size) + "master dark(s) found for\n" + str(self))
-        else:
-            self.master_dark = master_darks[matching_itime[0]]
-    
-    # Pairs based based on sky coords of the closest master flat and time between observation.
-    # metric is d^2 = angular_sep^2 + time_diff^2
-    def pair_master_flat(self, master_flats):
-        ang_seps = np.array([np.abs(self.coord.separation(master_flats[i].coord)).value for i in range(len(master_flats))], dtype=float)
-        time_seps = np.array([np.abs(self.coord.separation(master_flats[i].coord)).value for i in range(len(master_flats))], dtype=float)
-        ds = np.sqrt(ang_seps**2 + time_seps**2)
-        minds_loc = np.argmin(ds)
-        self.master_flat = master_flats[minds_loc]
-        
-    def trace_orders(self, output_dir, extraction_settings, src=None):
-        
-        if src is None or src == 'empirical':
-            order_dicts, order_map_image = pcomap.trace_orders_empirical(self.parse_image(), extraction_settings)
-        elif src is 'from_flats':
-            # Check if this flat has already been traced.
-            if not self.master_flat.is_traced:
-                order_dicts, order_map_image = pcomap.trace_orders_from_flat(self.master_flat.parse_image(), extraction_settings)
-                self.master_flat.is_traced = True
-                order_image_file = output_dir + 'order_map_' + self.file_date_str + '_' + self.target + '.fits'
-                self.order_map = OrderMapImage('x', order_image_file, order_dicts)
-                self.order_map.save(order_map_image=order_map_image)
-            else:
-                order_image_file = output_dir + 'order_map_' + self.file_date_str + '_' + self.target + '.fits'
-                input_file_dicts = order_image_file[0:-4] + 'pkl'
-                self.order_map = OrderMapImage.from_files(input_file_image=order_image_file, input_file_dicts=input_file_dicts)
+        super().__init__(input_file=input_file, output_path=output_path, parser=parser)
                 
                 
     def correct_flat_artifacts(self, output_dir, calibration_settings):
@@ -315,10 +207,10 @@ class ScienceImage(RawImage):
 # Class for raw bias frame 
 class BiasImage(RawImage):
     
-    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_dir_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
+    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_path_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
         
         # Call super init
-        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_dir_root=output_dir_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
+        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_path_root=output_path_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
         
     def __str__(self):
         s = 'Bias:' + '\n'
@@ -329,10 +221,10 @@ class BiasImage(RawImage):
 # Class for raw dark frame
 class DarkImage(RawImage):
     
-    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_dir_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
+    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_path_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
         
         # Call super init
-        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_dir_root=output_dir_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
+        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_path_root=output_path_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
         
     def __str__(self):
         s = 'Dark:' + '\n'
@@ -344,10 +236,10 @@ class DarkImage(RawImage):
 # Class for raw flat frame
 class FlatImage(RawImage):
     
-    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_dir_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
+    def __init__(self, input_file, output_path, parser):
         
         # Call super init
-        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_dir_root=output_dir_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
+        super().__init__(input_file=input_file, output_path=output_path, parser=parser)
         
     def __str__(self):
         s = 'Flat Field:' + '\n'
@@ -355,7 +247,6 @@ class FlatImage(RawImage):
         s += '    Exp. Time: ' + self.exp_time
         return s
     
-
 
 #######################################
 ###### Master Calibration Frames ######
@@ -366,57 +257,56 @@ class FlatImage(RawImage):
 # So this is primarily a helpful container
 class MasterCalibImage(SpecDataImage):
     
-    def __init__(self, calib_images, input_file, orientation='x', header_keys=None):
+    def __init__(self, individuals):
         
+        # Generate the filename for the median combined image
+        img_nums = np.array([int(f.image_num) for f in individuals])
+        img_start, img_end = str(np.min(img_nums)), str(np.max(img_nums))
+        input_file = individuals[0].output_path + 'calib' + os.sep + 'master_flat_' + individuals[0].date_obs + '_imgs' + img_start + '-' + img_end + '.fits'
+                
         # Call super init
-        super().__init__(input_file=input_file, orientation=orientation)
+        super().__init__(input_file=input_file, output_path=individuals[0].output_path)
     
         # A list of the individual calibration image objects
-        self.calib_images = calib_images
+        self.individuals = individuals
         
-        # Store header keys initialize header
-        self.header_keys = header_keys
-        if self.header_keys is not None:
-            self.generate_header()
+        # Generate a header
+        self.generate_header()
         
     # Save the master calibration image
-    def save(self, master_image, new_entries=None, input_file=None):
-        
-        if input_file is None:
-            input_file = self.input_file
-            
-        header_out = copy.deepcopy(self.header)
-        header_out.update(new_entries)
+    def save(self, master_image):
+        header_out = fits.Header()
+        for key in self.header:
+            if type(self.header[key]) is str:
+                header_out[key] = self.header[key]
         hdu = fits.PrimaryHDU(master_image, header=header_out)
         hdul = fits.HDUList([hdu])
         hdul.writeto(self.input_file, overwrite=True, output_verify='ignore')
         
-    def generate_header(self, header_keys=None, new_entries=None):
-        
-        # If header keys not already set
-        if header_keys is not None:
-            self.header_keys = header_keys
+    def generate_header(self):
         
         # Copy the header from the first image
-        self.header = copy.deepcopy(self.calib_images[0].header)
+        self.header = copy.deepcopy(self.individuals[0].header)
         
         # Store header keys
-        for h in self.header_keys:
-            if self.header_keys[h][0] in self.header:
-                setattr(self, h, self.header[self.header_keys[h][0]])
+        for h in self.individuals[0].parser.header_keys:
+            if self.individuals[0].parser.header_keys[h][0] in self.header:
+                setattr(self, h, self.header[self.individuals[0].parser.header_keys[h][0]])
             else:
-                setattr(self, h, self.header_keys[h][1])
+                setattr(self, h, self.individuals[0].parser.header_keys[h][1])
         
         # Compute the mean sky coords
-        ras = [cdat.coord.ra.deg for cdat in self.calib_images]
-        decs = [cdat.coord.dec.deg for cdat in self.calib_images]
+        ras = [cdat.coord.ra.deg for cdat in self.individuals]
+        decs = [cdat.coord.dec.deg for cdat in self.individuals]
         mra = np.average(ras)
         mdec = np.average(decs)
-        self.coord = SkyCoord(ra=mra, dec=mdec, unit=(units.deg, units.deg))
+        self.header['coord'] = SkyCoord(ra=mra, dec=mdec, unit=(units.deg, units.deg))
+        self.coord = self.header['coord']
         
         # Time of obs
-        ts = np.average(np.array([cdat.time_of_obs.jd for cdat in self.calib_images], dtype=float))
-        self.time_of_obs = Time(ts, scale='utc', format='jd')
+        ts = np.average(np.array([cdat.time_of_obs.jd for cdat in self.individuals], dtype=float))
+        self.header['time_of_obs'] = Time(ts, scale='utc', format='jd')
+        self.time_of_obs = self.header['time_of_obs']
         
     def __str__(self):
         s = 'Master Calibration Image:' + '\n'
@@ -426,62 +316,14 @@ class MasterCalibImage(SpecDataImage):
     
 class MasterFlatImage(MasterCalibImage):
     
-    def __init__(self, calib_images, input_file, orientation='x', header_keys=None):
+    def __init__(self, individuals):
+        """
+        Args:
+            individuals (list of FlatFieldImages): The individual flat field images which generate this master flat field.
+        """
         
         # Super init
-        super().__init__(calib_images=calib_images, input_file=input_file, orientation=orientation, header_keys=header_keys)
-        
-        self.is_traced = False
-        self.is_corrected = False
-        
-    # Pairs flats based on their location on the sky
-    # flats is a list of all individual flat frame objects
-    # Returns a list of MasterFlatImages
-    @classmethod
-    def from_all_flats(cls, flats, output_dir, header_keys=None):
-    
-        # Number of total individual flats
-        n_flats = len(flats)
-        
-        # Create a clustering object
-        density_cluster = sklearn.cluster.DBSCAN(eps=0.01745, min_samples=2, metric='euclidean', algorithm='auto', p=None, n_jobs=1)
-        
-        # Points are the ra and dec
-        dist_matrix = np.empty(shape=(n_flats, n_flats), dtype=float)
-        for i in range(n_flats):
-            for j in range(n_flats):
-                dpsi = np.abs(flats[i].coord.separation(flats[j].coord).value)
-                dt = np.abs(flats[i].time_of_obs.jd - flats[j].time_of_obs.jd)
-                dpsi /= np.pi
-                dt /= 10  # Places more emphasis on delta psi
-                dist_matrix[i, j] = np.sqrt(dpsi**2 + dt**2)
-        
-        # Fit
-        db = density_cluster.fit(dist_matrix)
-        
-        # Extract the labels
-        labels = db.labels_
-        good_labels = np.where(labels >= 0)[0]
-        if good_labels.size == 0:
-            raise NameError('Error! The flat pairing algorithm failed. No usable labels found.')
-        good_labels_init = labels[good_labels]
-        labels_unique = np.unique(good_labels_init)
-        
-        # The number of master flats
-        n_mflats = len(labels_unique)
-        
-        master_flats = []
-
-        for l in range(n_mflats):
-            
-            # Get this flat label
-            this_label = np.where(labels == labels_unique[l])[0]
-            img_nums_this_label = np.array([int(flats[lb].file_image_num) for lb in this_label])
-            img_start, img_end = str(np.min(img_nums_this_label)), str(np.max(img_nums_this_label))
-            master_file = output_dir + os.sep + 'master_flat_' + flats[this_label[0]].file_date_str + '_imgs' + img_start + '-' + img_end + '_' + flats[this_label[0]].target + '.fits'
-            master_flats.append(cls([flats[lb] for lb in this_label], master_file, header_keys=header_keys))
-            
-        return master_flats
+        super().__init__(individuals=individuals)
         
         
     def __str__(self):
@@ -528,7 +370,6 @@ class MasterDarkImage(MasterCalibImage):
         return s
     
     
-    
 class MasterBiasImage(MasterCalibImage):
     
     def __init__(self, calib_images, input_file, orientation='x', header_keys=None):
@@ -549,37 +390,39 @@ class MasterBiasImage(MasterCalibImage):
 ###### ORDER TRACING ######
 ###########################
     
+# Order tracing is either:
+# 1. Derived for each individual science exposure (empirical_unique)
+# 2. Derived from a flat star and used for the whole night (empirical_flat_star)
+# 3. Derived from flat fields and used for their corresponding images (empirical_flat_fields)
+# 4. Hard coded (hard_coded)
+# Each OrderMapImage corresponds to a fits file containing the labels / nans, and a dictionary with keys = labels (int), containing polynomial coffeicients (pcoeffs) and heights (height).
     
 class OrderMapImage(SpecDataImage):
     
-    def __init__(self, orientation, input_file, order_dicts):
+    def __init__(self, data, input_file):
         
         # Call super init
-        super().__init__(input_file=input_file, orientation=orientation)
+        super().__init__(input_file=input_file, output_path=data.output_path)
         
-        # Order dictionary info
-        self.order_dicts = order_dicts
-        self.input_file_dicts = self.input_file[0:-4] + 'pkl'
+        # The data this map corresponds to
+        self.data = data
         
-    
-    @classmethod
-    def from_files(cls, input_file_image, input_file_dicts):
-        if input_file_dicts is not None:
-            with open(input_file_dicts, 'rb') as handle:
-                order_dicts = pickle.load(handle)
-        return cls(orientation='x', input_file=input_file_image, order_dicts=order_dicts)
+        # Order dictionary file name
+        self.input_file_orders_list = self.input_file_noext + '.pkl'
         
-    def save(self, order_map_image=None):
-        
-        # Save the order map image
-        if order_map_image is not None:
-            hdu = fits.PrimaryHDU(order_map_image)
-            hdul = fits.HDUList([hdu])
-            hdul.writeto(self.input_file, overwrite=True)
-            
-        # Save the order map dictionaries
-        with open(self.input_file_dicts, 'wb') as handle:
-            pickle.dump(self.order_dicts, handle, protocol=pickle.HIGHEST_PROTOCOL)
+    def load(self):
+        """Loads and returns the order map image and pickled dictionary file
+
+        Returns:
+            np.ndarray: The order map image
+            list: The list of dictionaries for each order
+        """
+        with open(self.input_file_orders_list, 'rb') as f:
+            orders_list = pickle.load(f)
+        order_map_image = self.parse_image()
+        if not hasattr(self, 'orders_list'):
+            self.orders_list = orders_list
+        return order_map_image, orders_list
             
     def __str__(self):
         s = 'Order Map:' + '\n'
@@ -587,88 +430,103 @@ class OrderMapImage(SpecDataImage):
         return s
     
     
+class EmpiricalOrderMap(OrderMapImage):
     
-class EmpiricalOrderMap(SpecDataImage):
-    
-    def __init__(self, orientation, input_file, order_dicts):
+    def __init__(self, data, method):
+        
+        # Generate the filename for the median combined image
+        input_file = data.output_path + 'trace' + os.sep + data.base_input_file_noext + '_order_map.fits'
         
         # Call super init
-        super().__init__(input_file=input_file, orientation=orientation)
+        super().__init__(data=data, input_file=input_file)
         
-        # Order dictionary info
-        self.order_dicts = order_dicts
-        self.input_file_dicts = self.input_file[0:-4] + 'pkl'
-        
+        # Extract the method
+        self.trace_alg = getattr(pcomap, method)
     
-    @classmethod
-    def from_files(cls, input_file_image, input_file_dicts):
-        if input_file_dicts is not None:
-            with open(input_file_dicts, 'rb') as handle:
-                order_dicts = pickle.load(handle)
-        return cls(orientation='x', input_file=input_file_image, order_dicts=order_dicts)
+    
+    def trace_orders(self, redux_settings):
+        order_map_image, orders_list = self.trace_alg(self.data, redux_settings)
+        self.orders_list = orders_list
+        self.save(order_map_image)
         
-    def save(self, order_map_image=None):
+    def save(self, order_map_image):
         
-        # Save the order map image
-        if order_map_image is not None:
-            hdu = fits.PrimaryHDU(order_map_image)
-            hdul = fits.HDUList([hdu])
-            hdul.writeto(self.input_file, overwrite=True)
+        # Save the order map image, default header
+        hdu = fits.PrimaryHDU(order_map_image)
+        hdul = fits.HDUList([hdu])
+        hdul.writeto(self.input_file, overwrite=True)
             
         # Save the order map dictionaries
-        with open(self.input_file_dicts, 'wb') as handle:
-            pickle.dump(self.order_dicts, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        with open(self.input_file_orders_list, 'wb') as f:
+            pickle.dump(self.orders_list, f, protocol=pickle.HIGHEST_PROTOCOL)
             
     def __str__(self):
-        s = 'Order Map:' + '\n'
+        s = 'Empirical Order Map:' + '\n'
         s += '    Input File' + self.base_input_file
         return s
     
     
 class HardCodedOrderMap(OrderMapImage):
     
-    def __init__(self, input_file, order_dicts_file, orientation='x'):
+    def __init__(self, data):
+        
+        # Input file is stored as a class variable
+        input_file = self.input_file
         
         # Call super init
-        #super().__init__(input_file=input_file, orientation=orientation)
-        
-        # Order dictionary info
-        with open(order_dicts_file, 'rb') as f:
-            self.order_dicts = pickle.load(f)
-        
-    
-    @classmethod
-    def from_files(cls, input_file_image, input_file_dicts):
-        if input_file_dicts is not None:
-            with open(input_file_dicts, 'rb') as handle:
-                order_dicts = pickle.load(handle)
-        return cls(orientation='x', input_file=input_file_image, order_dicts=order_dicts)
-        
-    def save(self, order_map_image=None):
-        
-        # Save the order map image
-        if order_map_image is not None:
-            hdu = fits.PrimaryHDU(order_map_image)
-            hdul = fits.HDUList([hdu])
-            hdul.writeto(self.input_file, overwrite=True)
-            
-        # Save the order map dictionaries
-        with open(self.input_file_dicts, 'wb') as handle:
-            pickle.dump(self.order_dicts, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        super().__init__(data, input_file=input_file)
             
     def __str__(self):
-        s = 'Order Map:' + '\n'
+        s = 'Hard Coded Order Map:' + '\n'
         s += '    Input File' + self.base_input_file
         return s
-    
-    
-    
-####################################################
-###### MULTI TRACE DATA (under dev.) ###############
-####################################################
 
-#class MultiTraceImage():
-
+class iSHELLKGasMap(HardCodedOrderMap):
+    
+    input_file = os.path.dirname(spectrographs.__file__) + os.sep + 'ishell' + os.sep + 'order_map_KGAS.fits'
+    
+    def __init__(self, data):
+        
+        super().__init__(data=data)
+        
+        
+class CHIRONMap(HardCodedOrderMap):
+    
+    input_file = os.path.dirname(spectrographs.__file__) + os.sep + 'chiron' + os.sep + 'chiron_order_map_master2.fits'
+    
+    def __init__(self, data):
+        
+        super().__init__(data=data)
+        
+        
+class FlatFieldOrderMap(EmpiricalOrderMap):
+    
+    def __init__(self, data, method=None):
+        
+        if method is None:
+            method = 'trace_orders_from_flat_field'
+        
+        super().__init__(data=data, method=method)
+    
+    
+class FlatStarOrderMap(EmpiricalOrderMap):
+    
+    def __init__(self, data, input_file, output_path, method=None):
+        
+        if method is None:
+            method = 'trace_orders_empirical'
+        
+        super().__init__(data=data, input_file=input_file, output_path=output_path, method=method)
+        
+        
+class ScienceOrderMap(EmpiricalOrderMap):
+    
+    def __init__(self, data, input_file, output_path, method=None):
+        
+        if method is None:
+            method = 'trace_orders_empirical'
+        
+        super().__init__(data=data, input_file=input_file, output_path=output_path, method=method)
 
 ############################
 ###### Co-added Image ######
@@ -697,3 +555,406 @@ class CoAddedImage(SpecDataImage):
         return data_cube
         
         
+
+#####################################
+#### Instrument Specific Parsing ####
+#####################################
+
+
+#### Each function must be named parse_insname (all lowercase) to be automatically recognized
+#### The signature of these functions must take an input path, and return a dictionary of images where each key is a type of above image.
+
+class Parser:
+    
+    def __init__(self):
+        # nothing is Done.
+        pass
+    
+    # Defaults to parse method
+    def __call__(self, redux_settings):
+        return self.categorize(redux_settings)
+    
+    def categorize(self, redux_settings):
+        raise NotImplementedError("Must implement a categorize method for this instrument")
+    
+    def parse_header(self, data):
+        
+        # Stores extracted key, value pairs
+        modified_header = {}
+        
+        # Parse the header
+        fits_data = fits.open(data.input_file)[0]
+        
+        # Just in case
+        fits_data.verify('fix')
+
+        # The current header
+        current_fits_header = fits_data.header
+        modified_header.update(current_fits_header)
+        
+        # Store header keys as consistent names
+        for h in self.header_keys:
+            if self.header_keys[h][0] in current_fits_header:
+                modified_header[h] = current_fits_header[self.header_keys[h][0]]
+            else:
+                modified_header[h] = self.header_keys[h][1]
+                
+        # Also pass important keys as data object attributes
+        for key in self.header_keys:
+            if not hasattr(data, key):
+                setattr(data, key, modified_header[key])
+                
+        return modified_header
+    
+    def parse_image(self, filename):
+        """Parses the input file for the image only. It's assumed the header has already been parsed.
+
+        Args:
+            filename (str): The filename.
+        Returns:
+            data_image (np.ndarray): The data image, with shape=(ny, nx)
+        """
+        return fits.open(filename)[0].data.astype(float)
+    
+    def parse_date(self, data):
+        raise NotImplementedError("Must implement a parse_date method for this instrument")
+    
+    def parse_image_num(self, data):
+        raise NotImplementedError("Must implement a parse_image_num method for this instrument")
+    
+    # Functions that may be overloaded
+    def correct_readmath(self, data, data_image):
+        """Corrects the NDRS, BSCALE, and BZERO in place. image_corrected = (image_original / NDR - BZERO) / BSCALE
+
+        Args:
+            data (SpecDataImage): The SpecDataImage object this image corresponds to
+            data_image (np.ndarray): The data image.
+        """
+        # Number of dynamic reads, or Non-destructive reads.
+        # This reduces the read noise by sqrt(NDR)
+        if hasattr(data, 'NDR'):
+            data_image /= float(data.NDR)
+            
+        # BZERO and BSCALE are common fits header keys for linear transformations
+        if hasattr(data, 'BZERO'):
+            data_image -= float(data.BZERO)
+        if hasattr(data, 'BSCALE'):
+            data_image /= float(data.BSCALE)
+            
+    def group_darks(self, darks):
+        master_darks = []
+        exp_times = np.array([d.exp_time for d in darks])
+        exp_times_unq = np.unique(exp_times)
+        for t in exp_times_unq:
+            good = np.where(exp_times == t)[0]
+            indiv_darks = [darks[i] for i in good]
+            master_darks.append(MasterDarkImage(indiv_darks))
+        return master_darks
+    
+    def group_flats(self, flats):
+        
+        # Number of total individual flats
+        n_flats = len(flats)
+        
+        # Create a clustering object
+        density_cluster = sklearn.cluster.DBSCAN(eps=0.01745, min_samples=2, metric='euclidean', algorithm='auto', p=None, n_jobs=1)
+        
+        # Points are the ra and dec
+        dist_matrix = np.empty(shape=(n_flats, n_flats), dtype=float)
+        for i in range(n_flats):
+            for j in range(n_flats):
+                dpsi = np.abs(flats[i].coord.separation(flats[j].coord).value)
+                dt = np.abs(flats[i].time_of_obs.jd - flats[j].time_of_obs.jd)
+                dpsi /= np.pi
+                dt /= 10  # Places more emphasis on delta psi
+                dist_matrix[i, j] = np.sqrt(dpsi**2 + dt**2)
+        
+        # Fit
+        db = density_cluster.fit(dist_matrix)
+        
+        # Extract the labels
+        labels = db.labels_
+        good_labels = np.where(labels >= 0)[0]
+        if good_labels.size == 0:
+            raise NameError('Error! The flat pairing algorithm failed. No usable labels found.')
+        good_labels_init = labels[good_labels]
+        labels_unique = np.unique(good_labels_init)
+        
+        # The number of master flats
+        n_mflats = len(labels_unique)
+        
+        master_flats = []
+
+        for l in range(n_mflats):
+            this_label = np.where(good_labels_init == labels_unique[l])[0]
+            indiv_flats = [flats[lb] for lb in this_label]
+            master_flats.append(MasterFlatImage(indiv_flats))
+            
+        return master_flats
+    
+    # Pairs Master bias
+    def pair_master_bias(self, spec_image, master_bias):
+        spec_image.master_bias = master_bias
+    
+    # Pairs based on the correct exposure time
+    def pair_master_dark(self, spec_image, master_darks):
+        exp_times = np.array([master_darks[i].exp_time for i in range(len(master_darks))], dtype=float)
+        good = np.where(spec_image.exp_time == exp_times)[0]
+        if good.size != 0:
+            raise ValueError(str(good.size) + "master dark(s) found for\n" + str(self))
+        else:
+            spec_image.master_dark = master_darks[good[0]]
+    
+    # Pairs based based on sky coords of the closest master flat and time between observation.
+    # metric is d^2 = angular_sep^2 + time_diff^2
+    def pair_master_flat(self, spec_image, master_flats):
+        ang_seps = np.array([np.abs(spec_image.coord.separation(mf.coord)).value for mf in master_flats], dtype=float)
+        time_seps = np.array([np.abs(spec_image.time_of_obs.value - mf.time_of_obs.value) for mf in master_flats], dtype=float)
+        ds = np.sqrt(ang_seps**2 + time_seps**2)
+        minds_loc = np.argmin(ds)
+        spec_image.master_flat = master_flats[minds_loc]
+        
+    def print_summary(self, data):
+    
+        n_sci_tot = len(data['science'])
+        targets_all = np.array([data['science'][i].target for i in range(n_sci_tot)], dtype='<U50')
+        targets_unique = np.unique(targets_all)
+        for i in range(len(targets_unique)):
+            
+            target = targets_unique[i]
+            
+            locs_this_target = np.where(targets_all == target)[0]
+            
+            sci_this_target = [data['science'][j] for j in locs_this_target]
+            
+            print('Target: ' + target)
+            print('    N Exposures: ' + str(locs_this_target.size))
+            if hasattr(sci_this_target[0], 'master_bias'):
+                print('    Master Bias File(s): ')
+                print('    ' + data['science'].master_bias.base_input_file)
+                
+            if hasattr(sci_this_target[0], 'master_dark'):
+                darks_this_target_all = np.array([sci.master_dark for sci in sci_this_target], dtype=DarkImage)
+                darks_unique = np.unique(darks_this_target_all)
+                print('  Master Dark File(s): ')
+                for d in darks_unique:
+                    print('    ' + d.base_input_file)
+                
+            if hasattr(sci_this_target[0], 'master_flat'):
+                flats_this_target_all = np.array([sci.master_flat for sci in sci_this_target], dtype=FlatImage)
+                flats_unique = np.unique(flats_this_target_all)
+                print('  Master Flat File(s): ')
+                for f in flats_unique:
+                    print('    ' + f.base_input_file)
+                    
+            print('')
+        
+    
+    
+class iSHELLParser(Parser):
+    
+    header_keys = {
+        'target': ['OBJECT', ValueError],
+        'RA': ['TCS_RA', ValueError],
+        'DEC': ['TCS_DEC', ValueError],
+        'slit': ['SLIT', ValueError],
+        'wavelength_range': ['XDTILT', None],
+        'gas_cell': ['GASCELL', None],
+        'exp_time': ['ITIME', ValueError],
+        'time_of_obs': ['TCS_UTC', ValueError],
+        'NDR': ['NDR', 1],
+        'BZERO': ['BZERO', 0],
+        'BSCALE': ['BSCALE', 1]
+    }
+        
+    def categorize(self, redux_settings):
+        
+        # Stores the data as above objects
+        data = {}
+        
+        # iSHELL science files are files that contain spc or data
+        sci_files1 = glob.glob(redux_settings['input_path'] + '*data*.fits')
+        sci_files2 = glob.glob(redux_settings['input_path'] + '*spc*.fits')
+        sci_files = sci_files1 + sci_files2
+        sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
+        
+        data['science'] = [ScienceImage(input_file=sci_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(sci_files))]
+    
+        # Bias (typically not done for iSHELL, but still check)
+        if redux_settings['bias_subtraction']:
+            bias_files = glob.glob(redux_settings['input_path'] + '*bias*.fits')
+            data['bias'] = [BiasImage(input_file=bias_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(bias_files))]
+            data['master_bias'] = MasterBiasImage(individuals=data['bias'], output_path=redux_settings['run_output_path'])
+            
+            for sci in data['science']:
+                self.pair_master_bias(sci, data['master_bias'])
+                
+            for flat in data['flats']:
+                self.pair_master_bias(flat, data['master_bias'])
+            
+        # Darks assumed to contain dark in filename
+        if redux_settings['dark_subtraction']:
+            dark_files = glob.glob(redux_settings['input_path'] + '*dark*.fits')
+            data['darks'] = [DarkImage(input_file=dark_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(dark_files))]
+            data['master_darks'] = MasterDarkImage.from_all_darks(data['darks'])
+            
+            for sci in data['science']:
+                self.pair_master_dark(sci, data['master_darks'])
+                
+            for flat in data['flats']:
+                self.pair_master_dark(flat, data['master_darks'])
+        
+        # iSHELL flats must contain flat in the filename
+        if redux_settings['flat_division']:
+            flat_files = glob.glob(redux_settings['input_path'] + '*flat*.fits')
+            data['flats'] = [FlatImage(input_file=flat_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(flat_files))]
+            data['master_flats'] = self.group_flats(data['flats'])
+            for sci in data['science']:
+                self.pair_master_flat(sci, data['master_flats'])
+            
+        # iSHELL ThAr images must contain arc (not implemented yet)
+        if redux_settings['wavelength_calibration']:
+            thar_files = glob.glob(redux_settings['input_path'] + '*arc*.fits')
+            data['wavecals'] = [ThArImage(input_file=thar_files[f], output_path=redux_settings['run_output_path'] + 'calib' + os.sep, parser=self) for f in range(len(thar_files))]
+            data['master_wavecals'] = self.group_wavecals(data['wavecals'])
+            for sci in data['science']:
+                self.pair_master_wavecal(sci, data['master_wavecals'])
+                
+        
+        self.print_summary(data)
+
+        return data
+
+    # icm.2019A076.190627.flat.00019.a.fits
+    def parse_image_num(self, data):
+        string_list = data.base_input_file.split('.')
+        data.image_num = string_list[4]
+        
+    def parse_image(self, data):
+        """Parses the input file for the image only. It's assumed the header has already been parsed.
+
+        Args:
+            hdu_num (int): Which header data unit the desired image is in, default to 0.
+        Returns:
+            data_image (np.ndarray): The data image, with shape=(ny, nx)
+        """
+        # Parse the image
+        data_image = super().parse_image(data.input_file)
+        
+        # Correct readmath (checks if present)
+        self.correct_readmath(data, data_image)
+        return data_image
+        
+    # icm.2019A076.190627.flat.00019.a.fits
+    def parse_date(self, data):
+        string_list = data.base_input_file.split('.')
+        data.date_obs = string_list[1][0:4] + string_list[2][2:]
+    
+    def parse_header(self, data):
+        
+        modified_header = super().parse_header(data)
+                
+        # Store the sky coordinate
+        modified_header['coord'] = SkyCoord(ra=modified_header['RA'], dec=modified_header['DEC'], unit=(units.hourangle, units.deg))
+        data.coord = modified_header['coord']
+
+        # Overwrite the time of observation
+        modified_header['time_of_obs'] = Time(float(modified_header['time_of_obs']) + 2400000.5, scale='utc', format='jd')
+        data.time_of_obs = modified_header['time_of_obs']
+        
+        data.header = modified_header
+        
+        
+
+# Under dev
+class CHIRONParser(Parser):
+    
+    header_keys = {
+        'target': ['OBJECT', ValueError],
+        'RA': ['RA', ValueError],
+        'DEC': ['DEC', ValueError],
+        'slit': ['DECKER', ValueError],
+        'wavelength_range': ['_NOKEY_', 'Fixed (415 nm - 880 nm)'],
+        'exp_time': ['ITIME', ValueError],
+        'gas_cell': ['IODCELL', 'Out'],
+        'time_of_obs': ['DATE-OBS', ValueError],
+        'NDR': ['NDR', 1],
+        'BZERO': ['BZERO', 0],
+        'BSCALE': ['BSCALE', 1]
+    }
+        
+    def categorize(self, redux_settings):
+        
+        # Stores the data as above objects
+        data = {}
+        
+        # iSHELL science files are files that contain spc or data
+        sci_files = glob.glob(redux_settings['input_path'] + '*.fits')
+        sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
+        
+        data['science'] = [ScienceImage(input_file=sci_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(sci_files))]
+    
+        # Bias
+        if redux_settings['bias_subtraction']:
+            bias_files = glob.glob(redux_settings['input_path'] + '*bias*.fits')
+            data['bias'] = [BiasImage(input_file=bias_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(bias_files))]
+            data['master_bias'] = MasterBiasImage(individuals=data['bias'], output_path=redux_settings['run_output_path'])
+            
+        # Darks assumed to contain dark in filename
+        if redux_settings['dark_subtraction']:
+            dark_files = glob.glob(redux_settings['input_path'] + '*dark*.fits')
+            data['darks'] = [DarkImage(input_file=dark_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(dark_files))]
+            data['master_darks'] = MasterDarkImage.from_all_darks(data['darks'])
+        
+        # CHIRON flats must contain flat in the filename
+        if redux_settings['flat_division']:
+            flat_files = glob.glob(redux_settings['input_path'] + '*flat*.fits')
+            data['flats'] = [FlatImage(input_file=flat_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(flat_files))]
+            data['master_flats'] = self.group_flats(data['flats'])
+            for sci in data['science']:
+                self.pair_master_flat(sci, data['master_flats'])
+            
+        # CHIRON ThAr images must contain arc
+        if redux_settings['wavelength_calibration']:
+            thar_files = glob.glob(redux_settings['input_path'] + '*arc*.fits')
+            data['wave_cals'] = [ThArImage(input_file=thar_files[f], output_path=redux_settings['run_output_path'] + 'calib' + os.sep, parser=self) for f in range(len(thar_files))]
+            
+        self.print_summary(data)
+
+        return data
+
+    # chi190915.1242.fits
+    def parse_image_num(self, data):
+        string_list = data.base_input_file.split('.')
+        data.image_num = string_list[1]
+        
+    def parse_image(self, data):
+        """Parses the input file for the image only. It's assumed the header has already been parsed.
+
+        Args:
+            hdu_num (int): Which header data unit the desired image is in, default to 0.
+        Returns:
+            data_image (np.ndarray): The data image, with shape=(ny, nx)
+        """
+        # Parse the image
+        return super().parse_image(data.input_file).T
+        
+    # chi190915.1242.fits
+    def parse_date(self, data):
+        string_list = data.base_input_file.split('.')
+        data.date_obs = '20' + string_list[0][3:]
+    
+    def parse_header(self, data):
+        
+        modified_header = super().parse_header(data)
+                
+        # Store the sky coordinate
+        modified_header['coord'] = SkyCoord(ra=modified_header['RA'], dec=modified_header['DEC'], unit=(units.hourangle, units.deg))
+        data.coord = modified_header['coord']
+
+        # Overwrite the time of observation
+        tt = modified_header['time_of_obs'].replace('T', '-').replace(':', '-').split('-')
+        modified_header['time_of_obs'] = Time({'year': int(tt[0]), 'month': int(tt[1]), 'day': int(tt[2]), 'hour': int(tt[3]), 'minute':  int(tt[4]),'second': float(tt[5])})
+        data.time_of_obs = modified_header['time_of_obs']
+        
+        data.header = modified_header

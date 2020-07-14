@@ -35,11 +35,11 @@ import pychell.utils as pcutils
 import pychell.rvs.rvcalc as pcrvcalc
 
 
-def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
+def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None, templates_to_optimize=None):
     """Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. The weighting scheme includes (possible inversly) the rms of the fit, the amount of telluric absorption. Weights are also applied such that the barycenter sampling is approximately uniform from vmin to vmax.
 
     Args:
-        forward_models (ForwardModels): The list of forwad model objects
+        forward_models (ForwardModels): The list of forward model objects
         iter_num (int): The iteration to use.
         nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
     """
@@ -65,7 +65,7 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
     tot_weights_lr = np.empty(shape=(forward_models[0].data.flux.size, forward_models.n_spec), dtype=np.float64)
     
     # Weight by 1 / rms^2
-    rms = np.array([forward_models[ispec].opt[k1][0] for ispec in range(forward_models.n_spec)])
+    rms = np.array([forward_models[ispec].opt[k1][0] for ispec in range(forward_models.n_spec)], dtype=float)
     rms_weights = 1 / rms**2
     if forward_models[0].models_dict['star'].enabled:
         bad = np.where(rms_weights < 100)[0]
@@ -96,7 +96,6 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
             waves_shifted_lr[:, ispec] = forward_models[ispec].wavelength_solutions[-1] * np.exp(forward_models[ispec].data.bc_vel / cs.c)
             
         residuals_lr[:, ispec] = np.copy(forward_models[ispec].residuals[-1])
-        
 
         # Telluric weights
         tell_flux_hr = forward_models[ispec].models_dict['tellurics'].build(forward_models[ispec].best_fit_pars[k1], forward_models.templates_dict['tellurics'], current_stellar_template[:, 0])
@@ -131,12 +130,6 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
             y = np.where(histx >= vbc)[0][0] - 1
             tot_weights_lr[:, ispec] = tot_weights_lr[:, ispec] * number_weights[y]
             
-    # If started from a synthetic template, try and correct the blaze.
-    if iter_num == 0 and not forward_models[0].models_dict['star'].from_synthetic:
-        for ispec in range(forward_models.n_spec):
-            continuum = estimate_continuum(waves_shifted_lr[:, ispec], residuals_lr[:, ispec], width=7, n_knots=5, cont_val=0.9)
-            residuals_lr[:, ispec] = residuals_lr[:, ispec] - continuum
-            
     # Now to co-add residuals according to a least squares cubic spline
     # Flatten the arrays
     waves_shifted_lr_flat = waves_shifted_lr.flatten()
@@ -161,7 +154,6 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
     bad_knots = np.array(bad_knots)
     knots = np.delete(knots_init, bad_knots)
     
-
     # Do the fit
     tot_weights_lr_flat /= np.nansum(tot_weights_lr_flat)
     spline_fitter = scipy.interpolate.LSQUnivariateSpline(waves_shifted_lr_flat, residuals_lr_flat, t=knots[1:-1], w=tot_weights_lr_flat, k=3, ext=1, bbox=[waves_shifted_lr_flat[0], waves_shifted_lr_flat[-1]], check_finite=True)
@@ -177,19 +169,19 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None):
     # Augment the template
     new_flux = current_stellar_template[:, 1] + residuals_hr_fit
     
-    bad = np.where(new_flux > 1)[0]
+    max_cut = 1
+    bad = np.where(new_flux > max_cut)[0]
     if bad.size > 0:
-        new_flux[bad] = 1
+        new_flux[bad] = max_cut
 
     forward_models.templates_dict['star'][:, 1] = new_flux
     
     
-    
-def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_template=None):
+def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_template=None, templates_to_optimize=None):
     """Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. This function is identical to cubic_spline_lsq but does not include barycenter weighting.
 
     Args:
-        forward_models (ForwardModels): The list of forwad model objects
+        forward_models (ForwardModels): The list of forward model objects
         iter_num (int): The iteration to use.
         nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
     """
@@ -260,12 +252,6 @@ def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_templ
         if len(nights_for_template) != 1:
             tot_weights_lr[:, ispec] = tot_weights_lr[:, ispec] * tell_weights
             
-    # If started from a synthetic template, try and correct the blaze.
-    if iter_num == 0 and not forward_models[0].models_dict['star'].from_synthetic:
-        for ispec in range(forward_models.n_spec):
-            continuum = estimate_continuum(waves_shifted_lr[:, ispec], residuals_lr[:, ispec], width=7, n_knots=5, cont_val=0.9)
-            residuals_lr[:, ispec] = residuals_lr[:, ispec] - continuum
-            
     # Now to co-add residuals according to a least squares cubic spline
     # Flatten the arrays
     waves_shifted_lr_flat = waves_shifted_lr.flatten()
@@ -306,18 +292,19 @@ def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_templ
     # Augment the template
     new_flux = current_stellar_template[:, 1] + residuals_hr_fit
     
-    bad = np.where(new_flux > 1)[0]
+    max_cut = 1
+    bad = np.where(new_flux > max_cut)[0]
     if bad.size > 0:
-        new_flux[bad] = 1
+        new_flux[bad] = max_cut
 
     forward_models.templates_dict['star'][:, 1] = new_flux
 
-            
-def weighted_median(forward_models, iter_num=None, nights_for_template=None):
+
+def weighted_median(forward_models, iter_num=None, nights_for_template=None, templates_to_optimize=None):
     """Augments the stellar template by considering the weighted median of the residuals on a common high resolution grid.
 
     Args:
-        forward_models (ForwardModels): The list of forwad model objects
+        forward_models (ForwardModels): The list of forward model objects
         iter_num (int): The iteration to use.
         nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
     """
@@ -464,18 +451,19 @@ def weighted_median(forward_models, iter_num=None, nights_for_template=None):
     new_flux = current_stellar_template[:, 1] + residuals_median
 
     # Force the max to be less than 1.
-    bad = np.where(new_flux > 1)[0]
+    max_cut = 1
+    bad = np.where(new_flux > max_cut)[0]
     if bad.size > 0:
-        new_flux[bad] = 1.0
+        new_flux[bad] = max_cut
         
     forward_models.templates_dict['star'][:, 1] = new_flux
 
 
-def weighted_average(forward_models, iter_num=None, nights_for_template=None):
+def weighted_average(forward_models, iter_num=None, nights_for_template=None, templates_to_optimize=None):
     """Augments the stellar template by considering the weighted average of the residuals on a common high resolution grid.
 
     Args:
-        forward_models (ForwardModels): The list of forwad model objects
+        forward_models (ForwardModels): The list of forward model objects
         iter_num (int): The iteration to use.
         nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
     """
@@ -621,19 +609,20 @@ def weighted_average(forward_models, iter_num=None, nights_for_template=None):
     new_flux = current_stellar_template[:, 1] + residuals_average
 
     # Force the max to be less than 1.
-    bad = np.where(new_flux > 1)[0]
+    max_cut = 1
+    bad = np.where(new_flux > max_cut)[0]
     if bad.size > 0:
-        new_flux[bad] = 1.0
+        new_flux[bad] = max_cut
         
     forward_models.templates_dict['star'][:, 1] = new_flux
 
 
 # Uses pytorch to optimize the template
-def global_fit(forward_models, iter_num=None, templates_to_optimize=['star'], nights_for_template=None):
+def global_fit(forward_models, templates_to_optimize=None, iter_num=None, nights_for_template=None):
     """Akin to Wobble, this will update the stellar template by performing a gradient-based optimization via ADAM in pytorch considering all observations. Here, the template is a parameter of thousands of points.
 
     Args:
-        forward_models (ForwardModels): The list of forwad model objects
+        forward_models (ForwardModels): The list of forward model objects
         iter_num (int): The iteration to use.
         templates_to_optimize: For now, only the star is able to be optimized. Future updates will include a lab-frame coherence  simultaneous fit.
         nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
@@ -641,25 +630,31 @@ def global_fit(forward_models, iter_num=None, templates_to_optimize=['star'], ni
     # The number of lsf points
     n_lsf_pts = forward_models[0].models_dict['lsf'].nx
     
+    # The high resolution master grid (also stellar template grid)
     wave_hr_master = torch.from_numpy(forward_models.templates_dict['star'][:, 0])
     
     # Grids to optimize
     # Star
     if 'star' in templates_to_optimize:
-        star_flux = torch.nn.Parameter(torch.from_numpy(forward_models.templates_dict['star'][:, 1].astype(np.float64)))
+        star_flux = torch.nn.Parameter(torch.from_numpy(np.log(forward_models.templates_dict['star'][:, 1].astype(np.float64))))
         
         # The current best fit stellar velocities
         if not forward_models[0].models_dict['star'].from_synthetic and iter_num == 0:
             star_vels = -1 * torch.from_numpy(np.array([forward_models[ispec].data.bc_vel for ispec in range(forward_models.n_spec)]).astype(np.float64))
         else:
             star_vels = torch.from_numpy(np.array([forward_models[ispec].best_fit_pars[-1][forward_models[ispec].models_dict['star'].par_names[0]].value for ispec in range(forward_models.n_spec)]).astype(np.float64))
+        
+    if 'lab' in templates_to_optimize:
+        residual_lab_flux = torch.nn.Parameter(torch.zeros(wave_hr_master.size()[0])) + 1E-2
     
     # The partial built forward model flux
-    raw_models_partial = torch.empty((forward_models.templates_dict['star'][:, 0].size, forward_models.n_spec), dtype=torch.float64)
+    base_flux_models = torch.empty((forward_models.templates_dict['star'][:, 0].size, forward_models.n_spec), dtype=torch.float64)
     
-    # The best fit LSF for each spec
+    # The best fit LSF for each spec (optional)
     if 'lsf' in forward_models[0].models_dict:
-        lsf = torch.empty((n_lsf_pts, forward_models.n_spec), dtype=torch.float64)
+        lsfs = torch.empty((n_lsf_pts, forward_models.n_spec), dtype=torch.float64)
+    else:
+        lsfs = None
     
     # The data flux
     data_flux = torch.empty((forward_models[0].data.flux.size, forward_models.n_spec), dtype=torch.float64)
@@ -668,7 +663,7 @@ def global_fit(forward_models, iter_num=None, templates_to_optimize=['star'], ni
     badpix = torch.empty((forward_models[0].data.flux.size, forward_models.n_spec), dtype=torch.float64)
     
     # The wavelength solutions
-    wave_lr = torch.empty((forward_models[0].data.flux.size, forward_models.n_spec), dtype=torch.float64)
+    waves_lr = torch.empty((forward_models[0].data.flux.size, forward_models.n_spec), dtype=torch.float64)
     
     # Weights, may just be binary mask
     weights = torch.empty((forward_models[0].data.flux.size, forward_models.n_spec), dtype=torch.float64)
@@ -676,47 +671,51 @@ def global_fit(forward_models, iter_num=None, templates_to_optimize=['star'], ni
     # Loop over spectra and extract to the above arrays
     for ispec in range(forward_models.n_spec):
 
-        # Get the pars for this iteration
+        # Get the pars for this iteration and spectrum
         pars = copy.deepcopy(forward_models[ispec].best_fit_pars[-1])
 
-        # Case 1. Only optimizing star
-        if 'star' in templates_to_optimize:
-            x, y = forward_models[ispec].build_hr_nostar(pars, iter_num)
-            wave_lr[:, ispec], raw_models_partial[:, ispec] = torch.from_numpy(x), torch.from_numpy(y)
-            
-        # Case 2. Only optimizing lab frame
-        #if 'star' in templates_to_optimize:
-        #    wave_lr[:, ispec], raw_models_partial[:, ispec] = forward_models[ispec].build_hr_nostar(pars, iter_num)
+        x, y = forward_models[ispec].build_hr_nostar(pars, iter_num)
+        waves_lr[:, ispec], base_flux_models[:, ispec] = torch.from_numpy(x), torch.from_numpy(np.log(y))
 
         # Fetch lsf and flip for torch. As of now torch does not support the negative step
-        # Zeroth index is not a typo.
         if 'lsf' in forward_models[0].models_dict:
-            lsf[:, ispec] = torch.from_numpy(forward_models[ispec].models_dict['lsf'].build(pars))
-            lsf[:, ispec] = torch.from_numpy(np.flip(lsf[:, ispec].numpy(), axis=0).copy())
+            lsfs[:, ispec] = torch.from_numpy(forward_models[ispec].models_dict['lsf'].build(pars))
+            lsfs[:, ispec] = torch.from_numpy(np.flip(lsfs[:, ispec].numpy(), axis=0).copy())
 
         # The data and weights, change bad vals to nan
-        data_flux[:, ispec] = torch.from_numpy(np.copy(forward_models[ispec].data.flux))
+        data_flux[:, ispec] = torch.from_numpy(np.copy(np.log(forward_models[ispec].data.flux)))
         weights[:, ispec] = torch.from_numpy(np.copy(forward_models[ispec].data.badpix))
         bad = np.where(~np.isfinite(data_flux[:, ispec].numpy()) | ~np.isfinite(weights[:, ispec].numpy()))[0]
         if bad.size > 0:
-            data_flux[bad, ispec] = 0
+            data_flux[bad, ispec] = 1
             weights[bad, ispec] = 0
 
+    # CPU or GPU
     if torch.cuda.is_available():
         torch.device('cuda')
     else:
         torch.device('cpu')
 
     # Create the Torch model object
-    if 'star' in templates_to_optimize:
-        model = StarSolver(star_flux, star_vels, raw_models_partial, wave_lr, weights, data_flux, wave_hr_master, lsf=lsf)
+    
+    # Only optimizing star
+    #if 'star' in templates_to_optimize and len(templates_to_optimize) == 1:
+    #    model = StarSolver(star_flux, star_vels, raw_models_partial, wave_lr, weights, data_flux, wave_hr_master, lsf=lsf)
+    
+        
+    # Also lab
+    #elif 'lab' in templates_to_optimize:
+      #  model = StarSolver(star_flux, star_vels, raw_models_partial, wave_lr, weights, data_flux, wave_hr_master, lsfs=lsfs)
+    #if 'blaze' in template_to_optimize:
+    
+    model = GlobalSolver(base_flux_models, waves_lr, weights, data_flux, wave_hr_master, star_flux, star_vels, residual_lab_flux, lsfs=lsfs)
 
     # Create the Adam optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
 
-    print('Optimizing Stellar Template ...', flush=True)
+    print('Optimizing Template(s) ...', flush=True)
 
-    for epoch in range(400):
+    for epoch in range(200):
 
         optimizer.zero_grad()
 
@@ -732,7 +731,8 @@ def global_fit(forward_models, iter_num=None, templates_to_optimize=['star'], ni
         if (epoch + 1) % 10 == 0:
             print('epoch {}, loss {}'.format(epoch + 1, loss.item()), flush=True)
 
-    new_star_flux = model.star_flux.detach().numpy()
+    new_star_flux = np.exp(model.star_flux.detach().numpy())
+    residual_lab_flux_fit = np.exp(model.residual_lab_flux.detach().numpy())
 
     locs = np.where(new_star_flux > 1.0)[0]
     if locs.size > 0:
@@ -929,7 +929,269 @@ class StarSolver(torch.nn.Module):
                     pos += 1
             return (*result,)
         
+      
         
+# Class to optimize the forward model
+class GlobalSolver(torch.nn.Module):
+
+    def __init__(self, base_flux_models, waves_lr, weights, data_flux, wave_hr_master, star_flux, star_vels, residual_lab_flux, lsfs=None, continuums=None):
+        
+        # Parent init
+        super().__init__()
+
+        # Parameters to optimize
+        self.star_flux = star_flux # coherence in stellar (quasi) rest frame
+        self.residual_lab_flux = residual_lab_flux # coherence in lab frame
+        
+        # The base flux
+        self.base_flux_models = base_flux_models
+        
+        # Current wavelength solutions
+        self.waves_lr = waves_lr
+        
+        # Current best fit stellar velocities
+        self.star_vels = star_vels
+        
+        # Optimization weights
+        self.weights = weights
+        
+        # Actual data
+        self.data_flux = data_flux
+        
+        # Shape information
+        self.nx_data, self.n_spec = self.data_flux.shape
+        
+        # The lsf (optional)
+        if lsfs is not None:
+            self.nx_lsf = lsfs.shape[0]
+            self.lsfs = torch.ones(1, 1, self.nx_lsf, self.n_spec, dtype=torch.float64)
+            self.lsfs[0, 0, :, :] = lsfs
+            self.nx_pad1 = int(self.nx_lsf / 2) - 1
+            self.nx_pad2 = int(self.nx_lsf / 2)
+        else:
+            self.lsfs = None
+            
+        # Current blaze
+        self.continuums = continuums
+        
+        # High res master wave grid
+        self.wave_hr_master = wave_hr_master
+        
+        # The number of model pixels
+        self.nx_model = self.wave_hr_master.size()[0]
+
+    def forward(self):
+    
+        # Stores all low res models
+        models_lr = torch.empty((self.nx_data, self.n_spec), dtype=torch.float64)
+        
+        # Loop over observations
+        for ispec in range(self.n_spec):
+            
+            # Doppler shift the stellar wavelength grid used for this observation.
+            wave_hr_star_shifted = self.wave_hr_master * torch.exp(self.star_vels[ispec] / cs.c)
+
+            # Interpolate the stellar variable back to master grid
+            star = self.Interp1d()(wave_hr_star_shifted, self.star_flux, self.wave_hr_master)
+            
+            # Add everything into the base flux
+            if self.continuums is not None:
+                model = self.continuums[:, ispec] + self.residual_lab_flux + star + self.base_flux_models[:, ispec]
+            else:
+                model = self.residual_lab_flux + star + self.base_flux_models[:, ispec]
+            
+            # Convolution. NOTE: PyTorch convolution is a pain in the ass.
+            # Also torch.cat seems to take up too much memory, so a workaround is used to pad the model.
+            if self.lsfs is not None:
+                model_p = torch.ones((1, 1, self.nx_model + self.nx_pad1 + self.nx_pad2), dtype=torch.float64)
+                model_p[0, 0, self.nx_pad1:(-self.nx_pad2)] = torch.exp(model)
+                conv = torch.nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1, padding=0, bias=False)
+                conv.weight.data = self.lsfs[:, :, :, ispec]
+                model = torch.log(conv(model_p).flatten())
+
+            # Interpolate onto data grid
+            models_lr[:, ispec] = self.Interp1d()(self.wave_hr_master, model, self.waves_lr[:, ispec])
+
+        # Weighted RMS
+        wdiffs2 = (models_lr - self.data_flux)**2 * self.weights
+        loss = torch.sqrt(torch.sum(wdiffs2) / (torch.sum(self.weights)))
+
+        return loss
+    
+    
+    @staticmethod
+    def h_poly_helper(tt):
+        A = torch.tensor([
+            [1, 0, -3, 2],
+            [0, 1, -2, 1],
+            [0, 0, 3, -2],
+            [0, 0, -1, 1]
+            ], dtype=tt[-1].dtype)
+        return [
+            sum( A[i, j]*tt[j] for j in range(4) )
+            for i in range(4) ]
+        
+    @classmethod
+    def h_poly(cls, t):
+        tt = [ None for _ in range(4) ]
+        tt[0] = 1
+        for i in range(1, 4):
+            tt[i] = tt[i-1]*t
+        return cls.h_poly_helper(tt)
+
+    @classmethod
+    def H_poly(cls, t):
+        tt = [ None for _ in range(4) ]
+        tt[0] = t
+        for i in range(1, 4):
+            tt[i] = tt[i-1]*t*i/(i+1)
+        return cls.h_poly_helper(tt)
+
+    @classmethod
+    def interpcs(cls, x, y, xs):
+        m = (y[1:] - y[:-1])/(x[1:] - x[:-1])
+        m = torch.cat([m[[0]], (m[1:] + m[:-1])/2, m[[-1]]])
+        I = np.searchsorted(x[1:], xs)
+        dx = (x[I+1]-x[I])
+        hh = cls.h_poly((xs-x[I])/dx)
+        return hh[0]*y[I] + hh[1]*m[I]*dx + hh[2]*y[I+1] + hh[3]*m[I+1]*dx
+
+    class Interp1d(torch.autograd.Function):
+        def __call__(self, x, y, xnew, out=None):
+            return self.forward(x, y, xnew, out)
+
+        def forward(ctx, x, y, xnew, out=None):
+
+            # making the vectors at least 2D
+            is_flat = {}
+            require_grad = {}
+            v = {}
+            device = []
+            for name, vec in {'x': x, 'y': y, 'xnew': xnew}.items():
+                assert len(vec.shape) <= 2, 'interp1d: all inputs must be '\
+                                            'at most 2-D.'
+                if len(vec.shape) == 1:
+                    v[name] = vec[None, :]
+                else:
+                    v[name] = vec
+                is_flat[name] = v[name].shape[0] == 1
+                require_grad[name] = vec.requires_grad
+                device = list(set(device + [str(vec.device)]))
+            assert len(device) == 1, 'All parameters must be on the same device.'
+            device = device[0]
+
+            # Checking for the dimensions
+            assert (v['x'].shape[1] == v['y'].shape[1]
+                    and (
+                         v['x'].shape[0] == v['y'].shape[0]
+                         or v['x'].shape[0] == 1
+                         or v['y'].shape[0] == 1
+                        )
+                    ), ("x and y must have the same number of columns, and either "
+                        "the same number of row or one of them having only one "
+                        "row.")
+
+            reshaped_xnew = False
+            if ((v['x'].shape[0] == 1) and (v['y'].shape[0] == 1)
+               and (v['xnew'].shape[0] > 1)):
+                # if there is only one row for both x and y, there is no need to
+                # loop over the rows of xnew because they will all have to face the
+                # same interpolation problem. We should just stack them together to
+                # call interp1d and put them back in place afterwards.
+                original_xnew_shape = v['xnew'].shape
+                v['xnew'] = v['xnew'].contiguous().view(1, -1)
+                reshaped_xnew = True
+
+            # identify the dimensions of output and check if the one provided is ok
+            D = max(v['x'].shape[0], v['xnew'].shape[0])
+            shape_ynew = (D, v['xnew'].shape[-1])
+            if out is not None:
+                if out.numel() != shape_ynew[0]*shape_ynew[1]:
+                    # The output provided is of incorrect shape.
+                    # Going for a new one
+                    out = None
+                else:
+                    ynew = out.reshape(shape_ynew)
+            if out is None:
+                ynew = torch.zeros(*shape_ynew, dtype=y.dtype, device=device)
+
+            # moving everything to the desired device in case it was not there
+            # already (not handling the case things do not fit entirely, user will
+            # do it if required.)
+            for name in v:
+                v[name] = v[name].to(device)
+
+            # calling searchsorted on the x values.
+            #ind = ynew
+            #searchsorted(v['x'].contiguous(), v['xnew'].contiguous(), ind)
+            ind = np.searchsorted(v['x'].contiguous().numpy().flatten(), v['xnew'].contiguous().numpy().flatten())
+            ind = torch.tensor(ind)
+            # the `-1` is because searchsorted looks for the index where the values
+            # must be inserted to preserve order. And we want the index of the
+            # preceeding value.
+            ind -= 1
+            # we clamp the index, because the number of intervals is x.shape-1,
+            # and the left neighbour should hence be at most number of intervals
+            # -1, i.e. number of columns in x -2
+            ind = torch.clamp(ind, 0, v['x'].shape[1] - 1 - 1).long()
+
+            # helper function to select stuff according to the found indices.
+            def sel(name):
+                if is_flat[name]:
+                    return v[name].contiguous().view(-1)[ind]
+                return torch.gather(v[name], 1, ind)
+
+            # activating gradient storing for everything now
+            enable_grad = False
+            saved_inputs = []
+            for name in ['x', 'y', 'xnew']:
+                if require_grad[name]:
+                    enable_grad = True
+                    saved_inputs += [v[name]]
+                else:
+                    saved_inputs += [None, ]
+            # assuming x are sorted in the dimension 1, computing the slopes for
+            # the segments
+            is_flat['slopes'] = is_flat['x']
+            # now we have found the indices of the neighbors, we start building the
+            # output. Hence, we start also activating gradient tracking
+            with torch.enable_grad() if enable_grad else contextlib.suppress():
+                v['slopes'] = (
+                        (v['y'][:, 1:]-v['y'][:, :-1])
+                        /
+                        (v['x'][:, 1:]-v['x'][:, :-1])
+                    )
+
+                # now build the linear interpolation
+                ynew = sel('y') + sel('slopes')*(
+                                        v['xnew'] - sel('x'))
+
+                if reshaped_xnew:
+                    ynew = ynew.view(original_xnew_shape)
+
+            ctx.save_for_backward(ynew, *saved_inputs)
+            return ynew
+
+        @staticmethod
+        def backward(ctx, grad_out):
+            inputs = ctx.saved_tensors[1:]
+            gradients = torch.autograd.grad(
+                            ctx.saved_tensors[0],
+                            [i for i in inputs if i is not None],
+                            grad_out, retain_graph=True)
+            result = [None, ] * 5
+            pos = 0
+            for index in range(len(inputs)):
+                if inputs[index] is not None:
+                    result[index] = gradients[pos]
+                    pos += 1
+            return (*result,)
+        
+
+################################
+#### More Helpful functions ####
+################################
+
 def determine_best_night(rms, n_obs_nights):
     """Determines the night with the highest co-added S/N given the RMS of the fits.
 
@@ -953,24 +1215,63 @@ def determine_best_night(rms, n_obs_nights):
     best_night_index = np.nanargmax(nightly_snrs)
     return best_night_index
 
-################################
-#### More Helpful functions ####
-################################
 
+
+def torchpolyval1d(coeffs, x):
+    n = size(x)
+    y = torch.zeros(n)
+    coeffs = coeffs[::-1]
+    for i in range(n):
+        y[i] += coeffs[i] * x**i
+    return y
+        
 
 # This calculates the weighted median of a data set for rolling calculations
-def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.9):
+def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.98, smooth=True):
     nx = x.size
-
     continuum_coarse = np.ones(nx, dtype=np.float64)
+    if smooth:
+        ys = pcmath.median_filter1d(y, width=7)
+    else:
+        ys = np.copy(y)
     for ix in range(nx):
-        use = np.where((x > x[ix]-width/2) & (x < x[ix]+width/2))[0]
-        if np.all(~np.isfinite(y[use])):
+        use = np.where((x > x[ix]-width/2) & (x < x[ix]+width/2) & np.isfinite(y))[0]
+        if use.size == 0 or np.all(~np.isfinite(ys[use])):
             continuum_coarse[ix] = np.nan
         else:
-            continuum_coarse[ix] = pcmath.weighted_median(y[use], weights=None, med_val=cont_val)
-    good = np.where(np.isfinite(y))[0]
+            continuum_coarse[ix] = pcmath.weighted_median(ys[use], weights=None, med_val=cont_val)
+    good = np.where(np.isfinite(ys))[0]
     knot_points = x[np.linspace(good[0], good[-1], num=n_knots).astype(int)]
     interp_fun = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=n_knots).astype(int)], extrapolate=False, bc_type='not-a-knot')
     continuum = interp_fun(x)
     return continuum
+
+
+def fit_continuum_wobble(x, y, ivars, order=6, nsigma=[0.3,3.0], maxniter=50):
+    """Fit the continuum using sigma clipping
+    Args:
+        x: The wavelengths
+        y: The log-fluxes
+        order: The polynomial order to use
+        nsigma: The sigma clipping threshold: tuple (low, high)
+        maxniter: The maximum number of iterations to do
+    Returns:
+        The value of the continuum at the wavelengths in x
+    """
+    good = np.where(np.isfinite(x) & np.isfinite(y))[0]
+    xx, yy = x[good], y[good]
+    yy = np.log(y)
+    A = np.vander(x - np.nanmean(x), order+1)
+    m = np.ones(len(x), dtype=bool)
+    for i in range(maxniter):
+        m[ivars == 0] = 0  # mask out the bad pixels
+        w = np.linalg.solve(np.dot(A[m].T, A[m]), np.dot(A[m].T, yy[m]))
+        mu = np.dot(A, w)
+        resid = yy - mu
+        sigma = np.sqrt(np.nanmedian(resid**2))
+        m_new = (resid > -nsigma[0]*sigma) & (resid < nsigma[1]*sigma)
+        if m.sum() == m_new.sum():
+            m = m_new
+            break
+        m = m_new
+    return mu
