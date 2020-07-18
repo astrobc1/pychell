@@ -1033,10 +1033,10 @@ class WaveModelKnown(WavelengthSolutionModel):
         spline_pixel_set_points (np.ndarray): The location of the spline knots.
     """
 
-    def __init__(self, blueprint, wave_bounds, pix_bounds, nx, order_num=None):
+    def __init__(self, blueprint, pix_bounds, nx, order_num=None):
 
         # Call super method
-        super().__init__(blueprint, wave_bounds, pix_bounds, nx, order_num=order_num)
+        super().__init__(blueprint, pix_bounds, nx, order_num=order_num)
 
         self.base_par_names = []
 

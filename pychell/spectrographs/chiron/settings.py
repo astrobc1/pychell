@@ -17,55 +17,7 @@ observatory = 'CTIO'
 ####### Reduction / Extraction #####################################
 ####################################################################
 
-redux_settings = {
-    
-    # Gain of primary detector
-    'gain': 1.8,
-    
-    # Dark current of primary detector
-    'dark_current': 0.05,
-    
-    # Read noise of the primary detector
-    'read_noise': 8.0,
-    
-    # Calibration
-    'dark_subtraction': False,
-    'flat_division': True,
-    'bias_subtraction': False,
-    'wavelength_calibration': False,
-    
-    # Pixels to mask on the top, bottom, left, and right edges
-    'mask_left_edge': 200,
-    'mask_right_edge': 200,
-    'mask_top_edge': 50,
-    'mask_bottom_edge': 10,
-    
-    # The height of an order is defined as where the flat is located.
-    # This masks additional pixels on each side of the initial trace profile before moving forward.
-    # The profile is further flagged after thes sky background is estimated.
-    'mask_trace_edges':  3,
-    
-    # The degree of the polynomial to fit the individual order locations
-    'trace_pos_polyorder' : 2,
-    
-    # Whether or not to perform a sky subtraction
-    # The number of rows used to estimate the sky background (lowest n_sky_rows in the trace profile are used).
-    'sky_subtraction': True,
-    'n_sky_rows': 8,
-    
-    # The trace profile is constructed using oversampled data.
-    # This is the oversample factor.
-    'oversample': 4,
-    
-    # The optimal extraction algorithm
-    'optxalg': 'optimal_extraction_pmassey',
-    
-    'order_map': {'source': 'empirical_from_science', 'method': None},
-    
-    # The time offset used in the headers
-    'time_offset': 2400000.5
-    
-}
+redux_settings = NotImplemented
 
 ####################################################################
 ####### RADIAL VELOCITIES ##########################################
@@ -93,7 +45,7 @@ forward_model_blueprints = {
         'name': 'star',
         'class_name': 'StarModel',
         'input_file': None,
-        'vel': [-np.inf, 0, np.inf]
+        'vel': [-3E5, 0, 3E5]
     },
     
     # The methane gas cell
@@ -102,7 +54,7 @@ forward_model_blueprints = {
         'class_name': 'GasCellModelOrderDependent',
         'input_file': default_templates_path + 'iodine_gas_cell_chiron_master_40K.npz',
         'depth': [1, 1, 1],
-        'shifts': [-1.28151621, -1.28975381, -1.29827329, -1.30707465, -1.31615788, -1.32552298, -1.33516996, -1.34509881, -1.35530954, -1.36580215, -1.37657662, -1.38763298, -1.3989712 , -1.4105913 , -1.42249328, -1.43467713, -1.44714286, -1.45989046, -1.47291993, -1.48623128, -1.49982451, -1.5136996 , -1.52785658, -1.54229543, -1.55701615, -1.57201875, -1.58730322, -1.60286957, -1.61871779, -1.63484788, -1.65125985, -1.6679537 , -1.68492942, -1.70218701, -1.71972648, -1.73754783, -1.75565104, -1.77403614, -1.79270311, -1.81165195, -1.83088267, -1.85039526, -1.87018972, -1.89026606, -1.91062428, -1.93126437, -1.95218634, -1.97339018, -1.99487589, -2.01664348, -2.03869294, -2.06102428, -2.08363749, -2.10653258, -2.12970954, -2.15316838, -2.17690909, -2.20093168, -2.22523614, -2.24982247, -2.27469068, -2.29984077, -2.32527273],
+        'shifts': [-1.28151621, -1.28975381, -1.29827329, -1.30707465, -1.31615788, -1.32552298, -1.33516996, -1.34509881, -1.35530954, -1.36580215, -1.37657662, -1.38763298, -1.3989712, -1.4105913, -1.42249328, -1.43467713, -1.44714286, -1.45989046, -1.47291993, -1.48623128, -1.49982451, -1.5136996 , -1.52785658, -1.54229543, -1.55701615, -1.57201875, -1.58730322, -1.60286957, -1.61871779, -1.63484788, -1.65125985, -1.6679537 , -1.68492942, -1.70218701, -1.71972648, -1.73754783, -1.75565104, -1.77403614, -1.79270311, -1.81165195, -1.83088267, -1.85039526, -1.87018972, -1.89026606, -1.91062428, -1.93126437, -1.95218634, -1.97339018, -1.99487589, -2.01664348, -2.03869294, -2.06102428, -2.08363749, -2.10653258, -2.12970954, -2.15316838, -2.17690909, -2.20093168, -2.22523614, -2.24982247, -2.27469068, -2.29984077, -2.32527273],
         'shift_range': [0, 0]
     },
     

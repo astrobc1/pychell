@@ -52,7 +52,7 @@ forward_model_blueprints = {
         'name': 'iodine_gas_cell',
         'class_name': 'GasCellModel',
         'input_file': default_templates_path + 'MINERVA_North_Iodine_nist.npz',
-        'shift': [-0.105, -0.1, -0.095],
+        'shift': [0, 0, 0],
         'depth': [1, 1, 1]
     },
     
@@ -109,7 +109,7 @@ forward_model_blueprints = {
     'wavelength_solution': {
         
         'name': 'lagrange_wavesol_splines',
-        'class_name': 'WaveSolModelFull',
+        'class_name': 'WaveSolModelSplines',
         
         # The three pixels to span the detector
         'base_pixel_set_points': [200, 1023, 1847],
@@ -123,9 +123,8 @@ forward_model_blueprints = {
         # Right most set point for the quadratic wavelength solution
         'base_set_point_3': [5027.307137763543, 5068.828907329501, 5111.0547656534245, 5153.989186982839, 5197.6597970028315, 5242.072554919374, 5287.230094370015, 5333.194163663312, 5380.036363617119, 5427.556885596881, 5476.003996021366, 5525.310614823622, 5575.545803670773, 5626.665041134895, 5678.743792460886, 5731.7950401260305, 5785.846834024057, 5840.927559800103, 5897.061418761491, 5954.299363778574, 6012.668040846991, 6072.1675202625065, 6132.8638831046455, 6194.789311874347, 6257.963948363508, 6322.454439742417, 6388.30533836116, 6455.45584701302, 0.0],
         
-        'n_splines': 0,
+        'n_splines': 6,
         'n_delay_splines': 0,
-        'base': [-0.075, -0.01, 0.075],
-        'spline': [-0.15, 0.01, 0.15]
+        'spline': [-0.5, 0.01, 0.5]
     }
 }
