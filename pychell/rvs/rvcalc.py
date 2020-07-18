@@ -7,12 +7,16 @@ from joblib import Parallel, delayed
 # Maths
 import numpy as np
 import scipy.interpolate
+import scipy.constants as cs
+
+# LLVM
+from numba import jit, njit, prange
 
 # Graphics
 import matplotlib.pyplot as plt
 import pychell
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
-
+from robustneldermead.neldermead import NelderMead
 import pychell.maths as pcmath
 import pychell.utils as pcutils
 import copy
@@ -187,7 +191,7 @@ def plot_rvs(forward_models, iter_num):
         plt.ylabel('CCF (RMS surface)', fontweight='bold')
         plt.xlim(-10000, 10000)
         plt.tight_layout()
-        fname = fname = forward_models.run_output_path_rvs + forward_models.tag + '_ccfs_ord' + str(forward_models.order_num) + '_iter' + str(k4) + '.png'
+        fname = forward_models.run_output_path_rvs + forward_models.tag + '_ccfs_ord' + str(forward_models.order_num) + '_iter' + str(k4) + '.png'
         plt.savefig(fname)
         plt.close()
     
@@ -198,7 +202,7 @@ def plot_rvs(forward_models, iter_num):
         plt.xlabel('X Corr RV [m/s]', fontweight='bold')
         plt.ylabel('Bisector Span [m/s]', fontweight='bold')
         plt.tight_layout()
-        fname = fname = forward_models.run_output_path_rvs + forward_models.tag + '_bisectorspans_ord' + str(forward_models.order_num) + '_iter' + str(k4) + '.png'
+        fname = forward_models.run_output_path_rvs + forward_models.tag + '_bisectorspans_ord' + str(forward_models.order_num) + '_iter' + str(k4) + '.png'
         plt.savefig(fname)
         plt.close()
         
@@ -354,7 +358,202 @@ def cross_correlate_star(forward_model, iter_num):
         forward_model.initial_parameters[forward_model.models_dict['star'].par_names[0]].setv(value=xcorr_star_vel)
     
     return forward_model
-                        
+
+
+
+def generate_rv_contents(templates_dict, snr=100, blaze=True, ron=0, R=80000):
+    
+    rv_contents = {}
+    for t in templates_dict:
+        rv_contents[t] = compute_rv_content(templates_dict[t][:, 0], templates_dict[t][:, 1], snr=snr, blaze=blaze, ron=ron, R=R)
+        
+    return rv_contents
+ 
+def combine_orders(rvs, weights, n_obs_nights):
+    """Combines RVs across orders.
+
+    Args:
+        rvs (str): The rvs dictionary returned by parse_rvs.
+        bad_rvs_dict (dict): A dictionary of rvs to ignore, rules:
+        rvcs (np.ndarray) : The rv contents of each order.
+    """
+    
+    n_ord, n_spec = rvs.shape
+    n_nights = len(n_obs_nights)
+        
+    # Copy the weights
+    w = np.copy(weights)
+    
+    # Parameters are spectra and orders
+    init_pars = np.zeros(n_spec + n_ord, dtype=float) + np.nan
+    vlb = np.zeros(n_spec + n_ord, dtype=float) + np.nan
+    vub = np.zeros(n_spec + n_ord, dtype=float) + np.nan
+    vp = np.ones(n_spec + n_ord, dtype=int)
+    
+    # Copy rvs
+    rvs_flagged = np.copy(rvs)
+    
+    # Stores single measurement rvs
+    rvs_single = np.zeros(n_spec, dtype=float) + np.nan
+    unc_single = np.zeros(n_spec, dtype=float) + np.nan
+
+    # Do an initial order offset and flag
+    for o in range(n_ord):
+        rvs_flagged[o, :] = rvs_flagged[o, :] - np.nanmedian(rvs_flagged[o, :])
+
+    # set bad rvs to nan
+    bad = np.where(w == 0)
+    if bad[0].size > 0:
+        rvs_flagged[bad] = np.nan
+    
+    # Normalize weights
+    w /= np.nansum(w)
+    
+    # Initialize params
+    # Actual RVs with order offsets (above) subtracted off.
+    for i in range(n_spec):
+        init_pars[i] = 1
+        vlb[i] = -np.inf
+        vub[i] = np.inf
+    
+    # Order offsets, weighted average has been subtracted off, so should be nearly zero.
+    for i in range(n_ord):
+        init_pars[n_spec + i] = 1
+        vlb[n_spec + i] = -np.inf
+        vub[n_spec + i] = np.inf
+    
+    # Force last order to have zero offset
+    init_pars[-1] = 0
+    vp[-1] = 0
+    
+    # Disable bad spec
+    bad = np.where(np.nansum(w, axis=0) == 0)
+    vp[bad] = 0
+
+    vpi = np.where(vp)[0] # change to actual indicies
+        
+    # Do the optimization. result contains the lnightly RVs (n_nights,) and order offsets (n_ord,)
+    print('Solving RVs')
+
+    result = NelderMead(rv_solver, init_pars, minvs=vlb, maxvs=vub, varies=vpi, ftol=1E-5, n_iterations=3, no_improve_break=3, args_to_pass=(rvs_flagged, w, n_obs_nights)).solve()
+    
+    # Best pars
+    best_pars = result[0]
+    order_offsets = best_pars[n_spec:] # the order offsets
+    
+    # Calculate the individual order averaged RVs here
+    # Could use the "Fit" RVs but would rather do a direct weighted formulation with only the offsets.
+    for ispec in range(n_spec):
+        good = np.where((w[:, ispec] > 0) & np.isfinite(w[:, ispec]))[0]
+        ng = good.size
+        if ng == 0:
+            rvs_single[ispec] = np.nan
+            unc_single[ispec] = np.nan
+        elif ng == 1:
+            rvs_single[ispec] = np.copy(rvs_flagged[good[0], ispec] - order_offsets)
+            unc_single[ispec] = np.nan
+        else:
+            rvs_single[ispec] = pcmath.weighted_mean(rvs_flagged[good, ispec] - order_offsets, w[good, ispec])
+            unc_single[ispec] = pcmath.weighted_stddev(rvs_flagged[good, ispec] - order_offsets, w[good, ispec]) / np.sqrt(ng)
+
+    
+    # Nightly RVs from above
+    rvs_nightly = np.zeros(n_nights, dtype=float) + np.nan
+    unc_nightly = np.zeros(n_nights, dtype=float) + np.nan
+    f = 0
+    l = n_obs_nights[0]
+    if n_ord == 1:
+        w = np.nanmedian(weights, axis=0)
+    else:
+        w = 1 / unc_single**2
+
+    for inight in range(n_nights):
+        good = np.where((w[f:l] > 0) & np.isfinite(w[f:l]))[0]
+        ng = good.size
+        if ng == 0:
+            rvs_nightly[inight] = np.nan
+            unc_nightly[inight] = np.nan
+        elif ng == 1:
+            rvs_nightly[inight] = np.copy(rvs_single[f:l][good[0]])
+            unc_nightly[inight] = np.nan
+        else:
+            rvs_nightly[inight] = pcmath.weighted_mean(rvs_single[f:l][good], w[f:l][good])
+            unc_nightly[inight] = pcmath.weighted_stddev(rvs_single[f:l][good], w[f:l][good]) / np.sqrt(ng)
+            
+        if inight < n_nights - 1:
+            f += n_obs_nights[inight]
+            l += n_obs_nights[inight+1]
+
+    return rvs_single, unc_single, rvs_nightly, unc_nightly
+ 
+ 
+# Wobble Method of combining RVs (Starting from single RVs)
+# pars[0:n] = rvs
+# pars[n:] = order offsets.
+@jit(parallel=True)
+def rv_solver(pars, rvs, weights, n_obs_nights):
+    n_ord = rvs.shape[0]
+    n_spec = rvs.shape[1]
+    n_nights = n_obs_nights.size
+    rvs_individual = pars[:n_spec]
+    order_offsets = pars[n_spec:]
+    term = np.empty(shape=(n_ord, n_spec), dtype=np.float64)
+    
+    # MIN[(RV_j - RV_jo + VR_o)^2 * w_jo]
+    for o in prange(n_ord):
+        for i in range(n_spec):
+            term[o, i] = weights[o, i]**2 * (rvs_individual[i] - rvs[o, i] + order_offsets[o])**2
+    rms = np.sqrt(np.nansum(term) / term.size)
+
+    return rms, 1
+ 
+# Computes the RV content per pixel.
+def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None):
+    """Computes the radial-velocity information content per pixel and for a whole swaths.
+
+    Args:
+        wave (np.ndarray): The wavelength grid in units of Angstroms.
+        flux (np.ndarray): The flux, normalized to ~ 1.
+        snr (int, optional): The S/N of the observation at the average wavelength. Defaults to 100.
+        blaze (bool): Whether or not to blaze modulate the spectrum (crude).
+        ron (float): The readout noise.
+        R (int): The desired resolution of the flux. This is achieved with a Gaussian convolution only. If None, no convolution is performed.
+    Returns:
+        np.ndarray: The "rv information content" at each pixel, or precisely the uncertainty of measuring the rv of an individual "pixel".
+        np.ndarray: The rv content for the whole swath ("uncertainty").
+    """
+    
+    nx = wave.size
+    fluxmod = np.copy(flux)
+    
+    # Convert to PE
+    fluxmod *= snr**2
+    
+    if R is not None:
+        fluxmod = pcmath.convolve_flux(wave, fluxmod, R=R)
+    if blaze:
+        good = np.where(np.isfinite(wave) & np.isfinite(fluxmod))[0]
+        ng = good.size
+        x, y = np.array([wave[good[0]], wave[good[int(ng/2)]], wave[good[-1]]]), np.array([0.5, 1, 0.5])
+        pfit = pcmath.poly_coeffs(x, y)
+        blz = np.polyval(pfit, wave)
+        fluxmod *= blz
+        
+    rvc_per_pix = np.zeros(nx, dtype=np.float64) + np.nan
+    good = np.where(np.isfinite(wave) & np.isfinite(fluxmod))[0]
+    ng = good.size
+    flux_spline = scipy.interpolate.CubicSpline(wave[good], fluxmod[good], extrapolate=True, bc_type='clamped')
+    for i in range(nx):
+        if i in good:
+            slope = flux_spline(wave[i], 1)
+            if not np.isfinite(slope) or slope == 0:
+                continue
+            rvc_per_pix[i] = cs.c * np.sqrt(fluxmod[i] + ron**2) / (wave[i] * np.abs(slope))
+
+    rvc_tot = np.nansum(1 / rvc_per_pix**2)**(-0.5)
+    
+    return rvc_per_pix, rvc_tot
+        
 
 def compute_bisector_span(cc_vels, ccf, n_bs=1000):
     """Computes the bisector span of a given cross-correlation (RMS brute force) function.

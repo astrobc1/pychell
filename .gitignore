@@ -2,5 +2,6 @@
 build/
 dist/
 *egg*
+pychell_design
 .DS_Store
 __pycache__/

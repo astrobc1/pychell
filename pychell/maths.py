@@ -182,34 +182,33 @@ def median_filter2d(x, width, preserve_nans=True):
         
     return out
 
-# Computes the RV content per pixel.
-@jit
-def rv_content_per_pixel(wave, flux, snr=100, gain=1.0):
-    """Computes the radial-velocity information content per pixel.
-
-    Args:
-        wave (np.ndarray): The wavelength.
-        flux (np.ndarray): The flux.
-        snr (int, optional): The S/N, derived from units of ADU. Defaults to 100.
-        gain (float, optional): The conversion from ADU to photo-electrons. Defaults to 1.0.
-
-    Returns:
-        [type]: [description]
-    """
-    counts = snr**2
-    pe = gain * counts
-    A_center = pe
+def convolve_flux(wave, flux, R):
+    
     good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
-    A = A_center * flux
-    rvc_per_pix = np.empty(wave.size, dtype=np.float64)
-    A_spline = scipy.interpolate.CubicSpline(wave, A, extrapolate=True, bc_type='not-a-knot')
-    for j in range(wave.size-1):
-        if j in good:
-            slope = A_spline(wave[j], 1)
-            rvc_per_pix[j] = cs.c * np.sqrt(A[j]) / (wave[j] * np.abs(slope))
-        else:
-            rvc_per_pix[j] = np.nan
-    return rvc_per_pix
+    ng = good.size
+    cspline = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=True)
+    compress = int(np.min([64, ng / 6]))
+    ml = np.nanmean(wave[good])
+    nlsf = int(ng / compress)
+    lingrid = np.linspace(wave[good[0]], wave[good[-1]], num=ng)
+    fluxlin = cspline(lingrid)
+    dl = lingrid[1] - lingrid[0]
+    xlsf = np.arange(-nlsf/2, nlsf/2) * dl
+    if nlsf % 2 == 0:
+        xlsf = np.arange(-(int(nlsf / 2) - 1), int(nlsf / 2) + 1, 1) * dl
+        fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2 - 1), int(nlsf/2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
+    else:
+        xlsf = np.arange(-(int(nlsf / 2)), int(nlsf / 2) + 1, 1) * dl
+        fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2), int(nlsf/2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
+
+    sig = ml / (2 * np.sqrt(2 * np.log(2)) * R)
+    lsf = np.exp(-0.5 * (xlsf / sig)**2)
+    lsf /= np.sum(lsf)
+    fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
+    goodlin = np.where(np.isfinite(fluxlin))[0]
+    fluxc = scipy.interpolate.CubicSpline(cspline.x, fluxlin, extrapolate=False)(wave)
+    return fluxc
+
 
 # Returns the hermite polynomial of degree deg over the variable x
 def hermfun(x, deg):
@@ -422,7 +421,7 @@ def rolling_stddev_overcols(image, nbins):
 # Locates the closest value to a given value in an array
 # Returns the value and index.
 def find_closest(x, val):
-    """[summary]
+    """Finds the index and corresponding value in x which is closest to some val.
 
     Args:
         x (np.ndarray): The array to search.

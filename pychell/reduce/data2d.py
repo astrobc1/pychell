@@ -42,6 +42,7 @@ class SpecDataImage:
     Attributes:
         input_file (str): The full path + filename of the corresponding file.
         base_input_file (str): The filename of the corresponding file with the path removed.
+        parser (Parser): The parser object, must extend the Parser object.
         output_path (str): The root output path for this run.
     """
     
@@ -126,13 +127,6 @@ class RawImage(SpecDataImage):
     """
     
     def __init__(self, input_file, output_path, parser):
-        """Default initializer for a Raw image.
-
-        Args:
-            input_file (str):  The full path + filename of the corresponding file.
-            output_path (str): The root output path for this run.
-            parser (Parser): The parser object, must extend the Parser object.
-        """
         
         # Call super init
         super().__init__(input_file=input_file, output_path=output_path)
@@ -154,8 +148,10 @@ class RawImage(SpecDataImage):
     def save_reduced_orders(self, reduced_orders):
         header_out = fits.Header()
         for key in self.header:
-            if type(self.header[key]) is str:
+            try:
                 header_out[key] = self.header[key]
+            except:
+                pass
         hdu = fits.PrimaryHDU(reduced_orders, header=header_out)
         hdul = fits.HDUList([hdu])
         fname = self.output_path + 'spectra' + os.sep + self.base_input_file_noext + '_' + self.target + '_reduced' + '.fits'
@@ -173,19 +169,20 @@ class RawImage(SpecDataImage):
 
 # Class for a a raw science frame
 class ScienceImage(RawImage):
-    """Base class for a general science image.
-    """
     
     def __init__(self, input_file, output_path, parser):
-        """Default initializer for a Science image.
-
-        Args:
-            input_file (str):  The full path + filename of the corresponding file.
-            output_path (str): The root output path for this run.
-            parser (Parser): The parser object, must extend the Parser object.
-        """
+        
         # Call super init
         super().__init__(input_file=input_file, output_path=output_path, parser=parser)
+                
+                
+    def correct_flat_artifacts(self, output_dir, calibration_settings):
+        
+        # Check if this flat has already been corrected.
+        if not self.master_flat.is_corrected:
+            corrected_flat = pccalib.correct_flat_artifacts(self.master_flat, self.order_map, calibration_settings, output_dir)
+            self.master_flat.is_corrected = True
+            self.master_flat.save(corrected_flat)
         
     def __str__(self):
         s = 'Science Image:' + '\n'
@@ -211,19 +208,11 @@ class ScienceImage(RawImage):
 
 # Class for raw bias frame 
 class BiasImage(RawImage):
-    """Class for a single bias image.
-    """
     
-    def __init__(self, input_file, output_path, parser):
-        """Default initializer for a bias image.
-
-        Args:
-            input_file (str):  The full path + filename of the corresponding file.
-            output_path (str): The root output path for this run.
-            parser (Parser): The parser object, must extend the Parser object.
-        """
+    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_path_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
+        
         # Call super init
-        super().__init__(input_file=input_file, output_path=output_path, parser=parser)
+        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_path_root=output_path_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
         
     def __str__(self):
         s = 'Bias:' + '\n'
@@ -233,19 +222,11 @@ class BiasImage(RawImage):
     
 # Class for raw dark frame
 class DarkImage(RawImage):
-    """Class for a single dark image.
-    """
     
-    def __init__(self, input_file, output_path, parser):
-        """Default initializer for a single dark image.
-
-        Args:
-            input_file (str):  The full path + filename of the corresponding file.
-            output_path (str): The root output path for this run.
-            parser (Parser): The parser object, must extend the Parser object.
-        """
+    def __init__(self, input_file=None, header_keys=None, parse_header=False, output_path_root=None, hdu_num=0, time_offset=0, filename_parser=None, img_num=None, n_tot_imgs=None):
+        
         # Call super init
-        super().__init__(input_file=input_file, output_path=output_path, parser=parser)
+        super().__init__(input_file=input_file, header_keys=header_keys, parse_header=parse_header, output_path_root=output_path_root, hdu_num=hdu_num, time_offset=time_offset, filename_parser=filename_parser, img_num=img_num, n_tot_imgs=n_tot_imgs)
         
     def __str__(self):
         s = 'Dark:' + '\n'
@@ -256,17 +237,9 @@ class DarkImage(RawImage):
  
 # Class for raw flat frame
 class FlatImage(RawImage):
-    """Class for a single flat field image.
-    """
     
     def __init__(self, input_file, output_path, parser):
-        """Default initializer for a single flat field image.
-
-        Args:
-            input_file (str):  The full path + filename of the corresponding file.
-            output_path (str): The root output path for this run.
-            parser (Parser): The parser object, must extend the Parser object.
-        """
+        
         # Call super init
         super().__init__(input_file=input_file, output_path=output_path, parser=parser)
         
@@ -285,10 +258,6 @@ class FlatImage(RawImage):
 # Actual calibration routines are in calib.py,
 # So this is primarily a helpful container
 class MasterCalibImage(SpecDataImage):
-    """Base class for a master calib image.
-    Attributes:
-        individuals (list): The single frame images which make up this master calibration image.
-    """
     
     def __init__(self, individuals):
         
@@ -348,12 +317,11 @@ class MasterCalibImage(SpecDataImage):
     
     
 class MasterFlatImage(MasterCalibImage):
-    """Class for a master flat field image.
-    """
+    
     def __init__(self, individuals):
         """
         Args:
-            individuals (list): A list of the individual flat field images which generate this master flat field.
+            individuals (list of FlatFieldImages): The individual flat field images which generate this master flat field.
         """
         
         # Super init
@@ -368,16 +336,13 @@ class MasterFlatImage(MasterCalibImage):
     
     
 class MasterDarkImage(MasterCalibImage):
-    """Class for a master dark image.
-    """
-    def __init__(self, individuals):
-        """
-        Args:
-            individuals (list): A list of the individual dark images which generate this master dark.
-        """
+    
+    def __init__(self, calib_images, input_file, orientation='x', header_keys=None):
         
         # Super init
-        super().__init__(individuals=individuals)
+        super().__init__(calib_images=calib_images, input_file=input_file, orientation=orientation, header_keys=header_keys)
+        
+        # Nothing else done, so is redundant for now ...
         
         
     # Pairs darks based on their exposure times
@@ -408,16 +373,13 @@ class MasterDarkImage(MasterCalibImage):
     
     
 class MasterBiasImage(MasterCalibImage):
-    """Class for a master bias image.
-    """
-    def __init__(self, individuals):
-        """
-        Args:
-            individuals (list): A list of the individual bias images which generate this master bias.
-        """
+    
+    def __init__(self, calib_images, input_file, orientation='x', header_keys=None):
         
         # Super init
-        super().__init__(individuals=individuals)
+        super().__init__(calib_images=calib_images, input_file=input_file, orientation=orientation, header_keys=header_keys)
+        
+        # Nothing else done, so is redundant for now ...
     
     def __str__(self):
         s = 'Master Bias:' + '\n'
@@ -438,18 +400,9 @@ class MasterBiasImage(MasterCalibImage):
 # Each OrderMapImage corresponds to a fits file containing the labels / nans, and a dictionary with keys = labels (int), containing polynomial coffeicients (pcoeffs) and heights (height).
     
 class OrderMapImage(SpecDataImage):
-    """ Base class for an order map image
-
-    Attributes:
-        data (SpecDataImage): The image this order map corresponds to.
-    """
+    
     def __init__(self, data, input_file):
-        """Initialize an order map image object.
-
-        Args:
-            data (SpecDataImage): The image this order map corresponds to.
-            input_file (str):  The full path + filename of the corresponding order map file.
-        """
+        
         # Call super init
         super().__init__(input_file=input_file, output_path=data.output_path)
         
@@ -480,18 +433,9 @@ class OrderMapImage(SpecDataImage):
     
     
 class EmpiricalOrderMap(OrderMapImage):
-    """Base class for an empirically derived order map.
     
-    Attr:
-        trace_alg (function): The trace algorithm in order_map.py to call.
-    """
     def __init__(self, data, method):
-        """Initialize an empirically derived order map.
-
-        Args:
-            data (SpecDataImage): The data this order map corresponds to
-            method (str): The name of the function in order_map.py to trace the orders.
-        """
+        
         # Generate the filename for the median combined image
         input_file = data.output_path + 'trace' + os.sep + data.base_input_file_noext + '_order_map.fits'
         
@@ -503,21 +447,12 @@ class EmpiricalOrderMap(OrderMapImage):
     
     
     def trace_orders(self, redux_settings):
-        """Traces the orders.
-
-        Args:
-            redux_settings (dict): The merged reduction settings dictionary.
-        """
         order_map_image, orders_list = self.trace_alg(self.data, redux_settings)
         self.orders_list = orders_list
         self.save(order_map_image)
         
     def save(self, order_map_image):
-        """Saves the trace map image and list of dictionaries.
-
-        Args:
-            order_map_image (np.ndarray): An image of labels for each point.
-        """
+        
         # Save the order map image, default header
         hdu = fits.PrimaryHDU(order_map_image)
         hdul = fits.HDUList([hdu])
@@ -534,14 +469,9 @@ class EmpiricalOrderMap(OrderMapImage):
     
     
 class HardCodedOrderMap(OrderMapImage):
-    """Base class for a hard coded order map already stored in files. Must have attribute input_file.
-    """
+    
     def __init__(self, data):
-        """Initialize a hard coded map.
-
-        Args:
-            data (SpecDataImage): The image this order map corresponds to.
-        """
+        
         # Input file is stored as a class variable
         input_file = self.input_file
         
@@ -554,21 +484,16 @@ class HardCodedOrderMap(OrderMapImage):
         return s
 
 class iSHELLKGasMap(HardCodedOrderMap):
-    """Map for iSHELL Kgas mode.
-    """
+    
     input_file = os.path.dirname(spectrographs.__file__) + os.sep + 'ishell' + os.sep + 'order_map_KGAS.fits'
     
     def __init__(self, data):
-        """Initialize a hard coded map.
-
-        Args:
-            data (SpecDataImage): The image this order map corresponds to.
-        """
+        
         super().__init__(data=data)
         
         
 class CHIRONMap(HardCodedOrderMap):
-
+    
     input_file = os.path.dirname(spectrographs.__file__) + os.sep + 'chiron' + os.sep + 'chiron_order_map_master2.fits'
     
     def __init__(self, data):
@@ -577,15 +502,9 @@ class CHIRONMap(HardCodedOrderMap):
         
         
 class FlatFieldOrderMap(EmpiricalOrderMap):
-    """Orders determined by a flat field order map.
-    """
+    
     def __init__(self, data, method=None):
-        """Initialize a flat field order map
-
-        Args:
-            data (SpecDataImage): The image this order map corresponds to.
-            method ([type], optional): [description]. Defaults to trace_orders_from_flat_field.
-        """
+        
         if method is None:
             method = 'trace_orders_from_flat_field'
         
@@ -604,12 +523,12 @@ class FlatStarOrderMap(EmpiricalOrderMap):
         
 class ScienceOrderMap(EmpiricalOrderMap):
     
-    def __init__(self, data, input_file, output_path, method=None):
+    def __init__(self, data, method=None):
         
         if method is None:
             method = 'trace_orders_empirical'
         
-        super().__init__(data=data, input_file=input_file, output_path=output_path, method=method)
+        super().__init__(data=data, method=method)
 
 ############################
 ###### Co-added Image ######
@@ -648,8 +567,7 @@ class CoAddedImage(SpecDataImage):
 #### The signature of these functions must take an input path, and return a dictionary of images where each key is a type of above image.
 
 class Parser:
-    """Base class to help parse data for a given instrument.
-    """
+    
     def __init__(self):
         # nothing is Done.
         pass
@@ -670,7 +588,10 @@ class Parser:
         fits_data = fits.open(data.input_file)[0]
         
         # Just in case
-        fits_data.verify('fix')
+        try:
+            fits_data.verify('fix')
+        except:
+            pass
 
         # The current header
         current_fits_header = fits_data.header
@@ -687,7 +608,6 @@ class Parser:
         for key in self.header_keys:
             if not hasattr(data, key):
                 setattr(data, key, modified_header[key])
-                
         return modified_header
     
     def parse_image(self, filename):
@@ -947,8 +867,108 @@ class iSHELLParser(Parser):
         data.time_of_obs = modified_header['time_of_obs']
         
         data.header = modified_header
-
         
+class NIRSPECParser(Parser):
+    
+    header_keys = {
+        'target': ['OBJECT', ValueError],
+        'RA': ['RA', ValueError],
+        'DEC': ['DEC', ValueError],
+        'slit': ['SLITWIDT', ValueError],
+        'wavelength_range': ['_NO_KEY_', None],
+        'gas_cell': ['_NO_KEY_', None],
+        'exp_time': ['ITIME', ValueError],
+        'time_of_obs': ['MJD-OBS', ValueError],
+        'NDR': ['NDR', 1],
+        'BZERO': ['BZERO', 0],
+        'BSCALE': ['BSCALE', 1]
+    }
+        
+    def categorize(self, redux_settings):
+        
+        # Stores the data as above objects
+        data = {}
+        
+        # NIRSPEC science files
+        sci_files = glob.glob(redux_settings['input_path'] + '*.fits')
+        sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
+        
+        data['science'] = [ScienceImage(input_file=sci_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(sci_files))]
+    
+        # Bias
+        if redux_settings['bias_subtraction']:
+            bias_files = glob.glob(redux_settings['input_path'] + '*bias*.fits')
+            data['bias'] = [BiasImage(input_file=bias_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(bias_files))]
+            data['master_bias'] = MasterBiasImage(individuals=data['bias'], output_path=redux_settings['run_output_path'])
+            
+            for sci in data['science']:
+                self.pair_master_bias(sci, data['master_bias'])
+                
+            for flat in data['flats']:
+                self.pair_master_bias(flat, data['master_bias'])
+            
+        # Darks assumed to contain dark in filename
+        if redux_settings['dark_subtraction']:
+            dark_files = glob.glob(redux_settings['input_path'] + '*dark*.fits')
+            data['darks'] = [DarkImage(input_file=dark_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(dark_files))]
+            data['master_darks'] = MasterDarkImage.from_all_darks(data['darks'])
+            
+            for sci in data['science']:
+                self.pair_master_dark(sci, data['master_darks'])
+                
+            for flat in data['flats']:
+                self.pair_master_dark(flat, data['master_darks'])
+        
+        # Flats must contain flat in the filename
+        if redux_settings['flat_division']:
+            flat_files = glob.glob(redux_settings['input_path'] + '*flat*.fits')
+            data['flats'] = [FlatImage(input_file=flat_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(flat_files))]
+            data['master_flats'] = self.group_flats(data['flats'])
+            for sci in data['science']:
+                self.pair_master_flat(sci, data['master_flats'])
+        
+        self.print_summary(data)
+
+        return data
+
+    # NS.20050601.48268.fits
+    def parse_image_num(self, data):
+        string_list = data.base_input_file.split('.')
+        data.image_num = string_list[2]
+        
+    def parse_image(self, data):
+        """Parses the input file for the image only. It's assumed the header has already been parsed.
+
+        Args:
+            hdu_num (int): Which header data unit the desired image is in, default to 0.
+        Returns:
+            data_image (np.ndarray): The data image, with shape=(ny, nx)
+        """
+        # Parse the image
+        data_image = super().parse_image(data.input_file)
+        
+        # Correct readmath (checks if present)
+        self.correct_readmath(data, data_image)
+        return data_image
+        
+    # NS.20050601.48268.fits
+    def parse_date(self, data):
+        string_list = data.base_input_file.split('.')
+        data.date_obs = string_list[1]
+    
+    def parse_header(self, data):
+        
+        modified_header = super().parse_header(data)
+                
+        # Store the sky coordinate
+        modified_header['coord'] = SkyCoord(ra=modified_header['RA'], dec=modified_header['DEC'], unit=(units.hourangle, units.deg))
+        data.coord = modified_header['coord']
+
+        # Overwrite the time of observation
+        modified_header['time_of_obs'] = Time(float(modified_header['time_of_obs']) + 2400000.5, scale='utc', format='jd')
+        data.time_of_obs = modified_header['time_of_obs']
+        
+        data.header = modified_header
 
 # Under dev
 class CHIRONParser(Parser):

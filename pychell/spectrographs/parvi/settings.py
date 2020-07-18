@@ -5,62 +5,16 @@ import pychell.rvs
 # Path to default templates for rvs
 default_templates_path = pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep
 
-
-##################################################################
-####### General Stuff ############################################
-##################################################################
-
-# Some general parameters
-general_settings = {
-    
-    # The spectrograph name. Can be anything.
-    'spectrograph': 'PARVI',
-    
-    # The name of the observatory.
-    # Must be a recognized astropy EarthLocation if not computing own barycenter info.
-    'observatory': 'Palomar',
-    
-    # Gain of primary detector
-    'gain': NotImplemented,
-    
-    # Dark current of primary detector
-    'dark_current': NotImplemented,
-    
-    # Read noise of the primary detector
-    'read_noise': NotImplemented,
-    
-     # The orientation of the spectral axis for 2d images
-    'orientation': NotImplemented,
-    
-    # The number of data pixels for forward modeling (includes cropped pix on the ends)
-    'n_data_pix': 2038,
-    
-    # The time offset used in the headers
-    'time_offset': NotImplemented,
-    
-    # The tags to recognize science, bias, dark, and flat field images
-    'sci_tag': NotImplemented,
-    'bias_tag': NotImplemented,
-    'darks_tag': NotImplemented,
-    'flats_tag': NotImplemented,
-    
-    # The file name parser
-    'filename_parser': NotImplemented
-}
-
-
-# Header keys for reduction
-header_keys = NotImplemented
+spectrograph = "PARVI"
+observatory = "Palomar"
 
 ####################################################################
 ####### Reduction / Extraction #####################################
 ####################################################################
 
-# calibration settings
-calibration_settings = NotImplemented
 
-# Extraction settings
-extraction_settings = NotImplemented
+redux_settings = NotImplemented
+
 
 ####################################################################
 ####### RADIAL VELOCITIES ##########################################
@@ -74,7 +28,9 @@ forward_model_settings = {
     'crop_data_pix': [10, 10],
     
     # The units for plotting
-    'plot_wave_unit': 'nm'
+    'plot_wave_unit': 'nm',
+    
+    'observatory': observatory
 }
 
 # Forward model blueprints for RVs
@@ -85,12 +41,12 @@ forward_model_blueprints = {
         'name': 'star',
         'class_name': 'StarModel',
         'input_file': None,
-        'vel': [-np.inf, 0, np.inf]
+        'vel': [-3E5, 100, 3E5]
     },
     
     # Tellurics (from TAPAS)
     'tellurics': {
-        'name': 'vis_tellurics', # NOTE: full parameter names are name + species + base_name.
+        'name': 'nir_tellurics',
         'class_name': 'TelluricModelTAPAS',
         'vel': [-2000, -100, 500],
         'species': {
@@ -144,7 +100,7 @@ forward_model_blueprints = {
         'hermdeg': 4,
         'compress': 64,
         'n_delay': 0,
-        'width': [0.15, 0.21, 0.28], # LSF width, in angstroms (slightly larger than this for PARVI)
+        'width': [0.16, 0.18, 0.21], # LSF width, in angstroms (slightly larger than this for PARVI)
         'ak': [-0.075, 0.001, 0.075] # See cale et al 2019 or arfken et al some year for definition of ak > 0
     },
     

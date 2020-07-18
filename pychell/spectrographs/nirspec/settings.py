@@ -5,102 +5,34 @@ import pychell.rvs
 # Path to default templates for rvs
 default_templates_path = pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep
 
-# Return the file number and date
-# NS.20060715.34219.fits
-def parse_filename(filename):
-    res = filename.split('.')
-    filename_info = {'number': res[2], 'date': res[1]}
-    return filename_info
-
 #############################
-####### General Stuff #######
+####### Name and Site #######
 #############################
 
-# Some general parameters
-general_settings = {
-    
-    # The spectrograph name. Can be anything.
-    'spectrograph': 'NIRSPEC',
-    
-    # The name of the observatory.
-    # Must be a recognized astropy EarthLocation if not computing own barycenter info.
-    'observatory': 'Keck',
-    
-    # Gain of primary detector
-    'gain': 1.0,
-    
-    # Dark current of primary detector
-    'dark_current': 0.05,
-    
-    # Read noise of the primary detector
-    'read_noise': 1.0,
-    
-     # The orientation of the spectral axis for 2d images
-    'orientation': 'x',
-    
-    # The number of data pixels for forward modeling (includes cropped pix on the ends)
-    'n_data_pix': 2048,
-    
-    # The time offset used in the headers
-    'time_offset': 2400000.5,
-    
-    # The tags to recognize science, bias, dark, and flat field images
-    'sci_tag': 'data',
-    'bias_tag': 'bias',
-    'darks_tag': 'dark',
-    'flats_tag': 'flat',
-    
-    # The filename parser
-    'filename_parser': parse_filename
-}
-
-# Header keys for reduction
-# NOTE: For now, this is only suedin reduction.
-# The keys are common to all instruments
-# The items are lists.
-# item[0] = actual key in the header
-# item[1] = default values
-header_keys = {
-    'target': ['OBJECT', 'STAR'],
-    'RA': ['RA', '00:00:00.0'],
-    'DEC': ['DEC', '00:00:00.0'],
-    'slit': ['SLITNAME', '0.0'],
-    'wavelength_range': ['XDTILT', 'NA'],
-    'gas_cell': ['GASCELL', 'NA'],
-    'exp_time': ['ITIME', 'NA'],
-    'time_of_obs': ['TCS_UTC', 'NA'],
-    'NDR': ['NDR', 1],
-    'BZERO': ['BZERO', 0],
-    'BSCALE': ['BSCALE', 1]
-}
+spectrograph = 'NIRSPEC'
+observatory = 'Keck'
 
 ####################################################################
 ####### Reduction / Extraction #####################################
 ####################################################################
 
-# calibration settings
-# flat_correlation options are
-# 'closest_time' for flats to be applied from the closest in time, 'single' (single set)
-# 'closest_space' for flats to be applied from the closest in space angular sepration,
-# 'single' for a single set.
-calibration_settings = {
-    'dark_subtraction': False,
-    'flat_division': True,
-    'bias_subtraction': False,
-    'wavelength_calibration': False
-}
-
-# Extraction settings
-extraction_settings = {
+redux_settings = {
     
-    # Order map algorithm (options: 'from_flats, 'empirical')
-    'order_map': 'from_flats',
+    # Detector properties
+    'detector_props' : [{'gain': 1.0, 'dark_current': 0.00, 'read_noise': 1.0}],
+    
+    # Calibration
+    'dark_subtraction': False,
+    'flat_division': False,
+    'bias_subtraction': False,
+    'wavelength_calibration': False,
+    'flatfield_percentile': 0.85,
     
     # Pixels to mask on the top, bottom, left, and right edges
-    'mask_left_edge': 200,
-    'mask_right_edge': 200,
-    'mask_top_edge': 50,
-    'mask_bottom_edge': 10,
+    'mask_left_edge': 20,
+    'mask_right_edge': 20,
+    'mask_top_edge': 20,
+    'mask_bottom_edge': 20,
     
     # The height of an order is defined as where the flat is located.
     # This masks additional pixels on each side of the initial trace profile before moving forward.
@@ -117,7 +49,12 @@ extraction_settings = {
     
     # The trace profile is constructed using oversampled data.
     # This is the oversample factor.
-    'oversample': 4
+    'oversample': 4,
+    
+    # The optimal extraction algorithm
+    'optx_alg': 'pmassey_wrapper',
+    'order_map': {'source': 'empirical_unique', 'method': None}
+    
 }
 
 
@@ -132,7 +69,9 @@ forward_model_settings = {
     'crop_data_pix': [200, 200],
     
     # The units for plotting
-    'plot_wave_unit': 'microns'
+    'plot_wave_unit': 'microns',
+    
+    'observatory': observatory
 }
 
 # Forward model blueprints for RVs

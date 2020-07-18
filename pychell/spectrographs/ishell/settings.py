@@ -126,13 +126,15 @@ forward_model_blueprints = {
     # The default blaze is a quadratic + splines.
     'blaze': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'ResidualBlazeModel',
+        #'class_name': 'ResidualBlazeModel',
+        'class_name': 'SplineBlazeModel',
         'n_splines': 14,
         'base_quad': [-5.5E-5, -2E-6, 5.5E-5],
         'base_lin': [-0.001, 1E-5, 0.001],
         'base_zero': [0.96, 1.0, 1.08],
         'spline': [-0.135, 0.01, 0.135],
-        'n_delay_splines': 0,
+        #'spline': [-0.3, 1.0, 1.1],
+        'n_delay': 0,
         
         # Blaze is centered on the blaze wavelength. Crude estimates
         'blaze_wavelengths': [24623.42005657, 24509.67655586, 24396.84451226, 24284.92392579, 24173.91479643, 24063.81712419, 23954.63090907, 23846.35615107, 23738.99285018, 23632.54100641, 23527.00061976, 23422.37169023, 23318.65421781, 23215.84820252, 23113.95364434, 23012.97054327, 22912.89889933, 22813.7387125,  22715.48998279, 22618.1527102, 22521.72689473, 22426.21253637, 22331.60963514, 22237.91819101, 22145.13820401, 22053.26967413, 21962.31260136, 21872.26698571, 21783.13282718]
@@ -149,11 +151,11 @@ forward_model_blueprints = {
         'ak': [-0.03, 0.001, 0.2] # Hermite polynomial coefficients
     },
     
-    # Quadratic (Lagrange points) + splines
+    # Determined by splines
     'wavelength_solution': {
         
-        'name': 'lagrange_wavesol_splines',
-        'class_name': 'WaveSolModelFull',
+        'name': 'csplines_wavesol',
+        'class_name': 'WaveSolModelSplines',
         
         # The three pixels to span the detector corresponding to the above wavelengths
         # They are chosen as such because we typically use pixels 200-1848 only.
@@ -170,9 +172,9 @@ forward_model_blueprints = {
         'base_set_point_3': [24705.72472863, 24590.91231465, 24476.99298677, 24364.12010878, 24252.31443701, 24141.55527091, 24031.82506843, 23923.12291214, 23815.40789995, 23708.70106907, 23602.95596074, 23498.18607941, 23394.35163611, 23291.44815827, 23189.49231662, 23088.42080084, 22988.26540094, 22888.97654584, 22790.57559244, 22693.02942496, 22596.33915038, 22500.49456757, 22405.49547495, 22311.25574559, 22217.91297633, 22125.33774808, 22033.50356525, 21942.41058186, 21852.24253555],
         
         'n_splines': 6,
-        'n_delay_splines': 0,
-        'base': [-0.35, -0.05, 0.2],
-        'spline': [-0.15, 0.01, 0.15]
+        #'n_delay_splines': 0,
+        #'base': [-0.35, -0.05, 0.2],
+        'spline': [-0.5, 0.01, 0.5]
     },
     
     # Fabry Perot cavity with two parameters

@@ -304,8 +304,11 @@ class ForwardModels(list):
         # Full filename
         fname = self.run_output_path_rvs + self.tag + '_rvs_ord' + str(self[0].order_num) + '.npz'
         
+        # The bc velocities
+        bc_vels = np.array([fwm.data.bc_vel for fwm in self], dtype=float)
+        
         # Save in a .npz file for easy access later
-        np.savez(fname, BJDS=self.BJDS, BJDS_nightly=self.BJDS_nightly, n_obs_nights=self.n_obs_nights, **self.rvs_dict)
+        np.savez(fname, BJDS=self.BJDS, BJDS_nightly=self.BJDS_nightly, bc_vels=bc_vels, n_obs_nights=self.n_obs_nights, **self.rvs_dict)
 
     # Loads the templates dictionary and stores in a dictionary.
     # A pointer to the templates dictionary is stored in each forward model class
@@ -487,7 +490,7 @@ class ForwardModel:
             self.xcorrs = np.empty(shape=(self.n_xcorr_vels, self.n_template_fits), dtype=np.float64)
             
             # Stores the xcorr rvs. Nightly Xcorr RVs are not calculated, but can be by the user after.
-            self.rvs_xcosrr = np.empty(self.n_template_fits, dtype=np.float64)
+            self.rvs_xcorr = np.empty(self.n_template_fits, dtype=np.float64)
             self.rvs_xcorr_nightly = np.empty(self.n_template_fits, dtype=np.float64)
             self.unc_xcorr_nightly = np.empty(self.n_template_fits, dtype=np.float64)
         
@@ -517,7 +520,7 @@ class ForwardModel:
         # First generate the wavelength solution model
         model_class = getattr(pcmodelcomponents, model_blueprints['wavelength_solution']['class_name'])
         self.wave_bounds = model_class.estimate_endpoints(self.data, model_blueprints['wavelength_solution'], self.pix_bounds)
-        self.models_dict['wavelength_solution'] = model_class(model_blueprints['wavelength_solution'], self.wave_bounds, self.pix_bounds, self.n_data_pix, order_num=self.order_num)
+        self.models_dict['wavelength_solution'] = model_class(model_blueprints['wavelength_solution'], self.pix_bounds, self.n_data_pix, order_num=self.order_num)
         
         # The resolution of the high res fiducial wave grid
         self.dl = ((self.wave_bounds[1] +  15) - (self.wave_bounds[0] - 15)) / self.n_model_pix
@@ -559,8 +562,7 @@ class ForwardModel:
         self.initial_parameters = OptimParameters.Parameters()
         for model in self.models_dict:
             self.models_dict[model].init_parameters(self)
-            for pname in self.models_dict[model].par_names:
-                self.initial_parameters[pname] = self.models_dict[model].initial_parameters[pname]
+            self.initial_parameters.update(self.models_dict[model].initial_parameters)
 
 
     # Save outputs after last iteration. This method can be implemented or not and super can be called or not.

@@ -20,6 +20,8 @@ from astropy.time import Time
 
 # Graphics
 import matplotlib.pyplot as plt
+import pychell
+plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # Parallelization
 from joblib import Parallel, delayed
@@ -90,14 +92,12 @@ def reduce_night(user_redux_settings):
     if redux_settings['order_map']['source'] == 'empirical_unique':
         
         print('Empirically Deriving Trace For Each Image ...', flush=True)
-        #data['order_maps'] = []
-        #for master_flat in data['master_flats']:
-        #    data['order_maps'].append()
-            
-    #elif redux_settings['order_map']['source'] == 'empirical_flat_star':
-
-    #    for sci_data in data['science']:
-    #        sci_data.trace_orders(output_dir=general_settings['output_path_root'] + 'calib' + os.sep, extraction_settings=extraction_settings, src=extraction_settings['order_map'])
+        data['order_maps'] = []
+        map_init = redux_settings['order_map']['method']
+        for sci in data['science']:
+            data['order_maps'].append(pcdata.ScienceOrderMap(sci, map_init))
+            data['order_maps'][-1].trace_orders(redux_settings)
+            sci.order_map = data['order_maps'][-1]
         
     elif redux_settings['order_map']['source'] == 'empirical_from_flat_fields':
         print('Tracing Orders From Master Flat(s) ...', flush=True)

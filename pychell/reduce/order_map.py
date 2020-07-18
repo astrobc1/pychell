@@ -9,6 +9,9 @@ import json
 import copy
 import warnings
 
+# LLVM
+from numba import jit, njit
+
 # Maths
 import numpy as np
 import scipy.interpolate
@@ -151,10 +154,13 @@ def trace_orders_from_flat_field(master_flat, redux_settings):
 
 # It's like the above with extra steps
 # This will fail if a majority of the trace is not used.
-def trace_orders_empirical(data_image, redux_settings):
+def trace_orders_empirical(data, redux_settings):
+    
+    # Load the data image
+    data_image = data.parse_image()
     
     # Image dimensions
-    data_image = data_image.T
+    data_image = data_image
     ny, nx = data_image.shape
     
     data_image[0:redux_settings['mask_bottom_edge'], :] = np.nan
@@ -162,7 +168,7 @@ def trace_orders_empirical(data_image, redux_settings):
     data_image[:, 0:redux_settings['mask_left_edge']] = np.nan
     data_image[:, nx-redux_settings['mask_right_edge']:] = np.nan
 
-    # Smooth the flat.
+    # Smooth the image.
     data_smooth = pcmath.median_filter2d(data_image, width=5, preserve_nans=True)
     
     # Do a horizontal normalization of the smoothed flat image to remove the blaze
@@ -174,7 +180,7 @@ def trace_orders_empirical(data_image, redux_settings):
         #y_top = y_ranges[i+1]
     for x in range(nx):
         data_smooth[:, x] = data_smooth[:, x] / pcmath.weighted_median(data_smooth[:, x], med_val=0.99)
-    
+
     # Only consider regions where the flux is greater than 50%
     order_locations_all = np.zeros(shape=(ny, nx), dtype=float)
     good = np.where(data_smooth > 0.96)
@@ -201,9 +207,8 @@ def trace_orders_empirical(data_image, redux_settings):
     good_points[:, 0], good_points[:, 1] = good_lr[1], good_lr[0]
     
     # Create the Density clustering object and run
-    density_cluster = sklearn.cluster.DBSCAN(eps=7, min_samples=500, metric='euclidean', algorithm='auto', p=None, n_jobs=1)
+    density_cluster = sklearn.cluster.DBSCAN(eps=70, min_samples=30, metric=biased_metric, algorithm='auto', p=None, n_jobs=1)
     db = density_cluster.fit(good_points)
-    
     
     # Extract the labels
     labels = db.labels_
@@ -226,7 +231,7 @@ def trace_orders_empirical(data_image, redux_settings):
     # Further flag labels that don't span at least half the detector
     # If not bad, then fit.
     pcoeffs = []
-    order_dicts = []
+    orders_list = []
     for l in range(labels_unique_init.size):
         label_locs = np.where(order_locs_lr_labeled == labels_unique_init[l])
         if label_locs[0].size < 100:
@@ -239,17 +244,15 @@ def trace_orders_empirical(data_image, redux_settings):
             pfit = np.polyfit(label_locs[1] * Mx, label_locs[0] * My, 2)
             pcoeffs.append(pfit)
             height = 15
-            order_dicts.append({'label': len(order_dicts) + 1, 'pcoeffs': pfit, 'height': height})
-
+            orders_list.append([{'label': len(orders_list) + 1, 'pcoeffs': pfit, 'height': height}])
     
     # Now fill in a full frame image
-    n_orders = len(order_dicts)
-
+    n_orders = len(orders_list)
     order_image = np.full(shape=(ny, nx), dtype=np.float64, fill_value=np.nan)
 
     for o in range(n_orders):
         for x in range(first_x, last_x):
-            pmodel = np.polyval(order_dicts[o]['pcoeffs'], x)
+            pmodel = np.polyval(orders_list[o][0]['pcoeffs'], x)
             ymax = int(pmodel + height / 2)
             ymin = int(pmodel - height / 2)
             if ymin > ny - 1 or ymax < 0:
@@ -258,8 +261,11 @@ def trace_orders_empirical(data_image, redux_settings):
                 continue
             if ymin < 0 + redux_settings['mask_bottom_edge']:
                 continue
-            order_image[ymin:ymax, x] = int(order_dicts[o]['label'])
+            order_image[ymin:ymax, x] = int(orders_list[o][0]['label'])
 
-    return order_image, order_dicts
+    return order_image, orders_list
             
-    
+
+@njit
+def biased_metric(x, y):
+    return (10 * (x[0] - y[0])**2 + (x[1] - y[1])**2)**0.5

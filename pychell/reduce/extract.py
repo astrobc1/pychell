@@ -31,7 +31,6 @@ import optimparameters.parameters as OptimParams
 from robustneldermead.neldermead import NelderMead
 
 
-
 def extract_full_image_wrapper(data_all, index, redux_settings):
     """A wrapper to extract a full frame image for printing purposes.
 
@@ -113,11 +112,11 @@ def extract_full_image(data, redux_settings):
             for sub_trace_index, single_trace_dict in enumerate(single_order_list):
                 
                 stopwatch.lap(sub_trace_index)
-                print('    Extracting Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(order_dict['n_traces']) + ' ...')
+                print('    Extracting Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(len(single_order_list)) + ' ...')
                 
                 reduced_orders[order_index, sub_trace_index, :, :], boxcar_spectra[order_index, sub_trace_index, :], trace_profile_csplines[order_index, sub_trace_index], y_positions[order_index, sub_trace_index, :] = extract_single_trace(data, data_image, trace_map_image, single_trace_dict, redux_settings)
                 
-                print('    Extracted Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(order_dict['n_traces']) + ' in ' + str(round(stopwatch.time_since(sub_trace_index), 3)) + ' min ')
+                print('    Extracted Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(len(single_order_list)) + ' in ' + str(round(stopwatch.time_since(sub_trace_index), 3)) + ' min ')
                 
         # Orders are composed of single trace
         else:
@@ -252,6 +251,8 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
     ############################
     #### Optimal Extraction ####
     ############################
+
+    #spec1d, unc1d = slit_decomposition_wrapper(data, trace_image, y_positions_refined, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, redux_settings['detector_props'], sky=sky, M=M, n_iters=100)
     
     # The extraction algorithm
     spec_extractor = eval(redux_settings['optx_alg'])
@@ -670,7 +671,7 @@ def optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, 
         # Shift the trace profile
         P_x = scipy.interpolate.CubicSpline(trace_profile_fiducial_grid[good_trace_profile] + y_positions[x], trace_profile[good_trace_profile], extrapolate=False)(yarr)
         
-        P_use = P_x[all_pixels] # * pixel_fractions[all_pixels, x]
+        P_use = P_x[all_pixels] # pixel_fractions[all_pixels, x]
         badpix_use = badpix_x[all_pixels]
         S_use = S_x[all_pixels] # * pixel_fractions[all_pixels, x]
         
@@ -721,8 +722,6 @@ def generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions, ba
     # The max flux
     _, trace_max = estimate_trace_max(trace_profile_cspline, height)
     
-    trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
-    
     # The left and right profile positions
     left_trace_profile_inds = np.where(trace_profile_fiducial_grid < -1)[0]
     right_trace_profile_inds = np.where(trace_profile_fiducial_grid > 1)[0]
@@ -758,7 +757,6 @@ def generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions, ba
         if good.size < 3 or np.nanmin(good) < ys or np.nanmax(good) > yf:
             continue
         
-        
         # Left cuts
         ysl = left_ycut + y_positions[x]
         yl1, yl2 = int(np.floor(ysl)), int(np.ceil(ysl))
@@ -774,11 +772,10 @@ def generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions, ba
         yr1, yr2 = int(np.floor(ysr)), int(np.ceil(ysr))
         if ysr + 0.5 == yr2:
             frac_right = 0
-        elif ysr + 0.5 > yr1:
+        elif ysr + 0.5 > yr2:
             frac_right = yr2 - ysr + 0.5
         else:
-            frac_right = 0.5 - (ysr - yr2)
-        
+            frac_right = (yr2 - ysr) - 0.5
         
         full_pixels = np.arange(yl2, yr1+1, 1).astype(int)
         fractional_pixels = np.array([yl1, yr2])
@@ -1051,7 +1048,7 @@ def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline,
         good = np.where(np.isfinite(tp))[0]
         trace_profile_cspline_nosky = scipy.interpolate.CubicSpline(trace_profile_cspline.x[good], tp[good])
     else:
-        sky = None
+        sky = np.zeros(nx)
         trace_profile_cspline_nosky = copy.deepcopy(trace_profile_cspline)
         
     # Fractions of each pixel
@@ -1192,3 +1189,165 @@ def estimate_trace_profile(trace_image, y_positions, height, M=16, mask_edges=No
     cspline.x -= trace_max_pos
     
     return cspline
+
+
+
+########################
+
+def slit_decomposition_wrapper(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, detector_props, sky=None, M=16, n_iters=100, n_chunks=5):
+    
+    goody, goodx = np.where(badpix_mask == 1)
+    x_start, x_end = goodx[0], goodx[-1]
+    y_start, y_end = goody[0], goody[-1]
+    x_chunks = np.linspace(x_start, x_end, num=n_chunks+1).astype(int)
+    
+    for ichunk in range(n_chunks):
+        
+        chunk_x_start, chunk_x_end = x_chunks[ichunk], x_chunks[ichunk + 1]
+        goody_chunk, _ = np.where(badpix_mask[:, chunk_x_start:chunk_x_end] == 1)
+        chunk_y_start, chunk_y_end = goody_chunk[0], goody_chunk[-1]
+        
+        trace_image_chunk = trace_image[chunk_y_start:chunk_y_end, chunk_x_start:chunk_x_end]
+        badpix_mask_chunk = badpix_mask[chunk_y_start:chunk_y_end, chunk_x_start:chunk_x_end]
+        y_positions_chunk = y_positions[chunk_x_start:chunk_x_end] - chunk_y_start
+        pixel_fractions_chunk = pixel_fractions[chunk_y_start:chunk_y_end, chunk_x_start:chunk_x_end]
+        sky_chunk = sky[chunk_x_start:chunk_x_end]
+        slit_decomposition_extraction(data, trace_image_chunk, y_positions_chunk, trace_profile_cspline, badpix_mask_chunk, pixel_fractions_chunk, height, redux_settings, detector_props, sky=sky_chunk, M=M, n_iters=100)
+        
+
+def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, detector_props, sky=None, M=16, n_iters=100):
+    
+    print('Decomposing the slit function !')
+    
+    # Image dimensions
+    ny, nx = trace_image.shape
+    
+    # Good x and y positions
+    #goody, goodx = np.where(badpix_mask == 1)
+    #x_start, x_end = np.min(goodx), np.max(goodx)
+    #y_start, y_end = np.min(goody), np.max(goody)
+    
+    trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+    # The left and right profile positions
+    left_trace_profile_inds = np.where(trace_profile_fiducial_grid < -1)[0]
+    right_trace_profile_inds = np.where(trace_profile_fiducial_grid > 1)[0]
+    left_trace_profile_ypos= trace_profile_fiducial_grid[left_trace_profile_inds]
+    right_trace_profile_ypos = trace_profile_fiducial_grid[right_trace_profile_inds]
+    left_trace_profile = trace_profile[left_trace_profile_inds]
+    right_trace_profile = trace_profile[right_trace_profile_inds]
+    
+    # Find where it intersections at some minimum flux value
+    trace_max_pos, trace_max = estimate_trace_max(trace_profile_cspline, height)
+    left_ycut, _ = pcmath.intersection(left_trace_profile_ypos, left_trace_profile, redux_settings['min_profile_flux']*trace_max, precision=1000)
+    right_ycut, _ = pcmath.intersection(right_trace_profile_ypos, right_trace_profile, redux_settings['min_profile_flux']*trace_max, precision=1000)
+    
+    # Find the aperture size at inf resolution
+    # Find the aperture at finite resolution
+    y_hr_temp = np.arange(0, ny, 1/M)
+    window_size = right_ycut - left_ycut
+    _, ny_decimal = pcmath.find_closest(y_hr_temp, window_size)
+    N = int(np.ceil(ny_decimal * M))
+    ny = int(np.ceil(N / M))
+
+    # Generate the current spectrum from standard optimal extraction
+    current_spectrum, _, _ = pmassey_wrapper(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, sky=sky)
+    
+    #S = np.zeros((ny, nx), dtype=float)
+    #S = trace_image - np.outer(np.ones(ny), sky)
+    #for x in range(nx):
+        #ycol_lr_dec = np.arange(y_positions[x] - ny/2, y_positions[x] + ny/2)
+    #    use = np.arange(y_positions[x] - ny/2, y_positions[x] + ny/2).astype(int)
+    #    S[:, x] = trace_image[use, x] - sky[x]
+    
+    weight = 1 / M
+    n = (nx + 1) * M + 1
+    y = np.arange(N) / M
+    omega = np.zeros(M + 1) + weight
+    for i in range(nx):                    # Fill up matrix and RHS
+        yy = y + y_positions[i]                            # Offset Set
+
+        ind = np.where((yy >= 0) & (yy < 1))[0]     # Weights are the same within pixel except
+        i1 = ind[0]
+        i2 = ind[-1]
+        omega[0] = yy[i1]                          # Fix the first and the last subpixel, here
+        omega[M] = 1 - yy[i2]                 # the weight is split between the two subpixels
+        bkl = np.zeros(shape=(n, 2 * M + 1))                # Band-diagonal part that will contain omega#omega
+    
+    
+    # Sub pixel fractions
+    w = np.zeros(shape=(N, ny, nx), dtype=float)
+    lagrange = 100000.01
+    fiducial_grid = np.arange(0, ny, 1/M)
+    highres_grids = np.empty(shape=(N, nx), dtype=float)
+    for x in range(nx):
+        ypos = y_positions[x]
+        temp = np.linspace(ypos - ny / 2, ypos + ny / 2, num=N)
+        highres_grids[:, x] = temp
+    
+    # Generate the sub pixel fractions
+    for x in range(nx):
+        j0 = np.where(highres_grids[:, x] + 1/(2*M) > -0.5)[0][0]
+        fr = (highres_grids[j0, x] + 1 / (2 * M) + 0.5)
+        for j in range(N):
+            if j == j0:
+                w[j, :, x] = fr / M
+            elif j >= j0 + 1 and j <= j0 + M - 1:
+                w[j, :, x] = 1 / M
+            elif j == j0 + M:
+                w[j, :, x] = 1 / M - fr / M
+            else:
+                continue
+                
+    # Helpful matrix
+    B_upper = np.full(N - 1, fill_value=-1)
+    B_lower = np.full(N - 1, fill_value=-1)
+    B_main = np.full(N, fill_value=2)
+    B = scipy.sparse.diags((B_lower, B_main, B_upper), (-1, 0, 1)).toarray()
+    B[0, 0] = 1
+    B[-1, -1] = 1
+    f = np.copy(current_spectrum)
+    wjkx = slit_decomp_sum(w)
+
+    badf = np.where(~np.isfinite(f))[0]
+    if badf.size > 0:
+        f[badf] = 0
+        S[:, badf] = 0
+    bad_data = np.where(~np.isfinite(S)) #
+    if bad_data[0].size > 0:
+        S[bad_data] = 0
+
+    lagrange = 100
+    n_iters = 100
+    for iteration in range(n_iters):
+        print(iteration + 1)
+        f, g = slit_decomp_iter(f, N, M, B, S, w, lagrange, wjkx)
+        
+        #trace_profile_cspline_new = scipy.interpolate.CubicSpline(np.arange(0, ny, 1/M), g, extrapolate=True)
+        #badpix_mask_new = flag_bad_pixels(S, f, y_positions, trace_profile_cspline_new, pixel_fractions, badpix_mask, height, sky=None, nsig=6)
+    
+@jit
+def slit_decomp_iter(f, N, M, B, S, w, lagrange, wjkx):
+    R = np.einsum('yx,x,kyx->k', S, f, w)
+    #A = np.einsum('x,jkx->jk', f**2, wjkx)
+    A = np.einsum("x,jyx,kyx->jk", f**2, w, w)
+    g = np.linalg.solve(A + lagrange * B, R)
+    g /= np.trapz(g)
+    inner_sum = np.einsum('j,jyx->yx', g, w)
+    C = np.nansum(S * inner_sum, axis=0)
+    D = np.nansum(inner_sum**2, axis=0)
+    #corrections = 
+    fnew = (C / D) # / corrections
+    
+    return fnew, g
+
+# Compute the quantity SUM_y w_j,y,x * w_k,y,x
+#@njit(parallel=True)
+def slit_decomp_sum(w):
+    N, ny, nx = w.shape
+    M = int((N - 1) / ny)
+    wjkx = np.zeros(shape=(N, N, nx), dtype=float)
+    for x in range(nx):
+        for j in range(N):
+            wjkx[j, :, x] = (M+1) * w[j, 0, x] * w[:, 0, x]
+            
+    return wjkx

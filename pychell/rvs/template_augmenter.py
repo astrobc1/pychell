@@ -1242,8 +1242,8 @@ def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.98, smooth=True):
             continuum_coarse[ix] = pcmath.weighted_median(ys[use], weights=None, med_val=cont_val)
     good = np.where(np.isfinite(ys))[0]
     knot_points = x[np.linspace(good[0], good[-1], num=n_knots).astype(int)]
-    interp_fun = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=n_knots).astype(int)], extrapolate=False, bc_type='not-a-knot')
-    continuum = interp_fun(x)
+    cspline = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=n_knots).astype(int)], extrapolate=False, bc_type='not-a-knot')
+    continuum = cspline(x)
     return continuum
 
 

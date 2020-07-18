@@ -56,9 +56,9 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
         # Get better estimations for some parameters (eg xcorr for star)
         forward_models.opt_init_params()
         
-        # Stores the stellar templates over iterations. The plus 1 is for the wave grid
+        # Stores the stellar templates over iterations.
         stellar_templates = np.empty(shape=(forward_models[0].n_model_pix, forward_models.n_template_fits + 1), dtype=np.float64)
-
+        stellar_templates[:, 0] = forward_models.templates_dict['star'][:, 0]
         # Zeroth Iteration - No doppler shift if using a flat template.
         # We could also flag the stellar lines, but this has minimal impact on the RVs
         if not forward_models[0].models_dict['star'].from_synthetic:
@@ -73,7 +73,8 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
             else:
                 forward_models.template_augmenter(forward_models, iter_num=0, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
                 forward_models.update_models(0)
-                stellar_templates[:, 1] = np.copy(forward_models.templates_dict['star'][:, 1])
+                
+        stellar_templates[:, 1] = np.copy(forward_models.templates_dict['star'][:, 1])
 
         # Iterate over remaining stellar template generations
         for iter_num in range(forward_model_settings['n_template_fits']):
@@ -108,7 +109,7 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
                 # Update the forward model initial_parameters.
                 forward_models.update_models(iter_num)
                 
-                stellar_templates[:, iter_num+1] = np.copy(forward_models.templates_dict['star'][:, 1])
+                stellar_templates[:, iter_num+2] = np.copy(forward_models.templates_dict['star'][:, 1])
                 
 
         # Save forward model outputs
@@ -116,7 +117,7 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
         forward_models.save_results()
 
         # Save Stellar Template Outputs
-        np.savez(forward_models.run_output_path_stellar_templates + os.sep + forward_models.tag + '_stellar_templates_ord' + str(order_num+1) + '.npz', stellar_templates=stellar_templates)
+        np.savez(forward_models.run_output_path_stellar_templates + os.sep + forward_models.tag + '_stellar_templates_ord' + str(order_num) + '.npz', stellar_templates=stellar_templates)
 
     # End the clock!
     print('ALL DONE! Runtime: ' + str(round(stopwatch.time_since(name='ti_main') / 3600, 2)) + ' hours', flush=True)

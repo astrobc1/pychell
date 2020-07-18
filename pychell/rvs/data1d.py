@@ -238,7 +238,8 @@ class SpecDataPARVI(SpecData1d):
         
         # Load the flux, flux unc, and bad pix arrays. Also load the known wavelength grid for a starting point
         fits_data = fits.open(self.input_file)[0]
-        self.wave_grid, self.flux, self.flux_unc = fits_data.data[self.order_num, :, 0].astype(np.float64), fits_data.data[self.order_num, :, 5].astype(np.float64), fits_data.data[self.order_num, :, 6].astype(np.float64)
+        oi = self.order_num - 1
+        self.wave_grid, self.flux, self.flux_unc = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 5].astype(np.float64), fits_data.data[oi, :, 6].astype(np.float64)
         
         # Normalize according to 98th percentile in flux
         continuum = pcmath.weighted_median(self.flux, med_val=0.98)
@@ -253,7 +254,6 @@ class SpecDataPARVI(SpecData1d):
         
         # Convert wavelength grid to Angstroms, required!
         self.wave_grid *= 10
-        
         self.JD = float(fits_data.header['JD'])
         
         
