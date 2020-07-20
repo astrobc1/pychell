@@ -9,7 +9,10 @@ import scipy.interpolate # spline interpolation
 from scipy import constants as cs # cs.c = speed of light in m/s
 import numpy as np
 import scipy.ndimage.filters
-import torch
+try:
+    import torch
+except:
+    raise Warning("Could not import pytorch!")
 from astropy.coordinates import SkyCoord
 import astropy.units as units
 

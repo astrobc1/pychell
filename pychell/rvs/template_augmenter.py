@@ -18,7 +18,10 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 # Science/math
 from scipy import constants as cs # cs.c = speed of light in m/s
 import numpy as np # Math, Arrays
-import torch
+try:
+    import torch
+except:
+    raise Warning("Could not import pytorch!")
 import scipy.interpolate # Cubic interpolation, Akima interpolation
 
 # llvm

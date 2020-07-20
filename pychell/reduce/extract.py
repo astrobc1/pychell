@@ -10,7 +10,10 @@ import warnings
 # Science / Math
 import numpy as np
 import scipy.interpolate
-import torch
+try:
+    import torch
+except:
+    raise Warning("Could not import pytorch!")
 import scipy.signal
 from astropy.io import fits
 
