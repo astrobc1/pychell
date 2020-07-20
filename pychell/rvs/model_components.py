@@ -333,7 +333,10 @@ class SplineBlazeModel(EmpiricalMult):
         self.initial_parameters = OptimParameters.Parameters()
         continuum = self.estimate_continuum(forward_model)
         good = np.where(np.isfinite(continuum))[0]
-        wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+        if hasattr(forward_model.data, 'wave_grid'):
+            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters, forward_model.data.wave_grid)
+        else:
+            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
         for i in range(self.n_splines + 1):
             v = continuum[pcmath.find_closest(wave[good], self.spline_set_points[i])[0] + good[0]]
             self.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=v, minv=v + self.blueprint['spline'][0], maxv=v + self.blueprint['spline'][2], mcmcscale=0.001, vary=self.enabled))
@@ -350,7 +353,10 @@ class SplineBlazeModel(EmpiricalMult):
         continuum_coarse = np.ones(nx, dtype=np.float64)
         ys = pcmath.median_filter1d(forward_model.data.flux, width=7)
         cont_val = 0.98
-        wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+        if hasattr(forward_model.data, 'wave_grid'):
+            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters, forward_model.data.wave_grid)
+        else:
+            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
         for ix in range(nx):
             use = np.where((wave > wave[ix]-width/2) & (wave < wave[ix]+width/2) & np.isfinite(ys))[0]
             if use.size == 0 or np.all(~np.isfinite(ys[use])):
@@ -358,7 +364,7 @@ class SplineBlazeModel(EmpiricalMult):
             else:
                 continuum_coarse[ix] = pcmath.weighted_median(ys[use], med_val=cont_val)
     
-        good = np.where(np.isfinite(ys))[0]
+        good = np.where(np.isfinite(ys) & np.isfinite(continuum_coarse))[0]
         knot_points = wave[good[0::n_knots]]
         cspline = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[good[0::n_knots]], extrapolate=False, bc_type='natural')
         continuum = cspline(wave)
@@ -421,7 +427,8 @@ class GasCellModel(TemplateMult):
             # NOTE: Gas shift is additive in Angstroms
             wave = wave + pars[self.par_names[0]].value
             flux = flux ** pars[self.par_names[1]].value
-            return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+            return scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(wave_final)
+            #return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
         else:
             return self.build_fake(wave_final.size)
 

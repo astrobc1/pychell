@@ -999,6 +999,9 @@ class MinervaNorthT1ForwardModel(ForwardModel):
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
+        
+        #stop()
+        #plt.plot(final_hr_wave_grid, gas); plt.plot(wavelength_solution, self.data.flux); plt.show()
 
         # Interpolate high res model onto data grid
         model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])

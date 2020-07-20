@@ -205,8 +205,9 @@ def convolve_flux(wave, flux, R):
     lsf = np.exp(-0.5 * (xlsf / sig)**2)
     lsf /= np.sum(lsf)
     fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
-    goodlin = np.where(np.isfinite(fluxlin))[0]
-    fluxc = scipy.interpolate.CubicSpline(cspline.x, fluxlin, extrapolate=False)(wave)
+    goodlinc = np.where(np.isfinite(fluxlinc))[0]
+    fluxc = scipy.interpolate.CubicSpline(cspline.x, fluxlinc, extrapolate=False)(wave)
+
     return fluxc
 
 

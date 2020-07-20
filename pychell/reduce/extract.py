@@ -994,7 +994,7 @@ def plot_extracted_spectra(data, reduced_orders, boxcar_spectra):
     plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.1, hspace=0.4)
     
     # Create a filename
-    fname = data.output_path + 'spectra' + os.sep + data.base_input_file_noext + '_preview.png'
+    fname = data.output_path + 'spectra' + os.sep + data.base_input_file_noext + data.target.replace(' ', '_') + '_preview.png'
     
     # Save
     plt.savefig(fname)
@@ -1246,8 +1246,10 @@ def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_
     y_hr_temp = np.arange(0, ny, 1/M)
     window_size = right_ycut - left_ycut
     _, ny_decimal = pcmath.find_closest(y_hr_temp, window_size)
-    N = int(np.ceil(ny_decimal * M))
-    ny = int(np.ceil(N / M))
+    #N = int(np.ceil(ny_decimal * M))
+    N = M * ny + 1
+    #ny = int(np.ceil(N / M))
+    
 
     # Generate the current spectrum from standard optimal extraction
     current_spectrum, _, _ = pmassey_wrapper(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, sky=sky)
@@ -1259,42 +1261,26 @@ def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_
     #    use = np.arange(y_positions[x] - ny/2, y_positions[x] + ny/2).astype(int)
     #    S[:, x] = trace_image[use, x] - sky[x]
     
-    weight = 1 / M
-    n = (nx + 1) * M + 1
-    y = np.arange(N) / M
-    omega = np.zeros(M + 1) + weight
-    for i in range(nx):                    # Fill up matrix and RHS
-        yy = y + y_positions[i]                            # Offset Set
-
-        ind = np.where((yy >= 0) & (yy < 1))[0]     # Weights are the same within pixel except
-        i1 = ind[0]
-        i2 = ind[-1]
-        omega[0] = yy[i1]                          # Fix the first and the last subpixel, here
-        omega[M] = 1 - yy[i2]                 # the weight is split between the two subpixels
-        bkl = np.zeros(shape=(n, 2 * M + 1))                # Band-diagonal part that will contain omega#omega
-    
     
     # Sub pixel fractions
     w = np.zeros(shape=(N, ny, nx), dtype=float)
-    lagrange = 100000.01
-    fiducial_grid = np.arange(0, ny, 1/M)
-    highres_grids = np.empty(shape=(N, nx), dtype=float)
+    lagrange = 100.01
+    yarr = np.arange(ny)
+    arrhrbig = np.arange(-2*ny, 2*ny, 1/M)
     for x in range(nx):
         ypos = y_positions[x]
-        temp = np.linspace(ypos - ny / 2, ypos + ny / 2, num=N)
-        highres_grids[:, x] = temp
-    
-    # Generate the sub pixel fractions
-    for x in range(nx):
-        j0 = np.where(highres_grids[:, x] + 1/(2*M) > -0.5)[0][0]
-        fr = (highres_grids[j0, x] + 1 / (2 * M) + 0.5)
+        ygrid_zerocenter_arbitrary = yarrbig - ypos
+        #j0 = 
+        # = int(ny/2) - ypos
+        j0 = np.nanargmin(np.abs(ypos - arrhrbig))
+        fr = np.min(np.abs(ypos*M - arrhrbig))
         for j in range(N):
             if j == j0:
-                w[j, :, x] = fr / M
+                w[j, :, x] = fr
             elif j >= j0 + 1 and j <= j0 + M - 1:
                 w[j, :, x] = 1 / M
             elif j == j0 + M:
-                w[j, :, x] = 1 / M - fr / M
+                w[j, :, x] = 1 - fr
             else:
                 continue
                 
@@ -1307,7 +1293,7 @@ def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_
     B[-1, -1] = 1
     f = np.copy(current_spectrum)
     wjkx = slit_decomp_sum(w)
-
+    S = trace_image - np.outer(np.ones(trace_image[:, 0].size), sky)
     badf = np.where(~np.isfinite(f))[0]
     if badf.size > 0:
         f[badf] = 0
@@ -1316,7 +1302,6 @@ def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_
     if bad_data[0].size > 0:
         S[bad_data] = 0
 
-    lagrange = 100
     n_iters = 100
     for iteration in range(n_iters):
         print(iteration + 1)
@@ -1324,6 +1309,7 @@ def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_
         
         #trace_profile_cspline_new = scipy.interpolate.CubicSpline(np.arange(0, ny, 1/M), g, extrapolate=True)
         #badpix_mask_new = flag_bad_pixels(S, f, y_positions, trace_profile_cspline_new, pixel_fractions, badpix_mask, height, sky=None, nsig=6)
+    stop()
     
 @jit
 def slit_decomp_iter(f, N, M, B, S, w, lagrange, wjkx):
@@ -1348,6 +1334,6 @@ def slit_decomp_sum(w):
     wjkx = np.zeros(shape=(N, N, nx), dtype=float)
     for x in range(nx):
         for j in range(N):
-            wjkx[j, :, x] = (M+1) * w[j, 0, x] * w[:, 0, x]
+            wjkx[j, :, x] = (M + 1) * w[j, 0, x] * w[:, 0, x]
             
     return wjkx

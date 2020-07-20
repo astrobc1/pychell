@@ -9,12 +9,18 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 import datetime
 from pdb import set_trace as stop
 
-def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_num=None, templates=None):
+def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_num=None, templates=None, method=None, use_rms=False):
     
     # Get the orders
     if do_orders is None:
         do_orders = parser.get_orders(output_path_root)
     n_orders = len(do_orders)
+    
+    # The method to combine rvs with
+    if method is None:
+        rv_method = getattr(pcrvcalc, 'combine_orders_fast')
+    else:
+        rv_method = getattr(pcrvcalc, method)
     
     # Get the tag for this run
     fwm_temp = parser.parse_forward_model(output_path_root, do_orders[0], 1)
@@ -35,18 +41,25 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_num=No
     elif iter_num == 'best':
         _, iter_nums = get_best_iterations(rvs_dict, rvs_dict['n_obs_nights'])
     else:
-        iter_nums = np.zeros(n_orders).astype(int) + iter_num - 1
-
+        iter_nums = np.zeros(n_orders).astype(int) + iter_num
 
     # Parse the RMS and rvs, single iteration
-    rms_all = parser.parse_rms(output_path_root, do_orders=do_orders)
-    rms = np.zeros((n_orders, n_spec))
+    if use_rms:
+        rms_all = parser.parse_rms(output_path_root, do_orders=do_orders)
+        rms = np.zeros((n_orders, n_spec))
+        for o in range(n_orders):
+            rms[o, :] = rms_all[o, :, iter_nums[o] + index_offset]
+    else:
+        rms = None
+            
     rvs = np.zeros((n_orders, n_spec))
     unc_nightly = np.zeros((n_orders, n_nights))
+    rvs_nightly = np.zeros((n_orders, n_nights))
     for o in range(n_orders):
         rvs[o, :] = rvs_dict['rvs'][o, :, iter_nums[o]]
+        rvs_nightly[o, :] = rvs_dict['rvs_nightly'][o, :, iter_nums[o]]
         unc_nightly[o, :] = rvs_dict['unc_nightly'][o, :, iter_nums[o]]
-        rms[o, :] = rms_all[o, :, iter_nums[o] + index_offset]
+        
         
     if templates is not None:
         stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_nums=iter_nums)
@@ -57,10 +70,10 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_num=No
         rvcs = np.zeros(n_orders) + np.nanmedian(unc_nightly)
 
     # Generate weights
-    weights = gen_rv_weights(n_orders, bad_rvs_dict, rvs_dict['n_obs_nights'], rms=rms, rvcs=rvcs)
+    weights = gen_rv_weights(n_orders, bad_rvs_dict, rvs_dict['n_obs_nights'], rms=rms, rvcs=None)
     
     # Combine the orders via tfa, sort of
-    rvs_out = pcrvcalc.combine_orders(rvs, weights, rvs_dict['n_obs_nights'])
+    rvs_out = rv_method(rvs, rvs_nightly, unc_nightly, weights, rvs_dict['n_obs_nights'])
     
     # Plot the final rvs
     fname = output_path_root + tag + '_final_rvs.png'
@@ -129,7 +142,7 @@ def gen_rv_weights(n_orders, bad_rvs_dict, n_obs_nights, rms=None, rvcs=None):
         weights_rms = 1 / rms**2
         weights_rms *= mask
     else:
-        weights_rms = np.copy(mask)
+        weights_rms = np.ones_like(mask)
     weights_rms /= np.nansum(weights_rms)
         
     # RV content weights

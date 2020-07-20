@@ -154,7 +154,7 @@ class RawImage(SpecDataImage):
                 pass
         hdu = fits.PrimaryHDU(reduced_orders, header=header_out)
         hdul = fits.HDUList([hdu])
-        fname = self.output_path + 'spectra' + os.sep + self.base_input_file_noext + '_' + self.target + '_reduced' + '.fits'
+        fname = self.output_path + 'spectra' + os.sep + self.base_input_file_noext + '_' + self.target.replace(' ', '_') + '_reduced' + '.fits'
         hdul.writeto(fname, overwrite=True, output_verify='ignore')
         
     

@@ -173,8 +173,8 @@ class SpecDataiSHELL(SpecData1d):
         fits_data = fits.open(self.input_file)[0]
         fits_data.verify('fix')
         oi = self.order_num - 1
-        self.flux, self.flux_unc, self.badpix = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 1].astype(np.float64), fits_data.data[oi, :, 2].astype(np.float64)
-        
+        self.flux, self.flux_unc, self.badpix = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
+
         # Flip the data so wavelength is increasing for iSHELL data
         self.flux = self.flux[::-1]
         self.badpix = self.badpix[::-1]
@@ -333,12 +333,15 @@ class SpecDataMinervaNorthT1(SpecData1d):
         fits_data.verify('fix')
         
         # The flux
-        self.flux = fits_data.data[0, self.order_num, :].astype(np.float64)
+        self.flux = fits_data.data[2, self.order_num, :].astype(np.float64)
         self.flux_unc = np.zeros_like(self.flux) + 1E-3
         
         # Normalize to 1.
         self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
         self.badpix = np.ones_like(self.flux)
+        
+        #self.flux = self.flux[::-1]
+        #self.badpix = self.badpix[::-1]
         
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.        
         self.JD = float(fits_data.header['JD']) + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)
@@ -367,6 +370,9 @@ class SpecDataMinervaNorthT2(SpecData1d):
         # Normalize to 1.
         self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
         self.badpix = np.ones_like(self.flux)
+        
+        #self.flux = self.flux[::-1]
+        #self.badpix = self.badpix[::-1]
         
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.
         
