@@ -235,11 +235,9 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
     if redux_settings['sky_subtraction']:
         print('    Estimating Background Sky ...', flush=True)
         sky = estimate_sky(trace_image, y_positions_refined, trace_profile_cspline, height, n_sky_rows=redux_settings['n_sky_rows'], M=M)
-        # subtrace off baseline estimate from trace profile as well
         tp = trace_profile_cspline(trace_profile_cspline.x)
-        _, trace_max = estimate_trace_max(trace_profile_cspline, height)
-        sky_percentile = pcmath.weighted_median(sky, med_val=0.05) / trace_max
-        tp -= pcmath.weighted_median(tp, med_val=sky_percentile)
+        _, trace_max = estimate_trace_max(trace_profile_cspline)
+        tp -= pcmath.weighted_median(tp, med_val=0.05)
         bad = np.where(tp < 0)[0]
         if bad.size > 0:
             tp[bad] = np.nan
@@ -335,7 +333,7 @@ def boxcar_extraction(trace_image, y_positions, trace_profile_cspline, pixel_fra
     
     badpix_maskcp = np.copy(badpix_mask)
     
-    trace_max_pos, _ = estimate_trace_max(trace_profile_cspline, height)
+    trace_max_pos, _ = estimate_trace_max(trace_profile_cspline)
 
     for x in range(nx):
         
@@ -547,26 +545,29 @@ def estimate_sky(trace_image, y_positions, trace_profile_cspline, height, n_sky_
     # The image dimensions
     ny, nx = trace_image.shape
     
-    # HR grid
-    yhr = np.arange(-height / 2, height / 2 + 1, 1 / M)
-    xarr = np.arange(nx)
+    # Smooth the image
+    trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
+    
+    # Rectify
+    trace_image_smooth_rectified = rectify_trace(trace_image_smooth, y_positions, height, M=M)
+    nyr, nxr = trace_image_smooth_rectified.shape
+    
+    # rectified hr grid
+    yarrhr = np.copy(trace_profile_cspline.x)
 
     # Estimate the sky by considering N rows of a rectifed trace on a high resolution grid to minimize sampling artifacts.
-    yt = trace_profile_cspline(yhr)
-    sky_locs = np.argsort(yt)[0:int(n_sky_rows*M)]
-    
-    trace_image_hr_rectified = rectify_trace(trace_image, y_positions, height, M=M)
-    
-    # Create a smoothed image
-    smoothed_image = pcmath.median_filter2d(trace_image_hr_rectified, width=3, preserve_nans=True)
+    trace_profile = trace_profile_cspline(yarrhr)
+    good = np.where(np.isfinite(trace_profile))[0]
+    sky_locs = np.argsort(trace_profile)[0:int(n_sky_rows*M)]
     
     # Estimate the sky background from this smoothed image
-    sky_init = np.nanmedian(smoothed_image[sky_locs, :], axis=0)    
+
+    sky_init = np.nanmedian(trace_image_smooth_rectified[sky_locs, :], axis=0)
     
     # Smooth the sky again
     sky_out = np.copy(sky_init)
     good = np.where(np.isfinite(sky_init))[0]
-    sky_out[good] = scipy.signal.savgol_filter(sky_init[good], 7, 3)
+    sky_out[good] = scipy.signal.savgol_filter(sky_init[good], 17, 3)
     
     return sky_out
 
@@ -724,9 +725,6 @@ def generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions, ba
     # Determine the left and right cut
     trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
     
-    # The max flux
-    _, trace_max = estimate_trace_max(trace_profile_cspline, height)
-    
     # The left and right profile positions
     left_trace_profile_inds = np.where(trace_profile_fiducial_grid < -1)[0]
     right_trace_profile_inds = np.where(trace_profile_fiducial_grid > 1)[0]
@@ -736,8 +734,8 @@ def generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions, ba
     right_trace_profile = trace_profile[right_trace_profile_inds]
     
     # Find where it intersections at some minimum flux value
-    left_ycut, _ = pcmath.intersection(left_trace_profile_ypos, left_trace_profile, min_profile_flux*trace_max, precision=1000)
-    right_ycut, _ = pcmath.intersection(right_trace_profile_ypos, right_trace_profile, min_profile_flux*trace_max, precision=1000)
+    left_ycut, _ = pcmath.intersection(left_trace_profile_ypos, left_trace_profile, min_profile_flux, precision=1000)
+    right_ycut, _ = pcmath.intersection(right_trace_profile_ypos, right_trace_profile, min_profile_flux, precision=1000)
     
     # Initiate y arr, pix fractions
     yarr = np.arange(ny)
@@ -1044,9 +1042,8 @@ def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline,
     if redux_settings['sky_subtraction']:
         sky = estimate_sky(trace_image_smooth, y_positions, trace_profile_cspline, height, n_sky_rows=redux_settings['n_sky_rows'], M=redux_settings['oversample'])
         tp = trace_profile_cspline(trace_profile_cspline.x)
-        _, trace_max = estimate_trace_max(trace_profile_cspline, height)
-        sky_percentile = pcmath.weighted_median(sky, med_val=0.05) / trace_max
-        tp -= pcmath.weighted_median(tp, med_val=sky_percentile)
+        tp -= pcmath.weighted_median(tp, med_val=0.05)
+        
         bad = np.where(tp < 0)[0]
         if bad.size > 0:
             tp[bad] = 0
@@ -1119,17 +1116,17 @@ def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline,
     
     return y_positions_refined
 
-def estimate_trace_max(trace_profile_cspline, height):
-    """Estimates the location of the max of the trace profile to a factor of 1000. Crude, but works.
+def estimate_trace_max(trace_profile_cspline):
+    """Estimates the location of the max of the trace profile to a precision of 1000. Crude.
 
     Args:
         trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
         height (int): The height of the trace.
     """
     
-    M = 1000
+    prec = 1000
     trace_profile_fiducial_grid, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
-    xhr = np.arange(trace_profile_fiducial_grid[0], trace_profile_fiducial_grid[-1], 1 / M)
+    xhr = np.arange(trace_profile_fiducial_grid[0], trace_profile_fiducial_grid[-1], 1 / prec)
     tphr = trace_profile_cspline(xhr)
     mid = np.nanmedian(trace_profile_fiducial_grid)
     consider = np.where((xhr > mid - 10) & (xhr < mid + 10))[0]
@@ -1177,22 +1174,35 @@ def estimate_trace_profile(trace_image, y_positions, height, M=16, mask_edges=No
     
     if mask_edges is None:
         mask_edges = (5, 5)
+        
+    # Smooth the image
+    trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
     
-    # Rectify
-    trace_image_rectified = rectify_trace(trace_image, y_positions, height, M=M)
+    # Rectify and normalize
+    trace_image_smooth_rectified = rectify_trace(trace_image_smooth, y_positions, height, M=M)
+    nyr, nxr = trace_image_smooth_rectified.shape
+    max_vals = np.nanmax(trace_image_smooth_rectified, axis=0)
+    trace_image_smooth_rectified /= np.outer(np.ones(nyr), max_vals)
+    good = np.where(max_vals > 0.3*np.nanmedian(max_vals))[0]
     
-    # Median Crunch
-    trace_profile = np.nanmedian(trace_image_rectified, axis=1)
-    yhr = np.arange(0, ny, 1/M)
-    nt = trace_profile.size
+    # Median Crunch and mask
+    trace_profile = np.zeros(nyr) + np.nan
+    for yr in range(nyr):
+        trace_profile[yr] = np.nanmedian(trace_image_smooth_rectified[yr, good])
+
     good = np.where(np.isfinite(trace_profile))[0]
     trace_profile[good[0:mask_edges[0]*M]] = np.nan
-    trace_profile[good[nt - mask_edges[1]*M:]] = np.nan
-    good = np.where(np.isfinite(trace_profile))[0]
-    cspline = scipy.interpolate.CubicSpline(yhr[good], trace_profile[good], extrapolate=False, bc_type='not-a-knot')
-    trace_max_pos, _ = estimate_trace_max(cspline, height)
-    cspline.x -= trace_max_pos
+    trace_profile[good[nyr - mask_edges[1]*M:]] = np.nan
     
+    # Construct on hr grid
+    yhrt = np.arange(-nyr/2, nyr/2 + 1, 1/M)
+    good = np.where(np.isfinite(trace_profile))[0]
+    cspline = scipy.interpolate.CubicSpline(yhrt[good], trace_profile[good], extrapolate=False, bc_type='not-a-knot')
+
+    # Offset to max=1 and centered at zero.
+    max_pos, max_val = estimate_trace_max(cspline)
+    cspline = scipy.interpolate.CubicSpline(cspline.x - max_pos, cspline(cspline.x) / max_val, extrapolate=False, bc_type='natural')
+
     return cspline
 
 
@@ -1242,9 +1252,8 @@ def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_
     right_trace_profile = trace_profile[right_trace_profile_inds]
     
     # Find where it intersections at some minimum flux value
-    trace_max_pos, trace_max = estimate_trace_max(trace_profile_cspline, height)
-    left_ycut, _ = pcmath.intersection(left_trace_profile_ypos, left_trace_profile, redux_settings['min_profile_flux']*trace_max, precision=1000)
-    right_ycut, _ = pcmath.intersection(right_trace_profile_ypos, right_trace_profile, redux_settings['min_profile_flux']*trace_max, precision=1000)
+    left_ycut, _ = pcmath.intersection(left_trace_profile_ypos, left_trace_profile, redux_settings['min_profile_flux'], precision=1000)
+    right_ycut, _ = pcmath.intersection(right_trace_profile_ypos, right_trace_profile, redux_settings['min_profile_flux'], precision=1000)
     
     # Find the aperture size at inf resolution
     # Find the aperture at finite resolution
@@ -1314,7 +1323,7 @@ def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_
         
         #trace_profile_cspline_new = scipy.interpolate.CubicSpline(np.arange(0, ny, 1/M), g, extrapolate=True)
         #badpix_mask_new = flag_bad_pixels(S, f, y_positions, trace_profile_cspline_new, pixel_fractions, badpix_mask, height, sky=None, nsig=6)
-    stop()
+
     
 @jit
 def slit_decomp_iter(f, N, M, B, S, w, lagrange, wjkx):
