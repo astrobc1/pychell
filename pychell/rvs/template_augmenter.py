@@ -6,6 +6,7 @@ import importlib.util # importing other modules from files
 import warnings # ignore warnings
 import sys # sys utils
 import pickle
+import warnings
 from sys import platform # plotting backend
 from pdb import set_trace as stop # debugging
 
@@ -21,7 +22,7 @@ import numpy as np # Math, Arrays
 try:
     import torch
 except:
-    raise Warning("Could not import pytorch!")
+    warnings.warn("Could not import pytorch!")
 import scipy.interpolate # Cubic interpolation, Akima interpolation
 
 # llvm

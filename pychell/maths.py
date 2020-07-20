@@ -3,6 +3,7 @@
 # Default python modules
 # Debugging
 from pdb import set_trace as stop
+import warnings
 
 # Science/Math
 import scipy.interpolate # spline interpolation
@@ -12,7 +13,7 @@ import scipy.ndimage.filters
 try:
     import torch
 except:
-    raise Warning("Could not import pytorch!")
+    warnings.warn("Could not import pytorch!")
 from astropy.coordinates import SkyCoord
 import astropy.units as units
 

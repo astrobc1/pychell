@@ -13,7 +13,7 @@ import scipy.interpolate
 try:
     import torch
 except:
-    raise Warning("Could not import pytorch!")
+    warnings.warn("Could not import pytorch!")
 import scipy.signal
 from astropy.io import fits
 
