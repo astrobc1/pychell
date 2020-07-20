@@ -561,12 +561,14 @@ def estimate_sky(trace_image, y_positions, trace_profile_cspline, height, n_sky_
     smoothed_image = pcmath.median_filter2d(trace_image_hr_rectified, width=3, preserve_nans=True)
     
     # Estimate the sky background from this smoothed image
-    sky_init = np.nanmedian(smoothed_image[sky_locs, :], axis=0)
+    sky_init = np.nanmedian(smoothed_image[sky_locs, :], axis=0)    
     
     # Smooth the sky again
-    sky = scipy.signal.savgol_filter(sky_init, 7, 3)
+    sky_out = np.copy(sky_init)
+    good = np.where(np.isfinite(sky_init))[0]
+    sky_out[good] = scipy.signal.savgol_filter(sky_init[good], 7, 3)
     
-    return sky
+    return sky_out
 
 
 def pmassey_wrapper(data, trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, sky=None):
