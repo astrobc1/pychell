@@ -8,5 +8,5 @@ robustneldermead>=1.0.3
 matplotlib>=3.1.3
 scipy>=1.4.1
 joblib>=0.14.1
-scikit-learn==0.22.2
+scikit-learn>=0.22.2
 torch>=1.5.1
