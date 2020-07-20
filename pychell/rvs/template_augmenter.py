@@ -745,451 +745,453 @@ def global_fit(forward_models, templates_to_optimize=None, iter_num=None, nights
     forward_models.templates_dict['star'][:, 1] = new_star_flux
 
 # Class to optimize the forward model
-class StarSolver(torch.nn.Module):
+if 'torch' in sys.modules:
+    class StarSolver(torch.nn.Module):
 
-    def __init__(self, star_flux, star_vels, raw_model_no_star, wave_lr, weights, data_flux, wave_hr_master, lsf=None):
-        super(StarSolver, self).__init__()
+        def __init__(self, star_flux, star_vels, raw_model_no_star, wave_lr, weights, data_flux, wave_hr_master, lsf=None):
+            super(StarSolver, self).__init__()
 
-        # Parameters to optimize
-        self.star_flux = star_flux # the stellar flux
-        
-        self.raw_model_no_star = raw_model_no_star
-        self.wave_lr = wave_lr
-        self.star_vels = star_vels
-        self.weights = weights
-        self.data_flux = data_flux
-        self.nx_data, self.n_spec = self.data_flux.shape
-        self.nx_lsf = lsf.shape[0]
-        if lsf is not None:
-            self.lsf = torch.ones(1, 1, self.nx_lsf, self.n_spec, dtype=torch.float64)
-        else:
-            self.lsf = lsf
-        self.lsf[0, 0, :, :] = lsf
-        self.nx_pad1 = int(self.nx_lsf / 2) - 1
-        self.nx_pad2 = int(self.nx_lsf / 2)
-        self.wave_hr_master = wave_hr_master
-        self.nx_model = self.wave_hr_master.size()[0]
-
-    def forward(self):
-    
-        models_lr = torch.empty((self.nx_data, self.n_spec), dtype=torch.float64)
-        
-        for ispec in range(self.n_spec):
+            # Parameters to optimize
+            self.star_flux = star_flux # the stellar flux
             
-            # Doppler shift the stellar wavelength grid used for this observation.
-            wave_hr_star_shifted = self.wave_hr_master * torch.exp(self.star_vels[ispec] / cs.c)
-
-            # Interpolate the stellar variable back to master grid
-            star = self.Interp1d()(wave_hr_star_shifted, self.star_flux, self.wave_hr_master)
-            
-            # Convolution. Note: PyTorch convolution is a pain in the ass.
-            # Also torch.cat seems to take up too much memory, so a workaround.
-            if self.lsf is not None:
-                model_p = torch.ones((1, 1, self.nx_model + self.nx_pad1 + self.nx_pad2), dtype=torch.float64)
-                model_p[0, 0, self.nx_pad1:(-self.nx_pad2)] = star.flatten() * self.raw_model_no_star[:, ispec]
-                conv = torch.nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1, padding=0, bias=False)
-                conv.weight.data = self.lsf[:, :, :, ispec]
-                model = conv(model_p).flatten()
+            self.raw_model_no_star = raw_model_no_star
+            self.wave_lr = wave_lr
+            self.star_vels = star_vels
+            self.weights = weights
+            self.data_flux = data_flux
+            self.nx_data, self.n_spec = self.data_flux.shape
+            self.nx_lsf = lsf.shape[0]
+            if lsf is not None:
+                self.lsf = torch.ones(1, 1, self.nx_lsf, self.n_spec, dtype=torch.float64)
             else:
-                model = star.flatten() * self.raw_model_no_star[:, ispec]
+                self.lsf = lsf
+            self.lsf[0, 0, :, :] = lsf
+            self.nx_pad1 = int(self.nx_lsf / 2) - 1
+            self.nx_pad2 = int(self.nx_lsf / 2)
+            self.wave_hr_master = wave_hr_master
+            self.nx_model = self.wave_hr_master.size()[0]
 
-            # Interpolate onto data grid
-            models_lr[:, ispec] = self.Interp1d()(self.wave_hr_master, model, self.wave_lr[:, ispec])
+        def forward(self):
+        
+            models_lr = torch.empty((self.nx_data, self.n_spec), dtype=torch.float64)
+            
+            for ispec in range(self.n_spec):
+                
+                # Doppler shift the stellar wavelength grid used for this observation.
+                wave_hr_star_shifted = self.wave_hr_master * torch.exp(self.star_vels[ispec] / cs.c)
 
-        # Weighted RMS
-        wdiffs2 = (models_lr - self.data_flux)**2 * self.weights
-        loss = torch.sqrt(torch.sum(wdiffs2) / (torch.sum(self.weights)))
-
-        return loss
-
-    class Interp1d(torch.autograd.Function):
-        def __call__(self, x, y, xnew, out=None):
-            return self.forward(x, y, xnew, out)
-
-        def forward(ctx, x, y, xnew, out=None):
-
-            # making the vectors at least 2D
-            is_flat = {}
-            require_grad = {}
-            v = {}
-            device = []
-            for name, vec in {'x': x, 'y': y, 'xnew': xnew}.items():
-                assert len(vec.shape) <= 2, 'interp1d: all inputs must be '\
-                                            'at most 2-D.'
-                if len(vec.shape) == 1:
-                    v[name] = vec[None, :]
+                # Interpolate the stellar variable back to master grid
+                star = self.Interp1d()(wave_hr_star_shifted, self.star_flux, self.wave_hr_master)
+                
+                # Convolution. Note: PyTorch convolution is a pain in the ass.
+                # Also torch.cat seems to take up too much memory, so a workaround.
+                if self.lsf is not None:
+                    model_p = torch.ones((1, 1, self.nx_model + self.nx_pad1 + self.nx_pad2), dtype=torch.float64)
+                    model_p[0, 0, self.nx_pad1:(-self.nx_pad2)] = star.flatten() * self.raw_model_no_star[:, ispec]
+                    conv = torch.nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1, padding=0, bias=False)
+                    conv.weight.data = self.lsf[:, :, :, ispec]
+                    model = conv(model_p).flatten()
                 else:
-                    v[name] = vec
-                is_flat[name] = v[name].shape[0] == 1
-                require_grad[name] = vec.requires_grad
-                device = list(set(device + [str(vec.device)]))
-            assert len(device) == 1, 'All parameters must be on the same device.'
-            device = device[0]
+                    model = star.flatten() * self.raw_model_no_star[:, ispec]
 
-            # Checking for the dimensions
-            assert (v['x'].shape[1] == v['y'].shape[1]
-                    and (
-                         v['x'].shape[0] == v['y'].shape[0]
-                         or v['x'].shape[0] == 1
-                         or v['y'].shape[0] == 1
+                # Interpolate onto data grid
+                models_lr[:, ispec] = self.Interp1d()(self.wave_hr_master, model, self.wave_lr[:, ispec])
+
+            # Weighted RMS
+            wdiffs2 = (models_lr - self.data_flux)**2 * self.weights
+            loss = torch.sqrt(torch.sum(wdiffs2) / (torch.sum(self.weights)))
+
+            return loss
+
+        class Interp1d(torch.autograd.Function):
+            def __call__(self, x, y, xnew, out=None):
+                return self.forward(x, y, xnew, out)
+
+            def forward(ctx, x, y, xnew, out=None):
+
+                # making the vectors at least 2D
+                is_flat = {}
+                require_grad = {}
+                v = {}
+                device = []
+                for name, vec in {'x': x, 'y': y, 'xnew': xnew}.items():
+                    assert len(vec.shape) <= 2, 'interp1d: all inputs must be '\
+                                                'at most 2-D.'
+                    if len(vec.shape) == 1:
+                        v[name] = vec[None, :]
+                    else:
+                        v[name] = vec
+                    is_flat[name] = v[name].shape[0] == 1
+                    require_grad[name] = vec.requires_grad
+                    device = list(set(device + [str(vec.device)]))
+                assert len(device) == 1, 'All parameters must be on the same device.'
+                device = device[0]
+
+                # Checking for the dimensions
+                assert (v['x'].shape[1] == v['y'].shape[1]
+                        and (
+                            v['x'].shape[0] == v['y'].shape[0]
+                            or v['x'].shape[0] == 1
+                            or v['y'].shape[0] == 1
+                            )
+                        ), ("x and y must have the same number of columns, and either "
+                            "the same number of row or one of them having only one "
+                            "row.")
+
+                reshaped_xnew = False
+                if ((v['x'].shape[0] == 1) and (v['y'].shape[0] == 1)
+                and (v['xnew'].shape[0] > 1)):
+                    # if there is only one row for both x and y, there is no need to
+                    # loop over the rows of xnew because they will all have to face the
+                    # same interpolation problem. We should just stack them together to
+                    # call interp1d and put them back in place afterwards.
+                    original_xnew_shape = v['xnew'].shape
+                    v['xnew'] = v['xnew'].contiguous().view(1, -1)
+                    reshaped_xnew = True
+
+                # identify the dimensions of output and check if the one provided is ok
+                D = max(v['x'].shape[0], v['xnew'].shape[0])
+                shape_ynew = (D, v['xnew'].shape[-1])
+                if out is not None:
+                    if out.numel() != shape_ynew[0]*shape_ynew[1]:
+                        # The output provided is of incorrect shape.
+                        # Going for a new one
+                        out = None
+                    else:
+                        ynew = out.reshape(shape_ynew)
+                if out is None:
+                    ynew = torch.zeros(*shape_ynew, dtype=y.dtype, device=device)
+
+                # moving everything to the desired device in case it was not there
+                # already (not handling the case things do not fit entirely, user will
+                # do it if required.)
+                for name in v:
+                    v[name] = v[name].to(device)
+
+                # calling searchsorted on the x values.
+                #ind = ynew
+                #searchsorted(v['x'].contiguous(), v['xnew'].contiguous(), ind)
+                ind = np.searchsorted(v['x'].contiguous().numpy().flatten(), v['xnew'].contiguous().numpy().flatten())
+                ind = torch.tensor(ind)
+                # the `-1` is because searchsorted looks for the index where the values
+                # must be inserted to preserve order. And we want the index of the
+                # preceeding value.
+                ind -= 1
+                # we clamp the index, because the number of intervals is x.shape-1,
+                # and the left neighbour should hence be at most number of intervals
+                # -1, i.e. number of columns in x -2
+                ind = torch.clamp(ind, 0, v['x'].shape[1] - 1 - 1).long()
+
+                # helper function to select stuff according to the found indices.
+                def sel(name):
+                    if is_flat[name]:
+                        return v[name].contiguous().view(-1)[ind]
+                    return torch.gather(v[name], 1, ind)
+
+                # activating gradient storing for everything now
+                enable_grad = False
+                saved_inputs = []
+                for name in ['x', 'y', 'xnew']:
+                    if require_grad[name]:
+                        enable_grad = True
+                        saved_inputs += [v[name]]
+                    else:
+                        saved_inputs += [None, ]
+                # assuming x are sorted in the dimension 1, computing the slopes for
+                # the segments
+                is_flat['slopes'] = is_flat['x']
+                # now we have found the indices of the neighbors, we start building the
+                # output. Hence, we start also activating gradient tracking
+                with torch.enable_grad() if enable_grad else contextlib.suppress():
+                    v['slopes'] = (
+                            (v['y'][:, 1:]-v['y'][:, :-1])
+                            /
+                            (v['x'][:, 1:]-v['x'][:, :-1])
                         )
-                    ), ("x and y must have the same number of columns, and either "
-                        "the same number of row or one of them having only one "
-                        "row.")
 
-            reshaped_xnew = False
-            if ((v['x'].shape[0] == 1) and (v['y'].shape[0] == 1)
-               and (v['xnew'].shape[0] > 1)):
-                # if there is only one row for both x and y, there is no need to
-                # loop over the rows of xnew because they will all have to face the
-                # same interpolation problem. We should just stack them together to
-                # call interp1d and put them back in place afterwards.
-                original_xnew_shape = v['xnew'].shape
-                v['xnew'] = v['xnew'].contiguous().view(1, -1)
-                reshaped_xnew = True
+                    # now build the linear interpolation
+                    ynew = sel('y') + sel('slopes')*(
+                                            v['xnew'] - sel('x'))
 
-            # identify the dimensions of output and check if the one provided is ok
-            D = max(v['x'].shape[0], v['xnew'].shape[0])
-            shape_ynew = (D, v['xnew'].shape[-1])
-            if out is not None:
-                if out.numel() != shape_ynew[0]*shape_ynew[1]:
-                    # The output provided is of incorrect shape.
-                    # Going for a new one
-                    out = None
-                else:
-                    ynew = out.reshape(shape_ynew)
-            if out is None:
-                ynew = torch.zeros(*shape_ynew, dtype=y.dtype, device=device)
+                    if reshaped_xnew:
+                        ynew = ynew.view(original_xnew_shape)
 
-            # moving everything to the desired device in case it was not there
-            # already (not handling the case things do not fit entirely, user will
-            # do it if required.)
-            for name in v:
-                v[name] = v[name].to(device)
+                ctx.save_for_backward(ynew, *saved_inputs)
+                return ynew
 
-            # calling searchsorted on the x values.
-            #ind = ynew
-            #searchsorted(v['x'].contiguous(), v['xnew'].contiguous(), ind)
-            ind = np.searchsorted(v['x'].contiguous().numpy().flatten(), v['xnew'].contiguous().numpy().flatten())
-            ind = torch.tensor(ind)
-            # the `-1` is because searchsorted looks for the index where the values
-            # must be inserted to preserve order. And we want the index of the
-            # preceeding value.
-            ind -= 1
-            # we clamp the index, because the number of intervals is x.shape-1,
-            # and the left neighbour should hence be at most number of intervals
-            # -1, i.e. number of columns in x -2
-            ind = torch.clamp(ind, 0, v['x'].shape[1] - 1 - 1).long()
-
-            # helper function to select stuff according to the found indices.
-            def sel(name):
-                if is_flat[name]:
-                    return v[name].contiguous().view(-1)[ind]
-                return torch.gather(v[name], 1, ind)
-
-            # activating gradient storing for everything now
-            enable_grad = False
-            saved_inputs = []
-            for name in ['x', 'y', 'xnew']:
-                if require_grad[name]:
-                    enable_grad = True
-                    saved_inputs += [v[name]]
-                else:
-                    saved_inputs += [None, ]
-            # assuming x are sorted in the dimension 1, computing the slopes for
-            # the segments
-            is_flat['slopes'] = is_flat['x']
-            # now we have found the indices of the neighbors, we start building the
-            # output. Hence, we start also activating gradient tracking
-            with torch.enable_grad() if enable_grad else contextlib.suppress():
-                v['slopes'] = (
-                        (v['y'][:, 1:]-v['y'][:, :-1])
-                        /
-                        (v['x'][:, 1:]-v['x'][:, :-1])
-                    )
-
-                # now build the linear interpolation
-                ynew = sel('y') + sel('slopes')*(
-                                        v['xnew'] - sel('x'))
-
-                if reshaped_xnew:
-                    ynew = ynew.view(original_xnew_shape)
-
-            ctx.save_for_backward(ynew, *saved_inputs)
-            return ynew
-
-        @staticmethod
-        def backward(ctx, grad_out):
-            inputs = ctx.saved_tensors[1:]
-            gradients = torch.autograd.grad(
-                            ctx.saved_tensors[0],
-                            [i for i in inputs if i is not None],
-                            grad_out, retain_graph=True)
-            result = [None, ] * 5
-            pos = 0
-            for index in range(len(inputs)):
-                if inputs[index] is not None:
-                    result[index] = gradients[pos]
-                    pos += 1
-            return (*result,)
+            @staticmethod
+            def backward(ctx, grad_out):
+                inputs = ctx.saved_tensors[1:]
+                gradients = torch.autograd.grad(
+                                ctx.saved_tensors[0],
+                                [i for i in inputs if i is not None],
+                                grad_out, retain_graph=True)
+                result = [None, ] * 5
+                pos = 0
+                for index in range(len(inputs)):
+                    if inputs[index] is not None:
+                        result[index] = gradients[pos]
+                        pos += 1
+                return (*result,)
         
       
         
 # Class to optimize the forward model
-class GlobalSolver(torch.nn.Module):
+if 'torch' in sys.modules:
+    class GlobalSolver(torch.nn.Module):
 
-    def __init__(self, base_flux_models, waves_lr, weights, data_flux, wave_hr_master, star_flux, star_vels, residual_lab_flux, lsfs=None, continuums=None):
-        
-        # Parent init
-        super().__init__()
-
-        # Parameters to optimize
-        self.star_flux = star_flux # coherence in stellar (quasi) rest frame
-        self.residual_lab_flux = residual_lab_flux # coherence in lab frame
-        
-        # The base flux
-        self.base_flux_models = base_flux_models
-        
-        # Current wavelength solutions
-        self.waves_lr = waves_lr
-        
-        # Current best fit stellar velocities
-        self.star_vels = star_vels
-        
-        # Optimization weights
-        self.weights = weights
-        
-        # Actual data
-        self.data_flux = data_flux
-        
-        # Shape information
-        self.nx_data, self.n_spec = self.data_flux.shape
-        
-        # The lsf (optional)
-        if lsfs is not None:
-            self.nx_lsf = lsfs.shape[0]
-            self.lsfs = torch.ones(1, 1, self.nx_lsf, self.n_spec, dtype=torch.float64)
-            self.lsfs[0, 0, :, :] = lsfs
-            self.nx_pad1 = int(self.nx_lsf / 2) - 1
-            self.nx_pad2 = int(self.nx_lsf / 2)
-        else:
-            self.lsfs = None
+        def __init__(self, base_flux_models, waves_lr, weights, data_flux, wave_hr_master, star_flux, star_vels, residual_lab_flux, lsfs=None, continuums=None):
             
-        # Current blaze
-        self.continuums = continuums
-        
-        # High res master wave grid
-        self.wave_hr_master = wave_hr_master
-        
-        # The number of model pixels
-        self.nx_model = self.wave_hr_master.size()[0]
+            # Parent init
+            super().__init__()
 
-    def forward(self):
-    
-        # Stores all low res models
-        models_lr = torch.empty((self.nx_data, self.n_spec), dtype=torch.float64)
-        
-        # Loop over observations
-        for ispec in range(self.n_spec):
+            # Parameters to optimize
+            self.star_flux = star_flux # coherence in stellar (quasi) rest frame
+            self.residual_lab_flux = residual_lab_flux # coherence in lab frame
             
-            # Doppler shift the stellar wavelength grid used for this observation.
-            wave_hr_star_shifted = self.wave_hr_master * torch.exp(self.star_vels[ispec] / cs.c)
-
-            # Interpolate the stellar variable back to master grid
-            star = self.Interp1d()(wave_hr_star_shifted, self.star_flux, self.wave_hr_master)
+            # The base flux
+            self.base_flux_models = base_flux_models
             
-            # Add everything into the base flux
-            if self.continuums is not None:
-                model = self.continuums[:, ispec] + self.residual_lab_flux + star + self.base_flux_models[:, ispec]
+            # Current wavelength solutions
+            self.waves_lr = waves_lr
+            
+            # Current best fit stellar velocities
+            self.star_vels = star_vels
+            
+            # Optimization weights
+            self.weights = weights
+            
+            # Actual data
+            self.data_flux = data_flux
+            
+            # Shape information
+            self.nx_data, self.n_spec = self.data_flux.shape
+            
+            # The lsf (optional)
+            if lsfs is not None:
+                self.nx_lsf = lsfs.shape[0]
+                self.lsfs = torch.ones(1, 1, self.nx_lsf, self.n_spec, dtype=torch.float64)
+                self.lsfs[0, 0, :, :] = lsfs
+                self.nx_pad1 = int(self.nx_lsf / 2) - 1
+                self.nx_pad2 = int(self.nx_lsf / 2)
             else:
-                model = self.residual_lab_flux + star + self.base_flux_models[:, ispec]
+                self.lsfs = None
+                
+            # Current blaze
+            self.continuums = continuums
             
-            # Convolution. NOTE: PyTorch convolution is a pain in the ass.
-            # Also torch.cat seems to take up too much memory, so a workaround is used to pad the model.
-            if self.lsfs is not None:
-                model_p = torch.ones((1, 1, self.nx_model + self.nx_pad1 + self.nx_pad2), dtype=torch.float64)
-                model_p[0, 0, self.nx_pad1:(-self.nx_pad2)] = torch.exp(model)
-                conv = torch.nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1, padding=0, bias=False)
-                conv.weight.data = self.lsfs[:, :, :, ispec]
-                model = torch.log(conv(model_p).flatten())
+            # High res master wave grid
+            self.wave_hr_master = wave_hr_master
+            
+            # The number of model pixels
+            self.nx_model = self.wave_hr_master.size()[0]
 
-            # Interpolate onto data grid
-            models_lr[:, ispec] = self.Interp1d()(self.wave_hr_master, model, self.waves_lr[:, ispec])
-
-        # Weighted RMS
-        wdiffs2 = (models_lr - self.data_flux)**2 * self.weights
-        loss = torch.sqrt(torch.sum(wdiffs2) / (torch.sum(self.weights)))
-
-        return loss
-    
-    
-    @staticmethod
-    def h_poly_helper(tt):
-        A = torch.tensor([
-            [1, 0, -3, 2],
-            [0, 1, -2, 1],
-            [0, 0, 3, -2],
-            [0, 0, -1, 1]
-            ], dtype=tt[-1].dtype)
-        return [
-            sum( A[i, j]*tt[j] for j in range(4) )
-            for i in range(4) ]
+        def forward(self):
         
-    @classmethod
-    def h_poly(cls, t):
-        tt = [ None for _ in range(4) ]
-        tt[0] = 1
-        for i in range(1, 4):
-            tt[i] = tt[i-1]*t
-        return cls.h_poly_helper(tt)
+            # Stores all low res models
+            models_lr = torch.empty((self.nx_data, self.n_spec), dtype=torch.float64)
+            
+            # Loop over observations
+            for ispec in range(self.n_spec):
+                
+                # Doppler shift the stellar wavelength grid used for this observation.
+                wave_hr_star_shifted = self.wave_hr_master * torch.exp(self.star_vels[ispec] / cs.c)
 
-    @classmethod
-    def H_poly(cls, t):
-        tt = [ None for _ in range(4) ]
-        tt[0] = t
-        for i in range(1, 4):
-            tt[i] = tt[i-1]*t*i/(i+1)
-        return cls.h_poly_helper(tt)
-
-    @classmethod
-    def interpcs(cls, x, y, xs):
-        m = (y[1:] - y[:-1])/(x[1:] - x[:-1])
-        m = torch.cat([m[[0]], (m[1:] + m[:-1])/2, m[[-1]]])
-        I = np.searchsorted(x[1:], xs)
-        dx = (x[I+1]-x[I])
-        hh = cls.h_poly((xs-x[I])/dx)
-        return hh[0]*y[I] + hh[1]*m[I]*dx + hh[2]*y[I+1] + hh[3]*m[I+1]*dx
-
-    class Interp1d(torch.autograd.Function):
-        def __call__(self, x, y, xnew, out=None):
-            return self.forward(x, y, xnew, out)
-
-        def forward(ctx, x, y, xnew, out=None):
-
-            # making the vectors at least 2D
-            is_flat = {}
-            require_grad = {}
-            v = {}
-            device = []
-            for name, vec in {'x': x, 'y': y, 'xnew': xnew}.items():
-                assert len(vec.shape) <= 2, 'interp1d: all inputs must be '\
-                                            'at most 2-D.'
-                if len(vec.shape) == 1:
-                    v[name] = vec[None, :]
+                # Interpolate the stellar variable back to master grid
+                star = self.Interp1d()(wave_hr_star_shifted, self.star_flux, self.wave_hr_master)
+                
+                # Add everything into the base flux
+                if self.continuums is not None:
+                    model = self.continuums[:, ispec] + self.residual_lab_flux + star + self.base_flux_models[:, ispec]
                 else:
-                    v[name] = vec
-                is_flat[name] = v[name].shape[0] == 1
-                require_grad[name] = vec.requires_grad
-                device = list(set(device + [str(vec.device)]))
-            assert len(device) == 1, 'All parameters must be on the same device.'
-            device = device[0]
+                    model = self.residual_lab_flux + star + self.base_flux_models[:, ispec]
+                
+                # Convolution. NOTE: PyTorch convolution is a pain in the ass.
+                # Also torch.cat seems to take up too much memory, so a workaround is used to pad the model.
+                if self.lsfs is not None:
+                    model_p = torch.ones((1, 1, self.nx_model + self.nx_pad1 + self.nx_pad2), dtype=torch.float64)
+                    model_p[0, 0, self.nx_pad1:(-self.nx_pad2)] = torch.exp(model)
+                    conv = torch.nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1, padding=0, bias=False)
+                    conv.weight.data = self.lsfs[:, :, :, ispec]
+                    model = torch.log(conv(model_p).flatten())
 
-            # Checking for the dimensions
-            assert (v['x'].shape[1] == v['y'].shape[1]
-                    and (
-                         v['x'].shape[0] == v['y'].shape[0]
-                         or v['x'].shape[0] == 1
-                         or v['y'].shape[0] == 1
-                        )
-                    ), ("x and y must have the same number of columns, and either "
-                        "the same number of row or one of them having only one "
-                        "row.")
+                # Interpolate onto data grid
+                models_lr[:, ispec] = self.Interp1d()(self.wave_hr_master, model, self.waves_lr[:, ispec])
 
-            reshaped_xnew = False
-            if ((v['x'].shape[0] == 1) and (v['y'].shape[0] == 1)
-               and (v['xnew'].shape[0] > 1)):
-                # if there is only one row for both x and y, there is no need to
-                # loop over the rows of xnew because they will all have to face the
-                # same interpolation problem. We should just stack them together to
-                # call interp1d and put them back in place afterwards.
-                original_xnew_shape = v['xnew'].shape
-                v['xnew'] = v['xnew'].contiguous().view(1, -1)
-                reshaped_xnew = True
+            # Weighted RMS
+            wdiffs2 = (models_lr - self.data_flux)**2 * self.weights
+            loss = torch.sqrt(torch.sum(wdiffs2) / (torch.sum(self.weights)))
 
-            # identify the dimensions of output and check if the one provided is ok
-            D = max(v['x'].shape[0], v['xnew'].shape[0])
-            shape_ynew = (D, v['xnew'].shape[-1])
-            if out is not None:
-                if out.numel() != shape_ynew[0]*shape_ynew[1]:
-                    # The output provided is of incorrect shape.
-                    # Going for a new one
-                    out = None
-                else:
-                    ynew = out.reshape(shape_ynew)
-            if out is None:
-                ynew = torch.zeros(*shape_ynew, dtype=y.dtype, device=device)
-
-            # moving everything to the desired device in case it was not there
-            # already (not handling the case things do not fit entirely, user will
-            # do it if required.)
-            for name in v:
-                v[name] = v[name].to(device)
-
-            # calling searchsorted on the x values.
-            #ind = ynew
-            #searchsorted(v['x'].contiguous(), v['xnew'].contiguous(), ind)
-            ind = np.searchsorted(v['x'].contiguous().numpy().flatten(), v['xnew'].contiguous().numpy().flatten())
-            ind = torch.tensor(ind)
-            # the `-1` is because searchsorted looks for the index where the values
-            # must be inserted to preserve order. And we want the index of the
-            # preceeding value.
-            ind -= 1
-            # we clamp the index, because the number of intervals is x.shape-1,
-            # and the left neighbour should hence be at most number of intervals
-            # -1, i.e. number of columns in x -2
-            ind = torch.clamp(ind, 0, v['x'].shape[1] - 1 - 1).long()
-
-            # helper function to select stuff according to the found indices.
-            def sel(name):
-                if is_flat[name]:
-                    return v[name].contiguous().view(-1)[ind]
-                return torch.gather(v[name], 1, ind)
-
-            # activating gradient storing for everything now
-            enable_grad = False
-            saved_inputs = []
-            for name in ['x', 'y', 'xnew']:
-                if require_grad[name]:
-                    enable_grad = True
-                    saved_inputs += [v[name]]
-                else:
-                    saved_inputs += [None, ]
-            # assuming x are sorted in the dimension 1, computing the slopes for
-            # the segments
-            is_flat['slopes'] = is_flat['x']
-            # now we have found the indices of the neighbors, we start building the
-            # output. Hence, we start also activating gradient tracking
-            with torch.enable_grad() if enable_grad else contextlib.suppress():
-                v['slopes'] = (
-                        (v['y'][:, 1:]-v['y'][:, :-1])
-                        /
-                        (v['x'][:, 1:]-v['x'][:, :-1])
-                    )
-
-                # now build the linear interpolation
-                ynew = sel('y') + sel('slopes')*(
-                                        v['xnew'] - sel('x'))
-
-                if reshaped_xnew:
-                    ynew = ynew.view(original_xnew_shape)
-
-            ctx.save_for_backward(ynew, *saved_inputs)
-            return ynew
-
+            return loss
+        
+        
         @staticmethod
-        def backward(ctx, grad_out):
-            inputs = ctx.saved_tensors[1:]
-            gradients = torch.autograd.grad(
-                            ctx.saved_tensors[0],
-                            [i for i in inputs if i is not None],
-                            grad_out, retain_graph=True)
-            result = [None, ] * 5
-            pos = 0
-            for index in range(len(inputs)):
-                if inputs[index] is not None:
-                    result[index] = gradients[pos]
-                    pos += 1
-            return (*result,)
+        def h_poly_helper(tt):
+            A = torch.tensor([
+                [1, 0, -3, 2],
+                [0, 1, -2, 1],
+                [0, 0, 3, -2],
+                [0, 0, -1, 1]
+                ], dtype=tt[-1].dtype)
+            return [
+                sum( A[i, j]*tt[j] for j in range(4) )
+                for i in range(4) ]
+            
+        @classmethod
+        def h_poly(cls, t):
+            tt = [ None for _ in range(4) ]
+            tt[0] = 1
+            for i in range(1, 4):
+                tt[i] = tt[i-1]*t
+            return cls.h_poly_helper(tt)
+
+        @classmethod
+        def H_poly(cls, t):
+            tt = [ None for _ in range(4) ]
+            tt[0] = t
+            for i in range(1, 4):
+                tt[i] = tt[i-1]*t*i/(i+1)
+            return cls.h_poly_helper(tt)
+
+        @classmethod
+        def interpcs(cls, x, y, xs):
+            m = (y[1:] - y[:-1])/(x[1:] - x[:-1])
+            m = torch.cat([m[[0]], (m[1:] + m[:-1])/2, m[[-1]]])
+            I = np.searchsorted(x[1:], xs)
+            dx = (x[I+1]-x[I])
+            hh = cls.h_poly((xs-x[I])/dx)
+            return hh[0]*y[I] + hh[1]*m[I]*dx + hh[2]*y[I+1] + hh[3]*m[I+1]*dx
+
+        class Interp1d(torch.autograd.Function):
+            def __call__(self, x, y, xnew, out=None):
+                return self.forward(x, y, xnew, out)
+
+            def forward(ctx, x, y, xnew, out=None):
+
+                # making the vectors at least 2D
+                is_flat = {}
+                require_grad = {}
+                v = {}
+                device = []
+                for name, vec in {'x': x, 'y': y, 'xnew': xnew}.items():
+                    assert len(vec.shape) <= 2, 'interp1d: all inputs must be '\
+                                                'at most 2-D.'
+                    if len(vec.shape) == 1:
+                        v[name] = vec[None, :]
+                    else:
+                        v[name] = vec
+                    is_flat[name] = v[name].shape[0] == 1
+                    require_grad[name] = vec.requires_grad
+                    device = list(set(device + [str(vec.device)]))
+                assert len(device) == 1, 'All parameters must be on the same device.'
+                device = device[0]
+
+                # Checking for the dimensions
+                assert (v['x'].shape[1] == v['y'].shape[1]
+                        and (
+                            v['x'].shape[0] == v['y'].shape[0]
+                            or v['x'].shape[0] == 1
+                            or v['y'].shape[0] == 1
+                            )
+                        ), ("x and y must have the same number of columns, and either "
+                            "the same number of row or one of them having only one "
+                            "row.")
+
+                reshaped_xnew = False
+                if ((v['x'].shape[0] == 1) and (v['y'].shape[0] == 1)
+                and (v['xnew'].shape[0] > 1)):
+                    # if there is only one row for both x and y, there is no need to
+                    # loop over the rows of xnew because they will all have to face the
+                    # same interpolation problem. We should just stack them together to
+                    # call interp1d and put them back in place afterwards.
+                    original_xnew_shape = v['xnew'].shape
+                    v['xnew'] = v['xnew'].contiguous().view(1, -1)
+                    reshaped_xnew = True
+
+                # identify the dimensions of output and check if the one provided is ok
+                D = max(v['x'].shape[0], v['xnew'].shape[0])
+                shape_ynew = (D, v['xnew'].shape[-1])
+                if out is not None:
+                    if out.numel() != shape_ynew[0]*shape_ynew[1]:
+                        # The output provided is of incorrect shape.
+                        # Going for a new one
+                        out = None
+                    else:
+                        ynew = out.reshape(shape_ynew)
+                if out is None:
+                    ynew = torch.zeros(*shape_ynew, dtype=y.dtype, device=device)
+
+                # moving everything to the desired device in case it was not there
+                # already (not handling the case things do not fit entirely, user will
+                # do it if required.)
+                for name in v:
+                    v[name] = v[name].to(device)
+
+                # calling searchsorted on the x values.
+                #ind = ynew
+                #searchsorted(v['x'].contiguous(), v['xnew'].contiguous(), ind)
+                ind = np.searchsorted(v['x'].contiguous().numpy().flatten(), v['xnew'].contiguous().numpy().flatten())
+                ind = torch.tensor(ind)
+                # the `-1` is because searchsorted looks for the index where the values
+                # must be inserted to preserve order. And we want the index of the
+                # preceeding value.
+                ind -= 1
+                # we clamp the index, because the number of intervals is x.shape-1,
+                # and the left neighbour should hence be at most number of intervals
+                # -1, i.e. number of columns in x -2
+                ind = torch.clamp(ind, 0, v['x'].shape[1] - 1 - 1).long()
+
+                # helper function to select stuff according to the found indices.
+                def sel(name):
+                    if is_flat[name]:
+                        return v[name].contiguous().view(-1)[ind]
+                    return torch.gather(v[name], 1, ind)
+
+                # activating gradient storing for everything now
+                enable_grad = False
+                saved_inputs = []
+                for name in ['x', 'y', 'xnew']:
+                    if require_grad[name]:
+                        enable_grad = True
+                        saved_inputs += [v[name]]
+                    else:
+                        saved_inputs += [None, ]
+                # assuming x are sorted in the dimension 1, computing the slopes for
+                # the segments
+                is_flat['slopes'] = is_flat['x']
+                # now we have found the indices of the neighbors, we start building the
+                # output. Hence, we start also activating gradient tracking
+                with torch.enable_grad() if enable_grad else contextlib.suppress():
+                    v['slopes'] = (
+                            (v['y'][:, 1:]-v['y'][:, :-1])
+                            /
+                            (v['x'][:, 1:]-v['x'][:, :-1])
+                        )
+
+                    # now build the linear interpolation
+                    ynew = sel('y') + sel('slopes')*(
+                                            v['xnew'] - sel('x'))
+
+                    if reshaped_xnew:
+                        ynew = ynew.view(original_xnew_shape)
+
+                ctx.save_for_backward(ynew, *saved_inputs)
+                return ynew
+
+            @staticmethod
+            def backward(ctx, grad_out):
+                inputs = ctx.saved_tensors[1:]
+                gradients = torch.autograd.grad(
+                                ctx.saved_tensors[0],
+                                [i for i in inputs if i is not None],
+                                grad_out, retain_graph=True)
+                result = [None, ] * 5
+                pos = 0
+                for index in range(len(inputs)):
+                    if inputs[index] is not None:
+                        result[index] = gradients[pos]
+                        pos += 1
+                return (*result,)
         
 
 ################################
@@ -1218,16 +1220,6 @@ def determine_best_night(rms, n_obs_nights):
                 
     best_night_index = np.nanargmax(nightly_snrs)
     return best_night_index
-
-
-
-def torchpolyval1d(coeffs, x):
-    n = size(x)
-    y = torch.zeros(n)
-    coeffs = coeffs[::-1]
-    for i in range(n):
-        y[i] += coeffs[i] * x**i
-    return y
         
 
 # This calculates the weighted median of a data set for rolling calculations
