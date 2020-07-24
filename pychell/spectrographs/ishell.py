@@ -108,19 +108,19 @@ forward_model_blueprints = {
         'vel': [-500, -100, 500],
         'species': {
             'water': {
-                'input_file': templates_path + 'telluric_water_tapas_maunakea.npz',
+                'input_file': templates_path + 'telluric_water_tapas_maunakea_kband.npz',
                 'depth':[0.01, 1.5, 4.0]
             },
             'methane': {
-                'input_file': templates_path + 'telluric_methane_tapas_maunakea.npz',
+                'input_file': templates_path + 'telluric_methane_tapas_maunakea_kband.npz',
                 'depth': [0.1, 1.0, 3.0]
             },
             'nitrous_oxide': {
-                'input_file': templates_path + 'telluric_nitrous_oxide_tapas_maunakea.npz',
+                'input_file': templates_path + 'telluric_nitrous_oxide_tapas_maunakea_kband.npz',
                 'depth': [0.05, 0.65, 3.0]
             },
             'carbon_dioxide': {
-                'input_file': templates_path + 'telluric_carbon_dioxide_tapas_maunakea.npz',
+                'input_file': templates_path + 'telluric_carbon_dioxide_tapas_maunakea_kband.npz',
                 'depth': [0.05, 0.65, 3.0]
             }
         }

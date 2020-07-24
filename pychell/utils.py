@@ -5,7 +5,7 @@ import numpy as np
 from pdb import set_trace as stop
 import time
 import pychell.rvs.model_components as pcmodels
-import googledrivedownloader as gdd
+from google_drive_downloader import GoogleDriveDownloader as gdd
 
 # Helpful timer
 class StopWatch:
