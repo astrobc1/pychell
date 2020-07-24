@@ -187,32 +187,34 @@ def median_filter2d(x, width, preserve_nans=True):
         
     return out
 
-def convolve_flux(wave, flux, R):
+def convolve_flux(wave, flux, R, compress=64):
     
     good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
     ng = good.size
+    
+    # Interpolate onto a linearly spaced grid
     cspline = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=True)
-    compress = int(np.min([64, ng / 6]))
-    ml = np.nanmean(wave[good])
-    nlsf = int(ng / compress)
     lingrid = np.linspace(wave[good[0]], wave[good[-1]], num=ng)
     fluxlin = cspline(lingrid)
     dl = lingrid[1] - lingrid[0]
-    xlsf = np.arange(-nlsf/2, nlsf/2) * dl
-    if nlsf % 2 == 0:
-        xlsf = np.arange(-(int(nlsf / 2) - 1), int(nlsf / 2) + 1, 1) * dl
-        fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2 - 1), int(nlsf/2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
-    else:
-        xlsf = np.arange(-(int(nlsf / 2)), int(nlsf / 2) + 1, 1) * dl
-        fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2), int(nlsf/2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
+    
+    # The mean wavelength
+    ml = np.nanmean(wave[good])
+    
+    # The number of points in the lsf grid
+    nlsf = int(ng / compress)
+    
+    xlsf = np.arange(-nlsf/2, nlsf/2 + 1, 1) * dl
+    fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf/2), int(nlsf/2 + 1)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
 
     sig = ml / (2 * np.sqrt(2 * np.log(2)) * R)
     lsf = np.exp(-0.5 * (xlsf / sig)**2)
     lsf /= np.sum(lsf)
+    import matplotlib.pyplot as plt
     fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
     goodlinc = np.where(np.isfinite(fluxlinc))[0]
-    fluxc = scipy.interpolate.CubicSpline(cspline.x, fluxlinc, extrapolate=False)(wave)
-
+    fluxc = scipy.interpolate.CubicSpline(lingrid, fluxlinc, extrapolate=False)(wave)
+    
     return fluxc
 
 
@@ -693,23 +695,6 @@ def gauss_modified_solver(pars, x, data):
     good = np.where(np.isfinite(data))[0]
     rms = np.sqrt(np.nansum((data - model)**2) / good.size)
     return rms, 1
-
-
-def chi2_optimize_wrapper(model_builder, args_to_pass=None, kwargs_to_pass=None):
-    """[summary]
-
-    Args:
-        model_builder (function): [description]
-        args_to_pass (tuple): [description]. Defaults to None.
-        kwargs_to_pass (dict): [description]. Defaults to None.
-
-    Returns:
-        [type]: [description]
-    """
-    model = model_builder(args_to_pass, args_to_pass, kwargs_to_pass)
-    ng = np.where(np.isfinite(model) & np.isfinite(data))
-    rms = np.sqrt(np.nansum(data[good] - model[good])**2 / err[good] / ng)
-    return rms
 
 if 'torch' in sys.modules:
     class LinearInterp1d(torch.autograd.Function):

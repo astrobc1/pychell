@@ -15,6 +15,7 @@
     <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="spectrographs_api.html" />
     <link rel="prev" title="pychell API reference" href="template_generation_api.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
@@ -37,16 +38,51 @@
 <div class="section" id="module-pychell.rvs.rvcalc">
 <span id="computing-rvs"></span><h2>Computing RVs<a class="headerlink" href="#module-pychell.rvs.rvcalc" title="Permalink to this headline">¶</a></h2>
 <dl class="py function">
-<dt id="pychell.rvs.rvcalc.cc_wrapper">
-<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">cc_wrapper</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_model</span></em>, <em class="sig-param"><span class="n">n_spec_tot</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.cc_wrapper" title="Permalink to this definition">¶</a></dt>
-<dd><p>Cross correlation wrapper for a single spectrum.</p>
+<dt id="pychell.rvs.rvcalc.combine_orders">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">combine_orders</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">rvs</span></em>, <em class="sig-param"><span class="n">rvs_nightly</span></em>, <em class="sig-param"><span class="n">unc_nightly</span></em>, <em class="sig-param"><span class="n">weights</span></em>, <em class="sig-param"><span class="n">n_obs_nights</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.combine_orders" title="Permalink to this definition">¶</a></dt>
+<dd><p>Combines RVs across orders.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>forward_model</strong> (<em>ForwardModel</em>) – A single forward model object.</p></li>
-<li><p><strong>n_spec_tot</strong> (<em>int</em>) – The total number of spectra.</p></li>
-<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to use.</p></li>
+<li><p><strong>rvs</strong> (<em>np.ndarray</em>) – The single measurement RVs (shape=(n_ord, n_spec)).</p></li>
+<li><p><strong>rvs_nightly</strong> (<em>np.ndarray</em>) – The rvs dictionary returned by parse_rvs (shape=(n_ord, n_nights))</p></li>
+<li><p><strong>bad_rvs_dict</strong> (<em>dict</em>) – A dictionary of rvs to ignore.</p></li>
+<li><p><strong>rvcs</strong> (<em>np.ndarray</em>) – The rv contents of each order.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The single measurement RVs averaged across orders.
+np.ndarray: The single measurement uncertanties.
+np.ndarray: The nightly RVs averaged across orders.
+np.ndarray: The nightly RV uncertainties.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.combine_orders_fast">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">combine_orders_fast</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">rvs</span></em>, <em class="sig-param"><span class="n">rvs_nightly</span></em>, <em class="sig-param"><span class="n">unc_nightly</span></em>, <em class="sig-param"><span class="n">weights</span></em>, <em class="sig-param"><span class="n">n_obs_nights</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.combine_orders_fast" title="Permalink to this definition">¶</a></dt>
+<dd><p>Combines RVs across orders using a faster implementation of the above method.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>rvs</strong> (<em>np.ndarray</em>) – The single measurement RVs (shape=(n_ord, n_spec)).</p></li>
+<li><p><strong>rvs_nightly</strong> (<em>np.ndarray</em>) – The rvs dictionary returned by parse_rvs (shape=(n_ord, n_nights))</p></li>
+<li><p><strong>bad_rvs_dict</strong> (<em>dict</em>) – A dictionary of rvs to ignore.</p></li>
+<li><p><strong>rvcs</strong> (<em>np.ndarray</em>) – The rv contents of each order.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The single measurement RVs averaged across orders.
+np.ndarray: The single measurement uncertanties.
+np.ndarray: The nightly RVs averaged across orders.
+np.ndarray: The nightly RV uncertainties.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
 </dd>
 </dl>
 </dd></dl>
@@ -60,7 +96,7 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>cc_vels</strong> (<em>np.ndarray</em>) – The velocities used for cross-correlation.</p></li>
 <li><p><strong>ccf</strong> (<em>int</em>) – The corresponding 1-dimensional RMS curve.</p></li>
-<li><p><strong>n_bs</strong> (<em>int</em>) – The number of depths to use in calculating the BIS, defaults to 1000</p></li>
+<li><p><strong>n_bs</strong> (<em>int</em>) – The number of depths to use in calculating the BIS, defaults to 1000.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -74,28 +110,39 @@ bisector_span (float): The bisecor span of the line bisector (commonly referred 
 </dd></dl>
 
 <dl class="py function">
-<dt id="pychell.rvs.rvcalc.cross_correlate_all">
-<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">cross_correlate_all</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.cross_correlate_all" title="Permalink to this definition">¶</a></dt>
-<dd><p>Cross correlation wrapper for all spectra.</p>
+<dt id="pychell.rvs.rvcalc.compute_rv_content">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">compute_rv_content</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wave</span></em>, <em class="sig-param"><span class="n">flux</span></em>, <em class="sig-param"><span class="n">snr</span><span class="o">=</span><span class="default_value">100</span></em>, <em class="sig-param"><span class="n">blaze</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">ron</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">R</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.compute_rv_content" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the radial-velocity information content per pixel and for a whole swath.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects.</p></li>
-<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to use.</p></li>
+<li><p><strong>wave</strong> (<em>np.ndarray</em>) – The wavelength grid in units of Angstroms.</p></li>
+<li><p><strong>flux</strong> (<em>np.ndarray</em>) – The flux, normalized to ~ 1.</p></li>
+<li><p><strong>snr</strong> (<em>int</em><em>, </em><em>optional</em>) – The peak snr per 1d-pixel. Defaults to 100.</p></li>
+<li><p><strong>blaze</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to modulate by a pseudo blaze function. The pseudo blaze is a polynomial where the end points</p></li>
+<li><p><strong>ron</strong> (<em>int</em><em>, </em><em>optional</em>) – The read out noise of the detector. Defaults to 0.</p></li>
+<li><p><strong>R</strong> (<em>int</em><em>, </em><em>optional</em>) – The resolution to convolve the templates. Defaults to 80000.</p></li>
 </ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The “rv information content” at each pixel, or precisely the uncertainty of measuring the rv of an individual “pixel”.
+np.ndarray: The rv content for the whole swath (“uncertainty”).</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
 </dd>
 </dl>
 </dd></dl>
 
 <dl class="py function">
-<dt id="pychell.rvs.rvcalc.cross_correlate_star">
-<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">cross_correlate_star</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_model</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.cross_correlate_star" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs a cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.</p>
+<dt id="pychell.rvs.rvcalc.crude_brute_force">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">crude_brute_force</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_model</span></em>, <em class="sig-param"><span class="n">iter_index</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.crude_brute_force" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a pseudo cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>forward_model</strong> (<em>ForwardModel</em>) – A single forward model object.</p></li>
-<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to use.</p></li>
+<li><p><strong>iter_index</strong> (<em>int</em>) – The iteration to use to construct the forward model. Not used, is None.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
@@ -108,15 +155,38 @@ bisector_span (float): The bisecor span of the line bisector (commonly referred 
 </dd></dl>
 
 <dl class="py function">
-<dt id="pychell.rvs.rvcalc.generate_rvs">
-<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">generate_rvs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.generate_rvs" title="Permalink to this definition">¶</a></dt>
-<dd><p>Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed along with the line bisector and BIS.</p>
+<dt id="pychell.rvs.rvcalc.generate_nightly_rvs">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">generate_nightly_rvs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.generate_nightly_rvs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects.</p></li>
-<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to generate RVs from.</p></li>
+<li><p><strong>iter_index</strong> (<em>int</em>) – The iteration to generate RVs from.</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.generate_rv_contents">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">generate_rv_contents</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">templates_dict</span></em>, <em class="sig-param"><span class="n">snr</span><span class="o">=</span><span class="default_value">100</span></em>, <em class="sig-param"><span class="n">blaze</span><span class="o">=</span><span class="default_value">True</span></em>, <em class="sig-param"><span class="n">ron</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">R</span><span class="o">=</span><span class="default_value">80000</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.generate_rv_contents" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper to compute the rv content for several templates</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>templates_dict</strong> (<em>dict</em>) – The dictionary of templates. Each entry is  2-column array.</p></li>
+<li><p><strong>snr</strong> (<em>int</em><em>, </em><em>optional</em>) – The peak snr per 1d-pixel. Defaults to 100.</p></li>
+<li><p><strong>blaze</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to modulate by a pseudo blaze function. The pseudo blaze is a polynomial where the end points are at 50 percent in flux. Defaults to True.</p></li>
+<li><p><strong>ron</strong> (<em>int</em><em>, </em><em>optional</em>) – The read out noise of the detector. Defaults to 0.</p></li>
+<li><p><strong>R</strong> (<em>int</em><em>, </em><em>optional</em>) – The resolution to convolve the templates. Defaults to 80000.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A dictionary of RV contents with keys corresponding to the templates_dict dictionary.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
 </dd>
 </dl>
 </dd></dl>
@@ -132,19 +202,55 @@ bisector_span (float): The bisecor span of the line bisector (commonly referred 
 <li><p><strong>sep</strong> (<em>float</em>) – The minimum separation in days between two different nights of data, defaults to 0.5.</p></li>
 </ul>
 </dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The average nightly jds.
+(np.ndarray): The number of observations each night.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(np.ndarray)</p>
+</dd>
 </dl>
 </dd></dl>
 
 <dl class="py function">
 <dt id="pychell.rvs.rvcalc.plot_rvs">
-<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">plot_rvs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_num</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.plot_rvs" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">plot_rvs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.plot_rvs" title="Permalink to this definition">¶</a></dt>
 <dd><p>Plots all RVs and cross-correlation analysis after forward modeling all spectra.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects.</p></li>
-<li><p><strong>iter_num</strong> (<em>int</em>) – The iteration to use.</p></li>
+<li><p><strong>iter_index</strong> (<em>int</em>) – The iteration to use.</p></li>
 </ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.rv_solver">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">rv_solver</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">rvs</span></em>, <em class="sig-param"><span class="n">weights</span></em>, <em class="sig-param"><span class="n">n_obs_nights</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.rv_solver" title="Permalink to this definition">¶</a></dt>
+<dd><p>Internal function to optimize the rv offsets between orders.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.rvs.rvcalc.weighted_brute_force">
+<code class="sig-prename descclassname">pychell.rvs.rvcalc.</code><code class="sig-name descname">weighted_brute_force</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_model</span></em>, <em class="sig-param"><span class="n">iter_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.rvcalc.weighted_brute_force" title="Permalink to this definition">¶</a></dt>
+<dd><p>Performs a pseudo weighted cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>forward_model</strong> (<em>ForwardModel</em>) – A single forward model object.</p></li>
+<li><p><strong>iter_index</strong> (<em>int</em>) – The iteration to use to construct the forward model.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The velocities for the xcorr function.
+(np.ndarray): The rms (xcorr) surface.
+(np.ndarray): The xcorr RV (bary-center velocity subtracted).
+(float): The BIS.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(np.ndarray)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -180,6 +286,7 @@ bisector_span (float): The bisecor span of the line bisector (commonly referred 
 <li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
 <li class="toctree-l2 current"><a class="reference internal" href="rvs_api.html">Radial Velocities</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spectrographs_api.html">Spectroraphs</a></li>
 </ul>
 </li>
 </ul>
@@ -191,6 +298,7 @@ bisector_span (float): The bisecor span of the line bisector (commonly referred 
   <li><a href="api.html">pychell API reference</a><ul>
   <li><a href="rvs_api.html">pychell API reference</a><ul>
       <li>Previous: <a href="template_generation_api.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="spectrographs_api.html" title="next chapter">pychell API reference</a></li>
   </ul></li>
   </ul></li>
   </ul></li>

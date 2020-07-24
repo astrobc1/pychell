@@ -1,0 +1,259 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>pychell API reference &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="ishell.html" />
+    <link rel="prev" title="pychell API reference" href="spectrographs_api.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="pychell-api-reference">
+<h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="chiron">
+<h2>CHIRON<a class="headerlink" href="#chiron" title="Permalink to this headline">¶</a></h2>
+<p>CHIRON is a visible spectrograph on the 1.5 meter SMARTS telescope at CTIO.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pychell.rvs</span>
+
+<span class="c1"># Path to default templates for rvs</span>
+<span class="n">default_templates_path</span> <span class="o">=</span> <span class="n">pychell</span><span class="o">.</span><span class="n">rvs</span><span class="o">.</span><span class="vm">__file__</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="o">-</span><span class="mi">11</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;default_templates&#39;</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span>
+
+<span class="c1">#############################</span>
+<span class="c1">####### Name and Site #######</span>
+<span class="c1">#############################</span>
+
+<span class="n">spectrograph</span> <span class="o">=</span> <span class="s1">&#39;CHIRON&#39;</span>
+<span class="n">observatory</span> <span class="o">=</span> <span class="s1">&#39;CTIO&#39;</span>
+
+
+<span class="c1">####################################################################</span>
+<span class="c1">####### Reduction / Extraction #####################################</span>
+<span class="c1">####################################################################</span>
+
+<span class="n">redux_settings</span> <span class="o">=</span> <span class="bp">NotImplemented</span>
+
+<span class="c1">####################################################################</span>
+<span class="c1">####### RADIAL VELOCITIES ##########################################</span>
+<span class="c1">####################################################################</span>
+
+<span class="c1"># Default forward model settings</span>
+<span class="c1"># Default forward model settings</span>
+<span class="n">forward_model_settings</span> <span class="o">=</span> <span class="p">{</span>
+    
+    <span class="c1"># The cropped pixels</span>
+    <span class="s1">&#39;crop_data_pix&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">200</span><span class="p">,</span> <span class="mi">200</span><span class="p">],</span>
+    
+    <span class="c1"># The units for plotting</span>
+    <span class="s1">&#39;plot_wave_unit&#39;</span><span class="p">:</span> <span class="s1">&#39;nm&#39;</span><span class="p">,</span>
+    
+    <span class="c1"># The observatory</span>
+    <span class="s1">&#39;observatory&#39;</span><span class="p">:</span> <span class="n">observatory</span>
+<span class="p">}</span>
+
+<span class="c1"># Forward model blueprints for RVs</span>
+<span class="n">forward_model_blueprints</span> <span class="o">=</span> <span class="p">{</span>
+    
+    <span class="c1"># The star</span>
+    <span class="s1">&#39;star&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;star&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;StarModel&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s1">&#39;vel&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">3E5</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mf">3E5</span><span class="p">]</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># The methane gas cell</span>
+    <span class="s1">&#39;gas_cell&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;iodine_gas_cell&#39;</span><span class="p">,</span> <span class="c1"># NOTE: full parameter names are name + base_name.</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;GasCellModelOrderDependent&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">default_templates_path</span> <span class="o">+</span> <span class="s1">&#39;iodine_gas_cell_chiron_master_40K.npz&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+        <span class="s1">&#39;shifts&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">1.28151621</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.28975381</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.29827329</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.30707465</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.31615788</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.32552298</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.33516996</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.34509881</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.35530954</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.36580215</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.37657662</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.38763298</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.3989712</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.4105913</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.42249328</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.43467713</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.44714286</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.45989046</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.47291993</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.48623128</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.49982451</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.5136996</span> <span class="p">,</span> <span class="o">-</span><span class="mf">1.52785658</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.54229543</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.55701615</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.57201875</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.58730322</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.60286957</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.61871779</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.63484788</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.65125985</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.6679537</span> <span class="p">,</span> <span class="o">-</span><span class="mf">1.68492942</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.70218701</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.71972648</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.73754783</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.75565104</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.77403614</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.79270311</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.81165195</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.83088267</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.85039526</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.87018972</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.89026606</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.91062428</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.93126437</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.95218634</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.97339018</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.99487589</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.01664348</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.03869294</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.06102428</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.08363749</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.10653258</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.12970954</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.15316838</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.17690909</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.20093168</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.22523614</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.24982247</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.27469068</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.29984077</span><span class="p">,</span> <span class="o">-</span><span class="mf">2.32527273</span><span class="p">],</span>
+        <span class="s1">&#39;shift_range&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># Tellurics (from TAPAS)</span>
+    <span class="s1">&#39;tellurics&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;vis_tellurics&#39;</span><span class="p">,</span> <span class="c1"># NOTE: full parameter names are name + species + base_name.</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;TelluricModelTAPAS&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;vel&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">250</span><span class="p">,</span> <span class="o">-</span><span class="mi">100</span><span class="p">,</span> <span class="mi">250</span><span class="p">],</span>
+        <span class="s1">&#39;species&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;water&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">default_templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_water_tapas_ctio.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">]</span>
+            <span class="p">},</span>
+            <span class="s1">&#39;methane&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">default_templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_methane_tapas_ctio.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+            <span class="p">},</span>
+            <span class="s1">&#39;nitrous_oxide&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">default_templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_nitrous_oxide_tapas_ctio.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.65</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+            <span class="p">},</span>
+            <span class="s1">&#39;carbon_dioxide&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">default_templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_carbon_dioxide_tapas_ctio.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.65</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+            <span class="p">},</span>
+            <span class="s1">&#39;oxygen&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">default_templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_oxygen_tapas_ctio.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+            <span class="p">},</span>
+            <span class="s1">&#39;ozone&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">default_templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_ozone_tapas_ctio.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.65</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># The default blaze is a quadratic + splines.</span>
+    <span class="s1">&#39;blaze&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;full_blaze&#39;</span><span class="p">,</span> <span class="c1"># The blaze model after a division from a flat field</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;FullBlazeModel&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;n_splines&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s1">&#39;n_delay_splines&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s1">&#39;base_amp&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.02</span><span class="p">,</span> <span class="mf">1.05</span><span class="p">,</span> <span class="mf">1.4</span><span class="p">],</span>
+        <span class="s1">&#39;base_b&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.008</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.04</span><span class="p">],</span>
+        <span class="s1">&#39;base_c&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span>
+        <span class="s1">&#39;base_d&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.51</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">],</span>
+        <span class="s1">&#39;spline&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.135</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.135</span><span class="p">],</span>
+        
+        <span class="c1"># Blaze is centered on the blaze wavelength.</span>
+        <span class="s1">&#39;blaze_wavelengths&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">4576.37529117</span><span class="p">,</span> <span class="mf">4606.99031402</span><span class="p">,</span> <span class="mf">4638.67632316</span><span class="p">,</span> <span class="mf">4671.43331859</span><span class="p">,</span> <span class="mf">4705.26130031</span><span class="p">,</span> <span class="mf">4740.16026832</span><span class="p">,</span> <span class="mf">4776.13022262</span><span class="p">,</span> <span class="mf">4813.1711632</span><span class="p">,</span> <span class="mf">4851.28309008</span><span class="p">,</span> <span class="mf">4890.46600324</span><span class="p">,</span> <span class="mf">4930.7199027</span><span class="p">,</span> <span class="mf">4972.04478844</span><span class="p">,</span> <span class="mf">5014.44066047</span><span class="p">,</span> <span class="mf">5057.9075188</span> <span class="p">,</span> <span class="mf">5102.44536341</span><span class="p">,</span> <span class="mf">5148.05419431</span><span class="p">,</span> <span class="mf">5194.7340115</span><span class="p">,</span> <span class="mf">5242.48481498</span><span class="p">,</span> <span class="mf">5291.30660475</span><span class="p">,</span> <span class="mf">5341.1993808</span><span class="p">,</span> <span class="mf">5392.16314315</span><span class="p">,</span> <span class="mf">5444.19789179</span><span class="p">,</span> <span class="mf">5497.30362671</span><span class="p">,</span> <span class="mf">5551.48034793</span><span class="p">,</span> <span class="mf">5606.72805543</span><span class="p">,</span> <span class="mf">5663.04674923</span><span class="p">,</span> <span class="mf">5720.43642931</span><span class="p">,</span> <span class="mf">5778.89709568</span><span class="p">,</span> <span class="mf">5838.42874834</span><span class="p">,</span> <span class="mf">5899.03138729</span><span class="p">,</span> <span class="mf">5960.70501253</span><span class="p">,</span> <span class="mf">6023.44962406</span><span class="p">,</span> <span class="mf">6087.26522188</span><span class="p">,</span> <span class="mf">6152.15180599</span><span class="p">,</span> <span class="mf">6218.10937638</span><span class="p">,</span> <span class="mf">6285.13793307</span><span class="p">,</span> <span class="mf">6353.23747604</span><span class="p">,</span> <span class="mf">6422.40800531</span><span class="p">,</span> <span class="mf">6492.64952086</span><span class="p">,</span> <span class="mf">6563.9620227</span><span class="p">,</span> <span class="mf">6636.34551084</span><span class="p">,</span> <span class="mf">6709.79998526</span><span class="p">,</span> <span class="mf">6784.32544597</span><span class="p">,</span> <span class="mf">6859.92189297</span><span class="p">,</span> <span class="mf">6936.58932626</span><span class="p">,</span> <span class="mf">7014.32774584</span><span class="p">,</span> <span class="mf">7093.1371517</span><span class="p">,</span> <span class="mf">7173.01754386</span><span class="p">,</span> <span class="mf">7253.96892231</span><span class="p">,</span> <span class="mf">7335.99128704</span><span class="p">,</span> <span class="mf">7419.08463807</span><span class="p">,</span> <span class="mf">7503.24897538</span><span class="p">,</span> <span class="mf">7588.48429898</span><span class="p">,</span> <span class="mf">7674.79060888</span><span class="p">,</span> <span class="mf">7762.16790506</span><span class="p">,</span> <span class="mf">7850.61618753</span><span class="p">,</span> <span class="mf">7940.13545629</span><span class="p">,</span> <span class="mf">8030.72571134</span><span class="p">,</span> <span class="mf">8122.38695268</span><span class="p">,</span> <span class="mf">8215.1191803</span><span class="p">,</span> <span class="mf">8308.92239422</span><span class="p">,</span> <span class="mf">8403.79659443</span><span class="p">])</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># Hermite Gaussian LSF</span>
+    <span class="s1">&#39;lsf&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;lsf_hermite&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;LSFHermiteModel&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;hermdeg&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+        <span class="s1">&#39;n_delay&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s1">&#39;compress&#39;</span><span class="p">:</span> <span class="mi">64</span><span class="p">,</span>
+        <span class="s1">&#39;width&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.009</span><span class="p">,</span> <span class="mf">0.014</span><span class="p">,</span> <span class="mf">0.018</span><span class="p">],</span> <span class="c1"># LSF width, in angstroms</span>
+        <span class="s1">&#39;ak&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">]</span> <span class="c1"># See arken et al for definition of ak</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># Quadratic (Lagrange points) + splines</span>
+    <span class="s1">&#39;wavelength_solution&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;wavesol_ThAr_I2&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;WaveModelKnown&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;n_splines&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">,</span>
+        <span class="s1">&#39;n_delay_splines&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s1">&#39;spline&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.0005</span><span class="p">,</span> <span class="mf">0.03</span><span class="p">]</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rvs_api.html">Radial Velocities</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="spectrographs_api.html">Spectroraphs</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="spectrographs_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="spectrographs_api.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="ishell.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/chiron.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

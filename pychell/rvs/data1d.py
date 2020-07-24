@@ -58,6 +58,10 @@ class SpecData1d:
             self.order_num = order_num
         if spec_num is not None:
             self.spec_num = spec_num
+            
+        # Default wavelength and LSF grid, may be overwritten in custom parse method.
+        self.default_wave_grid = None
+        self.default_lsf = None
         
         # Parse the data for this observation
         self.parse()
@@ -72,6 +76,13 @@ class SpecData1d:
             
             self.badpix[0:crop_pix[0]] = 0
             self.badpix[self.flux.size - crop_pix[1] - 1:] = 0
+            
+        # Mask negative flux
+        bad = np.where(self.flux <= 0)[0]
+        if bad.size > 0:
+            self.flux[bad] = np.nan
+            self.flux_unc[bad] = np.nan
+            self.badpix[bad] = 0
         
     # Calculate bc info for only this observation
     def calculate_bc_info(self, obs_name, star_name):
@@ -268,7 +279,7 @@ class SpecDataMinervaAustralis(SpecData1d):
         
         # Load the flux, flux unc, and bad pix arrays
         # TOI257_ThAr_KiwiSpec_2019Aug05_0007_wcal_fib3
-        self.wave_grid = np.loadtxt(self.input_file + '_wave.txt').T[:, ::-1][:, self.order_num]
+        self.default_wave_grid = np.loadtxt(self.input_file + '_wave.txt').T[:, ::-1][:, self.order_num]
         self.flux = np.loadtxt(self.input_file + '_spec.txt').T[:, ::-1][:, self.order_num]
         self.flux_unc = np.loadtxt(self.input_file + '_specerr.txt').T[:, ::-1][:, self.order_num]
         self.JD = np.loadtxt(self.input_file + '_JD.txt')
@@ -333,15 +344,13 @@ class SpecDataMinervaNorthT1(SpecData1d):
         fits_data.verify('fix')
         
         # The flux
-        self.flux = fits_data.data[2, self.order_num, :].astype(np.float64)
+        self.flux = fits_data.data[2, self.order_num - 1, :].astype(np.float64)
+        #self.flux = fits_data.data[0, self.order_num - 1, :].astype(np.float64)
         self.flux_unc = np.zeros_like(self.flux) + 1E-3
         
         # Normalize to 1.
         self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
         self.badpix = np.ones_like(self.flux)
-        
-        #self.flux = self.flux[::-1]
-        #self.badpix = self.badpix[::-1]
         
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.        
         self.JD = float(fits_data.header['JD']) + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)

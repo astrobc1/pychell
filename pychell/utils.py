@@ -5,6 +5,7 @@ import numpy as np
 from pdb import set_trace as stop
 import time
 import pychell.rvs.model_components as pcmodels
+import googledrivedownloader as gdd
 
 # Helpful timer
 class StopWatch:
@@ -46,3 +47,10 @@ def getFromDict(dataDict, mapList):
 # Helper
 def setInDict(dataDict, mapList, value):
     getFromDict(dataDict, mapList[:-1])[mapList[-1]] = value
+    
+
+# Downlaod templates from google drive
+def download_templates(desination):
+    gdd.download_file_from_google_drive(file_id='1l9AzgAPI_9v4k1mktIyqJGPhqhIhSrp0',
+                                    dest_path=destination,
+                                    unzip=True)

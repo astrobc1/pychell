@@ -1,6 +1,10 @@
 import numpy as np
 import os
 import pychell.rvs # to grab templates dir
+import pychell
+
+# The path for pychell
+pychell_path = os.path.dirname(os.path.abspath(pychell.__file__)) + os.sep
 
 ##################################
 ######## GENERAL SETTINGS ########
@@ -19,6 +23,8 @@ general_settings = {
     # Plotting parameters
     'dpi': 200, # the dpi used in plots
     'plot_wave_unit': 'nm', # The units for plots. Options are nm, ang, microns
+    
+    'pychell_path': pychell_path
 }
 
 ####################################################################
@@ -41,9 +47,8 @@ redux_settings = {
     'mask_top_edge': 20,
     'mask_bottom_edge': 20,
     
-    # The height of an order is defined as where the flat is located.
     # This masks additional pixels on each side of the initial trace profile before moving forward.
-    # The profile is further flagged after thes sky background is estimated.
+    # The profile is further cropped after the sky background is estimated.
     'mask_trace_edges':  3,
     
     # The degree of the polynomial to fit the individual order locations
@@ -91,6 +96,7 @@ forward_model_settings = {
     # Stellar template augmentation
     'target_function': 'simple_rms',
     
+    # The number of bad pixels to flag in fitting.
     'flag_n_worst_pixels': 20,
     
     # Stellar template augmentation
@@ -104,11 +110,9 @@ forward_model_settings = {
     # Cross correlation / bisector span stuff for each iteration. Will take longer.
     # A cross correlation will still be run to estimate the correct overall RV before fitting
     # if starting from a synthetic template
-    'do_xcorr': False,
-    'xcorr_range': 10*1000, # m/s
-    'xcorr_step': 50, # m/s
-    'n_bs' : 1000, # 0, ..., 1 (approx)
+    'xcorr_options': {'method': 'weighted_brute_force', 'weights': ['tellurics', 'flux_unc'], 'n_bs': 1000, 'step': 50, 'range': 1E4},
     
+    # Whether or not to crudely remove the continuum from the data before any optimizing.
     'remove_continuum': False,
         
     # Model Resolution (n_model_pixels = model_resolution * n_data_pixels)

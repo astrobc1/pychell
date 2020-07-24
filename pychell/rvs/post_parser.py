@@ -75,6 +75,7 @@ def parse_rvs(output_path_root, do_orders=None):
 
 
 def parse_forward_model(output_path_root, order_num, spec_num):
+    print('Parsing Forward Model For Order ' + str(order_num) + ', Observation ' + str(spec_num))
     fname = glob.glob(output_path_root + 'Order' + str(order_num) + os.sep + 'Fits' + os.sep + '*_forward_model_*_spec' + str(spec_num) + '.pkl')[0]
     with open(fname, 'rb') as f:
             fwm = pickle.load(f)

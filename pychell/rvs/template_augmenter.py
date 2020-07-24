@@ -39,25 +39,16 @@ import pychell.utils as pcutils
 import pychell.rvs.rvcalc as pcrvcalc
 
 
-def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None, templates_to_optimize=None):
+def cubic_spline_lsq(forward_models, iter_index=None, nights_for_template=None, templates_to_optimize=None):
     """Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. The weighting scheme includes (possible inversly) the rms of the fit, the amount of telluric absorption. Weights are also applied such that the barycenter sampling is approximately uniform from vmin to vmax.
 
     Args:
         forward_models (ForwardModels): The list of forward model objects
-        iter_num (int): The iteration to use.
+        iter_index (int): The iteration to use.
         nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
     """
     if nights_for_template is None:
         nights_for_template = forward_models.nights_for_template
-        
-    if iter_num is None:
-        iter_num = len(forward_models[0].best_fit_pars)
-    
-    # k1 = index for forward model array access
-    # k2 = Plot names for forward model objects
-    # k3 = index for RV array access
-    # k4 = RV plot names
-    k1, k2, k3, k4 = forward_models[0].iteration_indices(iter_num)
 
     current_stellar_template = np.copy(forward_models.templates_dict['star'])
     
@@ -69,12 +60,12 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None, te
     tot_weights_lr = np.empty(shape=(forward_models[0].data.flux.size, forward_models.n_spec), dtype=np.float64)
     
     # Weight by 1 / rms^2
-    rms = np.array([forward_models[ispec].opt[k1][0] for ispec in range(forward_models.n_spec)], dtype=float)
+    rms = np.array([forward_models[ispec].opt[-1][0] for ispec in range(forward_models.n_spec)], dtype=float)
     rms_weights = 1 / rms**2
-    if forward_models[0].models_dict['star'].enabled:
-        bad = np.where(rms_weights < 100)[0]
-        if bad.size > 0:
-            rms_weights[bad] = 0
+    good = np.where(np.isfinite(rms_weights))[0]
+    bad = np.where(~np.isfinite(rms_weights))[0]
+    if good.size == 0:
+        rms_weights = np.ones(forward_models.n_spec)
 
     # All nights
     if nights_for_template is None or len(nights_for_template) == 0:
@@ -102,7 +93,7 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None, te
         residuals_lr[:, ispec] = np.copy(forward_models[ispec].residuals[-1])
 
         # Telluric weights
-        tell_flux_hr = forward_models[ispec].models_dict['tellurics'].build(forward_models[ispec].best_fit_pars[k1], forward_models.templates_dict['tellurics'], current_stellar_template[:, 0])
+        tell_flux_hr = forward_models[ispec].models_dict['tellurics'].build(forward_models[ispec].best_fit_pars[-1], forward_models.templates_dict['tellurics'], current_stellar_template[:, 0])
         tell_flux_hr_convolved = forward_models[ispec].models_dict['lsf'].convolve_flux(tell_flux_hr, pars=forward_models[ispec].best_fit_pars[-1])
         tell_flux_lr_convolved = np.interp(forward_models[ispec].wavelength_solutions[-1], current_stellar_template[:, 0], tell_flux_hr_convolved, left=np.nan, right=np.nan)
         tell_weights = tell_flux_lr_convolved**2
@@ -111,7 +102,7 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None, te
         
         # Final weights
         if len(nights_for_template) != 1:
-            tot_weights_lr[:, ispec] = tot_weights_lr[:, ispec] * tell_weights
+            tot_weights_lr[:, ispec] = tot_weights_lr[:, ispec] # * tell_weights
             
         
     # Generate the histogram
@@ -173,33 +164,21 @@ def cubic_spline_lsq(forward_models, iter_num=None, nights_for_template=None, te
     # Augment the template
     new_flux = current_stellar_template[:, 1] + residuals_hr_fit
     
-    max_cut = 1
-    bad = np.where(new_flux > max_cut)[0]
-    if bad.size > 0:
-        new_flux[bad] = max_cut
+    locs = np.where(new_flux > 1)[0]
+    if locs.size > 0:
+        new_flux[locs] = 1
 
     forward_models.templates_dict['star'][:, 1] = new_flux
     
     
-def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_template=None, templates_to_optimize=None):
+def cubic_spline_lsq_nobcweights(forward_models, iter_index, nights_for_template=None, templates_to_optimize=None):
     """Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. This function is identical to cubic_spline_lsq but does not include barycenter weighting.
 
     Args:
         forward_models (ForwardModels): The list of forward model objects
-        iter_num (int): The iteration to use.
+        iter_index (int): The iteration to use.
         nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
     """
-    if nights_for_template is None:
-        nights_for_template = forward_models.nights_for_template
-        
-    if iter_num is None:
-        iter_num = len(forward_models[0].best_fit_pars)
-    
-    # k1 = index for forward model array access
-    # k2 = Plot names for forward model objects
-    # k3 = index for RV array access
-    # k4 = RV plot names
-    k1, k2, k3, k4 = forward_models[0].iteration_indices(iter_num)
 
     current_stellar_template = np.copy(forward_models.templates_dict['star'])
     
@@ -211,12 +190,12 @@ def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_templ
     tot_weights_lr = np.empty(shape=(forward_models[0].data.flux.size, forward_models.n_spec), dtype=np.float64)
     
     # Weight by 1 / rms^2
-    rms = np.array([forward_models[ispec].opt[k1][0] for ispec in range(forward_models.n_spec)])
+    rms = np.array([forward_models[ispec].opt[-1][0] for ispec in range(forward_models.n_spec)])
     rms_weights = 1 / rms**2
-    if forward_models[0].models_dict['star'].enabled:
-        bad = np.where(rms_weights < 100)[0]
-        if bad.size > 0:
-            rms_weights[bad] = 0
+    good = np.where(np.isfinite(rms_weights))[0]
+    bad = np.where(~np.isfinite(rms_weights))[0]
+    if good.size == 0:
+        rms_weights = np.ones(forward_models.n_spec)
 
     # All nights
     if nights_for_template is None or len(nights_for_template) == 0:
@@ -245,7 +224,7 @@ def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_templ
         
 
         # Telluric weights
-        tell_flux_hr = forward_models[ispec].models_dict['tellurics'].build(forward_models[ispec].best_fit_pars[k1], forward_models.templates_dict['tellurics'], current_stellar_template[:, 0])
+        tell_flux_hr = forward_models[ispec].models_dict['tellurics'].build(forward_models[ispec].best_fit_pars[-1], forward_models.templates_dict['tellurics'], current_stellar_template[:, 0])
         tell_flux_hr_convolved = forward_models[ispec].models_dict['lsf'].convolve_flux(tell_flux_hr, pars=forward_models[ispec].best_fit_pars[-1])
         tell_flux_lr_convolved = np.interp(forward_models[ispec].wavelength_solutions[-1], current_stellar_template[:, 0], tell_flux_hr_convolved, left=np.nan, right=np.nan)
         tell_weights = tell_flux_lr_convolved**2
@@ -296,20 +275,19 @@ def cubic_spline_lsq_nobcweights(forward_models, iter_num=None, nights_for_templ
     # Augment the template
     new_flux = current_stellar_template[:, 1] + residuals_hr_fit
     
-    max_cut = 1
-    bad = np.where(new_flux > max_cut)[0]
-    if bad.size > 0:
-        new_flux[bad] = max_cut
+    locs = np.where(new_flux > 1)[0]
+    if locs.size > 0:
+        new_flux[locs] = 1
 
     forward_models.templates_dict['star'][:, 1] = new_flux
 
 
-def weighted_median(forward_models, iter_num=None, nights_for_template=None, templates_to_optimize=None):
+def weighted_median(forward_models, iter_index=None, nights_for_template=None, templates_to_optimize=None):
     """Augments the stellar template by considering the weighted median of the residuals on a common high resolution grid.
 
     Args:
         forward_models (ForwardModels): The list of forward model objects
-        iter_num (int): The iteration to use.
+        iter_index (int): The iteration to use.
         nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
     """
     current_stellar_template = np.copy(forward_models.templates_dict['star'])
@@ -328,8 +306,12 @@ def weighted_median(forward_models, iter_num=None, nights_for_template=None, tem
     
     
     # Weight by 1 / rms^2
-    rms = np.array([forward_models[ispec].opt[iter_num][0] for ispec in range(forward_models.n_spec)]) 
+    rms = np.array([forward_models[ispec].opt[iter_index][0] for ispec in range(forward_models.n_spec)]) 
     rms_weights = 1 / rms**2
+    good = np.where(np.isfinite(rms_weights))[0]
+    bad = np.where(~np.isfinite(rms_weights))[0]
+    if good.size == 0:
+        rms_weights = np.ones(forward_models.n_spec)
     
     # bc vels
     bc_vels = np.array([fwm.data.bc_vel for fwm in forward_models], dtype=np.float64)
@@ -428,14 +410,6 @@ def weighted_median(forward_models, iter_num=None, nights_for_template=None, tem
             residuals_median[ix] = 0
         else:
             if forward_models.n_spec > 1:
-                # Further flag any pixels larger than 3*wstddev from a weighted average, but use the weighted median.
-                #wavg = pcmath.weighted_mean(residuals_hr[ix, :], tot_weights_hr[ix, :]/np.nansum(tot_weights_hr[ix, :]))
-                #wstddev = pcmath.weighted_stddev(residuals_hr[ix, :], tot_weights_hr[ix, :]/np.nansum(tot_weights_hr[ix, :]))
-                #diffs = np.abs(wavg - residuals_hr[ix, :])
-                #bad = np.where(diffs > 3*wstddev)[0]
-                #if bad.size > 0:
-                    #tot_weights_hr[ix, bad] = 0
-                    #bad_pix_hr[ix, bad] = 0
                 residuals_median[ix] = pcmath.weighted_median(residuals_hr[ix, :], weights=tot_weights_hr[ix, :]/np.nansum(tot_weights_hr[ix, :]))
             elif np.isfinite(residuals_hr[ix, 0]):
                 residuals_median[ix] = residuals_hr[ix, 0]
@@ -455,20 +429,19 @@ def weighted_median(forward_models, iter_num=None, nights_for_template=None, tem
     new_flux = current_stellar_template[:, 1] + residuals_median
 
     # Force the max to be less than 1.
-    max_cut = 1
-    bad = np.where(new_flux > max_cut)[0]
-    if bad.size > 0:
-        new_flux[bad] = max_cut
-        
+    locs = np.where(new_flux > 1)[0]
+    if locs.size > 0:
+        new_flux[locs] = 1
+
     forward_models.templates_dict['star'][:, 1] = new_flux
 
 
-def weighted_average(forward_models, iter_num=None, nights_for_template=None, templates_to_optimize=None):
+def weighted_average(forward_models, iter_index=None, nights_for_template=None, templates_to_optimize=None):
     """Augments the stellar template by considering the weighted average of the residuals on a common high resolution grid.
 
     Args:
         forward_models (ForwardModels): The list of forward model objects
-        iter_num (int): The iteration to use.
+        iter_index (int): The iteration to use.
         nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
     """
     current_stellar_template = np.copy(forward_models.templates_dict['star'])
@@ -486,8 +459,12 @@ def weighted_average(forward_models, iter_num=None, nights_for_template=None, te
     residuals_min = np.empty(forward_models.n_model_pix, dtype=np.float64) + np.nan
     
     # Weight by 1 / rms^2
-    rms = np.array([forward_models[ispec].opt[iter_num][0] for ispec in range(forward_models.n_spec)]) 
+    rms = np.array([forward_models[ispec].opt[iter_index][0] for ispec in range(forward_models.n_spec)]) 
     rms_weights = 1 / rms**2
+    good = np.where(np.isfinite(rms_weights))[0]
+    bad = np.where(~np.isfinite(rms_weights))[0]
+    if good.size == 0:
+        rms_weights = np.ones(forward_models.n_spec)
     
     # bc vels
     bc_vels = np.array([fwm.data.bc_vel for fwm in forward_models], dtype=np.float64)
@@ -613,24 +590,24 @@ def weighted_average(forward_models, iter_num=None, nights_for_template=None, te
     new_flux = current_stellar_template[:, 1] + residuals_average
 
     # Force the max to be less than 1.
-    max_cut = 1
-    bad = np.where(new_flux > max_cut)[0]
-    if bad.size > 0:
-        new_flux[bad] = max_cut
+    locs = np.where(new_flux > 1)[0]
+    if locs.size > 0:
+        new_flux[locs] = 1
         
     forward_models.templates_dict['star'][:, 1] = new_flux
 
 
 # Uses pytorch to optimize the template
-def global_fit(forward_models, templates_to_optimize=None, iter_num=None, nights_for_template=None):
-    """Akin to Wobble, this will update the stellar template by performing a gradient-based optimization via ADAM in pytorch considering all observations. Here, the template is a parameter of thousands of points.
+def global_fit(forward_models, templates_to_optimize=None, iter_index=None, nights_for_template=None):
+    """Similar to Wobble, this will update the stellar template and lab frames by performing a gradient-based optimization via ADAM in pytorch considering all observations. Here, the template(s) are a parameter of thousands of points. The star is implemented in such a way that it will modify the current template, Doppler shift each observation and multiply them into the model. The lab frame is implemented in such a way that it will modify a zero based array, and then add this into each observation before convolution is performed.
 
     Args:
         forward_models (ForwardModels): The list of forward model objects
-        iter_num (int): The iteration to use.
-        templates_to_optimize: For now, only the star is able to be optimized. Future updates will include a lab-frame coherence  simultaneous fit.
-        nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
+        iter_index (int): The iteration to use.
+        templates_to_optimize (list of strings): valid entries are 'star', 'lab'.
+        nights_for_template (None): May be set, but not used here.
     """
+    
     # The number of lsf points
     n_lsf_pts = forward_models[0].models_dict['lsf'].nx
     
@@ -638,24 +615,25 @@ def global_fit(forward_models, templates_to_optimize=None, iter_num=None, nights
     wave_hr_master = torch.from_numpy(forward_models.templates_dict['star'][:, 0])
     
     # Grids to optimize
-    # Star
     if 'star' in templates_to_optimize:
-        star_flux = torch.nn.Parameter(torch.from_numpy(np.log(forward_models.templates_dict['star'][:, 1].astype(np.float64))))
+        star_flux = torch.nn.Parameter(torch.from_numpy(forward_models.templates_dict['star'][:, 1].astype(np.float64)))
         
         # The current best fit stellar velocities
-        if not forward_models[0].models_dict['star'].from_synthetic and iter_num == 0:
-            star_vels = -1 * torch.from_numpy(np.array([forward_models[ispec].data.bc_vel for ispec in range(forward_models.n_spec)]).astype(np.float64))
-        else:
-            star_vels = torch.from_numpy(np.array([forward_models[ispec].best_fit_pars[-1][forward_models[ispec].models_dict['star'].par_names[0]].value for ispec in range(forward_models.n_spec)]).astype(np.float64))
+        star_vels = torch.from_numpy(np.array([forward_models[ispec].best_fit_pars[-1][forward_models[ispec].models_dict['star'].par_names[0]].value for ispec in range(forward_models.n_spec)]).astype(np.float64))
+    else:
+        star_flux = None
+        star_vels = None
         
     if 'lab' in templates_to_optimize:
-        residual_lab_flux = torch.nn.Parameter(torch.zeros(wave_hr_master.size()[0])) + 1E-2
+        residual_lab_flux = torch.nn.Parameter(torch.zeros(wave_hr_master.size()[0], dtype=torch.float64) + 1E-4)
+    else:
+        residual_lab_flux = None
     
     # The partial built forward model flux
     base_flux_models = torch.empty((forward_models.templates_dict['star'][:, 0].size, forward_models.n_spec), dtype=torch.float64)
     
     # The best fit LSF for each spec (optional)
-    if 'lsf' in forward_models[0].models_dict:
+    if 'lsf' in forward_models[0].models_dict and forward_models[0].models_dict['lsf'].enabled:
         lsfs = torch.empty((n_lsf_pts, forward_models.n_spec), dtype=torch.float64)
     else:
         lsfs = None
@@ -676,22 +654,26 @@ def global_fit(forward_models, templates_to_optimize=None, iter_num=None, nights
     for ispec in range(forward_models.n_spec):
 
         # Get the pars for this iteration and spectrum
-        pars = copy.deepcopy(forward_models[ispec].best_fit_pars[-1])
+        pars = forward_models[ispec].best_fit_pars[-1]
 
-        x, y = forward_models[ispec].build_hr_nostar(pars, iter_num)
-        waves_lr[:, ispec], base_flux_models[:, ispec] = torch.from_numpy(x), torch.from_numpy(np.log(y))
+        if 'star' in templates_to_optimize:
+            x, y = forward_models[ispec].build_hr_nostar(pars, iter_index)
+        else:
+            x, y = forward_models[ispec].build_hr(pars, iter_index)
+            
+        waves_lr[:, ispec], base_flux_models[:, ispec] = torch.from_numpy(x), torch.from_numpy(y)
 
         # Fetch lsf and flip for torch. As of now torch does not support the negative step
-        if 'lsf' in forward_models[0].models_dict:
+        if 'lsf' in forward_models[0].models_dict and forward_models[0].models_dict['lsf'].enabled:
             lsfs[:, ispec] = torch.from_numpy(forward_models[ispec].models_dict['lsf'].build(pars))
             lsfs[:, ispec] = torch.from_numpy(np.flip(lsfs[:, ispec].numpy(), axis=0).copy())
 
         # The data and weights, change bad vals to nan
-        data_flux[:, ispec] = torch.from_numpy(np.copy(np.log(forward_models[ispec].data.flux)))
+        data_flux[:, ispec] = torch.from_numpy(np.copy(forward_models[ispec].data.flux))
         weights[:, ispec] = torch.from_numpy(np.copy(forward_models[ispec].data.badpix))
-        bad = np.where(~np.isfinite(data_flux[:, ispec].numpy()) | ~np.isfinite(weights[:, ispec].numpy()))[0]
-        if bad.size > 0:
-            data_flux[bad, ispec] = 1
+        bad = torch.where(~torch.isfinite(data_flux[:, ispec]) | ~torch.isfinite(weights[:, ispec]) | (weights[:, ispec] <= 0))[0]
+        if len(bad) > 0:
+            data_flux[bad, ispec] = np.nan
             weights[bad, ispec] = 0
 
     # CPU or GPU
@@ -701,107 +683,39 @@ def global_fit(forward_models, templates_to_optimize=None, iter_num=None, nights
         torch.device('cpu')
 
     # Create the Torch model object
-    
-    # Only optimizing star
-    #if 'star' in templates_to_optimize and len(templates_to_optimize) == 1:
-    #    model = StarSolver(star_flux, star_vels, raw_models_partial, wave_lr, weights, data_flux, wave_hr_master, lsf=lsf)
-    
-        
-    # Also lab
-    #elif 'lab' in templates_to_optimize:
-      #  model = StarSolver(star_flux, star_vels, raw_models_partial, wave_lr, weights, data_flux, wave_hr_master, lsfs=lsfs)
-    #if 'blaze' in template_to_optimize:
-    
-    model = GlobalSolver(base_flux_models, waves_lr, weights, data_flux, wave_hr_master, star_flux, star_vels, residual_lab_flux, lsfs=lsfs)
+    model = TemplateOptimizer(base_flux_models, waves_lr, weights, data_flux, wave_hr_master, star_flux=star_flux, star_vels=star_vels, residual_lab_flux=residual_lab_flux, lsfs=lsfs)
 
     # Create the Adam optimizer
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0002)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
     print('Optimizing Template(s) ...', flush=True)
 
-    for epoch in range(200):
-
-        optimizer.zero_grad()
+    for epoch in range(500):
 
         # Generate the model
+        optimizer.zero_grad()
         loss = model.forward()
 
         # Back propagation (gradient calculation)
         loss.backward()
-
-        # Take a step in the best direction (steepest gradient)
         optimizer.step()
 
         if (epoch + 1) % 10 == 0:
             print('epoch {}, loss {}'.format(epoch + 1, loss.item()), flush=True)
 
-    new_star_flux = np.exp(model.star_flux.detach().numpy())
-    residual_lab_flux_fit = np.exp(model.residual_lab_flux.detach().numpy())
+    if 'star' in templates_to_optimize:
+        new_star_flux = model.star_flux.detach().numpy()
+        locs = np.where(new_star_flux > 1)[0]
+        if locs.size > 0:
+            new_star_flux[locs] = 1
+        forward_models.templates_dict['star'][:, 1] = new_star_flux
 
-    locs = np.where(new_star_flux > 1.0)[0]
-    if locs.size > 0:
-        new_star_flux[locs] = 1.0
-        
-    forward_models.templates_dict['star'][:, 1] = new_star_flux
+    if 'lab' in templates_to_optimize:
+        residual_lab_flux_fit = model.residual_lab_flux.detach().numpy()
+        forward_models.templates_dict['residual_lab'] = np.array([np.copy(forward_models.templates_dict['star'][:, 0]), residual_lab_flux_fit]).T
+    
 
-# Class to optimize the forward model
-if 'torch' in sys.modules:
-    class StarSolver(torch.nn.Module):
 
-        def __init__(self, star_flux, star_vels, raw_model_no_star, wave_lr, weights, data_flux, wave_hr_master, lsf=None):
-            super(StarSolver, self).__init__()
-
-            # Parameters to optimize
-            self.star_flux = star_flux # the stellar flux
-            
-            self.raw_model_no_star = raw_model_no_star
-            self.wave_lr = wave_lr
-            self.star_vels = star_vels
-            self.weights = weights
-            self.data_flux = data_flux
-            self.nx_data, self.n_spec = self.data_flux.shape
-            self.nx_lsf = lsf.shape[0]
-            if lsf is not None:
-                self.lsf = torch.ones(1, 1, self.nx_lsf, self.n_spec, dtype=torch.float64)
-            else:
-                self.lsf = lsf
-            self.lsf[0, 0, :, :] = lsf
-            self.nx_pad1 = int(self.nx_lsf / 2) - 1
-            self.nx_pad2 = int(self.nx_lsf / 2)
-            self.wave_hr_master = wave_hr_master
-            self.nx_model = self.wave_hr_master.size()[0]
-
-        def forward(self):
-        
-            models_lr = torch.empty((self.nx_data, self.n_spec), dtype=torch.float64)
-            
-            for ispec in range(self.n_spec):
-                
-                # Doppler shift the stellar wavelength grid used for this observation.
-                wave_hr_star_shifted = self.wave_hr_master * torch.exp(self.star_vels[ispec] / cs.c)
-
-                # Interpolate the stellar variable back to master grid
-                star = self.Interp1d()(wave_hr_star_shifted, self.star_flux, self.wave_hr_master)
-                
-                # Convolution. Note: PyTorch convolution is a pain in the ass.
-                # Also torch.cat seems to take up too much memory, so a workaround.
-                if self.lsf is not None:
-                    model_p = torch.ones((1, 1, self.nx_model + self.nx_pad1 + self.nx_pad2), dtype=torch.float64)
-                    model_p[0, 0, self.nx_pad1:(-self.nx_pad2)] = star.flatten() * self.raw_model_no_star[:, ispec]
-                    conv = torch.nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1, padding=0, bias=False)
-                    conv.weight.data = self.lsf[:, :, :, ispec]
-                    model = conv(model_p).flatten()
-                else:
-                    model = star.flatten() * self.raw_model_no_star[:, ispec]
-
-                # Interpolate onto data grid
-                models_lr[:, ispec] = self.Interp1d()(self.wave_hr_master, model, self.wave_lr[:, ispec])
-
-            # Weighted RMS
-            wdiffs2 = (models_lr - self.data_flux)**2 * self.weights
-            loss = torch.sqrt(torch.sum(wdiffs2) / (torch.sum(self.weights)))
-
-            return loss
 
         class Interp1d(torch.autograd.Function):
             def __call__(self, x, y, xnew, out=None):
@@ -938,34 +852,40 @@ if 'torch' in sys.modules:
         
 # Class to optimize the forward model
 if 'torch' in sys.modules:
-    class GlobalSolver(torch.nn.Module):
+    class TemplateOptimizer(torch.nn.Module):
 
-        def __init__(self, base_flux_models, waves_lr, weights, data_flux, wave_hr_master, star_flux, star_vels, residual_lab_flux, lsfs=None, continuums=None):
+        def __init__(self, base_flux_models, waves_lr, weights, data_flux, wave_hr_master, star_flux=None, star_vels=None, residual_lab_flux=None, lsfs=None):
             
             # Parent init
-            super().__init__()
-
-            # Parameters to optimize
-            self.star_flux = star_flux # coherence in stellar (quasi) rest frame
-            self.residual_lab_flux = residual_lab_flux # coherence in lab frame
-            
-            # The base flux
-            self.base_flux_models = base_flux_models
-            
-            # Current wavelength solutions
-            self.waves_lr = waves_lr
-            
-            # Current best fit stellar velocities
-            self.star_vels = star_vels
-            
-            # Optimization weights
-            self.weights = weights
-            
-            # Actual data
-            self.data_flux = data_flux
+            super(TemplateOptimizer, self).__init__()
             
             # Shape information
-            self.nx_data, self.n_spec = self.data_flux.shape
+            self.nx_data, self.n_spec = data_flux.shape
+            
+            # High res master wave grid for all observations
+            self.wave_hr_master = wave_hr_master # shape=(nmx,)
+            
+            # The number of model pixels
+            self.nx_model = self.wave_hr_master.size()[0]
+            
+            # Actual data
+            self.data_flux = data_flux # shape=(nx, n_spec)
+
+            # Potential parameters to optimize
+            self.star_flux = star_flux # coherence in stellar (quasi) rest frame, shape=(nmx,)
+            self.residual_lab_flux = residual_lab_flux # coherence in lab frame, shape=(nmx,)
+            
+            # The base flux
+            self.base_flux_models = base_flux_models # shape=(nx, n_spec)
+            
+            # Current wavelength solutions
+            self.waves_lr = waves_lr # shape=(nx, n_spec)
+            
+            # Current best fit stellar velocities
+            self.star_vels = star_vels # shape=(n_spec,)
+            
+            # Optimization weights
+            self.weights = weights # shape=(nx, n_spec)
             
             # The lsf (optional)
             if lsfs is not None:
@@ -976,51 +896,43 @@ if 'torch' in sys.modules:
                 self.nx_pad2 = int(self.nx_lsf / 2)
             else:
                 self.lsfs = None
-                
-            # Current blaze
-            self.continuums = continuums
-            
-            # High res master wave grid
-            self.wave_hr_master = wave_hr_master
-            
-            # The number of model pixels
-            self.nx_model = self.wave_hr_master.size()[0]
 
         def forward(self):
         
             # Stores all low res models
-            models_lr = torch.empty((self.nx_data, self.n_spec), dtype=torch.float64)
+            models_lr = torch.empty((self.nx_data, self.n_spec), dtype=torch.float64) + np.nan
             
             # Loop over observations
             for ispec in range(self.n_spec):
                 
                 # Doppler shift the stellar wavelength grid used for this observation.
-                wave_hr_star_shifted = self.wave_hr_master * torch.exp(self.star_vels[ispec] / cs.c)
-
-                # Interpolate the stellar variable back to master grid
-                star = self.Interp1d()(wave_hr_star_shifted, self.star_flux, self.wave_hr_master)
-                
-                # Add everything into the base flux
-                if self.continuums is not None:
-                    model = self.continuums[:, ispec] + self.residual_lab_flux + star + self.base_flux_models[:, ispec]
+                if self.star_flux is not None and self.residual_lab_flux is not None:
+                    wave_hr_star_shifted = self.wave_hr_master * torch.exp(self.star_vels[ispec] / cs.c)
+                    star = self.Interp1d()(wave_hr_star_shifted, self.star_flux, self.wave_hr_master).flatten()
+                    model = self.base_flux_models[:, ispec] * star + self.residual_lab_flux
+                elif self.star_flux is not None and self.residual_lab_flux is None:
+                    wave_hr_star_shifted = self.wave_hr_master * torch.exp(self.star_vels[ispec] / cs.c)
+                    star = self.Interp1d()(wave_hr_star_shifted, self.star_flux, self.wave_hr_master).flatten()
+                    model = self.base_flux_models[:, ispec] * star
                 else:
-                    model = self.residual_lab_flux + star + self.base_flux_models[:, ispec]
-                
-                # Convolution. NOTE: PyTorch convolution is a pain in the ass.
-                # Also torch.cat seems to take up too much memory, so a workaround is used to pad the model.
+                    model = self.base_flux_models[:, ispec] + self.residual_lab_flux
+                    
+                # Convolution. NOTE: PyTorch convolution is a pain in the ass
                 if self.lsfs is not None:
                     model_p = torch.ones((1, 1, self.nx_model + self.nx_pad1 + self.nx_pad2), dtype=torch.float64)
-                    model_p[0, 0, self.nx_pad1:(-self.nx_pad2)] = torch.exp(model)
+                    model_p[0, 0, self.nx_pad1:(-self.nx_pad2)] = model
                     conv = torch.nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1, padding=0, bias=False)
                     conv.weight.data = self.lsfs[:, :, :, ispec]
-                    model = torch.log(conv(model_p).flatten())
+                    model = conv(model_p).flatten()
 
                 # Interpolate onto data grid
-                models_lr[:, ispec] = self.Interp1d()(self.wave_hr_master, model, self.waves_lr[:, ispec])
+                good = torch.where(torch.isfinite(self.weights[:, ispec]) & (self.weights[:, ispec] > 0))[0]
+                models_lr[good, ispec] = self.Interp1d()(self.wave_hr_master, model, self.waves_lr[good, ispec])
 
             # Weighted RMS
-            wdiffs2 = (models_lr - self.data_flux)**2 * self.weights
-            loss = torch.sqrt(torch.sum(wdiffs2) / (torch.sum(self.weights)))
+            good = torch.where(torch.isfinite(self.weights) & (self.weights > 0) & torch.isfinite(models_lr))[0]
+            wdiffs2 = (models_lr[good] - self.data_flux[good])**2 * self.weights[good]
+            loss = torch.sqrt(torch.sum(wdiffs2) / (torch.sum(self.weights[good])))
 
             return loss
         
@@ -1224,6 +1136,19 @@ def determine_best_night(rms, n_obs_nights):
 
 # This calculates the weighted median of a data set for rolling calculations
 def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.98, smooth=True):
+    """This will estimate the continuum with adjustable spline knots.
+
+    Args:
+        x (np.ndarray): The wavelength array.
+        y (np.ndarray): The flux array.
+        width (float, optional): The width of the window in units of x. Defaults to 7.
+        n_knots (int, optional): The number of spline knots. Defaults to 8.
+        cont_val (float, optional): The estimate of the percentile of the continuum. Defaults to 0.98.
+        smooth (bool, optional): Whether or not to smooth the input spectrum. Defaults to True.
+
+    Returns:
+        np.ndarray: The estimate of the continuum
+    """
     nx = x.size
     continuum_coarse = np.ones(nx, dtype=np.float64)
     if smooth:
@@ -1243,24 +1168,25 @@ def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.98, smooth=True):
     return continuum
 
 
-def fit_continuum_wobble(x, y, ivars, order=6, nsigma=[0.3,3.0], maxniter=50):
-    """Fit the continuum using sigma clipping
+def fit_continuum_wobble(x, y, mask, order=6, nsigma=[0.3,3.0], maxniter=50):
+    """Fit the continuum using sigma clipping. This function is a modified version from Megan Bedell's Wobble code.
     Args:
-        x: The wavelengths
-        y: The log-fluxes
+        x: The wavelengths.
+        y: The log-fluxes.
         order: The polynomial order to use
         nsigma: The sigma clipping threshold: tuple (low, high)
         maxniter: The maximum number of iterations to do
     Returns:
-        The value of the continuum at the wavelengths in x
+        The value of the continuum at the wavelengths in x in log space.
     """
     good = np.where(np.isfinite(x) & np.isfinite(y))[0]
     xx, yy = x[good], y[good]
-    yy = np.log(y)
+    yy = np.copy(y)
+    yy = pcmath.median_filter1d(yy, 7)
     A = np.vander(x - np.nanmean(x), order+1)
     m = np.ones(len(x), dtype=bool)
     for i in range(maxniter):
-        m[ivars == 0] = 0  # mask out the bad pixels
+        m[mask == 0] = 0  # mask out the bad pixels
         w = np.linalg.solve(np.dot(A[m].T, A[m]), np.dot(A[m].T, yy[m]))
         mu = np.dot(A, w)
         resid = yy - mu

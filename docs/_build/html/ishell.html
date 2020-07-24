@@ -1,0 +1,319 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>pychell API reference &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <script src="_static/language_data.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="nirspec.html" />
+    <link rel="prev" title="pychell API reference" href="chiron.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="pychell-api-reference">
+<h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="ishell">
+<h2>iSHELL<a class="headerlink" href="#ishell" title="Permalink to this headline">¶</a></h2>
+<p>iSHELL is a near-infrared spectrograph on the 3.5 meter NASA IRTF telescope.</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pychell.rvs</span>
+<span class="c1"># Other notes for iSHELL:</span>
+<span class="c1"># blaze_model parameters for a sinc model (full unmodified blaze)</span>
+<span class="c1"># a: [1.02, 1.05, 1.08], b: [0.008, 0.01, 0.0115], c: [-5, 0.1, 5], d: [0.51, 0.7, 0.9]</span>
+
+<span class="c1"># Path to templates for rvs</span>
+<span class="n">templates_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">pychell</span><span class="o">.</span><span class="vm">__file__</span><span class="p">))</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span> <span class="o">+</span> <span class="s1">&#39;templates&#39;</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span>
+
+<span class="c1">#############################</span>
+<span class="c1">####### Name and Site #######</span>
+<span class="c1">#############################</span>
+
+<span class="n">spectrograph</span> <span class="o">=</span> <span class="s1">&#39;iSHELL&#39;</span> <span class="c1">#: Notice the colon, this tells sphinx to use this comment as docstring for this value</span>
+<span class="n">observatory</span> <span class="o">=</span> <span class="s1">&#39;IRTF&#39;</span> 
+
+<span class="c1">####################################################################</span>
+<span class="c1">####### Reduction / Extraction #####################################</span>
+<span class="c1">####################################################################</span>
+
+<span class="n">redux_settings</span> <span class="o">=</span> <span class="p">{</span>
+    
+    <span class="c1"># Detector properties</span>
+    <span class="s1">&#39;detector_props&#39;</span> <span class="p">:</span> <span class="p">[{</span><span class="s1">&#39;gain&#39;</span><span class="p">:</span> <span class="mf">1.8</span><span class="p">,</span> <span class="s1">&#39;dark_current&#39;</span><span class="p">:</span> <span class="mf">0.05</span><span class="p">,</span> <span class="s1">&#39;read_noise&#39;</span><span class="p">:</span> <span class="mf">8.0</span><span class="p">}],</span>
+    
+    <span class="c1"># Calibration</span>
+    <span class="s1">&#39;dark_subtraction&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s1">&#39;flat_division&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s1">&#39;bias_subtraction&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s1">&#39;wavelength_calibration&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span>
+    <span class="s1">&#39;flatfield_percentile&#39;</span><span class="p">:</span> <span class="mf">0.75</span><span class="p">,</span>
+    
+    <span class="c1"># Pixels to mask on the top, bottom, left, and right edges</span>
+    <span class="s1">&#39;mask_left_edge&#39;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+    <span class="s1">&#39;mask_right_edge&#39;</span><span class="p">:</span> <span class="mi">200</span><span class="p">,</span>
+    <span class="s1">&#39;mask_top_edge&#39;</span><span class="p">:</span> <span class="mi">20</span><span class="p">,</span>
+    <span class="s1">&#39;mask_bottom_edge&#39;</span><span class="p">:</span> <span class="mi">20</span><span class="p">,</span>
+    
+    <span class="c1"># The height of an order is defined as where the flat is located.</span>
+    <span class="c1"># This masks additional pixels on each side of the initial trace profile before moving forward.</span>
+    <span class="c1"># The profile is further flagged after thes sky background is estimated.</span>
+    <span class="s1">&#39;mask_trace_edges&#39;</span><span class="p">:</span>  <span class="mi">3</span><span class="p">,</span>
+    
+    <span class="c1"># The degree of the polynomial to fit the individual order locations</span>
+    <span class="s1">&#39;trace_pos_polyorder&#39;</span> <span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+    
+    <span class="c1"># Whether or not to perform a sky subtraction</span>
+    <span class="c1"># The number of rows used to estimate the sky background (lowest n_sky_rows in the trace profile are used).</span>
+    <span class="s1">&#39;sky_subtraction&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="s1">&#39;n_sky_rows&#39;</span><span class="p">:</span> <span class="mi">8</span><span class="p">,</span>
+    
+    <span class="c1"># The trace profile is constructed using oversampled data.</span>
+    <span class="c1"># This is the oversample factor.</span>
+    <span class="s1">&#39;oversample&#39;</span><span class="p">:</span> <span class="mi">4</span><span class="p">,</span>
+    
+    <span class="c1"># The optimal extraction algorithm</span>
+    <span class="s1">&#39;optx_alg&#39;</span><span class="p">:</span> <span class="s1">&#39;pmassey_wrapper&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;order_map&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;source&#39;</span><span class="p">:</span> <span class="s1">&#39;empirical_from_flat_fields&#39;</span><span class="p">,</span> <span class="s1">&#39;method&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">}</span>
+    
+<span class="p">}</span>
+
+
+<span class="c1">####################################################################</span>
+<span class="c1">####### RADIAL VELOCITIES ##########################################</span>
+<span class="c1">####################################################################</span>
+
+<span class="c1"># Default forward model settings</span>
+<span class="n">forward_model_settings</span> <span class="o">=</span> <span class="p">{</span>
+    
+    <span class="c1"># X corr options</span>
+    <span class="s1">&#39;xcorr_options&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;method&#39;</span><span class="p">:</span> <span class="s1">&#39;weighted_brute_force&#39;</span><span class="p">,</span> <span class="s1">&#39;weights&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;tellurics&#39;</span><span class="p">,</span> <span class="s1">&#39;flux_unc&#39;</span><span class="p">],</span> <span class="s1">&#39;n_bs&#39;</span><span class="p">:</span> <span class="mi">1000</span><span class="p">,</span> <span class="s1">&#39;step&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;range&#39;</span><span class="p">:</span> <span class="mf">1E4</span><span class="p">},</span>
+    
+    <span class="c1"># The cropped pixels</span>
+    <span class="s1">&#39;crop_data_pix&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">200</span><span class="p">,</span> <span class="mi">200</span><span class="p">],</span>
+    
+    <span class="c1"># The units for plotting</span>
+    <span class="s1">&#39;plot_wave_unit&#39;</span><span class="p">:</span> <span class="s1">&#39;microns&#39;</span><span class="p">,</span>
+    
+    <span class="s1">&#39;observatory&#39;</span><span class="p">:</span> <span class="n">observatory</span>
+<span class="p">}</span>
+
+<span class="c1"># Forward model blueprints for RVs</span>
+<span class="c1"># No default blueprints are defined.</span>
+<span class="n">forward_model_blueprints</span> <span class="o">=</span> <span class="p">{</span>
+    
+    <span class="c1"># The star</span>
+    <span class="s1">&#39;star&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;star&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;StarModel&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s1">&#39;vel&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">1000</span> <span class="o">*</span> <span class="mi">300</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">1000</span> <span class="o">*</span> <span class="mi">300</span><span class="p">]</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># The methane gas cell</span>
+    <span class="s1">&#39;gas_cell&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;methane_gas_cell&#39;</span><span class="p">,</span> <span class="c1"># NOTE: full parameter names are name + base_name.</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;GasCellModel&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">templates_path</span> <span class="o">+</span> <span class="s1">&#39;methane_gas_cell_ishell_kgas.npz&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;shift&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span>
+        <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.97</span><span class="p">,</span> <span class="mf">0.97</span><span class="p">,</span> <span class="mf">0.97</span><span class="p">]</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># Tellurics (from TAPAS)</span>
+    <span class="s1">&#39;tellurics&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;kband_tellurics&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;TelluricModelTAPAS&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;vel&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mi">500</span><span class="p">,</span> <span class="o">-</span><span class="mi">100</span><span class="p">,</span> <span class="mi">500</span><span class="p">],</span>
+        <span class="s1">&#39;species&#39;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s1">&#39;water&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_water_tapas_maunakea.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">]</span>
+            <span class="p">},</span>
+            <span class="s1">&#39;methane&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_methane_tapas_maunakea.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+            <span class="p">},</span>
+            <span class="s1">&#39;nitrous_oxide&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_nitrous_oxide_tapas_maunakea.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.65</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+            <span class="p">},</span>
+            <span class="s1">&#39;carbon_dioxide&#39;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s1">&#39;input_file&#39;</span><span class="p">:</span> <span class="n">templates_path</span> <span class="o">+</span> <span class="s1">&#39;telluric_carbon_dioxide_tapas_maunakea.npz&#39;</span><span class="p">,</span>
+                <span class="s1">&#39;depth&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.65</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># The default blaze is a quadratic + splines.</span>
+    <span class="s1">&#39;blaze&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;residual_blaze&#39;</span><span class="p">,</span> <span class="c1"># The blaze model after a division from a flat field</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;ResidualBlazeModel&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;n_splines&#39;</span><span class="p">:</span> <span class="mi">14</span><span class="p">,</span>
+        <span class="s1">&#39;base_quad&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">5.5E-5</span><span class="p">,</span> <span class="o">-</span><span class="mf">2E-6</span><span class="p">,</span> <span class="mf">5.5E-5</span><span class="p">],</span>
+        <span class="s1">&#39;base_lin&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.001</span><span class="p">,</span> <span class="mf">1E-5</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">],</span>
+        <span class="s1">&#39;base_zero&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.96</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.08</span><span class="p">],</span>
+        <span class="s1">&#39;spline&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.135</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.135</span><span class="p">],</span>
+        <span class="s1">&#39;n_delay&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        
+        <span class="c1"># Blaze is centered on the blaze wavelength. Crude estimates</span>
+        <span class="s1">&#39;blaze_wavelengths&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">24623.42005657</span><span class="p">,</span> <span class="mf">24509.67655586</span><span class="p">,</span> <span class="mf">24396.84451226</span><span class="p">,</span> <span class="mf">24284.92392579</span><span class="p">,</span> <span class="mf">24173.91479643</span><span class="p">,</span> <span class="mf">24063.81712419</span><span class="p">,</span> <span class="mf">23954.63090907</span><span class="p">,</span> <span class="mf">23846.35615107</span><span class="p">,</span> <span class="mf">23738.99285018</span><span class="p">,</span> <span class="mf">23632.54100641</span><span class="p">,</span> <span class="mf">23527.00061976</span><span class="p">,</span> <span class="mf">23422.37169023</span><span class="p">,</span> <span class="mf">23318.65421781</span><span class="p">,</span> <span class="mf">23215.84820252</span><span class="p">,</span> <span class="mf">23113.95364434</span><span class="p">,</span> <span class="mf">23012.97054327</span><span class="p">,</span> <span class="mf">22912.89889933</span><span class="p">,</span> <span class="mf">22813.7387125</span><span class="p">,</span>  <span class="mf">22715.48998279</span><span class="p">,</span> <span class="mf">22618.1527102</span><span class="p">,</span> <span class="mf">22521.72689473</span><span class="p">,</span> <span class="mf">22426.21253637</span><span class="p">,</span> <span class="mf">22331.60963514</span><span class="p">,</span> <span class="mf">22237.91819101</span><span class="p">,</span> <span class="mf">22145.13820401</span><span class="p">,</span> <span class="mf">22053.26967413</span><span class="p">,</span> <span class="mf">21962.31260136</span><span class="p">,</span> <span class="mf">21872.26698571</span><span class="p">,</span> <span class="mf">21783.13282718</span><span class="p">]</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># Hermite Gaussian LSF</span>
+    <span class="s1">&#39;lsf&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;lsf_hermite&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;LSFHermiteModel&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;hermdeg&#39;</span><span class="p">:</span> <span class="mi">6</span><span class="p">,</span>
+        <span class="s1">&#39;n_delay&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+        <span class="s1">&#39;compress&#39;</span><span class="p">:</span> <span class="mi">64</span><span class="p">,</span>
+        <span class="s1">&#39;width&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.055</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">],</span> <span class="c1"># LSF width, in angstroms</span>
+        <span class="s1">&#39;ak&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.03</span><span class="p">,</span> <span class="mf">0.001</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">]</span> <span class="c1"># Hermite polynomial coefficients</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># Determined by splines</span>
+    <span class="s1">&#39;wavelength_solution&#39;</span><span class="p">:</span> <span class="p">{</span>
+        
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;csplines_wavesol&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;WaveSolModelSplines&#39;</span><span class="p">,</span>
+        
+        <span class="c1"># The three pixels to span the detector corresponding to the above wavelengths</span>
+        <span class="c1"># They are chosen as such because we typically use pixels 200-1848 only.</span>
+        <span class="c1"># These pixels must correspond to the wavelengths in the array wavesol_base_wave_set_points_i[order]</span>
+        <span class="s1">&#39;base_pixel_set_points&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">199</span><span class="p">,</span> <span class="mf">1023.5</span><span class="p">,</span> <span class="mi">1847</span><span class="p">],</span>
+        
+        <span class="c1"># Left most set point for the quadratic wavelength solution</span>
+        <span class="s1">&#39;base_set_point_1&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">24545.57561435</span><span class="p">,</span> <span class="mf">24431.48444449</span><span class="p">,</span> <span class="mf">24318.40830764</span><span class="p">,</span> <span class="mf">24206.35776048</span><span class="p">,</span> <span class="mf">24095.33986576</span><span class="p">,</span> <span class="mf">23985.37381209</span><span class="p">,</span> <span class="mf">23876.43046386</span><span class="p">,</span> <span class="mf">23768.48974584</span><span class="p">,</span> <span class="mf">23661.54443537</span><span class="p">,</span> <span class="mf">23555.56359209</span><span class="p">,</span> <span class="mf">23450.55136357</span><span class="p">,</span> <span class="mf">23346.4923953</span><span class="p">,</span> <span class="mf">23243.38904298</span><span class="p">,</span> <span class="mf">23141.19183839</span><span class="p">,</span> <span class="mf">23039.90272625</span><span class="p">,</span> <span class="mf">22939.50127095</span><span class="p">,</span> <span class="mf">22840.00907242</span><span class="p">,</span> <span class="mf">22741.40344225</span><span class="p">,</span> <span class="mf">22643.6481698</span><span class="p">,</span> <span class="mf">22546.74892171</span><span class="p">,</span> <span class="mf">22450.70934177</span><span class="p">,</span> <span class="mf">22355.49187891</span><span class="p">,</span> <span class="mf">22261.08953053</span><span class="p">,</span> <span class="mf">22167.42305394</span><span class="p">,</span> <span class="mf">22074.72848136</span><span class="p">,</span> <span class="mf">21982.75611957</span><span class="p">,</span> <span class="mf">21891.49178289</span><span class="p">,</span> <span class="mf">21801.07332421</span><span class="p">,</span> <span class="mf">21711.43496504</span><span class="p">],</span>
+
+        <span class="c1"># Middle set point for the quadratic wavelength solution</span>
+        <span class="s1">&#39;base_set_point_2&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">24628.37672608</span><span class="p">,</span> <span class="mf">24513.79686837</span><span class="p">,</span> <span class="mf">24400.32734124</span><span class="p">,</span> <span class="mf">24287.85495107</span><span class="p">,</span> <span class="mf">24176.4424356</span><span class="p">,</span> <span class="mf">24066.07880622</span><span class="p">,</span> <span class="mf">23956.7243081</span><span class="p">,</span> <span class="mf">23848.39610577</span><span class="p">,</span> <span class="mf">23741.05658955</span><span class="p">,</span> <span class="mf">23634.68688897</span><span class="p">,</span> <span class="mf">23529.29771645</span><span class="p">,</span> <span class="mf">23424.86836784</span><span class="p">,</span> <span class="mf">23321.379387</span><span class="p">,</span> <span class="mf">23218.80573474</span><span class="p">,</span> <span class="mf">23117.1876433</span><span class="p">,</span> <span class="mf">23016.4487031</span><span class="p">,</span> <span class="mf">22916.61245655</span><span class="p">,</span> <span class="mf">22817.65768889</span><span class="p">,</span> <span class="mf">22719.56466802</span><span class="p">,</span> <span class="mf">22622.34315996</span><span class="p">,</span> <span class="mf">22525.96723597</span><span class="p">,</span> <span class="mf">22430.41612825</span><span class="p">,</span> <span class="mf">22335.71472399</span><span class="p">,</span> <span class="mf">22241.83394135</span><span class="p">,</span> <span class="mf">22148.73680381</span><span class="p">,</span> <span class="mf">22056.42903627</span><span class="p">,</span> <span class="mf">21964.91093944</span><span class="p">,</span> <span class="mf">21874.20764171</span><span class="p">,</span> <span class="mf">21784.20091295</span><span class="p">],</span>
+
+        <span class="c1"># Right most set point for the quadratic wavelength solution</span>
+        <span class="s1">&#39;base_set_point_3&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">24705.72472863</span><span class="p">,</span> <span class="mf">24590.91231465</span><span class="p">,</span> <span class="mf">24476.99298677</span><span class="p">,</span> <span class="mf">24364.12010878</span><span class="p">,</span> <span class="mf">24252.31443701</span><span class="p">,</span> <span class="mf">24141.55527091</span><span class="p">,</span> <span class="mf">24031.82506843</span><span class="p">,</span> <span class="mf">23923.12291214</span><span class="p">,</span> <span class="mf">23815.40789995</span><span class="p">,</span> <span class="mf">23708.70106907</span><span class="p">,</span> <span class="mf">23602.95596074</span><span class="p">,</span> <span class="mf">23498.18607941</span><span class="p">,</span> <span class="mf">23394.35163611</span><span class="p">,</span> <span class="mf">23291.44815827</span><span class="p">,</span> <span class="mf">23189.49231662</span><span class="p">,</span> <span class="mf">23088.42080084</span><span class="p">,</span> <span class="mf">22988.26540094</span><span class="p">,</span> <span class="mf">22888.97654584</span><span class="p">,</span> <span class="mf">22790.57559244</span><span class="p">,</span> <span class="mf">22693.02942496</span><span class="p">,</span> <span class="mf">22596.33915038</span><span class="p">,</span> <span class="mf">22500.49456757</span><span class="p">,</span> <span class="mf">22405.49547495</span><span class="p">,</span> <span class="mf">22311.25574559</span><span class="p">,</span> <span class="mf">22217.91297633</span><span class="p">,</span> <span class="mf">22125.33774808</span><span class="p">,</span> <span class="mf">22033.50356525</span><span class="p">,</span> <span class="mf">21942.41058186</span><span class="p">,</span> <span class="mf">21852.24253555</span><span class="p">],</span>
+        
+        <span class="s1">&#39;n_splines&#39;</span><span class="p">:</span> <span class="mi">6</span><span class="p">,</span>
+        <span class="c1">#&#39;n_delay_splines&#39;: 0,</span>
+        <span class="c1">#&#39;base&#39;: [-0.35, -0.05, 0.2],</span>
+        <span class="s1">&#39;spline&#39;</span><span class="p">:</span> <span class="p">[</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]</span>
+    <span class="p">},</span>
+    
+    <span class="c1"># Fabry Perot cavity with two parameters</span>
+    <span class="s1">&#39;fringing&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;fringing&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;class_name&#39;</span><span class="p">:</span> <span class="s1">&#39;BasicFringingModel&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;d&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">183900000.0</span><span class="p">,</span> <span class="mf">183911000.0</span><span class="p">,</span> <span class="mf">183930000.0</span><span class="p">],</span>
+        <span class="s1">&#39;fin&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.01</span><span class="p">,</span> <span class="mf">0.04</span><span class="p">,</span> <span class="mf">0.08</span><span class="p">],</span>
+        <span class="s1">&#39;n_delay&#39;</span><span class="p">:</span> <span class="mi">10000</span> <span class="c1"># To delay indefinitely, user may wish to enable.</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rvs_api.html">Radial Velocities</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="spectrographs_api.html">Spectroraphs</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="spectrographs_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="chiron.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="nirspec.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/ishell.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

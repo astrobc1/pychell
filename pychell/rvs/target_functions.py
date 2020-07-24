@@ -31,23 +31,26 @@ from numba import njit, jit, prange
 import pychell.rvs.model_components as pcmodelcomponents # the data objects
 import pychell.maths as pcmath
 
-
-def simple_rms(gp, forward_model, iter_num):
+def simple_rms(gp, forward_model, iter_index):
     """Target function which returns the RMS and constraint. The RMS is weighted by bad pixels only (i.e., a binary mask). The constraint is used to force the LSF to be positive everywhere.
 
     Args:
         gp (Parameters): The Parameters object.
         forward_model (ForwardModel): The forwad model object
-        iter_num (int): The iteration to generate RVs from.
+        iter_index (int): The iteration to generate RVs from.
+    Returns:
+        (float): The rms.
+        (float): The constraint.
     """
 
     # Generate the forward model
-    wave_lr, model_lr = forward_model.build_full(gp, iter_num)
+    wave_lr, model_lr = forward_model.build_full(gp, iter_index)
 
     # Weights are just bad pixels
     weights = np.copy(forward_model.data.badpix)
 
     # Differences
+    #diffs2 = (np.log(forward_model.data.flux) - np.log(model_lr))**2
     diffs2 = (forward_model.data.flux - model_lr)**2
     good = np.where(np.isfinite(diffs2) & (weights > 0))[0]
     if good.size < 100:
@@ -75,18 +78,19 @@ def simple_rms(gp, forward_model, iter_num):
     return rms, cons
 
 
-
-
-def weighted_data_flux(gp, forward_model, iter_num):
+def weighted_data_flux(gp, forward_model, iter_index):
     """Target function which returns the RMS and constraint. The RMS is weighted by bad pixels and the provided flux uncertainties. The constraint is used to force the LSF to be positive everywhere.
 
     Args:
         gp (Parameters): The Parameters object.
         forward_model (ForwardModel): The forwad model object
-        iter_num (int): The iteration to generate RVs from.
+        iter_index (int): The iteration to generate RVs from.
+    Returns:
+        (float): The rms.
+        (float): The constraint.
     """
     # Generate the forward model
-    wave_lr, model_lr = forward_model.build_full(gp, iter_num)
+    wave_lr, model_lr = forward_model.build_full(gp, iter_index)
     
     # Build weights from flux uncertainty
     weights = 1 / forward_model.data.flux_unc**2 * forward_model.data.badpix
@@ -119,17 +123,20 @@ def weighted_data_flux(gp, forward_model, iter_num):
     return wrms, cons
 
 
-def binary_tellmask(gp, forward_model, iter_num):
+def binary_tellmask(gp, forward_model, iter_index):
     
     """Target function which returns the RMS and constraint. The RMS is weighted by bad pixels and a binary telluric mask which flags regions of telluric absorption greater than 95 percent. The constraint is used to force the LSF to be positive everywhere.
 
     Args:
         gp (Parameters): The Parameters object.
         forward_model (ForwardModel): The forwad model object
-        iter_num (int): The iteration to generate RVs from.
+        iter_index (int): The iteration to generate RVs from.
+    Returns:
+        (float): The rms.
+        (float): The constraint.
     """
     # Generate the forward model
-    wave_lr, model_lr = forward_model.build_full(gp, iter_num)
+    wave_lr, model_lr = forward_model.build_full(gp, iter_index)
     
     # Build weights from flux uncertainty
     tell_flux = forward_model.models_dict['tellurics'].build(gp, forward_model.templates_dict['tellurics'], wave_lr)
@@ -165,17 +172,20 @@ def binary_tellmask(gp, forward_model, iter_num):
     return wrms, cons
 
 
-def binary_tellmask_ignore(gp, forward_model, iter_num):
+def binary_tellmask_ignore(gp, forward_model, iter_index):
     
     """Target function which returns the RMS and constraint. The RMS is weighted by bad pixels and a binary telluric mask which flags regions of telluric absorption greater than 95 percent. The constraint is used to force the LSF to be positive everywhere.
 
     Args:
         gp (Parameters): The Parameters object.
         forward_model (ForwardModel): The forwad model object
-        iter_num (int): The iteration to generate RVs from.
+        iter_index (int): The iteration to generate RVs from.
+    Returns:
+        (float): The rms.
+        (float): The constraint.
     """
     # Generate the forward model
-    wave_lr, model_lr = forward_model.build_full(gp, iter_num)
+    wave_lr, model_lr = forward_model.build_full(gp, iter_index)
     
     # Build weights from flux uncertainty
     tell_flux = forward_model.models_dict['tellurics'].build(gp, forward_model.templates_dict['tellurics'], wave_lr)

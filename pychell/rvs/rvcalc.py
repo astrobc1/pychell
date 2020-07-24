@@ -22,35 +22,32 @@ import pychell.utils as pcutils
 import copy
 
 
-def generate_rvs(forward_models, iter_num):
-    """Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed along with the line bisector and BIS.
+def generate_nightly_rvs(forward_models, iter_index):
+    """Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed.
 
     Args:
         forward_models (ForwardModels): The list of forward model objects.
-        iter_num (int): The iteration to generate RVs from.
+        iter_index (int): The iteration to generate RVs from.
     """
-    
-    # k1 = index for forward model array access    
-    # k2 = Plot names for forward model objects
-    # k3 = index for RV array access
-    # k4 = RV plot names
-    k1, k2, k3, k4 = forward_models[0].iteration_indices(iter_num)
 
     # The nightly RVs and error bars.
     rvs_nightly = np.full(forward_models.n_nights, fill_value=np.nan)
     unc_nightly = np.full(forward_models.n_nights, fill_value=np.nan)
-    rvs_xcorr_nightly = np.full(forward_models.n_nights, fill_value=np.nan)
-    unc_xcorr_nightly = np.full(forward_models.n_nights, fill_value=np.nan)
+    
+    # Same for xcorr rvs
+    if forward_models.do_xcorr:
+        rvs_xcorr_nightly = np.full(forward_models.n_nights, fill_value=np.nan)
+        unc_xcorr_nightly = np.full(forward_models.n_nights, fill_value=np.nan)
 
     # The best fit stellar RVs, remove the barycenter velocity
-    rvs = np.array([forward_models[ispec].best_fit_pars[k1][forward_models[ispec].models_dict['star'].par_names[0]].value + forward_models[ispec].data.bc_vel for ispec in range(forward_models.n_spec)], dtype=np.float64)
+    rvs = np.array([forward_models[ispec].best_fit_pars[-1][forward_models[ispec].models_dict['star'].par_names[0]].value + forward_models[ispec].data.bc_vel for ispec in range(forward_models.n_spec)], dtype=np.float64)
     
-    # The CC vels
+    # The xcorr vels
     if forward_models.do_xcorr:
-        rvs_xcorr = np.array([forward_models[ispec].rvs_xcorr[k3] for ispec in range(forward_models.n_spec)], dtype=np.float64)
+        rvs_xcorr = forward_models.rvs_dict['rvs_xcorr'][:, iter_index]
 
     # The RMS from the forward model fit
-    rms = np.array([forward_models[ispec].opt[k1][0] for ispec in range(forward_models.n_spec)], dtype=np.float64)
+    rms = np.array([forward_models[ispec].opt[-1][0] for ispec in range(forward_models.n_spec)], dtype=np.float64)
 
     # Co-add to get nightly RVs
     # If only one spectrum and no initial guess, no rvs!
@@ -58,42 +55,39 @@ def generate_rvs(forward_models, iter_num):
         rvs[0] = np.nan
         rvs_nightly[0] = np.nan
         unc_nightly[0] = np.nan
-        rvs_xcorr_nightly[0] = np.nan
-        unc_xcorr_nightly[0] = np.nan
     else:
         f = 0
         l = forward_models.n_obs_nights[0]
         for inight in range(forward_models.n_nights):
             
             # Nelder Mead RVs
-            rvs_single_night = rvs[f:l]
+            r = rvs[f:l]
             w = 1 / rms[f:l]**2
             if forward_models.n_obs_nights[inight] > 1:
-                wavg = pcmath.weighted_mean(rvs_single_night, w)
-                wstddev = pcmath.weighted_stddev(rvs_single_night, w)
-                good = np.where(np.abs(rvs_single_night - wavg) < 4*wstddev)[0]
+                wavg = pcmath.weighted_mean(r, w)
+                wstddev = pcmath.weighted_stddev(r, w)
+                good = np.where(np.abs(r - wavg) < 4*wstddev)[0]
                 if good.size == 0:
-                    good = np.arange(rvs_single_night.size).astype(int)
-                rvs_nightly[inight] = pcmath.weighted_mean(rvs_single_night[good], w[good])
-                unc_nightly[inight] = pcmath.weighted_stddev(rvs_single_night[good], w[good]) / np.sqrt(forward_models.n_obs_nights[inight])
+                    good = np.arange(r.size).astype(int)
+                rvs_nightly[inight] = pcmath.weighted_mean(r[good], w[good])
+                unc_nightly[inight] = pcmath.weighted_stddev(r[good], w[good]) / np.sqrt(forward_models.n_obs_nights[inight])
             else:
-                rvs_nightly[inight] = rvs_single_night[0]
-                unc_nightly[inight] = 0
-                
+                rvs_nightly[inight] = r[0]
+                unc_nightly[inight] = np.nan
                 
             # xcorr RVs
             if forward_models.do_xcorr:
-                rvs_single_night = rvs_xcorr[f:l]
+                r = rvs_xcorr[f:l]
                 if forward_models.n_obs_nights[inight] > 1:
-                    wavg = pcmath.weighted_mean(rvs_single_night, w)
-                    wstddev = pcmath.weighted_stddev(rvs_single_night, w)
-                    good = np.where(np.abs(rvs_single_night - wavg) < 4*wstddev)[0]
+                    wavg = pcmath.weighted_mean(r, w)
+                    wstddev = pcmath.weighted_stddev(r, w)
+                    good = np.where(np.abs(r - wavg) < 4*wstddev)[0]
                     if good.size == 0:
-                        good = np.arange(rvs_single_night.size).astype(int)
-                    rvs_xcorr_nightly[inight] = pcmath.weighted_mean(rvs_single_night[good], w[good])
-                    unc_xcorr_nightly[inight] = pcmath.weighted_stddev(rvs_single_night[good], w[good]) / np.sqrt(forward_models.n_obs_nights[inight])
+                        good = np.arange(r.size).astype(int)
+                    rvs_xcorr_nightly[inight] = pcmath.weighted_mean(r[good], w[good])
+                    unc_xcorr_nightly[inight] = pcmath.weighted_stddev(r[good], w[good]) / np.sqrt(forward_models.n_obs_nights[inight])
                 else:
-                    rvs_xcorr_nightly[inight] = rvs_single_night[0]
+                    rvs_xcorr_nightly[inight] = r[0]
                     unc_xcorr_nightly[inight] = 0
                 
             # Step to next night
@@ -101,43 +95,28 @@ def generate_rvs(forward_models, iter_num):
                 f += forward_models.n_obs_nights[inight]
                 l += forward_models.n_obs_nights[inight+1]
             
-    
-                
-                
     # Store Outputs
     
     # Nelder Mead
-    forward_models.rvs_dict['rvs'][:, k3] = rvs
-    forward_models.rvs_dict['rvs_nightly'][:, k3] = rvs_nightly
-    forward_models.rvs_dict['unc_nightly'][:, k3] = unc_nightly
+    forward_models.rvs_dict['rvs'][:, iter_index] = rvs
+    forward_models.rvs_dict['rvs_nightly'][:, iter_index] = rvs_nightly
+    forward_models.rvs_dict['unc_nightly'][:, iter_index] = unc_nightly
     
     # X Corr
     if forward_models.do_xcorr:
-        for ispec in range(forward_models.n_spec):
-            forward_models.rvs_dict['xcorr_vels'][:, ispec, k3] = forward_models[ispec].xcorr_vels[:, k3]
-            forward_models.rvs_dict['xcorrs'][:, ispec, k3] = forward_models[ispec].xcorrs[:, k3]
-            forward_models.rvs_dict['line_bisectors'][:, ispec, k3] = forward_models[ispec].line_bisectors[:, k3]
-            forward_models.rvs_dict['bisector_spans'][ispec, k3] = forward_models[ispec].bisector_spans[k3]
         
         # X Corr RVs
-        forward_models.rvs_dict['rvs_xcorr'][:, k3] = rvs_xcorr
-        forward_models.rvs_dict['rvs_xcorr_nightly'][:, k3] = rvs_xcorr_nightly
-        forward_models.rvs_dict['unc_xcorr_nightly'][:, k3] = unc_xcorr_nightly
+        forward_models.rvs_dict['rvs_xcorr_nightly'][:, iter_index] = rvs_xcorr_nightly
+        forward_models.rvs_dict['unc_xcorr_nightly'][:, iter_index] = unc_xcorr_nightly
 
         
-def plot_rvs(forward_models, iter_num):
+def plot_rvs(forward_models, iter_index):
     """Plots all RVs and cross-correlation analysis after forward modeling all spectra.
 
     Args:
         forward_models (ForwardModels): The list of forward model objects.
-        iter_num (int): The iteration to use.
+        iter_index (int): The iteration to use.
     """
-    
-    # k1 = index for forward model array access    
-    # k2 = Plot names for forward model objects
-    # k3 = index for RV array access
-    # k4 = RV plot names
-    k1, k2, k3, k4 = forward_models[0].iteration_indices(iter_num)
     
     # Plot the rvs, nightly rvs, xcorr rvs, xcorr nightly rvs
     plot_width, plot_height = 1800, 600
@@ -149,29 +128,29 @@ def plot_rvs(forward_models, iter_num):
     
     # Individual rvs from nelder mead fitting
     plt.plot(forward_models.BJDS - forward_models.BJDS_nightly[0],
-             rvs['rvs'][:, k3] - np.nanmedian(rvs['rvs_nightly'][:, k3]),
+             rvs['rvs'][:, iter_index] - np.nanmedian(rvs['rvs_nightly'][:, iter_index]),
              marker='.', linewidth=0, alpha=0.7, color=(0.1, 0.8, 0.1))
     
     # Nightly rvs from nelder mead fitting
     plt.errorbar(forward_models.BJDS_nightly - forward_models.BJDS_nightly[0],
-                    rvs['rvs_nightly'][:, k3] - np.nanmedian(rvs['rvs_nightly'][:, k3]),
-                    yerr=rvs['unc_nightly'][:, k3], marker='o', linewidth=0, elinewidth=1, label='Nelder Mead', color=(0, 114/255, 189/255))
+                    rvs['rvs_nightly'][:, iter_index] - np.nanmedian(rvs['rvs_nightly'][:, iter_index]),
+                    yerr=rvs['unc_nightly'][:, iter_index], marker='o', linewidth=0, elinewidth=1, label='Nelder Mead', color=(0, 114/255, 189/255))
 
     # Individual and nightly xcorr rvs
     if forward_models.do_xcorr:
         plt.plot(forward_models.BJDS - forward_models.BJDS_nightly[0],
-                    rvs['rvs_xcorr'][:, k3] - np.nanmedian(rvs['rvs_xcorr'][:, k3]),
+                    rvs['rvs_xcorr'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr'][:, iter_index]),
                     marker='.', linewidth=0, color='black', alpha=0.6)
         plt.errorbar(forward_models.BJDS_nightly - forward_models.BJDS_nightly[0],
-                        rvs['rvs_xcorr_nightly'][:, k3] - np.nanmedian(rvs['rvs_xcorr_nightly'][:, k3]),
-                        yerr=rvs['unc_xcorr_nightly'][:, k3], marker='X', linewidth=0, alpha=0.8, label='X Corr', color='darkorange')
+                        rvs['rvs_xcorr_nightly'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr_nightly'][:, iter_index]),
+                        yerr=rvs['unc_xcorr_nightly'][:, iter_index], marker='X', linewidth=0, alpha=0.8, label='X Corr', color='darkorange')
     
-    plt.title(forward_models[0].star_name + ' RVs Order ' + str(forward_models.order_num) + ', Iteration ' + str(k4), fontweight='bold')
+    plt.title(forward_models[0].star_name + ' RVs Order ' + str(forward_models.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
     plt.xlabel('BJD - BJD$_{0}$', fontweight='bold')
     plt.ylabel('RV [m/s]', fontweight='bold')
     plt.legend(loc='upper right')
     plt.tight_layout()
-    fname = forward_models.run_output_path_rvs + forward_models.tag + '_rvs_ord' + str(forward_models.order_num) + '_iter' + str(k4) + '.png'
+    fname = forward_models.run_output_path_rvs + forward_models.tag + '_rvs_ord' + str(forward_models.order_num) + '_iter' + str(iter_index + 1) + '.png'
     plt.savefig(fname)
     plt.close()
     
@@ -179,75 +158,33 @@ def plot_rvs(forward_models, iter_num):
         # Plot the Bisector stuff
         plt.figure(1, figsize=(12, 7), dpi=200)
         for ispec in range(forward_models.n_spec):
-            v0 = rvs['rvs_xcorr'][ispec, k3]
-            depths = np.linspace(0, 1, num=forward_models.n_bs)
-            ccf_ = rvs['xcorrs'][:, ispec, k3] - np.nanmin(rvs['xcorrs'][:, ispec, k3])
+            v0 = rvs['rvs_xcorr'][ispec, iter_index]
+            depths = np.linspace(0, 1, num=forward_models.xcorr_options['n_bs'])
+            ccf_ = rvs['xcorrs'][:, 2*ispec+1, iter_index] - np.nanmin(rvs['xcorrs'][:, 2*ispec+1, iter_index])
             ccf_ = ccf_ / np.nanmax(ccf_)
-            plt.plot(rvs['xcorr_vels'][:, ispec, k3] - v0, ccf_)
-            plt.plot(rvs['line_bisectors'][:, ispec, k3], depths)
+            plt.plot(rvs['xcorrs'][:, 2*ispec, iter_index] - v0, ccf_)
+            plt.plot(rvs['line_bisectors'][:, ispec, iter_index], depths)
         
-        plt.title(forward_models.star_name + ' CCFs Order ' + str(forward_models.order_num) + ', Iteration ' + str(k4), fontweight='bold')
+        plt.title(forward_models.star_name + ' CCFs Order ' + str(forward_models.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
         plt.xlabel('RV$_{\star}$ [m/s]', fontweight='bold')
         plt.ylabel('CCF (RMS surface)', fontweight='bold')
         plt.xlim(-10000, 10000)
         plt.tight_layout()
-        fname = forward_models.run_output_path_rvs + forward_models.tag + '_ccfs_ord' + str(forward_models.order_num) + '_iter' + str(k4) + '.png'
+        fname = forward_models.run_output_path_rvs + forward_models.tag + '_ccfs_ord' + str(forward_models.order_num) + '_iter' + str(iter_index + 1) + '.png'
         plt.savefig(fname)
         plt.close()
     
         # Plot the Bisector stuff
         plt.figure(1, figsize=(12, 7), dpi=200)
-        plt.plot(rvs['rvs_xcorr'][:, k3], rvs['bisector_spans'][:, k3], marker='o', linewidth=0)
-        plt.title(forward_models[0].star_name + ' CCF Bisector Spans Order ' + str(forward_models.order_num) + ', Iteration ' + str(k4), fontweight='bold')
+        plt.plot(rvs['rvs_xcorr'][:, iter_index], rvs['bisector_spans'][:, iter_index], marker='o', linewidth=0)
+        plt.title(forward_models[0].star_name + ' CCF Bisector Spans Order ' + str(forward_models.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
         plt.xlabel('X Corr RV [m/s]', fontweight='bold')
         plt.ylabel('Bisector Span [m/s]', fontweight='bold')
         plt.tight_layout()
-        fname = forward_models.run_output_path_rvs + forward_models.tag + '_bisectorspans_ord' + str(forward_models.order_num) + '_iter' + str(k4) + '.png'
+        fname = forward_models.run_output_path_rvs + forward_models.tag + '_bisectorspans_ord' + str(forward_models.order_num) + '_iter' + str(iter_index + 1) + '.png'
         plt.savefig(fname)
         plt.close()
-        
 
-def cross_correlate_all(forward_models, iter_num):
-    """Cross correlation wrapper for all spectra.
-
-    Args:
-        forward_models (ForwardModels): The list of forward model objects.
-        iter_num (int): The iteration to use.
-    """
-
-    # Fit in Parallel
-    stopwatch = pcutils.StopWatch()
-    print('Cross Correlating Spectra ... ', flush=True)
-
-    if forward_models.n_cores > 1:
-
-        # Construct the arguments
-        iter_pass = []
-        for ispec in range(forward_models.n_spec):
-            iter_pass.append((forward_models[ispec], forward_models.n_spec, iter_num))
-
-        # Cross Correlate in Parallel
-        forward_models[:] = Parallel(n_jobs=forward_models.n_cores, verbose=0, batch_size=1)(delayed(cc_wrapper)(*iter_pass[ispec]) for ispec in range(forward_models.n_spec))
-        
-    else:
-        for ispec in range(forward_models.n_spec):
-            forward_models[ispec] = cc_wrapper(forward_models[ispec], forward_models.n_spec, iter_num)
-            
-    print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
-
-
-def cc_wrapper(forward_model, n_spec_tot, iter_num):
-    """Cross correlation wrapper for a single spectrum.
-
-    Args:
-        forward_model (ForwardModel): A single forward model object.
-        n_spec_tot (int): The total number of spectra.
-        iter_num (int): The iteration to use.
-    """
-    stopwatch = pcutils.StopWatch()
-    cross_correlate_star(forward_model, iter_num)
-    print('    Cross Correlated Spectrum ' + str(forward_model.data.spec_num) + ' of ' + str(n_spec_tot) + ' in ' + str(round((stopwatch.time_since()), 2)) + ' sec', flush=True)
-    return forward_model
 
 
 def get_nightly_jds(jds, sep=0.5):
@@ -256,6 +193,9 @@ def get_nightly_jds(jds, sep=0.5):
     Args:
         jds (np.ndarray): An array of sorted JDs (or BJDs).
         sep (float): The minimum separation in days between two different nights of data, defaults to 0.5.
+    Returns:
+        (np.ndarray): The average nightly jds.
+        (np.ndarray): The number of observations each night.
     """
     
     # Number of spectra
@@ -287,81 +227,129 @@ def get_nightly_jds(jds, sep=0.5):
     return jds_nightly, n_obs_nights
 
 
-def cross_correlate_star(forward_model, iter_num):
-    """Performs a cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.
+def weighted_brute_force(forward_model, iter_index):
+    """Performs a pseudo weighted cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.
 
     Args:
         forward_model (ForwardModel): A single forward model object.
-        iter_num (int): The iteration to use.
-        
+        iter_index (int): The iteration to use to construct the forward model.
     Returns:
-        forward_model (ForwardModel): The forward model object with cross-correlation results stored in place.
+        (np.ndarray): The velocities for the xcorr function.
+        (np.ndarray): The rms (xcorr) surface.
+        (np.ndarray): The xcorr RV (bary-center velocity subtracted).
+        (float): The BIS.
     """
     
-    
-    # k1 = index for forward model array access
-    # k2 = Plot names for forward model objects
-    # k3 = index for RV array access
-    # k4 = RV plot names
-    k1, k2, k3, k4 = forward_model.iteration_indices(iter_num)
-        
-    if forward_model.crude:
-        pars = copy.deepcopy(forward_model.initial_parameters)
-        vels = np.arange(-250000, 250000, 500)
-    else:
-        pars = copy.deepcopy(forward_model.best_fit_pars[k1])
-        v0 = pars[forward_model.models_dict['star'].par_names[0]].value
-        vels = np.linspace(v0-forward_model.xcorr_range, v0+forward_model.xcorr_range, num=forward_model.n_xcorr_vels)
+    pars = copy.deepcopy(forward_model.best_fit_pars[-1])
+    v0 = pars[forward_model.models_dict['star'].par_names[0]].value
+    vels = np.linspace(v0 - forward_model.xcorr_options['range'], v0 + forward_model.xcorr_options['range'], num=forward_model.xcorr_options['n_vels'])
 
     # Stores the rms as a function of velocity
-    rms = np.empty(vels.size, dtype=np.float64)
+    rmss = np.empty(vels.size, dtype=np.float64) + np.nan
     
-    # Weights for now are just bad pixels
-    weights = np.copy(forward_model.data.badpix * forward_model.data.flux_unc)
+    # Starting weights are flux uncertainties and bad pixels. If flux unc are uniform, they have no effect.
+    weights_init = np.copy(forward_model.data.badpix * forward_model.data.flux_unc)
     
     # Flag regions of heavy tellurics
-    if 'tellurics' in forward_model.models_dict:
-        tell_flux = forward_model.models_dict['tellurics'].build(pars, forward_model.templates_dict['tellurics'],  forward_model.templates_dict['star'][:, 0])
-        tell_flux = forward_model.models_dict['lsf'].convolve_flux(tell_flux, pars=pars)
-        tell_flux = np.interp(forward_model.build_full(pars, iter_num)[0], forward_model.templates_dict['star'][:, 0], tell_flux, left=0, right=0)
-        tell_flux_weights = tell_flux**2
-        weights *= tell_flux_weights
+    low_flux_regions = np.where(np.log(forward_model.data.flux) < -3)[0]
+    if low_flux_regions.size > 0:
+        weights_init[low_flux_regions] = 0
         
     for i in range(vels.size):
+        
+        weights = np.copy(weights_init)
         
         # Set the RV parameter to the current step
         pars[forward_model.models_dict['star'].par_names[0]].setv(value=vels[i])
         
         # Build the model
-        _, model_lr = forward_model.build_full(pars, iter_num)
+        _, model_lr = forward_model.build_full(pars, iter_index)
+        
+        # Weights
+        bad = np.where(~np.isfinite(model_lr) | (weights <= 0))[0]
+        if bad.size > 0:
+            weights[bad] = 0
         
         # Construct the RMS
-        rms[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
+        rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
 
-    xcorr_star_vel = vels[np.nanargmin(rms)]
+    # Extract the best rv
+    xcorr_star_vel = vels[np.nanargmin(rmss)]
     xcorr_rv_init = xcorr_star_vel + forward_model.data.bc_vel # Actual RV is bary corr corrected
     vels_for_rv = vels + forward_model.data.bc_vel
         
-    # Fit the CCF with a polynomial
-    if not forward_model.crude:
-        use = np.where((vels_for_rv > xcorr_rv_init - 150) & (vels_for_rv < xcorr_rv_init + 150))[0]
-        pfit = np.polyfit(vels_for_rv[use], rms[use], 2)
-        forward_model.rvs_xcorr[k3] = -1 * pfit[1] / (2 * pfit[0])
-        forward_model.xcorr_vels[:, k3] = vels_for_rv
-        forward_model.xcorrs[:, k3] = rms
-        bspan_result = compute_bisector_span(forward_model.xcorr_vels[:, k3], forward_model.xcorrs[:, k3], n_bs=forward_model.n_bs)
-        forward_model.line_bisectors[:, k3] = bspan_result[0]
-        forward_model.bisector_spans[k3] = bspan_result[1]
+    # Fit with a polynomial
+    use = np.where((vels_for_rv > xcorr_rv_init - 150) & (vels_for_rv < xcorr_rv_init + 150))[0]
+    pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
+    xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
     
-    # If this is the first iteration, update the stellar rv
-    if forward_model.crude:
-        forward_model.initial_parameters[forward_model.models_dict['star'].par_names[0]].setv(value=xcorr_star_vel)
+    # Bisector span
+    bspan_result = compute_bisector_span(vels_for_rv, rmss, n_bs=forward_model.xcorr_options['n_bs'])
     
-    return forward_model
+    return vels_for_rv, rmss, xcorr_rv, bspan_result[1]
 
 
+def crude_brute_force(forward_model, iter_index=None):
+    """Performs a pseudo cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.
+
+    Args:
+        forward_model (ForwardModel): A single forward model object.
+        iter_index (int): The iteration to use to construct the forward model. Not used, is None.
+        
+    Returns:
+        forward_model (ForwardModel): The forward model object with cross-correlation results stored in place.
+    """
+    
+    pars = copy.deepcopy(forward_model.initial_parameters)
+    vels = np.arange(-250000, 250000, 500)
+
+    # Stores the rms as a function of velocity
+    rmss = np.empty(vels.size, dtype=np.float64) + np.nan
+    
+    # Weights are bad pixels
+    weights_init = np.copy(forward_model.data.badpix)
+    
+    # Flag very low flux
+    low_flux_regions = np.where(np.log(forward_model.data.flux) < -3)[0]
+    good = np.where(forward_model)
+    if low_flux_regions.size > 0:
+        weights_init[low_flux_regions] = 0
+        
+    for i in range(vels.size):
+        
+        weights = np.copy(weights_init)
+        
+        # Set the RV parameter to the current step
+        pars[forward_model.models_dict['star'].par_names[0]].setv(value=vels[i])
+        
+        # Build the model
+        _, model_lr = forward_model.build_full(pars, iter_index)
+        
+        # Weights
+        bad = np.where(~np.isfinite(model_lr) | (weights <= 0))[0]
+        if bad.size > 0:
+            weights[bad] = 0
+        
+        # Construct the RMS
+        rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights)) / np.nansum(weights)
+
+    # Extract the best rv
+    xcorr_star_vel = vels[np.nanargmin(rmss)]
+    
+    return xcorr_star_vel
 
 def generate_rv_contents(templates_dict, snr=100, blaze=True, ron=0, R=80000):
+    """Wrapper to compute the rv content for several templates
+
+    Args:
+        templates_dict (dict): The dictionary of templates. Each entry is  2-column array.
+        snr (int, optional): The peak snr per 1d-pixel. Defaults to 100.
+        blaze (bool, optional): Whether or not to modulate by a pseudo blaze function. The pseudo blaze is a polynomial where the end points are at 50 percent in flux. Defaults to True.
+        ron (int, optional): The read out noise of the detector. Defaults to 0.
+        R (int, optional): The resolution to convolve the templates. Defaults to 80000.
+    Returns:
+        dict: A dictionary of RV contents with keys corresponding to the templates_dict dictionary. 
+    """
     
     rv_contents = {}
     for t in templates_dict:
@@ -373,9 +361,15 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     """Combines RVs across orders.
 
     Args:
-        rvs (str): The rvs dictionary returned by parse_rvs.
-        bad_rvs_dict (dict): A dictionary of rvs to ignore, rules:
+        rvs (np.ndarray): The single measurement RVs (shape=(n_ord, n_spec)).
+        rvs_nightly (np.ndarray): The rvs dictionary returned by parse_rvs (shape=(n_ord, n_nights))
+        bad_rvs_dict (dict): A dictionary of rvs to ignore.
         rvcs (np.ndarray) : The rv contents of each order.
+    Returns:
+        np.ndarray: The single measurement RVs averaged across orders.
+        np.ndarray: The single measurement uncertanties.
+        np.ndarray: The nightly RVs averaged across orders.
+        np.ndarray: The nightly RV uncertainties.
     """
     
     n_ord, n_spec = rvs.shape
@@ -441,44 +435,65 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     best_pars = result[0]
     order_offsets = best_pars[n_spec:] # the order offsets
     
+    # Offset
+    for o in range(n_ord):
+        rvs_flagged[o, :] -= order_offsets[o]
+    
     # Calculate the individual order averaged RVs here
     # Could use the "Fit" RVs but would rather do a direct weighted formulation with only the offsets.
     for ispec in range(n_spec):
-        good = np.where((w[:, ispec] > 0) & np.isfinite(w[:, ispec]))[0]
-        ng = good.size
+        rr, ww = rvs_flagged[:, ispec], w[:, ispec]
+        good_finite = np.where((ww > 0) & np.isfinite(ww))[0]
+        ng = good_finite.size
         if ng == 0:
             rvs_single[ispec] = np.nan
             unc_single[ispec] = np.nan
         elif ng == 1:
-            rvs_single[ispec] = np.copy(rvs_flagged[good[0], ispec] - order_offsets)
+            rvs_single[ispec] = np.copy(rr[good_finite[0]])
             unc_single[ispec] = np.nan
+        elif ng in (2, 3):
+            rvs_single[ispec] = pcmath.weighted_mean(rr, ww)
+            unc_single[ispec] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
         else:
-            rvs_single[ispec] = pcmath.weighted_mean(rvs_flagged[good, ispec] - order_offsets, w[good, ispec])
-            unc_single[ispec] = pcmath.weighted_stddev(rvs_flagged[good, ispec] - order_offsets, w[good, ispec]) / np.sqrt(ng)
+            wstddev = pcmath.weighted_stddev(rr, ww)
+            wmean = pcmath.weighted_mean(rr, ww)
+            bad = np.where(np.abs(rr - wmean) > 5*wstddev)
+            if bad[0].size > 0:
+                ng -= bad[0].size
+                ww[bad] = 0
+            rvs_single[ispec] = pcmath.weighted_mean(rr, ww)
+            unc_single[ispec] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
 
-    
-    # Nightly RVs from above
+        
+    # Nightly RVs
     rvs_nightly_out = np.zeros(n_nights, dtype=float) + np.nan
     unc_nightly_out = np.zeros(n_nights, dtype=float) + np.nan
     f = 0
     l = n_obs_nights[0]
-    if n_ord == 1:
-        w = np.nanmedian(weights, axis=0)
-    else:
-        w = 1 / unc_single**2
 
     for inight in range(n_nights):
-        good = np.where((w[f:l] > 0) & np.isfinite(w[f:l]))[0]
-        ng = good.size
+        rr, ww = rvs_flagged[:, f:l], w[:, f:l]
+        good_finite = np.where((ww > 0) & np.isfinite(ww))
+        ng = good_finite[0].size
         if ng == 0:
             rvs_nightly_out[inight] = np.nan
             unc_nightly[inight] = np.nan
         elif ng == 1:
-            rvs_nightly_out[inight] = np.copy(rvs_single[f:l][good[0]])
+            rvs_nightly_out[inight] = np.copy(rr[good_finite[0]])
             unc_nightly_out[inight] = np.nan
+        elif ng in (2, 3):
+            rvs_nightly_out[inight] = pcmath.weighted_mean(rr, ww)
+            unc_nightly_out[inight] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
         else:
-            rvs_nightly_out[inight] = pcmath.weighted_mean(rvs_single[f:l][good], w[f:l][good])
-            unc_nightly_out[inight] = pcmath.weighted_stddev(rvs_single[f:l][good], w[f:l][good]) / np.sqrt(ng)
+            wstddev = pcmath.weighted_stddev(rr, ww)
+            wmean = pcmath.weighted_mean(rr, ww)
+            bad = np.where(np.abs(rr - wmean) > 5*wstddev)
+            if bad[0].size > 0:
+                ng -= bad[0].size
+                ww[bad] = 0
+            rvs_nightly_out[inight] = pcmath.weighted_mean(rr, ww)
+            unc_nightly_out[inight] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
+                
             
         if inight < n_nights - 1:
             f += n_obs_nights[inight]
@@ -488,7 +503,19 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
 
 
 def combine_orders_fast(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
-    
+    """Combines RVs across orders using a faster implementation of the above method.
+
+    Args:
+        rvs (np.ndarray): The single measurement RVs (shape=(n_ord, n_spec)).
+        rvs_nightly (np.ndarray): The rvs dictionary returned by parse_rvs (shape=(n_ord, n_nights))
+        bad_rvs_dict (dict): A dictionary of rvs to ignore.
+        rvcs (np.ndarray) : The rv contents of each order.
+    Returns:
+        np.ndarray: The single measurement RVs averaged across orders.
+        np.ndarray: The single measurement uncertanties.
+        np.ndarray: The nightly RVs averaged across orders.
+        np.ndarray: The nightly RV uncertainties.
+    """
     n_ord, n_spec = rvs.shape
     n_nights = len(n_obs_nights)
     
@@ -616,6 +643,9 @@ def combine_orders_fast(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
 # pars[n:] = order offsets.
 @jit(parallel=True)
 def rv_solver(pars, rvs, weights, n_obs_nights):
+    """Internal function to optimize the rv offsets between orders.
+    """
+    
     n_ord = rvs.shape[0]
     n_spec = rvs.shape[1]
     n_nights = n_obs_nights.size
@@ -628,7 +658,12 @@ def rv_solver(pars, rvs, weights, n_obs_nights):
         for i in range(n_spec):
             term[o, i] = weights[o, i]**2 * (rvs_individual[i] - rvs[o, i] + order_offsets[o])**2
     rms = np.sqrt(np.nansum(term) / term.size)
-
+    
+    bad = np.where(term > 5*rms)
+    if bad[0].size > 0:
+        term[bad] = 0
+    rms = np.sqrt(np.nansum(term) / term.size)
+    
     return rms, 1
 
 # Wobble Method of combining RVs (Starting from single RVs)
@@ -653,15 +688,15 @@ def rv_solver_nightsonly(pars, rvs, weights, n_obs_nights):
  
 # Computes the RV content per pixel.
 def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None):
-    """Computes the radial-velocity information content per pixel and for a whole swaths.
+    """Computes the radial-velocity information content per pixel and for a whole swath.
 
     Args:
         wave (np.ndarray): The wavelength grid in units of Angstroms.
         flux (np.ndarray): The flux, normalized to ~ 1.
-        snr (int, optional): The S/N of the observation at the average wavelength. Defaults to 100.
-        blaze (bool): Whether or not to blaze modulate the spectrum (crude).
-        ron (float): The readout noise.
-        R (int): The desired resolution of the flux. This is achieved with a Gaussian convolution only. If None, no convolution is performed.
+        snr (int, optional): The peak snr per 1d-pixel. Defaults to 100.
+        blaze (bool, optional): Whether or not to modulate by a pseudo blaze function. The pseudo blaze is a polynomial where the end points 
+        ron (int, optional): The read out noise of the detector. Defaults to 0.
+        R (int, optional): The resolution to convolve the templates. Defaults to 80000.
     Returns:
         np.ndarray: The "rv information content" at each pixel, or precisely the uncertainty of measuring the rv of an individual "pixel".
         np.ndarray: The rv content for the whole swath ("uncertainty").
@@ -705,15 +740,11 @@ def compute_bisector_span(cc_vels, ccf, n_bs=1000):
     Args:
         cc_vels (np.ndarray): The velocities used for cross-correlation.
         ccf (int): The corresponding 1-dimensional RMS curve.
-        n_bs (int): The number of depths to use in calculating the BIS, defaults to 1000
-        
+        n_bs (int): The number of depths to use in calculating the BIS, defaults to 1000.
     Returns:
         line_bisectors (np.ndarray): The line bisectors of the ccf.
         bisector_span (float): The bisecor span of the line bisector (commonly referred to as the BIS).
     """
-
-
-
     # B(d) = (v_l(d) + v_r(d)) / 2
     # v_l = velocities located on the left side from the minimum of the CCF peak and v_r are the ones on the right side
     # Mean bisector is computed at two depth ranges:

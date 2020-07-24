@@ -28,6 +28,7 @@ from numba import njit, jit, prange
 
 # Pychell modules
 import pychell.config as pcconfig
+import pychell.rvs.template_augmenter as pcaugmenter
 import pychell.maths as pcmath # mathy equations
 import pychell.rvs.forward_models as pcforwardmodels # the various forward model implementations
 import pychell.rvs.data1d as pcdata # the data objects
@@ -53,63 +54,84 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
         # This will construct the individual forward model objects (single spectrum)
         forward_models = pcforwardmodels.ForwardModels(forward_model_settings, model_blueprints, order_num) # basically a fancy list
         
-        # Get better estimations for some parameters (eg xcorr for star)
-        forward_models.opt_init_params()
+        # Get better estimation for star (eg xcorr for star)
+        if forward_models[0].models_dict['star'].from_synthetic:
+            forward_models.cross_correlate_spectra()
         
         # Stores the stellar templates over iterations.
         stellar_templates = np.empty(shape=(forward_models[0].n_model_pix, forward_models.n_template_fits + 1), dtype=np.float64)
         stellar_templates[:, 0] = forward_models.templates_dict['star'][:, 0]
+        
         # Zeroth Iteration - No doppler shift if using a flat template.
         # We could also flag the stellar lines, but this has minimal impact on the RVs
         if not forward_models[0].models_dict['star'].from_synthetic:
-
+            
             print('Iteration: 0 (flat stellar template, no RVs)', flush=True)
 
-            forward_models.fit_spectra(0)
-
-            if forward_model_settings['n_template_fits'] == 0:
-                forward_models.save_final_outputs(forward_model_settings)
-                continue
-            else:
-                forward_models.template_augmenter(forward_models, iter_num=0, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
+            # Check if any parameters are enabled
+            if not np.any([forward_models[0].initial_parameters[pname].vary for pname in forward_models[0].initial_parameters]):
+                print('No parameters to optimize, moving on', flush=True)
+                for ispec in range(forward_models.n_spec):
+                    fwm = forward_models[ispec]
+                    start_wave, start_flux = fwm.build_full(fwm.initial_parameters, None)
+                    fwm.best_fit_pars.append(fwm.initial_parameters)
+                    fwm.wavelength_solutions.append(start_wave)
+                    fwm.models.append(start_flux)
+                    fwm.opt.append([np.nan, np.nan])
+                    fwm.residuals.append(fwm.data.flux - start_flux)
+                forward_models.template_augmenter(forward_models, iter_index=0, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
                 forward_models.update_models(0)
+            else:
+                
+                forward_models.fit_spectra(0)
+
+                if forward_model_settings['n_template_fits'] == 0:
+                    forward_models.save_results()
+                    continue
+                else:
+                    forward_models.template_augmenter(forward_models, iter_index=0, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
+                    forward_models.update_models(0)
                 
         stellar_templates[:, 1] = np.copy(forward_models.templates_dict['star'][:, 1])
 
         # Iterate over remaining stellar template generations
-        for iter_num in range(forward_model_settings['n_template_fits']):
+        for iter_index in range(forward_model_settings['n_template_fits']):
 
-            print('Starting Iteration: ' + str(iter_num+1) + ' of ' + str(forward_models.n_template_fits), flush=True)
+            print('Starting Iteration: ' + str(iter_index+1) + ' of ' + str(forward_models.n_template_fits), flush=True)
             stopwatch.lap(name='ti_iter')
 
             # Run the fit for all spectra and do a cross correlation analysis as well.
-            forward_models.fit_spectra(iter_num)
+            forward_models.fit_spectra(iter_index)
             
-            print('Finished Iteration ' + str(iter_num+1) + ' in ' + str(round(stopwatch.time_since(name='ti_iter')/3600, 2)) + ' hours', flush=True)
+            print('Finished Iteration ' + str(iter_index + 1) + ' in ' + str(round(stopwatch.time_since(name='ti_iter')/3600, 2)) + ' hours', flush=True)
             
             # Compute the RVs and output after each iteration (same file is overwritten)
-            pcrvcalc.generate_rvs(forward_models, iter_num)
-            pcrvcalc.plot_rvs(forward_models, iter_num)
+            pcrvcalc.generate_nightly_rvs(forward_models, iter_index)
+            pcrvcalc.plot_rvs(forward_models, iter_index)
             forward_models.save_rvs()
 
             # Print RV Diagnostics
             if forward_models.n_nights > 1:
-                rvscd_std = np.nanstd(forward_models.rvs_dict['rvs_nightly'][:, iter_num])
+                rvscd_std = np.nanstd(forward_models.rvs_dict['rvs_nightly'][:, iter_index])
                 print('  Stddev of all nightly RVs: ' + str(round(rvscd_std, 4)) + ' m/s', flush=True)
             elif forward_models.n_spec >= 1:
-                rvs_std = np.nanstd(forward_models.rvs_dict['rvs'][:, iter_num])
+                rvs_std = np.nanstd(forward_models.rvs_dict['rvs'][:, iter_index])
                 print('  Stddev of all RVs: ' + str(round(rvs_std, 4)) + ' m/s', flush=True)
 
             # Compute the new stellar template, update parameters.
-            if iter_num + 1 < forward_models.n_template_fits:
+            if iter_index + 1 < forward_models.n_template_fits:
                 
                 # Template Augmentation
-                forward_models.template_augmenter(forward_models, iter_num=iter_num, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
+                if hasattr(forward_models, 'templates_to_optimize') and len(forward_models.templates_to_optimize) > 0:
+                    pcaugmenter.global_fit(forward_models, iter_index=iter_index, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
+                else:
+                    forward_models.template_augmenter(forward_models, iter_index=iter_index, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
 
                 # Update the forward model initial_parameters.
-                forward_models.update_models(iter_num)
+                forward_models.update_models(iter_index)
                 
-                stellar_templates[:, iter_num+2] = np.copy(forward_models.templates_dict['star'][:, 1])
+                # Pass to stellar template array
+                stellar_templates[:, iter_index+2] = np.copy(forward_models.templates_dict['star'][:, 1])
                 
 
         # Save forward model outputs
@@ -118,6 +140,9 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
 
         # Save Stellar Template Outputs
         np.savez(forward_models.run_output_path_stellar_templates + os.sep + forward_models.tag + '_stellar_templates_ord' + str(order_num) + '.npz', stellar_templates=stellar_templates)
+        
+        if 'lab_coherence' in forward_models.templates_dict:
+            np.savez(forward_models.run_output_path_stellar_templates + os.sep + forward_models.tag + '_lab_coherence_ord' + str(order_num) + '.npz', lab_coherence=forward_models.templates_dict['lab_coherence'])
 
     # End the clock!
     print('ALL DONE! Runtime: ' + str(round(stopwatch.time_since(name='ti_main') / 3600, 2)) + ' hours', flush=True)
@@ -156,7 +181,7 @@ def init_spectrograph(forward_model_settings, spectrograph=None):
         spectrograph = forward_model_settings['spectrograph']
         
     # Load in the default instrument settings and add to dict.
-    spec_module = importlib.import_module('pychell.spectrographs.' + spectrograph.lower() + '.settings')
+    spec_module = importlib.import_module('pychell.spectrographs.' + spectrograph.lower())
     forward_model_settings.update(spec_module.forward_model_settings)
         
 def init_defaults(forward_model_settings):
@@ -180,7 +205,7 @@ def init_blueprints(forward_model_settings, user_model_blueprints=None, spectrog
     
     model_blueprints = {}
     
-    spec_mod = importlib.import_module('pychell.spectrographs.' + spectrograph.lower() + '.settings')
+    spec_mod = importlib.import_module('pychell.spectrographs.' + spectrograph.lower())
     model_blueprints = spec_mod.forward_model_blueprints
 
     for user_key in user_model_blueprints:
