@@ -95,7 +95,7 @@ def parse_templates(output_path_root, do_orders=None):
             
     return templates
 
-def parse_stellar_templates(output_path_root, do_orders=None, iter_nums=None):
+def parse_stellar_templates(output_path_root, do_orders=None, iter_indexes=None):
     
     if do_orders is None:
         do_order = get_orders(output_path_root)
@@ -103,14 +103,14 @@ def parse_stellar_templates(output_path_root, do_orders=None, iter_nums=None):
     n_orders = len(do_orders)
     stellar_templates = []
     for o in range(n_orders):
-        stellar_templates.append(parse_stellar_template(output_path_root, do_orders[o], iter_num=iter_nums[o]))
+        stellar_templates.append(parse_stellar_template(output_path_root, do_orders[o], iter_index=iter_indexes[o]))
             
     return stellar_templates
 
-def parse_stellar_template(output_path_root, order_num, iter_num):
+def parse_stellar_template(output_path_root, order_num, iter_index):
     f = glob.glob(output_path_root + 'Order' + str(order_num) + os.sep + 'Stellar_Templates' + os.sep + '*.npz')[0]
     template_temp = np.load(f)['stellar_templates']
-    template = np.array([template_temp[:, 0], template_temp[:, iter_num + 1]]).T
+    template = np.array([template_temp[:, 0], template_temp[:, iter_index + 1]]).T
     return template
 
 def parse_rms(output_path_root, do_orders=None):

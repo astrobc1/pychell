@@ -166,6 +166,9 @@ def init(user_forward_model_settings, user_model_blueprints):
     # The model blueprints
     model_blueprints = init_blueprints(forward_model_settings, user_model_blueprints=user_model_blueprints)
     
+    # Download templates if need be
+    init_templates(forward_model_settings)
+    
     # Matplotlib backend
     if forward_model_settings['n_cores'] > 1 or platform != 'darwin':
         matplotlib.use("AGG")
@@ -215,6 +218,12 @@ def init_blueprints(forward_model_settings, user_model_blueprints=None, spectrog
             model_blueprints[user_key] = user_model_blueprints[user_key]
             
     return model_blueprints
+
+
+def init_templates(forward_model_settings):
+    
+    if not pcutils.templates_path_exists(forward_model_settings['templates_path']):
+        pcutils.download_templates(overwrite=forward_model_settings['force_download_templates'])
 
 
 ################################################################################################################

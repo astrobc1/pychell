@@ -24,7 +24,11 @@ general_settings = {
     'dpi': 200, # the dpi used in plots
     'plot_wave_unit': 'nm', # The units for plots. Options are nm, ang, microns
     
-    'pychell_path': pychell_path
+    'pychell_path': pychell_path,
+    
+    'force_download_templates': False,
+    
+    'templates_path': pychell_path + 'templates' + os.sep,
 }
 
 ####################################################################
@@ -86,9 +90,6 @@ forward_model_settings = {
     
     # If the user only wishes to compute the BJDS and barycorrs for later.
     'compute_bc_only': False,
-    
-    # Path of the default provided templates (tellurics, gas cell)
-    'default_templates_path': pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep,
     
     # Barycenter file
     'bary_corr_file': None,

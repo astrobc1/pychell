@@ -88,6 +88,20 @@ class ForwardModels(list):
 
         # Print summary
         self.print_init_summary()
+        
+    #def plot_summary(self):
+        
+        # Define a figure
+        #plot_width, plot_height, dpi = 24, 18, 300
+        #fig = plt.figure(1, figsize=(plot_width, plot_height), dpi=dpi)
+        
+        # plot the data spectrum and model
+        #ax1 = plt.subplot2grid((6, 3), (0, 0), rowspan=1, colspan=2, fig=fig)
+        
+        
+        
+        
+        
 
 
     # Updates spectral models according to best fit parameters, and run the update method for each iteration.
@@ -591,7 +605,7 @@ class ForwardModel:
         self.initial_parameters.update(pars)
     
     # Plots the forward model after each iteration with other template as well if verbose_plot = True
-    def plot_model(self, iter_index):
+    def plot_model(self, iter_index, save=True):
         
         wave_factors = {
             'microns': 1E-4,
@@ -689,9 +703,13 @@ class ForwardModel:
         ax.set_xlim(wave[f] - pad, wave[l] + pad)
         ax.set_xlabel('Wavelength [' + self.plot_wave_unit + ']', fontsize=12)
         ax.set_ylabel('Data, Model, Residuals', fontsize=12)
-        plt.tight_layout()
-        plt.savefig(fname)
-        plt.close()
+        
+        if save:
+            plt.tight_layout()
+            plt.savefig(fname)
+            plt.close()
+        else:
+            return fig
 
     # Save the forward model object to a pickle
     def save_to_pickle(self, output_path):

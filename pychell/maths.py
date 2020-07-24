@@ -204,13 +204,13 @@ def convolve_flux(wave, flux, R, compress=64):
     # The number of points in the lsf grid
     nlsf = int(ng / compress)
     
-    xlsf = np.arange(-nlsf/2, nlsf/2 + 1, 1) * dl
-    fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf/2), int(nlsf/2 + 1)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
+    xlsf = np.arange(-(int(nlsf / 2) - 1), int(nlsf / 2) + 1, 1) * dl
+    fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2 - 1), int(nlsf / 2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
 
     sig = ml / (2 * np.sqrt(2 * np.log(2)) * R)
     lsf = np.exp(-0.5 * (xlsf / sig)**2)
     lsf /= np.sum(lsf)
-    import matplotlib.pyplot as plt
+
     fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
     goodlinc = np.where(np.isfinite(fluxlinc))[0]
     fluxc = scipy.interpolate.CubicSpline(lingrid, fluxlinc, extrapolate=False)(wave)
