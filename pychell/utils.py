@@ -4,6 +4,8 @@ import operator
 import numpy as np
 from pdb import set_trace as stop
 import time
+import traceback
+import logging
 import pychell
 import os
 from google_drive_downloader import GoogleDriveDownloader as gdd
@@ -63,11 +65,12 @@ def templates_path_exists(path=None):
 # Downlaod templates from google drive
 def download_templates(overwrite=False):
     pychell_path = os.path.dirname(os.path.abspath(pychell.__file__)) + os.sep
-    dest = pychell_path + os.sep + 'templates.zip'
+    dest = pychell_path + 'templates.zip'
     print('Downloading Templates to')
     print('  ' + dest)
     try:
         gdd.download_file_from_google_drive(file_id='1B_dgE4qfGt1fYHIVMTYiV5r3-kNfUHX4', dest_path=dest, unzip=True, showsize=True, overwrite=overwrite)
         os.remove(dest)
-    except:
+    except Exception as e:
         print("ERROR: Unable to download templates!")
+        logging.error(traceback.format_exc())
