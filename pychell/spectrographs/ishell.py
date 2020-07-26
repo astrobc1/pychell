@@ -1,12 +1,10 @@
 import os
 import numpy as np
 import pychell.rvs
+
 # Other notes for iSHELL:
 # blaze_model parameters for a sinc model (full unmodified blaze)
 # a: [1.02, 1.05, 1.08], b: [0.008, 0.01, 0.0115], c: [-5, 0.1, 5], d: [0.51, 0.7, 0.9]
-
-# Path to templates for rvs
-templates_path = os.path.dirname(os.path.abspath(pychell.__file__)) + os.sep + 'templates' + os.sep
 
 #############################
 ####### Name and Site #######
@@ -96,7 +94,7 @@ forward_model_blueprints = {
     'gas_cell': {
         'name': 'methane_gas_cell', # NOTE: full parameter names are name + base_name.
         'class_name': 'GasCellModel',
-        'input_file': templates_path + 'methane_gas_cell_ishell_kgas.npz',
+        'input_file': 'methane_gas_cell_ishell_kgas.npz',
         'shift': [0, 0, 0],
         'depth': [0.97, 0.97, 0.97]
     },
@@ -108,19 +106,19 @@ forward_model_blueprints = {
         'vel': [-500, -100, 500],
         'species': {
             'water': {
-                'input_file': templates_path + 'telluric_water_tapas_maunakea_kband.npz',
+                'input_file': 'telluric_water_tapas_maunakea.npz',
                 'depth':[0.01, 1.5, 4.0]
             },
             'methane': {
-                'input_file': templates_path + 'telluric_methane_tapas_maunakea_kband.npz',
+                'input_file': 'telluric_methane_tapas_maunakea.npz',
                 'depth': [0.1, 1.0, 3.0]
             },
             'nitrous_oxide': {
-                'input_file': templates_path + 'telluric_nitrous_oxide_tapas_maunakea_kband.npz',
+                'input_file': 'telluric_nitrous_oxide_tapas_maunakea.npz',
                 'depth': [0.05, 0.65, 3.0]
             },
             'carbon_dioxide': {
-                'input_file': templates_path + 'telluric_carbon_dioxide_tapas_maunakea_kband.npz',
+                'input_file': 'telluric_carbon_dioxide_tapas_maunakea.npz',
                 'depth': [0.05, 0.65, 3.0]
             }
         }

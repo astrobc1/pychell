@@ -527,9 +527,8 @@ class ForwardModel:
 
         # First generate the wavelength solution model
         model_class = getattr(pcmodelcomponents, model_blueprints['wavelength_solution']['class_name'])
-        self.models_dict['wavelength_solution'] = model_class(model_blueprints['wavelength_solution'], self.pix_bounds, self.n_data_pix, default_wave_grid=self.data.default_wave_grid, order_num=self.order_num)
-        self.wave_bounds = self.models_dict['wavelength_solution'].estimate_endpoints()
-        
+        self.wave_bounds = model_class.estimate_bounds(self, model_blueprints['wavelength_solution'])
+        self.models_dict['wavelength_solution'] = model_class(self, model_blueprints['wavelength_solution'])
         
         # The spacing of the high res fiducial wave grid
         self.dl = ((self.wave_bounds[1] +  15) - (self.wave_bounds[0] - 15)) / self.n_model_pix
@@ -537,7 +536,7 @@ class ForwardModel:
         # Define the LSF model if present
         if 'lsf' in model_blueprints:
             model_class_init = getattr(pcmodelcomponents, model_blueprints['lsf']['class_name'])
-            self.models_dict['lsf'] = model_class_init(model_blueprints['lsf'], self.dl, self.n_model_pix, order_num=self.order_num)
+            self.models_dict['lsf'] = model_class_init(self, model_blueprints['lsf'])
         
         # Generate the remaining model components from their blueprints and load any input templates
         # All remaining model components should subtype MultComponent
@@ -548,7 +547,7 @@ class ForwardModel:
             
             # Construct the model
             model_class = getattr(pcmodelcomponents, model_blueprints[blueprint]['class_name'])
-            self.models_dict[blueprint] = model_class(model_blueprints[blueprint], self.wave_bounds, order_num=self.order_num)
+            self.models_dict[blueprint] = model_class(self, model_blueprints[blueprint])
 
 
     def load_templates(self):
@@ -557,7 +556,7 @@ class ForwardModel:
         
         for model in self.models_dict:
             if hasattr(self.models_dict[model], 'load_template'):
-                templates_dict[model] = self.models_dict[model].load_template(nx=self.n_model_pix)
+                templates_dict[model] = self.models_dict[model].load_template(self)
                 
         return templates_dict
 

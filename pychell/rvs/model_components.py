@@ -38,7 +38,7 @@ class SpectralComponent:
         par_names (str): The full parameter names are name + _ + base_par_names.
     """
 
-    def __init__(self, blueprint, order_num=None):
+    def __init__(self, forward_model, blueprint):
         """ Base initialization for a model component.
 
         Args:
@@ -59,8 +59,7 @@ class SpectralComponent:
         self.enabled = not (self.n_delay > 0)
 
         # The order number for this model
-        if order_num is not None:
-            self.order_num = order_num
+        self.order_num = forward_model.order_num
 
         # The blueprint must contain a name for this model
         self.name = blueprint['name']
@@ -68,6 +67,9 @@ class SpectralComponent:
         # Parameter names
         self.base_par_names = []
         self.par_names = []
+        
+        # The wavelength bounds for this model in the lab frame
+        self.wave_bounds = forward_model.wave_bounds
 
     # Must implement a build method
     def build(self, pars, *args, **kwargs):
@@ -115,7 +117,7 @@ class MultModelComponent(SpectralComponent):
         par_names (list): The full parameter names for this specific run.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
         """Default constructor for a multiplicative model component.
 
         Args:
@@ -124,10 +126,7 @@ class MultModelComponent(SpectralComponent):
             order_num (int, optional): The order number. Defaults to None.
         """
         # Call super method
-        super().__init__(blueprint, order_num=order_num)
-
-        # The wavelength bounds (accounting for cropped pixels)
-        self.wave_bounds = wave_bounds
+        super().__init__(forward_model, blueprint)
 
     # Effectively no model
     def build_fake(self, nx):
@@ -146,7 +145,7 @@ class EmpiricalMult(MultModelComponent):
     """ Base class for an empirically derived multiplicative (or log-additive) spectral component (i.e., based purely on parameters, no templates involved). As of now, this is purely a node in the Type tree and provides no additional functionality.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
         """Default constructor for an empirical multiplicative model component.
 
         Args:
@@ -155,7 +154,7 @@ class EmpiricalMult(MultModelComponent):
             order_num (int, optional): The order number. Defaults to None.
         """
         # Call super method
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
 
 class TemplateMult(MultModelComponent):
@@ -165,7 +164,7 @@ class TemplateMult(MultModelComponent):
         input_file (str): If provided, stores the full path + filename of the input file.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
         """Constructs a multiplicative model that uses a template.
 
         Args:
@@ -174,11 +173,11 @@ class TemplateMult(MultModelComponent):
             order_num (int, optional): The order number. Defaults to None.
         """
         # Call super method
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         # By default, set input_file. Some models (like tellurics) ignore this
         if 'input_file' in blueprint:
-            self.input_file = blueprint['input_file']
+            self.input_file = forward_model.templates_path + blueprint['input_file']
 
 
 #### Blaze Models ####
@@ -194,10 +193,10 @@ class ResidualBlazeModel(EmpiricalMult):
         spline_set_points (np.ndarray): The location of the spline knots.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
         
         # Super
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         # The base parameter names
         self.base_par_names = ['_base_quad', '_base_lin', '_base_zero']
@@ -286,10 +285,10 @@ class FullBlazeModel(EmpiricalMult):
         spline_set_points (np.ndarray): The location of the spline knots.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Super
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         # The base parameter names
         self.base_par_names = ['_base_amp', '_base_b', '_base_c', '_base_d']
@@ -364,10 +363,10 @@ class SplineBlazeModel(EmpiricalMult):
         spline_set_points (np.ndarray): The location of the spline knots.
     """
     
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Super
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         # The base parameter names
         self.base_par_names = []
@@ -417,10 +416,10 @@ class BasicFringingModel(EmpiricalMult):
     """ A basic Fabry-Perot cavity model.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Super
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = ['_d', '_fin']
 
@@ -451,10 +450,10 @@ class GasCellModel(TemplateMult):
     """ A gas cell model which is consistent across orders.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = ['_shift', '_depth']
 
@@ -469,10 +468,12 @@ class GasCellModel(TemplateMult):
         else:
             return self.build_fake(wave_final.size)
 
-    def load_template(self, *args, pad=1, **kwargs):
+    def load_template(self, forward_model):
         print('Loading in Gas Cell Template', flush=True)
+        pad = 5
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
+        flux /= pcmath.weighted_median(flux, med_val=0.999)
         good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
         template = np.array([wave[good], flux[good]]).T
         return template
@@ -487,10 +488,10 @@ class GasCellModelOrderDependent(TemplateMult):
     """ A gas cell model which is not consistent across orders.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = ['_shift', '_depth']
 
@@ -505,12 +506,13 @@ class GasCellModelOrderDependent(TemplateMult):
         else:
             return self.build_fake(wave_final.size)
 
-    def load_template(self, *args, pad=1, **kwargs):
+    def load_template(self, forward_model):
         print('Loading in Gas Cell Template ...', flush=True)
+        pad = 5
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
-        good = np.where(
-            (wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
+        flux /= pcmath.weighted_median(flux, med_val=0.999)
+        good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
         template = np.array([wave[good], flux[good]]).T
         return template
 
@@ -530,10 +532,10 @@ class StarModel(TemplateMult):
         from_synthetic (bool): Whether or not this model started from a synthetic template or not.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = ['_vel']
 
@@ -562,87 +564,20 @@ class StarModel(TemplateMult):
         
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=-1*forward_model.data.bc_vel, minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1, vary=self.enabled))
 
-    def load_template(self, nx):
+    def load_template(self, forward_model):
         pad = 15
-        wave_even = np.linspace(self.wave_bounds[0] - pad, self.wave_bounds[1] + pad, num=nx)
+        wave_even = np.linspace(self.wave_bounds[0] - pad, self.wave_bounds[1] + pad, num=forward_model.n_model_pix)
         if self.from_synthetic:
             print('Loading in Synthetic Stellar Template', flush=True)
             template_raw = np.loadtxt(self.input_file, delimiter=',')
             wave, flux = template_raw[:, 0], template_raw[:, 1]
-            flux_interp = scipy.interpolate.CubicSpline(
-                wave, flux, extrapolate=False, bc_type='not-a-knot')(wave_even)
+            flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False, bc_type='not-a-knot')(wave_even)
+            flux_interp /= pcmath.weighted_median(flux_interp, med_val=0.999)
             template = np.array([wave_even, flux_interp]).T
         else:
             template = np.array([wave_even, np.ones(wave_even.size)]).T
 
         return template
-        
-       
-
-
-class StarModelOrderDependent(TemplateMult):
-    """ A star model which is order dependent. For now this is only used for Minerva-Australis.
-    
-    Attr:
-        input_dir (str): The defualt directory the Minerva-Australis reduction pipeline produces for a given target.
-    """
-
-    def __init__(self, blueprint, wave_bounds, order_num=None):
-
-        # Call super method
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
-
-        self.base_par_names = ['_vel']
-
-        if 'input_file' in blueprint:
-            self.from_synthetic = True
-        else:
-            self.from_synthetic = False
-            self.enabled = False
-
-        if self.order_num < 10:
-            self.ord_str = '0' + str(self.order_num)
-        else:
-            self.ord_str = str(self.order_num)
-        self.input_dir = blueprint['input_dir']
-        self.par_names = [self.name + s for s in self.base_par_names]
-
-    def build(self, pars, wave, flux, wave_final):
-        if self.enabled:
-            wave_shifted = wave * np.exp(pars[self.par_names[0]].value / cs.c)
-            return np.interp(wave_final, wave_shifted, flux, left=np.nan, right=np.nan)
-        else:
-            return self.build_fake(wave_final.size)
-
-    def update(self, forward_model, iter_index):
-        super().update(forward_model, iter_index)
-
-    def init_parameters(self, forward_model):
-        
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(
-            name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1, vary=self.enabled))
-
-    def load_template(self, nx, *args, pad=15, **kwargs):
-        if self.from_synthetic:
-            print('Loading in Synthetic Stellar Template', flush=True)
-            f = glob.glob(self.input_dir + '*_' + self.ord_str + '.txt')[0]
-            template_raw = np.loadtxt(f, delimiter=',')
-            wave_init, flux_init = template_raw[:, 0], template_raw[:, 1]
-            good = np.where(
-                (wave_init > self.wave_bounds[0] - pad) & (wave_init < self.wave_bounds[1] + pad))[0]
-            wave, flux = wave_init[good], flux_init[good]
-            wave_star = np.linspace(wave[0], wave[-1], num=nx)
-            interp_fun = scipy.interpolate.CubicSpline(
-                wave, flux, extrapolate=False, bc_type='not-a-knot')
-            flux_star = interp_fun(wave_star)
-            flux_star /= pcmath.weighted_median(flux_star, med_val=0.99)
-            template = np.array([wave_star, flux_star]).T
-        else:
-            wave_star = np.linspace(
-                self.wave_bounds[0] - pad, self.wave_bounds[1] + pad, num=nx)
-            template = np.array([wave_star, np.ones(nx)]).T
-        return template
-
 
 #### Tellurics ####
 
@@ -656,10 +591,10 @@ class TelluricModelTAPAS(TemplateMult):
         species_input_files (list): A list of input files (strings) for the individual species.
     """
 
-    def __init__(self, blueprint, wave_bounds, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, wave_bounds, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = ['_vel']
 
@@ -672,7 +607,7 @@ class TelluricModelTAPAS(TemplateMult):
             self.species_enabled = {}
             self.species_input_files = {}
             for itell in range(self.n_species):
-                self.species_input_files[self.species[itell]] = blueprint['species'][self.species[itell]]['input_file']
+                self.species_input_files[self.species[itell]] = forward_model.templates_path + blueprint['species'][self.species[itell]]['input_file']
                 self.species_enabled[self.species[itell]] = True
                 self.base_par_names.append('_' + self.species[itell] + '_depth')
         self.par_names = [self.name + s for s in self.base_par_names]
@@ -726,6 +661,7 @@ class TelluricModelTAPAS(TemplateMult):
             wave, flux = template['wave'], template['flux']
             good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
             wave, flux = wave[good], flux[good]
+            flux /= pcmath.weighted_median(flux, med_val=0.999)
             templates[self.species[i]] = np.array([wave, flux]).T
         return templates
 
@@ -754,10 +690,10 @@ class LSFModel(SpectralComponent):
         default_lsf (np.ndarray): The default LSF to use or start from. Defaults to None.
     """
 
-    def __init__(self, blueprint, dl, nx_model, default_lsf=None, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         if 'compress' in blueprint:
             self.compress = blueprint['compress']
@@ -765,10 +701,10 @@ class LSFModel(SpectralComponent):
             self.compress = 64
 
         # The resolution of the model grid (dl = grid spacing)
-        self.dl = dl
+        self.dl = forward_model.dl
 
         # The number of model pixels
-        self.nx_model = nx_model
+        self.nx_model = forward_model.n_model_pix
 
         # The number of points in the grid
         self.nx = int(self.nx_model / self.compress)
@@ -781,7 +717,10 @@ class LSFModel(SpectralComponent):
             self.x = np.arange(-(int(self.nx / 2)),
                                int(self.nx / 2) + 1, 1) * self.dl
             
-        self.default_lsf = default_lsf
+        if hasattr(forward_model.data, 'default_lsf'):
+            self.default_lsf = forward_model.data.default_lsf
+        else:
+            self.default_lsf = None
 
     # Returns a delta function
     def build_fake(self):
@@ -817,10 +756,10 @@ class LSFHermiteModel(LSFModel):
         hermdeg (int): The degree of the hermite model. Zero corresponds to a pure Gaussian.
     """
 
-    def __init__(self, blueprint, dl, nx_model, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super
-        super().__init__(blueprint, dl, nx_model, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = ['_width']
 
@@ -861,9 +800,9 @@ class LSFModelKnown(LSFModel):
         The default LSF model to use.
     """
 
-    def __init__(self, blueprint, dl, nx_model, default_lsf=None, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
-        super().__init__(blueprint, dl, nx_model, default_lsf=default_lsf, order_num=order_num)
+        super().__init__(forward_model, blueprint)
         self.base_par_names = []
         self.par_names = []
 
@@ -886,49 +825,52 @@ class WavelengthSolutionModel(SpectralComponent):
         default_wave_grid (np.ndarray): The default wavelength grid to use or start from.
     """
 
-    def __init__(self, blueprint, pix_bounds, nx, default_wave_grid=None, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         # The pixel bounds which roughly correspond to wave_bounds
-        self.pix_bounds = pix_bounds
+        self.pix_bounds = forward_model.pix_bounds
 
         # The number of total data pixels present in the data
-        self.nx = nx
+        self.nx = forward_model.n_data_pix
         
         # The default wavelength grid if provided
-        self.default_wave_grid = default_wave_grid
+        if hasattr(forward_model.data, 'default_wave_grid'):
+            self.default_wave_grid = forward_model.data.default_wave_grid
+        else:
+            self.default_wave_grid = None
 
     # Should never be called. Need to implement if being used
     def build_fake(self):
         raise ValueError('Need to implement a wavelength solution !')
 
     # Estimates the endpoints of the wavelength grid for each order
-    def estimate_endpoints(self):
+    @staticmethod
+    def estimate_bounds(forward_model, blueprint):
 
-        if hasattr(self, 'default_wave_grid') and self.default_wave_grid is not None:
+        if hasattr(forward_model.data, 'default_wave_grid') and forward_model.data.default_wave_grid is not None:
             wave_pad = 1  # Angstroms
-            wave_estimate = self.default_wave_grid
-            wave_bounds = [wave_estimate[self.pix_bounds[0]] - wave_pad, wave_estimate[self.pix_bounds[1]] + wave_pad]
+            wave_estimate = np.copy(forward_model.data.default_wave_grid)
+            wave_bounds = [wave_estimate[forward_model.pix_bounds[0]] - wave_pad, wave_estimate[forward_model.pix_bounds[1]] + wave_pad]
         else:
             # Make an array for the base wavelengths
-            wavesol_base_wave_set_points = np.array([self.blueprint['base_set_point_1'][self.order_num - 1],
-                                                     self.blueprint['base_set_point_2'][self.order_num - 1],
-                                                     self.blueprint['base_set_point_3'][self.order_num - 1]])
+            wavesol_base_wave_set_points = np.array([blueprint['base_set_point_1'][forward_model.order_num - 1],
+                                                     blueprint['base_set_point_2'][forward_model.order_num - 1],
+                                                     blueprint['base_set_point_3'][forward_model.order_num - 1]])
 
             # Get the polynomial coeffs through matrix inversion.
-            wave_estimate_coeffs = pcmath.poly_coeffs(np.array(self.blueprint['base_pixel_set_points']), wavesol_base_wave_set_points)
+            wave_estimate_coeffs = pcmath.poly_coeffs(np.array(blueprint['base_pixel_set_points']), wavesol_base_wave_set_points)
 
             # The estimated wavelength grid
-            wave_estimate = np.polyval(wave_estimate_coeffs, np.arange(self.nx))
+            wave_estimate = np.polyval(wave_estimate_coeffs, np.arange(forward_model.n_data_pix))
 
             # Wavelength end points are larger to account for changes in the wavelength solution
             # The stellar template is further padded to account for barycenter sampling
             wave_pad = 1  # Angstroms
-            wave_bounds = [wave_estimate[self.pix_bounds[0]] - wave_pad, wave_estimate[self.pix_bounds[1]] + wave_pad]
-        self.wave_bounds = wave_bounds
-
+            wave_bounds = [wave_estimate[forward_model.pix_bounds[0]] - wave_pad, wave_estimate[forward_model.pix_bounds[1]] + wave_pad]
+            
         return wave_bounds
 
 
@@ -942,10 +884,10 @@ class WaveSolModelSplines(WavelengthSolutionModel):
         spline_pixel_set_points (np.ndarray): The location of the spline knots in pixel space.
     """
 
-    def __init__(self, blueprint, pix_bounds, nx, default_wave_grid=None, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, pix_bounds, nx, default_wave_grid=default_wave_grid, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = []
 
@@ -998,10 +940,10 @@ class WaveSolModelQuadratic(WavelengthSolutionModel):
         spline_pixel_set_points (np.ndarray): The location of the spline knots in pixel space.
     """
 
-    def __init__(self, blueprint, pix_bounds, nx, default_wave_grid=None, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, pix_bounds, nx, default_wave_grid=default_wave_grid, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = ['_wave_lagrange_1', '_wave_lagrange_2', '_wave_lagrange_3']
 
@@ -1077,10 +1019,10 @@ class WaveModelHybrid(WavelengthSolutionModel):
         spline_pixel_set_points (np.ndarray): The location of the spline knots.
     """
 
-    def __init__(self, blueprint, pix_bounds, nx, default_wave_grid=None, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, pix_bounds, nx, default_wave_grid=default_wave_grid, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = []
 
@@ -1133,18 +1075,18 @@ class WaveModelHybrid(WavelengthSolutionModel):
 
 
 
-
 class WaveSolModelLegendre(WavelengthSolutionModel):
+
     """ Class for a full wavelength solution via Legendre Polynomials. In development.
 
     Attributes:
 
     """
 
-    def __init__(self, blueprint, wave_bounds, pix_bounds, nx, order_num=None):
+    def __init__(self, forward_model, blueprint):
 
         # Call super method
-        super().__init__(blueprint, wave_bounds, pix_bounds, nx, order_num=order_num)
+        super().__init__(forward_model, blueprint)
 
         self.base_par_names = []
 

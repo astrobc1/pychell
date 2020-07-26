@@ -5,8 +5,11 @@ import numpy as np
 from pdb import set_trace as stop
 import time
 import traceback
+import pathlib
 import logging
 import pychell
+from datetime import datetime
+import glob
 import os
 from google_drive_downloader import GoogleDriveDownloader as gdd
 
@@ -50,27 +53,34 @@ def getFromDict(dataDict, mapList):
 # Helper
 def setInDict(dataDict, mapList, value):
     getFromDict(dataDict, mapList[:-1])[mapList[-1]] = value
-    
-
-# Check if the templates path exists
-def templates_path_exists(path=None):
-    if path is None:
-        pychell_path = os.path.dirname(os.path.abspath(pychell.__file__)) + os.sep
-        path = pychell_path + 'templates' + os.sep
-    if os.path.exists(path):
-        return True
-    else:
-        return False
 
 # Downlaod templates from google drive
-def download_templates(overwrite=False):
-    pychell_path = os.path.dirname(os.path.abspath(pychell.__file__)) + os.sep
-    dest = pychell_path + 'templates.zip'
+def download_templates(dest):
+    
+    if not os.path.exists(dest):
+        os.makedirs(dest)
+        
+    if os.path.exists(dest + 'templates'):
+        raise ValueError("Move existing templates folder in pychell_templates")
+        
     print('Downloading Templates to')
     print('  ' + dest)
+    
+    stop()
+    
+    now = datetime.now()
+    dt_string = now.strftime("%Y%m%d_%H%M%S")
+    dest_zip = dest + 'templates_' + dt_string + '.zip'
+        
     try:
-        gdd.download_file_from_google_drive(file_id='1B_dgE4qfGt1fYHIVMTYiV5r3-kNfUHX4', dest_path=dest, unzip=True, showsize=True, overwrite=overwrite)
-        os.remove(dest)
+        gdd.download_file_from_google_drive(file_id='1TDuaC13Znkzs3x_66VqtTm7WlIS-CRjy', dest_path=dest_zip, unzip=True, showsize=True, overwrite=False)
+        os.remove(dest_zip)
+        template_files = glob.glob(dest + 'templates' + os.sep + '*')
+        for tfile in template_files:
+            p = pathlib.Path(tfile).absolute()
+            parent_dir = p.parents[1]
+            p.rename(parent_dir / p.name)
+        os.rmdir(dest + 'templates')
     except Exception as e:
         print("ERROR: Unable to download templates!")
         logging.error(traceback.format_exc())

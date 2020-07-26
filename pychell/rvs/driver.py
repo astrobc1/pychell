@@ -222,8 +222,8 @@ def init_blueprints(forward_model_settings, user_model_blueprints=None, spectrog
 
 def init_templates(forward_model_settings):
     
-    if not pcutils.templates_path_exists(forward_model_settings['templates_path']):
-        pcutils.download_templates(overwrite=forward_model_settings['force_download_templates'])
+    if forward_model_settings['force_download_templates']:
+        pcutils.download_templates(forward_model_settings['templates_path'])
 
 
 ################################################################################################################
