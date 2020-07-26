@@ -66,8 +66,6 @@ def download_templates(dest):
     print('Downloading Templates to')
     print('  ' + dest)
     
-    stop()
-    
     now = datetime.now()
     dt_string = now.strftime("%Y%m%d_%H%M%S")
     dest_zip = dest + 'templates_' + dt_string + '.zip'
