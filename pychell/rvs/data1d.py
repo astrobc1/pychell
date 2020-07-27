@@ -219,7 +219,7 @@ class SpecDataCHIRON(SpecData1d):
         fits_data = fits.open(self.input_file)[0]
         fits_data.verify('fix')
         
-        self.wave_grid, self.flux = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
+        self.default_wave_grid, self.flux = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
         self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
         
         # For CHIRON, generate a dumby uncertainty grid and a bad pix array that will be updated or used
@@ -325,7 +325,7 @@ class SpecDataMinervaAustralis(SpecData1d):
         return bjds, bc_vels
     
     
-class SpecDataMinervaNorthT1(SpecData1d):
+class SpecDataMinervaNorth(SpecData1d):
     
     """ Class for extracted 1-dimensional spectra from the MINERVA North array.
     """
@@ -344,8 +344,8 @@ class SpecDataMinervaNorthT1(SpecData1d):
         fits_data.verify('fix')
         
         # The flux
-        self.flux = fits_data.data[2, self.order_num - 1, :].astype(np.float64)
-        #self.flux = fits_data.data[0, self.order_num - 1, :].astype(np.float64)
+        #self.flux = fits_data.data[2, self.order_num - 1, :].astype(np.float64)
+        self.flux = fits_data.data[0, self.order_num - 1, :].astype(np.float64)
         self.flux_unc = np.zeros_like(self.flux) + 1E-3
         
         # Normalize to 1.
@@ -354,97 +354,4 @@ class SpecDataMinervaNorthT1(SpecData1d):
         
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.        
         self.JD = float(fits_data.header['JD']) + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)
-        
-        
-class SpecDataMinervaNorthT2(SpecData1d):
-    """ Class for extracted 1-dimensional spectra from the MINERVA North array.
-    """
-    
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
-        
-        # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
-        
-    
-    def parse(self):
-        """Parses MINERVA North T1 data.
-        """
-        
-        # Load the flux, flux unc, and bad pix arrays
-        fits_data = fits.open(self.input_file)[0]
-        fits_data.verify('fix')
-        
-        self.flux, self.flux_unc = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
-        
-        # Normalize to 1.
-        self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
-        self.badpix = np.ones_like(self.flux)
-        
-        #self.flux = self.flux[::-1]
-        #self.badpix = self.badpix[::-1]
-        
-        # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.
-        
-        #self.JD = Time(fits_data.header['DATE-OBS'].replace('T', ' '), scale='utc').jd + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)     
-        
-        
-class SpecDataMinervaNorthT3(SpecData1d):
-    """ Class for extracted 1-dimensional spectra from the MINERVA North array.
-    """
-    
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
-        
-        # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
-        
-    
-    def parse(self):
-        """Parses MINERVA North T3 data.
-        """
-        
-        # Load the flux, flux unc, and bad pix arrays
-        fits_data = fits.open(self.input_file)[0]
-        fits_data.verify('fix')
-        
-        self.flux, self.flux_unc = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
-        
-        # Normalize to 1.
-        self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
-        self.badpix = np.ones_like(self.flux)
-        
-        # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.
-        #self.JD = Time(fits_data.header['DATE-OBS'].replace('T', ' '), scale='utc').jd + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)     
-        
-        
-class SpecDataMinervaNorthT4(SpecData1d):
-    """ Class for extracted 1-dimensional spectra from the MINERVA North array.
-    """
-    
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
-        
-        # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
-        
-    
-    def parse(self):
-        """Parses MINERVA North T4 data.
-        """
-        
-        # Load the flux, flux unc, and bad pix arrays
-        fits_data = fits.open(self.input_file)[0]
-        fits_data.verify('fix')
-        
-        self.flux, self.flux_unc = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
-        
-        # Normalize to 1.
-        self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
-        self.badpix = np.ones_like(self.flux)
-        
-        # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.
-        #self.JD = Time(fits_data.header['DATE-OBS'].replace('T', ' '), scale='utc').jd + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)     
-        
-        
-        
-        
-        
         

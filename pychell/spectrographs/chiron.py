@@ -52,7 +52,7 @@ forward_model_blueprints = {
     'gas_cell': {
         'name': 'iodine_gas_cell', # NOTE: full parameter names are name + base_name.
         'class_name': 'GasCellModelOrderDependent',
-        'input_file': default_templates_path + 'iodine_gas_cell_chiron_master_40K.npz',
+        'input_file': 'iodine_gas_cell_chiron_master_40K.npz',
         'depth': [1, 1, 1],
         'shifts': [-1.28151621, -1.28975381, -1.29827329, -1.30707465, -1.31615788, -1.32552298, -1.33516996, -1.34509881, -1.35530954, -1.36580215, -1.37657662, -1.38763298, -1.3989712, -1.4105913, -1.42249328, -1.43467713, -1.44714286, -1.45989046, -1.47291993, -1.48623128, -1.49982451, -1.5136996 , -1.52785658, -1.54229543, -1.55701615, -1.57201875, -1.58730322, -1.60286957, -1.61871779, -1.63484788, -1.65125985, -1.6679537 , -1.68492942, -1.70218701, -1.71972648, -1.73754783, -1.75565104, -1.77403614, -1.79270311, -1.81165195, -1.83088267, -1.85039526, -1.87018972, -1.89026606, -1.91062428, -1.93126437, -1.95218634, -1.97339018, -1.99487589, -2.01664348, -2.03869294, -2.06102428, -2.08363749, -2.10653258, -2.12970954, -2.15316838, -2.17690909, -2.20093168, -2.22523614, -2.24982247, -2.27469068, -2.29984077, -2.32527273],
         'shift_range': [0, 0]
@@ -65,27 +65,27 @@ forward_model_blueprints = {
         'vel': [-250, -100, 250],
         'species': {
             'water': {
-                'input_file': default_templates_path + 'telluric_water_tapas_ctio.npz',
+                'input_file': 'telluric_water_tapas_ctio.npz',
                 'depth': [0.01, 1.5, 4.0]
             },
             'methane': {
-                'input_file': default_templates_path + 'telluric_methane_tapas_ctio.npz',
+                'input_file': 'telluric_methane_tapas_ctio.npz',
                 'depth': [0.1, 1.0, 3.0]
             },
             'nitrous_oxide': {
-                'input_file': default_templates_path + 'telluric_nitrous_oxide_tapas_ctio.npz',
+                'input_file': 'telluric_nitrous_oxide_tapas_ctio.npz',
                 'depth': [0.05, 0.65, 3.0]
             },
             'carbon_dioxide': {
-                'input_file': default_templates_path + 'telluric_carbon_dioxide_tapas_ctio.npz',
+                'input_file': 'telluric_carbon_dioxide_tapas_ctio.npz',
                 'depth': [0.05, 0.65, 3.0]
             },
             'oxygen': {
-                'input_file': default_templates_path + 'telluric_oxygen_tapas_ctio.npz',
+                'input_file': 'telluric_oxygen_tapas_ctio.npz',
                 'depth': [0.1, 1.1, 3.0]
             },
             'ozone': {
-                'input_file': default_templates_path + 'telluric_ozone_tapas_ctio.npz',
+                'input_file': 'telluric_ozone_tapas_ctio.npz',
                 'depth': [0.05, 0.65, 3.0]
             }
         }
@@ -121,7 +121,7 @@ forward_model_blueprints = {
     # Quadratic (Lagrange points) + splines
     'wavelength_solution': {
         'name': 'wavesol_ThAr_I2',
-        'class_name': 'WaveModelKnown',
+        'class_name': 'WaveModelHybrid',
         'n_splines': 10,
         'n_delay_splines': 0,
         'spline': [-0.03, 0.0005, 0.03]

@@ -51,7 +51,7 @@ forward_model_blueprints = {
     'gas_cell': {
         'name': 'iodine_gas_cell',
         'class_name': 'GasCellModel',
-        'input_file': default_templates_path + 'minerva_north_iodine_template_nist.npz',
+        'input_file': 'iodine_gas_cell_minervanorth_nist.npz',
         'shift': [0, 0, 0],
         'depth': [1, 1, 1]
     },
@@ -63,15 +63,15 @@ forward_model_blueprints = {
         'vel': [-500, -100, 500],
         'species': {
             'water': {
-                'input_file': default_templates_path + 'telluric_water_tapas_whipple_vis.npz',
+                'input_file': 'telluric_water_tapas_whipple.npz',
                 'depth':[0.01, 1.5, 4.0]
             },
             'ozone': {
-                'input_file': default_templates_path + 'telluric_ozone_tapas_whipple_vis.npz',
+                'input_file': 'telluric_ozone_tapas_whipple.npz',
                 'depth': [0.1, 1.0, 3.0]
             },
             'oxygen': {
-                'input_file': default_templates_path + 'telluric_oxygen_tapas_whipple_vis.npz',
+                'input_file': 'telluric_oxygen_tapas_whipple.npz',
                 'depth': [0.05, 0.65, 3.0]
             }
         }

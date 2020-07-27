@@ -2,9 +2,6 @@ import os
 import numpy as np
 import pychell.rvs
 
-# Path to default templates for rvs
-default_templates_path = pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep
-
 spectrograph = "PARVI"
 observatory = "Palomar"
 
@@ -51,27 +48,27 @@ forward_model_blueprints = {
         'vel': [-2000, -100, 500],
         'species': {
             'water': {
-                'input_file': default_templates_path + 'telluric_water_tapas_palomar.npz',
+                'input_file': 'telluric_water_tapas_palomar.npz',
                 'depth': [0.01, 1.5, 4.0]
             },
             'methane': {
-                'input_file': default_templates_path + 'telluric_methane_tapas_palomar.npz',
+                'input_file': 'telluric_methane_tapas_palomar.npz',
                 'depth': [0.1, 1.0, 3.0]
             },
             'nitrous_oxide': {
-                'input_file': default_templates_path + 'telluric_nitrous_oxide_tapas_palomar.npz',
+                'input_file': 'telluric_nitrous_oxide_tapas_palomar.npz',
                 'depth': [0.05, 0.65, 3.0]
             },
             'carbon_dioxide': {
-                'input_file': default_templates_path + 'telluric_carbon_dioxide_tapas_palomar.npz',
+                'input_file': 'telluric_carbon_dioxide_tapas_palomar.npz',
                 'depth': [0.05, 0.65, 3.0]
             },
             'oxygen': {
-                'input_file': default_templates_path + 'telluric_oxygen_tapas_palomar.npz',
+                'input_file': 'telluric_oxygen_tapas_palomar.npz',
                 'depth': [0.1, 1.1, 3.0]
             },
             'ozone': {
-                'input_file': default_templates_path + 'telluric_ozone_tapas_palomar.npz',
+                'input_file': 'telluric_ozone_tapas_palomar.npz',
                 'depth': [0.05, 0.65, 3.0]
             }
         }

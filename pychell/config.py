@@ -26,9 +26,7 @@ general_settings = {
     
     'pychell_path': pychell_path,
     
-    'force_download_templates': False,
-    
-    'templates_path': pychell_path + 'templates' + os.sep,
+    'force_download_templates': False
 }
 
 ####################################################################

@@ -768,8 +768,8 @@ def compute_bisector_span(cc_vels, ccf, n_bs=1000):
 
     # First normalize the CCF function
     ccf = ccf - np.nanmin(ccf)
-    cont_ = pcmath.weighted_median(ccf, med_val=0.95)
-    ccf = ccf / cont_
+    continuum = pcmath.weighted_median(ccf, med_val=0.95)
+    ccfn = ccf / continuum
     
     # Get the velocities and offset such that the best vel is at zero
     best_vel = cc_vels[np.nanargmin(ccf)]
@@ -778,7 +778,7 @@ def compute_bisector_span(cc_vels, ccf, n_bs=1000):
     # High res version of the ccf
     cc_vels_hr = np.linspace(np.nanmin(cc_vels), np.nanmax(cc_vels), num=int(cc_vels.size*100))
     good = np.where(np.isfinite(cc_vels) & np.isfinite(ccf))[0]
-    ccf_hr = scipy.interpolate.CubicSpline(cc_vels[good], ccf[good], extrapolate=False)(cc_vels_hr)
+    ccf_hr = scipy.interpolate.CubicSpline(cc_vels[good], ccfn[good], extrapolate=False)(cc_vels_hr)
     
     # The vels on the left and right of the best vel.
     use_left = np.where(cc_vels < 0)[0]
@@ -788,7 +788,7 @@ def compute_bisector_span(cc_vels, ccf, n_bs=1000):
     if use_left.size == 0 or use_right.size == 0:
         return np.nan, np.nan
     
-    vel_max_ind_left, vel_max_ind_right = use_left[np.nanargmax(ccf[use_left])], use_right[np.nanargmax(ccf[use_right])]
+    vel_max_ind_left, vel_max_ind_right = use_left[np.nanargmax(ccfn[use_left])], use_right[np.nanargmax(ccfn[use_right])]
     vel_max_ind_left_hr, vel_max_ind_right_hr = use_left_hr[np.nanargmax(ccf_hr[use_left_hr])], use_right_hr[np.nanargmax(ccf_hr[use_right_hr])]
     
     use_left = np.where((cc_vels > cc_vels[vel_max_ind_left]) & (cc_vels < 0))[0]

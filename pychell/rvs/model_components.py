@@ -176,8 +176,10 @@ class TemplateMult(MultModelComponent):
         super().__init__(forward_model, blueprint)
 
         # By default, set input_file. Some models (like tellurics) ignore this
-        if 'input_file' in blueprint:
+        if 'input_file' in blueprint and blueprint['input_file'] is not None:
             self.input_file = forward_model.templates_path + blueprint['input_file']
+        else:
+            self.input_file = None
 
 
 #### Blaze Models ####
@@ -257,18 +259,17 @@ class ResidualBlazeModel(EmpiricalMult):
 
     def init_parameters(self, forward_model):
         
+        if forward_model.remove_continuum:
+            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+            log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.3, 3.0], maxniter=50)
+            forward_model.data.flux = np.exp(np.log(forward_model.data.flux) - log_continuum)
+        
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['base_quad'][1], minv=self.blueprint['base_quad'][0], maxv=self.blueprint['base_quad'][2], mcmcscale=0.1, vary=self.enabled))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base_lin'][1], minv=self.blueprint['base_lin'][0], maxv=self.blueprint['base_lin'][2], mcmcscale=0.1, vary=self.enabled))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base_zero'][1], minv=self.blueprint['base_zero'][0], maxv=self.blueprint['base_zero'][2], mcmcscale=0.1, vary=self.enabled))
         if self.n_splines > 0:
             for i in range(self.n_splines + 1):
                 forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+3], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
-
-    def estimate(self, forward_model):
-        wave = forward_model.models_dict['wavelength_solution'].estimate(forward_model)
-        continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=6, nsigma=[0.3, 3.0], maxniter=50)
-        return np.exp(continuum)
-
 
     def __repr__(self):
         return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ' , Splines Active: ' + str(self.splines_enabled) + ']'
@@ -341,11 +342,6 @@ class FullBlazeModel(EmpiricalMult):
                 forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(
                     name=self.par_names[i+4], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
 
-    def estimate(self, forward_model):
-        wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
-        continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=6, nsigma=[0.3, 3.0], maxniter=50)
-        return continuum
-
     # To enable/disable splines.
     def update(self, forward_model, iter_index):
         super().update(forward_model, iter_index)
@@ -390,14 +386,19 @@ class SplineBlazeModel(EmpiricalMult):
 
     def init_parameters(self, forward_model):
         
-        wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
         if forward_model.remove_continuum:
-            continuum = np.ones(wave.size) + self.blueprint['spline'][1]
+            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+            log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.3, 3.0], maxniter=50)
+            forward_model.data.flux = np.exp(np.log(forward_model.data.flux) - log_continuum)
+            continuum_zero = np.ones_like(forward_model.data.flux)
         else:
-            continuum = self.estimate(forward_model)
-        good = np.where(np.isfinite(continuum))[0]
+            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+            log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.3, 3.0], maxniter=50)
+            continuum_zero = np.exp(log_continuum)
+        
+        good = np.where(np.isfinite(continuum_zero))[0]
         for i in range(self.n_splines + 1):
-            v = continuum[pcmath.find_closest(wave[good], self.spline_set_points[i])[0] + good[0]]
+            v = continuum_zero[pcmath.find_closest(wave[good], self.spline_set_points[i])[0] + good[0]]
             forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=v, minv=v +self.blueprint['spline'][0], maxv=v + self.blueprint['spline'][1], mcmcscale=0.001, vary=self.enabled))
             
     def update(self, forward_model, iter_index):
@@ -473,9 +474,10 @@ class GasCellModel(TemplateMult):
         pad = 5
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
-        flux /= pcmath.weighted_median(flux, med_val=0.999)
         good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
-        template = np.array([wave[good], flux[good]]).T
+        wave, flux = wave[good], flux[good]
+        flux /= pcmath.weighted_median(flux, med_val=0.999)
+        template = np.array([wave, flux]).T
         return template
 
     def init_parameters(self, forward_model):
@@ -511,9 +513,10 @@ class GasCellModelOrderDependent(TemplateMult):
         pad = 5
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
-        flux /= pcmath.weighted_median(flux, med_val=0.999)
         good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
-        template = np.array([wave[good], flux[good]]).T
+        wave, flux = wave[good], flux[good]
+        flux /= pcmath.weighted_median(flux, med_val=0.999)
+        template = np.array([wave, flux]).T
         return template
 
     def init_parameters(self, forward_model):
@@ -1046,7 +1049,8 @@ class WaveModelHybrid(WavelengthSolutionModel):
         self.par_names = [self.name + s for s in self.base_par_names]
         
         # The known wavelength grid
-        self.default_wave_grid = default_wave_grid
+        if hasattr(forward_model.data, 'default_wave_grid'):
+            self.default_wave_grid = forward_model.data.default_wave_grid
 
     def build(self, pars):
         if not self.splines_enabled:
@@ -1055,7 +1059,7 @@ class WaveModelHybrid(WavelengthSolutionModel):
             pixel_grid = np.arange(self.nx)
             splines = np.array([pars[self.par_names[i]].value for i in range(self.n_splines + 1)], dtype=np.float64)
             wave_spline = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, splines, bc_type='not-a-knot', extrapolate=True)(pixel_grid)
-            return wave_grid + wave_spline
+            return self.default_wave_grid + wave_spline
 
     def build_fake(self):
         pass

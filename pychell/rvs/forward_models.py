@@ -147,11 +147,6 @@ class ForwardModels(list):
         
         # The number of spectra (may overwrite)
         self.n_spec = len(input_files)
-        if forward_model_settings['remove_continuum']:
-            for fwm in self:
-                wave = fwm.models_dict['wavelength_solution'].build(fwm.initial_parameters)
-                continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(fwm.data.flux), fwm.data.badpix, order=4, nsigma=[0.3,3.0], maxniter=50)
-                fwm.data.flux = np.exp(np.log(fwm.data.flux) - continuum)
             
     def init_rvs(self):
         
@@ -271,7 +266,7 @@ class ForwardModels(list):
                 self[ispec] = self.solver_wrapper(self[ispec], iter_index, self.n_spec)
         
         # Cross correlate if set
-        if self.do_xcorr and self.n_template_fits > 0:
+        if self.do_xcorr and self.n_template_fits > 0 and self.models_dict['star'].enabled:
             self.cross_correlate_spectra(iter_index)
             
         # Fit in Parallel
@@ -967,7 +962,7 @@ class MinervaAustralisForwardModel(ForwardModel):
 
         return wavelength_solution, model_lr
     
-class MinervaNorthT1ForwardModel(ForwardModel):
+class MinervaNorthForwardModel(ForwardModel):
     
     def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
 
@@ -978,135 +973,28 @@ class MinervaNorthT1ForwardModel(ForwardModel):
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
         final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        
+        model = np.ones_like(final_hr_wave_grid)
 
         # Star
-        model = self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
+        if self.models_dict['star'].enabled:
+            model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
         
         # Gas Cell
-        model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
+        if self.models_dict['gas_cell'].enabled:
+            model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
         
         # All tellurics
-        model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+        if self.models_dict['tellurics'].enabled:
+            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
         
         # Blaze Model
-        #model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        if self.models_dict['blaze'].enabled:
+            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Convolve Model with LSF
-        model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
-        
-        
-        model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
-        
-        #stop()
-        #plt.plot(wavelength_solution, np.log(model_lr)+0.3); plt.plot(wavelength_solution, np.log(self.data.flux)); plt.show()
-        
-        return wavelength_solution, model_lr
-    
-    
-class MinervaNorthT2ForwardModel(ForwardModel):
-    
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
-
-    def build_full(self, pars, iter_index):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
-
-        # Star
-        model = self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
-        
-        # Gas Cell
-        model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
-        
-        # All tellurics
-        model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Blaze Model
-        model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
-
-        # Convolve Model with LSF
-        model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
-        
-        return wavelength_solution, model_lr
-  
-    
-class MinervaNorthT3ForwardModel(ForwardModel):
-    
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
-
-    def build_full(self, pars, iter_index):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
-
-        # Star
-        model = self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
-        
-        # Gas Cell
-        model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
-        
-        # All tellurics
-        model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Blaze Model
-        model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
-
-        # Convolve Model with LSF
-        model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
-        
-        return wavelength_solution, model_lr
-    
-    
-class MinervaNorthT4ForwardModel(ForwardModel):
-    
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
-
-    def build_full(self, pars, iter_index):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
-
-        # Star
-        model = self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
-        
-        # Gas Cell
-        model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
-        
-        # All tellurics
-        model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Blaze Model
-        model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
-
-        # Convolve Model with LSF
-        model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+        if self.models_dict['lsf'].enabled:
+            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
