@@ -463,7 +463,7 @@ class ForwardModel:
         
         # Initialize the data
         data_class_init = getattr(pcdata, 'SpecData' + forward_model_settings['spectrograph'])
-        self.data = data_class_init(input_file, order_num=self.order_num, spec_num=self.spec_num, crop_pix=self.crop_data_pix)
+        self.data = data_class_init(input_file, self)
         self.n_data_pix = self.data.flux.size
         
         # Init the models

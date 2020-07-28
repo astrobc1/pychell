@@ -74,6 +74,9 @@ forward_model_settings = {
     
     # The units for plotting
     'plot_wave_unit': 'microns',
+
+    # Crops (masks) data pixels
+    'crop_pix': [200, 200],
     
     'observatory': observatory
 }

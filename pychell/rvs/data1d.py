@@ -40,7 +40,7 @@ class SpecData1d:
     """
 
     
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
+    def __init__(self, input_file, forward_model):
         """ Base initialization for this model component.
 
         Args:
@@ -54,28 +54,31 @@ class SpecData1d:
         self.base_input_file = os.path.basename(self.input_file)
         
         # Order number and image number if set
-        if order_num is not None:
-            self.order_num = order_num
-        if spec_num is not None:
-            self.spec_num = spec_num
+        self.order_num = forward_model.order_num
+        self.spec_num = forward_model.spec_num
+        self.crop_pix = forward_model.crop_pix
             
         # Default wavelength and LSF grid, may be overwritten in custom parse method.
         self.default_wave_grid = None
         self.default_lsf = None
         
         # Parse the data for this observation
-        self.parse()
+        self.parse(forward_model)
         
         # Enforce the pixels are cropped (ideally they are already cropped and this has no effect, but still optional)
-        if crop_pix is not None:
-            self.flux[0:crop_pix[0]] = np.nan
-            self.flux[self.flux.size - crop_pix[1] - 1:] = np.nan
+        if self.crop_pix is not None:
             
-            self.flux_unc[0:crop_pix[0]] = np.nan
-            self.flux_unc[self.flux.size - crop_pix[1] - 1:] = np.nan
+            # Flux
+            self.flux[0:self.crop_pix[0]] = np.nan
+            self.flux[self.flux.size - self.crop_pix[1] - 1:] = np.nan
             
-            self.badpix[0:crop_pix[0]] = 0
-            self.badpix[self.flux.size - crop_pix[1] - 1:] = 0
+            # Flux unc
+            self.flux_unc[0:self.crop_pix[0]] = np.nan
+            self.flux_unc[self.flux.size - self.crop_pix[1] - 1:] = np.nan
+            
+            # Bad pix
+            self.badpix[0:self.crop_pix[0]] = 0
+            self.badpix[self.flux.size - self.crop_pix[1] - 1:] = 0
             
         # Mask negative flux
         bad = np.where(self.flux <= 0)[0]
@@ -169,17 +172,12 @@ class SpecData1d:
     
 class SpecDataiSHELL(SpecData1d):
     """ Class for extracted 1-dimensional spectra from iSHELL on the NASA IRTF.
-    
     """
-
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
         
-        # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
-        
-    def parse(self):
+    def parse(self, forward_model):
         """ Parses iSHELL data and computes the mid-exposure time (no exp meter for iSHELL).
         """
+        
         # Load the flux, flux unc, and bad pix arrays
         fits_data = fits.open(self.input_file)[0]
         fits_data.verify('fix')
@@ -202,16 +200,8 @@ class SpecDataiSHELL(SpecData1d):
 
 class SpecDataCHIRON(SpecData1d):
     """ Class for extracted 1-dimensional spectra from CHIRON on the SMARTS 1.5 m telescope.
-    
     """
-    
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
-        
-        # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
-        
-    
-    def parse(self):
+    def parse(self, forward_model):
         """ Parses CHIRON data and extracts the flux weighted midpoint of the exposure from the header if present, otherwise computes the mid exposure time. The flux uncertainty is not provided from CHIRON (?), so we assume all normalized uncertainties to arbitrarily be 0.001 (uniform). The wavelength grid provided by the ThAr lamp is provided in the wave_grid attribute.
         """
         
@@ -236,16 +226,8 @@ class SpecDataCHIRON(SpecData1d):
 class SpecDataPARVI(SpecData1d):
     
     """ Class for extracted 1-dimensional spectra from PARVI.
-    
-    """
-    
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
-        
-        # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
-        
-    
-    def parse(self):
+    """    
+    def parse(self, forward_model):
         
         # Load the flux, flux unc, and bad pix arrays. Also load the known wavelength grid for a starting point
         fits_data = fits.open(self.input_file)[0]
@@ -269,13 +251,8 @@ class SpecDataPARVI(SpecData1d):
         
         
 class SpecDataMinervaAustralis(SpecData1d):
-
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
         
-        # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
-        
-    def parse(self):
+    def parse(self, forward_model):
         
         # Load the flux, flux unc, and bad pix arrays
         # TOI257_ThAr_KiwiSpec_2019Aug05_0007_wcal_fib3
@@ -330,22 +307,18 @@ class SpecDataMinervaNorth(SpecData1d):
     """ Class for extracted 1-dimensional spectra from the MINERVA North array.
     """
     
-    def __init__(self, input_file, order_num=None, spec_num=None, crop_pix=None):
-        
-        # Call the super class
-        super().__init__(input_file, order_num=order_num, spec_num=spec_num, crop_pix=crop_pix)
-        
-    
-    def parse(self):
+    def parse(self, forward_model):
         """Parses MINERVA North T1 data.
         """
         # Load the flux, flux unc, and bad pix arrays
         fits_data = fits.open(self.input_file)[0]
         fits_data.verify('fix')
         
+        # The minerva telescope number to grab (1-4)
+        self.tel_num = forward_model.tel_num
+        
         # The flux
-        #self.flux = fits_data.data[2, self.order_num - 1, :].astype(np.float64)
-        self.flux = fits_data.data[0, self.order_num - 1, :].astype(np.float64)
+        self.flux = fits_data.data[self.tel_num - 1, self.order_num - 1, :].astype(np.float64)
         self.flux_unc = np.zeros_like(self.flux) + 1E-3
         
         # Normalize to 1.

@@ -41,6 +41,8 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     fwm_temp = parser.parse_forward_model(output_path_root, do_orders[0], 1)
     tag = fwm_temp.tag + '_' + datetime.date.today().strftime("%d%m%Y")
     index_offset = int(not fwm_temp.models_dict['star'].from_synthetic)
+    star_name = fwm_temp.star_name
+    spectrograph = fwm_temp.spectrograph
     
     # Parse the RVs
     rvs_dict = parser.parse_rvs(output_path_root, do_orders=do_orders)
@@ -99,7 +101,7 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     
     # Plot the final rvs
     fname = output_path_root + tag + '_final_rvs.png'
-    plot_final_rvs(rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], *rvs_out, phase_to=None, show=True, fname=None)
+    plot_final_rvs(star_name, spectrograph, rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], *rvs_out, phase_to=None, show=True, fname=None)
         
     # Save to a text file
     fname = output_path_root + tag + '_final_rvs.txt'
@@ -223,7 +225,7 @@ def gen_rv_weights(n_orders, bad_rvs_dict, n_obs_nights, rms=None, rvcs=None):
 
     return weights
 
-def plot_final_rvs(bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, show=True, fname=None):
+def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, show=True, fname=None):
     
     if phase_to is None:
         phase_to = 1E20
@@ -233,6 +235,8 @@ def plot_final_rvs(bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_
 
     # Nightly RVs
     plt.errorbar(bjds_nightly%phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, linewidth=0, elinewidth=3, marker='o', markersize=10, markerfacecolor='blue', color='grey', alpha=0.9)
+    
+    plt.title(star_name + ', ' + spectrograph + 'Relative RVs')
     
     if show:
         plt.show()

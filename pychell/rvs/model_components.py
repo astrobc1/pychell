@@ -542,14 +542,15 @@ class StarModel(TemplateMult):
 
         self.base_par_names = ['_vel']
 
-        if 'input_file' in blueprint and blueprint['input_file'] is not None:
+        if hasattr(self, 'input_file') and self.input_file is not None:
             self.from_synthetic = True
             self.n_delay = 0
         else:
             self.from_synthetic = False
             self.enabled = False
             self.n_delay = 1
-
+        
+        # Update parameter names
         self.par_names = [self.name + s for s in self.base_par_names]
 
     def build(self, pars, template, wave_final):
