@@ -111,8 +111,26 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     
     if debug:
         stop()
+        redchi2s = nightly_redchi2(rvs_out[0], rvs_out[1], rvs_out[2], rvs_out[3], rvs_dict['n_obs_nights'])
         
     return rvs_out
+    
+def compute_redchi2s(rvs_single, unc_single, rvs_nightly, unc_nightly, n_obs_nights):
+    n_nights = len(rvs_nightly)
+    f, l = 0, n_obs_nights[0]
+    redchi2s = np.zeros(n_nights)
+    redchi2s_nightly = np.zeros(n_nights)
+    redchi2s_nightly[:] = np.nan
+    redchi2s[:] = np.nan
+    for inight in range(n_nights):
+        ng = np.where(np.isfinite(rvs_single[f:l]))[0].size
+        if ng == 1:
+            continue
+        redchi2s[inight] = np.nansum(((rvs_single[f:l] - rvs_nightly[inight]) / unc_single[f:l])**2) / (ng - 1)
+        if inight < n_nights - 1:
+            f += n_obs_nights[inight]
+            l += n_obs_nights[inight+1]
+    return redchi2s, redchi2s_nightly
     
 def lsperiodogram(t, rvs, pmin=1.3, pmax=None):
     """Computes a Lomb-Scargle periodogram.
@@ -225,6 +243,71 @@ def gen_rv_weights(n_orders, bad_rvs_dict, n_obs_nights, rms=None, rvcs=None):
 
     return weights
 
+
+
+def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, debug=False, xcorr=False):
+    
+    # Get the orders
+    if do_orders is None:
+        do_orders = parser.get_orders(output_path_root)
+    n_orders = len(do_orders)
+    
+    # Get the tag for this run
+    fwm_temp = parser.parse_forward_model(output_path_root, do_orders[0], 1)
+    tag = fwm_temp.tag + '_' + datetime.date.today().strftime("%d%m%Y")
+    index_offset = int(not fwm_temp.models_dict['star'].from_synthetic)
+    star_name = fwm_temp.star_name
+    spectrograph = fwm_temp.spectrograph
+    
+    # Parse the RVs
+    rvs_dict = parser.parse_rvs(output_path_root, do_orders=do_orders)
+    
+    # Number of spectra and nights
+    n_spec = np.sum(rvs_dict['n_obs_nights'])
+    n_nights = len(rvs_dict['n_obs_nights'])
+    n_iters = rvs_dict['rvs'].shape[2]
+    
+    # Determine which iteration to use
+    if iter_index is None:
+        iter_indexes = np.zeros(n_orders).astype(int) + n_iters - 1
+    elif iter_index == 'best':
+        _, iter_indexes = get_best_iterations(rvs_dict, xcorr)
+    else:
+        iter_indexes = np.zeros(n_orders).astype(int) + iter_index
+        
+    pars = parser.parse_parameters(output_path_root, do_orders=do_orders)
+    pars_unpacked, varies_unpacked = parser.parameter_unpack(pars, iter_indexes)
+    par_names = list(pars[0, 0, 0].keys())
+    for o in range(n_orders):
+        rvs_unpacked = rvs_dict['rvs'][o, :, iter_indexes[o]]
+        
+        n_cols = 3
+        varies_locs = np.where(varies_unpacked[o, 0, :])[0]
+        nv = varies_locs.size
+        n_rows = int(np.ceil(nv / n_cols))
+        stop()
+        fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(12, 12), dpi=300)
+        for row in range(n_rows):
+            for col in range(n_cols):
+                
+                # The par index
+                ip = n_cols * row + col
+                if ip + 1 > nv:
+                    continue
+                
+                axarr[row, col].plot(rvs_unpacked - np.nanmedian(rvs_unpacked), pars_unpacked[o, :, varies_locs[ip]], marker='.', lw=0)
+                axarr[row, col].set_xlabel('RV [m/s]', fontsize=8)
+                axarr[row, col].set_ylabel(par_names[varies_locs[ip]].replace('_', ' '), fontsize=8)
+                axarr[row, col].tick_params(axis='both', which='major', labelsize=8)
+        fname = output_path_root + 'Order' + str(do_orders[o]) + os.sep + tag + '_ord' + str(do_orders[o]) + '_parameter_corrs.png'
+        plt.subplots_adjust(left=0.1, bottom=0.05, right=0.95, top=0.95, wspace=0.3, hspace=0.3)
+        plt.savefig(fname)
+        plt.close()
+        
+    if debug:
+        stop()
+        
+    
 def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, show=True, fname=None):
     
     if phase_to is None:
@@ -236,7 +319,9 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
     # Nightly RVs
     plt.errorbar(bjds_nightly%phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, linewidth=0, elinewidth=3, marker='o', markersize=10, markerfacecolor='blue', color='grey', alpha=0.9)
     
-    plt.title(star_name + ', ' + spectrograph + 'Relative RVs')
+    plt.title(star_name.replace('_', ' ') + ', ' + spectrograph + ' Relative RVs')
+    plt.xlabel('BJD - BJD$_{0}$')
+    plt.ylabel('RV [m/s]')
     
     if show:
         plt.show()

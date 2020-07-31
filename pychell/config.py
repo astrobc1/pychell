@@ -26,7 +26,9 @@ general_settings = {
     
     'pychell_path': pychell_path,
     
-    'force_download_templates': False
+    'force_download_templates': False,
+    
+    'debug': False
 }
 
 ####################################################################
@@ -117,8 +119,5 @@ forward_model_settings = {
     # Model Resolution (n_model_pixels = model_resolution * n_data_pixels)
     # This is only important because of the instrument line profile (LSF)
     # 8 seems sufficient.
-    'model_resolution': 8,
-    
-    # How may pixels to crop on each end of the data
-    'crop_pix': [10, 10],
+    'model_resolution': 8
 }

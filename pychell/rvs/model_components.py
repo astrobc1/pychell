@@ -437,7 +437,6 @@ class BasicFringingModel(EmpiricalMult):
             return self.build_fake(wave_final.size)
 
     def init_parameters(self, forward_model):
-        
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['d'][1], minv=self.blueprint['d'][0], maxv=self.blueprint['d'][2], mcmcscale=0.1, vary=self.enabled))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['fin'][1], minv=self.blueprint['fin'][0], maxv=self.blueprint['fin'][2], mcmcscale=0.1, vary=self.enabled))
 
@@ -641,7 +640,7 @@ class TelluricModelTAPAS(TemplateMult):
         # Components
         for itell, tell in enumerate(self.species):
             max_range = np.nanmax(forward_model.templates_dict['tellurics'][tell][:, 1]) - np.nanmin(forward_model.templates_dict['tellurics'][tell][:, 1])
-            if max_range > 0.02:
+            if max_range > 0.015:
                 self.species_enabled[tell] = True
             else:
                 self.species_enabled[tell] = False
@@ -652,13 +651,15 @@ class TelluricModelTAPAS(TemplateMult):
             v = True
         else:
             v = False
+            self.enabled = False
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1, vary=v))
 
     def update(self, forward_model, iter_index):
         super().update(forward_model, iter_index)
 
-    def load_template(self, *args, pad=1, **kwargs):
+    def load_template(self, forward_model):
         templates = {}
+        pad = 5
         for i in range(self.n_species):
             print('Loading in Telluric Template For ' + self.species[i], flush=True)
             template = np.load(self.species_input_files[self.species[i]])
@@ -874,7 +875,7 @@ class WavelengthSolutionModel(SpectralComponent):
             # The stellar template is further padded to account for barycenter sampling
             wave_pad = 1  # Angstroms
             wave_bounds = [wave_estimate[forward_model.pix_bounds[0]] - wave_pad, wave_estimate[forward_model.pix_bounds[1]] + wave_pad]
-            
+
         return wave_bounds
 
 

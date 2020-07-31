@@ -56,7 +56,7 @@ class SpecData1d:
         # Order number and image number if set
         self.order_num = forward_model.order_num
         self.spec_num = forward_model.spec_num
-        self.crop_pix = forward_model.crop_pix
+        self.crop_pix = forward_model.crop_data_pix
             
         # Default wavelength and LSF grid, may be overwritten in custom parse method.
         self.default_wave_grid = None
@@ -328,3 +328,34 @@ class SpecDataMinervaNorth(SpecData1d):
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.        
         self.JD = float(fits_data.header['JD']) + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)
         
+        
+        
+class SpecDataNIRSPEC(SpecData1d):
+    """ Class for extracted 1-dimensional spectra from iSHELL on the NASA IRTF.
+    """
+        
+    def parse(self, forward_model):
+        """ Parses iSHELL data and computes the mid-exposure time (no exp meter for iSHELL).
+        """
+        
+        # Load the flux, flux unc, and bad pix arrays
+        fits_data = fits.open(self.input_file)[0]
+        fits_data.verify('fix')
+        oi = self.order_num - 1
+        self.flux, self.flux_unc, self.badpix = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
+
+        # Flip the data so wavelength is increasing for iSHELL data
+        #self.flux = self.flux[::-1]
+        #self.badpix = self.badpix[::-1]
+        #self.flux_unc = self.flux_unc[::-1]
+        
+        # Normalize to 99th percentile
+        med_val = pcmath.weighted_median(self.flux, med_val=0.99)
+        self.flux /= med_val
+        self.flux_unc /= med_val
+        
+        # Define the JD of this observation using the mid point of the observation
+        #self.JD = float(fits_data.header['TCS_UTC']) + 2400000.5 + float(fits_data.header['ITIME']) / (2 * 3600 * 24)
+        
+        # TEMP
+        self.JD = 2455293.84426

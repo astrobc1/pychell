@@ -129,3 +129,33 @@ def parse_rms(output_path_root, do_orders=None):
             rms[o, ispec, :] = [fwm.opt[k][0] for k in range(n_iters)]
         
     return rms
+
+def parameter_unpack(pars, iter_indexes):
+    
+    n_orders, n_spec, n_iters = pars.shape
+    n_pars = len(pars[0, 0, 0].keys())
+    pars_unpacked = np.empty(shape=(n_orders, n_spec, n_pars), dtype=float)
+    varies_unpacked = np.empty(shape=(n_orders, n_spec, n_pars), dtype=bool)
+    for o in range(n_orders):
+        for ispec in range(n_spec):
+            pars_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['values']
+            varies_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['values']
+                
+    return pars_unpacked, varies_unpacked
+
+def parse_parameters(output_path_root, do_orders=None):
+    
+    if do_orders is None:
+        do_order = get_orders(output_path_root)
+        
+    n_orders = len(do_orders)
+    fwm0 = parse_forward_model(output_path_root, do_orders[0], 1)
+    n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'Fits' + os.sep + '*.pkl'))
+    n_iters = fwm0.n_template_fits + (not fwm0.models_dict['star'].from_synthetic)
+    pars = np.empty(shape=(n_orders, n_spec, n_iters), dtype=object)
+    for o in range(n_orders):
+        for ispec in range(n_spec):
+            fwm = parse_forward_model(output_path_root, do_orders[o], ispec + 1)
+            pars[o, ispec, :] = [fwm.best_fit_pars[k] for k in range(n_iters)]
+            
+    return pars

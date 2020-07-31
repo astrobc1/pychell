@@ -472,9 +472,9 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     l = n_obs_nights[0]
 
     for inight in range(n_nights):
-        rr, ww = rvs_flagged[:, f:l], w[:, f:l]
-        good_finite = np.where((ww > 0) & np.isfinite(ww))
-        ng = good_finite[0].size
+        rr, ww = rvs_flagged[:, f:l].flatten(), w[:, f:l].flatten()
+        good_finite = np.where((ww > 0) & np.isfinite(ww))[0]
+        ng = good_finite.size
         if ng == 0:
             rvs_nightly_out[inight] = np.nan
             unc_nightly[inight] = np.nan
