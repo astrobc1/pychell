@@ -89,21 +89,40 @@ class ForwardModels(list):
         # Print summary
         self.print_init_summary()
         
-    #def plot_summary(self):
-        
-        # Define a figure
-        #plot_width, plot_height, dpi = 24, 18, 300
-        #fig = plt.figure(1, figsize=(plot_width, plot_height), dpi=dpi)
-        
-        # plot the data spectrum and model
-        #ax1 = plt.subplot2grid((6, 3), (0, 0), rowspan=1, colspan=2, fig=fig)
-        
-        
-        
-        
-        
+    def generate_nightly_rvs(self, iter_index):
+        """Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed.
 
+        Args:
+            iter_index (int): The iteration to generate RVs from.
+        """
 
+        # The nightly RVs and error bars.
+        rvs_nightly = np.full(self.n_nights, fill_value=np.nan)
+        unc_nightly = np.full(self.n_nights, fill_value=np.nan)
+
+        # The best fit stellar RVs, remove the barycenter velocity
+        rvs = np.array([self[ispec].best_fit_pars[-1][self[ispec].models_dict['star'].par_names[0]].value + self[ispec].data.bc_vel for ispec in range(self.n_spec)], dtype=np.float64)
+        
+        # The RMS from the forward model fit
+        rms = np.array([self[ispec].opt[-1][0] for ispec in range(self.n_spec)], dtype=np.float64)
+        weights = 1 / rms**2
+        
+        # The NM RVs
+        rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvs, weights, self.n_obs_nights, flag_outliers=False)
+        self.rvs_dict['rvs'][:, iter_index] = rvs
+        self.rvs_dict['rvs_nightly'][:, iter_index] = rvs_nightly
+        self.rvs_dict['unc_nightly'][:, iter_index] = unc_nightly
+        
+        # The xcorr RVs
+        if self.do_xcorr:
+            rvs_xcorr_nightly = np.full(self.n_nights, fill_value=np.nan)
+            unc_xcorr_nightly = np.full(self.n_nights, fill_value=np.nan)
+            rvsx = self.rvs_dict['rvs_xcorr'][:, iter_index]
+            rvsx_nightly, uncx_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvsx, weights, self.n_obs_nights, flag_outliers=False)
+            self.rvs_dict['rvs_nightly'][:, iter_index] = rvsx_nightly
+            self.rvs_dict['unc_nightly'][:, iter_index] = uncx_nightly
+        
+        
     # Updates spectral models according to best fit parameters, and run the update method for each iteration.
     def update_models(self, iter_index):
 
@@ -438,7 +457,82 @@ class ForwardModels(list):
                 
         print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
 
-    
+    def plot_rvs(self, iter_index):
+        """Plots all RVs and cross-correlation analysis after forward modeling all spectra.
+
+        Args:
+            forward_models (ForwardModels): The list of forward model objects.
+            iter_index (int): The iteration to use.
+        """
+        
+        # Plot the rvs, nightly rvs, xcorr rvs, xcorr nightly rvs
+        plot_width, plot_height = 1800, 600
+        dpi = 200
+        plt.figure(num=1, figsize=(int(plot_width/dpi), int(plot_height/dpi)), dpi=200)
+        
+        # Alias
+        rvs = self.rvs_dict
+        
+        # Individual rvs from nelder mead fitting
+        plt.plot(self.BJDS - self.BJDS_nightly[0],
+                rvs['rvs'][:, iter_index] - np.nanmedian(rvs['rvs_nightly'][:, iter_index]),
+                marker='.', linewidth=0, alpha=0.7, color=(0.1, 0.8, 0.1))
+        
+        # Nightly rvs from nelder mead fitting
+        plt.errorbar(self.BJDS_nightly - self.BJDS_nightly[0],
+                        rvs['rvs_nightly'][:, iter_index] - np.nanmedian(rvs['rvs_nightly'][:, iter_index]),
+                        yerr=rvs['unc_nightly'][:, iter_index], marker='o', linewidth=0, elinewidth=1, label='Nelder Mead', color=(0, 114/255, 189/255))
+
+        # Individual and nightly xcorr rvs
+        if self.do_xcorr:
+            plt.plot(self.BJDS - self.BJDS_nightly[0],
+                        rvs['rvs_xcorr'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr'][:, iter_index]),
+                        marker='.', linewidth=0, color='black', alpha=0.6)
+            plt.errorbar(self.BJDS_nightly - self.BJDS_nightly[0],
+                            rvs['rvs_xcorr_nightly'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr_nightly'][:, iter_index]),
+                            yerr=rvs['unc_xcorr_nightly'][:, iter_index], marker='X', linewidth=0, alpha=0.8, label='X Corr', color='darkorange')
+        
+        plt.title(self[0].star_name + ' RVs Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
+        plt.xlabel('BJD - BJD$_{0}$', fontweight='bold')
+        plt.ylabel('RV [m/s]', fontweight='bold')
+        plt.legend(loc='upper right')
+        plt.tight_layout()
+        fname = self.run_output_path_rvs + self.tag + '_rvs_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
+        plt.savefig(fname)
+        plt.close()
+        
+        if self.do_xcorr:
+            # Plot the Bisector stuff
+            plt.figure(1, figsize=(12, 7), dpi=200)
+            for ispec in range(self.n_spec):
+                v0 = rvs['rvs_xcorr'][ispec, iter_index]
+                depths = np.linspace(0, 1, num=self.xcorr_options['n_bs'])
+                ccf_ = rvs['xcorrs'][:, 2*ispec+1, iter_index] - np.nanmin(rvs['xcorrs'][:, 2*ispec+1, iter_index])
+                ccf_ = ccf_ / np.nanmax(ccf_)
+                plt.plot(rvs['xcorrs'][:, 2*ispec, iter_index] - v0, ccf_)
+                plt.plot(rvs['line_bisectors'][:, ispec, iter_index], depths)
+            
+            plt.title(self.star_name + ' CCFs Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
+            plt.xlabel('RV$_{\star}$ [m/s]', fontweight='bold')
+            plt.ylabel('CCF (RMS surface)', fontweight='bold')
+            plt.xlim(-10000, 10000)
+            plt.tight_layout()
+            fname = self.run_output_path_rvs + self.tag + '_ccfs_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
+            plt.savefig(fname)
+            plt.close()
+        
+            # Plot the Bisector stuff
+            plt.figure(1, figsize=(12, 7), dpi=200)
+            plt.plot(rvs['rvs_xcorr'][:, iter_index], rvs['bisector_spans'][:, iter_index], marker='o', linewidth=0)
+            plt.title(self[0].star_name + ' CCF Bisector Spans Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
+            plt.xlabel('X Corr RV [m/s]', fontweight='bold')
+            plt.ylabel('Bisector Span [m/s]', fontweight='bold')
+            plt.tight_layout()
+            fname = self.run_output_path_rvs + self.tag + '_bisectorspans_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
+            plt.savefig(fname)
+            plt.close()
+        
+        
 class ForwardModel:
     
     def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
@@ -1071,3 +1165,82 @@ class NIRSPECForwardModel(ForwardModel):
             stop()
 
         return wavelength_solution, model_lr
+    
+    
+class PARVI_devForwardModel(ForwardModel):
+    
+    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
+
+        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
+
+    def build_full(self, pars, iter_index):
+        
+        # The final high res wave grid for the model
+        # Eventually linearly interpolated to the data grid (wavelength solution)
+        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        
+        model = np.ones_like(final_hr_wave_grid)
+
+        # Star
+        if self.models_dict['star'].enabled:
+            model *= self.models_dict['star'].build(pars, self.templates_dict['star'][:, 0], self.templates_dict['star'][:, 1], final_hr_wave_grid)
+        
+        # All tellurics
+        if self.models_dict['tellurics'].enabled:
+            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+        
+        # Blaze Model
+        if self.models_dict['blaze'].enabled:
+            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+            
+        # Residual lab flux
+        if 'residual_lab' in self.templates_dict:
+            model += self.templates_dict['residual_lab'][:, 1]
+
+        # Convolve Model with LSF
+        if self.models_dict['lsf'].enabled:
+            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+
+        # Generate the wavelength solution of the data
+        #print("JWD final_hr_wave_grid.shape:",final_hr_wave_grid.shape)
+        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
+
+        # Interpolate high res model onto data grid
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        
+        if self.debug:
+            stop()
+        
+        return wavelength_solution, model_lr
+    
+    def build_hr_nostar(self, pars, iter_index):
+        
+        # The final high res wave grid for the model
+        # Eventually linearly interpolated to the data grid (wavelength solution)
+        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        
+        model = np.ones_like(final_hr_wave_grid)
+        
+        # Gas Cell
+        if self.models_dict['gas_cell'].enabled:
+            model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
+        
+        # All tellurics
+        if self.models_dict['tellurics'].enabled:
+            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+        
+        # Blaze Model
+        if self.models_dict['blaze'].enabled:
+            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        
+        # Residual lab flux
+        if 'residual_lab' in self.templates_dict:
+            model += self.templates_dict['residual_lab'][:, 1]
+
+        # Generate the wavelength solution of the data
+        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
+        
+        if self.debug:
+            stop()
+
+        return wavelength_solution, model

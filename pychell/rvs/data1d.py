@@ -359,3 +359,34 @@ class SpecDataNIRSPEC(SpecData1d):
         
         # TEMP
         self.JD = 2455293.84426
+        
+        
+class SpecDataPARVI_dev(SpecData1d):
+    """ Class for extracted 1D spectra from PARVI using Chaz example txt file.
+    """
+        
+    def parse(self):
+        #txt file example uses one file per order.  this might not be what self.input_file is about.
+        txt_data = np.genfromtxt(self.input_file).T
+        self.default_wave_grid, self.flux, self.flux_unc = txt_data[3].astype(np.float64), txt_data[4].astype(np.float64), txt_data[5].astype(np.float64)
+        #print("JWD sanity check default_wave_grid on load: ",self.default_wave_grid)
+
+        # Create bad pix array, further cropped later
+        self.badpix = np.ones(self.flux.size, dtype=np.float64)
+        bad = np.where(~np.isfinite(self.flux) | (self.flux <= 0) | (self.flux_unc == 0) | (self.flux_unc > 0.5))[0]
+        if bad.size > 0:
+            self.badpix[bad] = 0
+
+        #input data was normalized before application of simulated atmospheric effects.  renormalize flux and flux_unc to prevent problems in blaze fitting.
+        factor = 1.0/np.mean(self.flux)
+        self.flux*=factor
+        self.flux_unc*=factor
+        print("Renormalizing with factor of ",factor," for file ",self.input_file)
+        
+        # Convert wavelength grid to Angstroms, required!
+        self.default_wave_grid *= 10
+        # JWD I think chaz gave the wrong units.
+        self.default_wave_grid *= 1000
+
+        # use average observed time to get JD (all times should be equal)
+        self.JD = np.mean(txt_data[0]).astype(np.float64)+2450000

@@ -105,9 +105,9 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
             
             print('Finished Iteration ' + str(iter_index + 1) + ' in ' + str(round(stopwatch.time_since(name='ti_iter')/3600, 2)) + ' hours', flush=True)
             
-            # Compute the RVs and output after each iteration (same file is overwritten)
-            pcrvcalc.generate_nightly_rvs(forward_models, iter_index)
-            pcrvcalc.plot_rvs(forward_models, iter_index)
+            # Compute the RVs and output after each iteration for diagnostic purposes (same file is overwritten)
+            forward_models.generate_nightly_rvs(iter_index)
+            forward_models.plot_rvs(iter_index)
             forward_models.save_rvs()
 
             # Print RV Diagnostics

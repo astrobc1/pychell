@@ -61,6 +61,7 @@ def parse_rvs(output_path_root, do_orders=None):
 
     # Load in rvs for each order
     for o in range(n_orders):
+        print('Loading in RVs for Order ' + str(do_orders[o]))
         fname = glob.glob(output_path_root + 'Order' + str(do_orders[o]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
         rvfile = np.load(fname)
         rvs_dict['rvs'][o, :, :] = rvfile['rvs']
