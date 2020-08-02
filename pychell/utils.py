@@ -55,7 +55,10 @@ def setInDict(dataDict, mapList, value):
     getFromDict(dataDict, mapList[:-1])[mapList[-1]] = value
 
 # Downlaod templates from google drive
-def download_templates(dest):
+def download_templates(dest, file_id=None):
+    
+    if file_id is None:
+        file_id = '1ubwYyH6DidtDfxRdg707-8M9iORS-jql'
     
     if not os.path.exists(dest):
         os.makedirs(dest)
@@ -71,7 +74,7 @@ def download_templates(dest):
     dest_zip = dest + 'templates_' + dt_string + '.zip'
         
     try:
-        gdd.download_file_from_google_drive(file_id='1TDuaC13Znkzs3x_66VqtTm7WlIS-CRjy', dest_path=dest_zip, unzip=True, showsize=True, overwrite=False)
+        gdd.download_file_from_google_drive(file_id=file_id, dest_path=dest_zip, unzip=True, showsize=True, overwrite=False)
         os.remove(dest_zip)
         template_files = glob.glob(dest + 'templates' + os.sep + '*')
         for tfile in template_files:
