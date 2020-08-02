@@ -86,6 +86,13 @@ class SpecData1d:
             self.flux[bad] = np.nan
             self.flux_unc[bad] = np.nan
             self.badpix[bad] = 0
+            
+        # Further mask very low flux
+        bad = np.where(self.flux < 0.05)[0]
+        if bad.size > 0:
+            self.flux[bad] = np.nan
+            self.flux_unc[bad] = np.nan
+            self.flux[bad] = 0
         
     # Calculate bc info for only this observation
     def calculate_bc_info(self, obs_name, star_name):
