@@ -115,13 +115,10 @@ class ForwardModels(list):
         
         # The xcorr RVs
         if self.do_xcorr:
-            rvs_xcorr_nightly = np.full(self.n_nights, fill_value=np.nan)
-            unc_xcorr_nightly = np.full(self.n_nights, fill_value=np.nan)
             rvsx = self.rvs_dict['rvs_xcorr'][:, iter_index]
             rvsx_nightly, uncx_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvsx, weights, self.n_obs_nights, flag_outliers=False)
-            self.rvs_dict['rvs_nightly'][:, iter_index] = rvsx_nightly
-            self.rvs_dict['unc_nightly'][:, iter_index] = uncx_nightly
-        
+            self.rvs_dict['rvs_xcorr_nightly'][:, iter_index] = rvsx_nightly
+            self.rvs_dict['unc_xcorr_nightly'][:, iter_index] = uncx_nightly
         
     # Updates spectral models according to best fit parameters, and run the update method for each iteration.
     def update_models(self, iter_index):
@@ -186,9 +183,6 @@ class ForwardModels(list):
         # Compute the nightly BJDs and n obs per night
         self.BJDS_nightly, self.n_obs_nights = pcrvcalc.get_nightly_jds(self.BJDS)
         
-        # Sort everything by BJD
-        self.sort()
-        
         # The number of nights
         self.n_nights = len(self.BJDS_nightly)
             
@@ -219,23 +213,6 @@ class ForwardModels(list):
             
         else:
             self.do_xcorr = False
-        
-        
-    def sort(self):
-        """Sorts the objects by BJD, in place.
-        """
-        # Sort by BJD
-        sorting_inds = np.argsort(self.BJDS)
-        self.BJDS = self.BJDS[sorting_inds]
-        self.bc_vels = self.bc_vels[sorting_inds]
-        
-        # Also sort the list
-        for ispec in range(self.n_spec):
-            self[ispec] = self[sorting_inds[ispec]]
-            self[ispec].spec_index = ispec
-            self[ispec].spec_num = ispec + 1
-            self[ispec].data.spec_index = ispec
-            self[ispec].data.spec_num = ispec + 1
     
     
     def init_parameters(self):
@@ -285,7 +262,7 @@ class ForwardModels(list):
                 self[ispec] = self.solver_wrapper(self[ispec], iter_index, self.n_spec)
         
         # Cross correlate if set
-        if self.do_xcorr and self.n_template_fits > 0 and self.models_dict['star'].enabled:
+        if self.do_xcorr and self.n_template_fits > 0 and self[0].models_dict['star'].enabled:
             self.cross_correlate_spectra(iter_index)
             
         # Fit in Parallel
@@ -313,13 +290,6 @@ class ForwardModels(list):
         self.templates_dict = self[0].load_templates()
         for fwm in self:
             fwm.templates_dict = self.templates_dict
-
-    # Overwrite the getattr function
-    def __getattr__(self, key):
-        try:
-            return self.__dict__[key]
-        except:
-            return getattr(self[0], key)
             
 
     # Create output directories

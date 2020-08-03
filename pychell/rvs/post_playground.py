@@ -322,30 +322,33 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
         iter_indexes = np.zeros(n_orders).astype(int) + iter_index
         
     pars = parser.parse_parameters(output_path_root, do_orders=do_orders)
-    pars_unpacked, varies_unpacked = parser.parameter_unpack(pars, iter_indexes)
+    pars_unpacked, varies_unpacked = parser.parameter_unpack(pars, iter_indexes + index_offset)
     par_names = list(pars[0, 0, 0].keys())
     for o in range(n_orders):
         rvs_unpacked = rvs_dict['rvs'][o, :, iter_indexes[o]]
         
-        n_cols = 3
+        n_cols = 5
         varies_locs = np.where(varies_unpacked[o, 0, :])[0]
         nv = varies_locs.size
         n_rows = int(np.ceil(nv / n_cols))
-        fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(12, 12), dpi=300)
+        fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(16, 12), dpi=300)
         for row in range(n_rows):
             for col in range(n_cols):
                 
                 # The par index
                 ip = n_cols * row + col
+                
                 if ip + 1 > nv:
+                    axarr[row, col].set_visible(False)
                     continue
                 
                 axarr[row, col].plot(rvs_unpacked - np.nanmedian(rvs_unpacked), pars_unpacked[o, :, varies_locs[ip]], marker='.', lw=0)
-                axarr[row, col].set_xlabel('RV [m/s]', fontsize=8)
-                axarr[row, col].set_ylabel(par_names[varies_locs[ip]].replace('_', ' '), fontsize=8)
-                axarr[row, col].tick_params(axis='both', which='major', labelsize=8)
+                axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
+                axarr[row, col].set_ylabel(par_names[varies_locs[ip]].replace('_', ' '), fontsize=4)
+                axarr[row, col].tick_params(axis='both', which='major', labelsize=4)
+        fig.suptitle(star_name.replace('_', ' ') + ' Parameter Correlations Order ' + str(do_orders[o]), fontsize=10)
         fname = output_path_root + 'Order' + str(do_orders[o]) + os.sep + tag + '_ord' + str(do_orders[o]) + '_parameter_corrs.png'
-        plt.subplots_adjust(left=0.1, bottom=0.05, right=0.95, top=0.95, wspace=0.3, hspace=0.3)
+        plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.3, hspace=0.5)
         plt.savefig(fname)
         plt.close()
         

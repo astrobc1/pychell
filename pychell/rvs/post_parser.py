@@ -140,7 +140,7 @@ def parameter_unpack(pars, iter_indexes):
     for o in range(n_orders):
         for ispec in range(n_spec):
             pars_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['values']
-            varies_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['values']
+            varies_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['varies']
                 
     return pars_unpacked, varies_unpacked
 
@@ -152,11 +152,11 @@ def parse_parameters(output_path_root, do_orders=None):
     n_orders = len(do_orders)
     fwm0 = parse_forward_model(output_path_root, do_orders[0], 1)
     n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'Fits' + os.sep + '*.pkl'))
-    n_iters = fwm0.n_template_fits + (not fwm0.models_dict['star'].from_synthetic)
-    pars = np.empty(shape=(n_orders, n_spec, n_iters), dtype=object)
+    n_iters_pars = fwm0.n_template_fits + (not fwm0.models_dict['star'].from_synthetic)
+    pars = np.empty(shape=(n_orders, n_spec, n_iters_pars), dtype=object)
     for o in range(n_orders):
         for ispec in range(n_spec):
             fwm = parse_forward_model(output_path_root, do_orders[o], ispec + 1)
-            pars[o, ispec, :] = [fwm.best_fit_pars[k] for k in range(n_iters)]
+            pars[o, ispec, :] = [fwm.best_fit_pars[k] for k in range(n_iters_pars)]
             
     return pars
