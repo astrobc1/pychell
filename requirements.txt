@@ -1,6 +1,6 @@
 astropy>=4.0
 llc>=0.2
-barycorrpy>=0.3.1
+barycorrpy==0.3.2
 numba>=0.48
 numpy>=1.18
 optimparameters>=1.0.1

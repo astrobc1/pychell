@@ -21,6 +21,7 @@ from matplotlib import cm
 
 # Multiprocessing
 from joblib import Parallel, delayed
+import tqdm
 
 # Science/math
 from scipy import constants as cs # cs.c = speed of light in m/s
@@ -354,7 +355,7 @@ class ForwardModels(list):
         args_to_pass = (forward_model, iter_index)
         
         # Construct the Nelder Mead Solver and run
-        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-5)
+        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-10)
         opt_result = solver.solve()
 
         # Pass best fit parameters and optimization result to forward model
@@ -431,7 +432,6 @@ class ForwardModels(list):
         """Plots all RVs and cross-correlation analysis after forward modeling all spectra.
 
         Args:
-            forward_models (ForwardModels): The list of forward model objects.
             iter_index (int): The iteration to use.
         """
         
@@ -456,7 +456,7 @@ class ForwardModels(list):
         # Individual and nightly xcorr rvs
         if self.do_xcorr:
             plt.plot(self.BJDS - self.BJDS_nightly[0],
-                        rvs['rvs_xcorr'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr'][:, iter_index]),
+                        rvs['rvs_xcorr'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr_nightly'][:, iter_index]),
                         marker='.', linewidth=0, color='black', alpha=0.6)
             plt.errorbar(self.BJDS_nightly - self.BJDS_nightly[0],
                             rvs['rvs_xcorr_nightly'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr_nightly'][:, iter_index]),
@@ -581,7 +581,7 @@ class ForwardModel:
         self.n_use_data_pix = int(self.n_data_pix - self.crop_data_pix[0] - self.crop_data_pix[1])
         
         # The left and right pixels. This should roughly match the bad pix arrays
-        self.pix_bounds = [self.crop_data_pix[0], self.n_data_pix - self.crop_data_pix[1]]
+        self.pix_bounds = [self.crop_data_pix[0], self.n_data_pix - self.crop_data_pix[1] - 1]
         self.n_model_pix = int(self.model_resolution * self.n_data_pix)
 
         # First generate the wavelength solution model
@@ -1214,3 +1214,40 @@ class PARVI_devForwardModel(ForwardModel):
             stop()
 
         return wavelength_solution, model
+    
+    
+class SimulatedForwardModel(ForwardModel):
+    
+    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
+
+        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
+
+    def build_full(self, pars, iter_index):
+        
+        # The final high res wave grid for the model
+        # Eventually linearly interpolated to the data grid (wavelength solution)
+        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        
+        model = np.ones_like(final_hr_wave_grid)
+
+        # Star
+        if self.models_dict['star'].enabled:
+            model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
+            
+        if self.models_dict['blaze'].enabled:
+            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+
+        # Convolve Model with LSF
+        if self.models_dict['lsf'].enabled:
+            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+
+        # Generate the wavelength solution of the data
+        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
+
+        # Interpolate high res model onto data grid
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        
+        if self.debug:
+            stop()
+        
+        return wavelength_solution, model_lr

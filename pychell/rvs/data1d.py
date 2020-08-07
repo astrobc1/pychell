@@ -80,19 +80,12 @@ class SpecData1d:
             self.badpix[0:self.crop_pix[0]] = 0
             self.badpix[self.flux.size - self.crop_pix[1] - 1:] = 0
             
-        # Mask negative flux
-        bad = np.where(self.flux <= 0)[0]
+        # Mask any flux less than 5 percent
+        bad = np.where((self.flux < 0.05) | ~np.isfinite(self.flux))[0]
         if bad.size > 0:
             self.flux[bad] = np.nan
             self.flux_unc[bad] = np.nan
             self.badpix[bad] = 0
-            
-        # Further mask very low flux
-        bad = np.where(self.flux < 0.05)[0]
-        if bad.size > 0:
-            self.flux[bad] = np.nan
-            self.flux_unc[bad] = np.nan
-            self.flux[bad] = 0
         
     # Calculate bc info for only this observation
     def calculate_bc_info(self, obs_name, star_name):
@@ -107,10 +100,10 @@ class SpecData1d:
         from barycorrpy import get_BC_vel
         from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
         
-        # BJDs
+        # BJD
         self.bjd = JDUTC_to_BJDTDB(JDUTC=self.JD, starname=star_name, obsname=obs_name)[0]
         
-        # bc vels
+        # bc vel
         self.bc_vel = get_BC_vel(JDUTC=self.JD, starname=star_name, obsname=obs_name)[0]
     
     def set_bc_info(self, bjd=None, bc_vel=None):
@@ -315,7 +308,7 @@ class SpecDataMinervaNorth(SpecData1d):
     """
     
     def parse(self, forward_model):
-        """Parses MINERVA North T1 data.
+        """Parses MINERVA North data.
         """
         # Load the flux, flux unc, and bad pix arrays
         fits_data = fits.open(self.input_file)[0]
@@ -333,7 +326,11 @@ class SpecDataMinervaNorth(SpecData1d):
         self.badpix = np.ones_like(self.flux)
         
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.        
-        self.JD = float(fits_data.header['JD']) + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)
+        try:
+            self.JD = float(fits_data.header['FLUXMID' + str(self.tel_num)])
+        except:
+            print('Warning: Using non weighted exposure mid point for ' + self.base_input_file)
+            self.JD = float(fits_data.header['JD']) + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)
         
         
         
@@ -397,3 +394,65 @@ class SpecDataPARVI_dev(SpecData1d):
 
         # use average observed time to get JD (all times should be equal)
         self.JD = np.mean(txt_data[0]).astype(np.float64)+2450000
+        
+class SpecDataSimulated(SpecData1d):
+    
+    """ Simulated Data.
+    """
+    def parse(self, forward_model):
+        
+        # Load the flux, flux unc, and bad pix arrays. Also load the known wavelength grid for a starting point
+        fits_data = fits.open(self.input_file)[0]
+        #oi = self.order_num - 1
+        self.default_wave_grid = fits_data.data[:, 0].astype(np.float64)
+        self.flux = fits_data.data[:, 1].astype(np.float64)
+        self.flux_unc = np.zeros_like(self.flux) + 1E-3
+        
+        # Normalize according to 98th percentile in flux
+        #continuum = pcmath.weighted_median(self.flux, med_val=0.99)
+        #self.flux /= continuum
+        
+        # Create bad pix array, further cropped later
+        self.badpix = np.ones(self.flux.size, dtype=np.float64)
+        bad = np.where(~np.isfinite(self.flux) | (self.flux == 0) | (self.flux_unc == 0) | (self.flux_unc > 0.5))[0]
+        if bad.size > 0:
+            self.badpix[bad] = 0
+
+        self.JD = float(fits_data.header['JD'])
+        
+        
+    def calculate_bc_info_all(forward_models, obs_name, star_name):
+        """ Computes the bary-center information for all observations.
+
+        Args:
+            forward_models (ForwardModels): The list of forward model objects.
+            obs_name (str): The name of the observatory to be looked up on EarthLocations.
+            star_name (str): The name of the star to be queuried on SIMBAD.
+        Returns:
+            bjds (np.ndarray): The BJDs of the observations
+            bc_vels (np.ndarray): The bary-center velocities of the observations.
+        """
+        # Import the barycorrpy module
+        from barycorrpy import get_BC_vel
+        from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
+        
+        # Extract the jds
+        jds = np.array([fwm.data.JD for fwm in forward_models], dtype=float)
+        
+        # BJDs
+        #bjds = JDUTC_to_BJDTDB(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=obs_name)[0]
+        
+        #bjds = JDUTC_to_BJDTDB(JDUTC=jds, obsname=obs_name, starname = star_name)[0]
+        
+        # bc vels
+        #bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=obs_name)[0]
+        #bc_vels = get_BC_vel(JDUTC=jds, obsname=obs_name, starname = star_name)[0]
+        
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=obs_name, ephemeris='de430', leap_update=True)[0]
+        bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=obs_name, ephemeris='de430', leap_update=True)[0]
+        
+        
+        for i in range(forward_models.n_spec):
+            forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
+            
+        return bjds, bc_vels

@@ -111,7 +111,7 @@ forward_model_settings = {
     # Cross correlation / bisector span stuff for each iteration. Will take longer.
     # A cross correlation will still be run to estimate the correct overall RV before fitting
     # if starting from a synthetic template
-    'xcorr_options': {'method': 'weighted_brute_force', 'weights': ['tellurics', 'flux_unc'], 'n_bs': 1000, 'step': 50, 'range': 1E4},
+    'xcorr_options': {'method': 'weighted_brute_force', 'n_bs': 1000, 'step': 50, 'range': 1E4},
     
     # Whether or not to crudely remove the continuum from the data before any optimizing.
     'remove_continuum': False,

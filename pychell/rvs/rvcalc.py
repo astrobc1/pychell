@@ -87,19 +87,19 @@ def weighted_brute_force(forward_model, iter_index):
     weights_init = np.copy(forward_model.data.badpix * forward_model.data.flux_unc)
     
     # Flag regions of heavy tellurics
-    tell_flux_hr = forward_model.models_dict['tellurics'].build(pars, forward_model.templates_dict['tellurics'], forward_model.templates_dict['star'][:, 0])
-    tell_flux_hrc = forward_model.models_dict['lsf'].convolve_flux(tell_flux_hr, pars=pars)
-    tell_flux_lr = np.interp(forward_model.wavelength_solutions[-1], forward_model.templates_dict['star'][:, 0], tell_flux_hrc, left=0, right=0)
-    tell_weights = tell_flux_lr**2
-    
-    # Combine weights
-    weights_init *= tell_weights
+    if 'tellurics' in forward_model.models_dict and forward_model.models_dict['tellurics'].enabled:
+        tell_flux_hr = forward_model.models_dict['tellurics'].build(pars, forward_model.templates_dict['tellurics'], forward_model.templates_dict['star'][:, 0])
+        tell_flux_hrc = forward_model.models_dict['lsf'].convolve_flux(tell_flux_hr, pars=pars)
+        tell_flux_lr = np.interp(forward_model.wavelength_solutions[-1], forward_model.templates_dict['star'][:, 0], tell_flux_hrc, left=0, right=0)
+        tell_weights = tell_flux_lr**2
+        # Combine weights
+        weights_init *= tell_weights
     
     # Star weights depend on the amount of rv content.
     R = np.nanmean(forward_model.templates_dict['star'][:, 0]) / (2 * pars[forward_model.models_dict['lsf'].par_names[0]].value * np.log(4))
     rvc, _ = compute_rv_content(forward_model.templates_dict['star'][:, 0], forward_model.templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, R=R)
     star_weights = 1 / rvc**2
-        
+    
     for i in range(vels.size):
         
         weights = np.copy(weights_init)
@@ -111,8 +111,8 @@ def weighted_brute_force(forward_model, iter_index):
         wave_lr, model_lr = forward_model.build_full(pars, iter_index)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        star_weights_shifted = np.interp(wave_lr, forward_model.templates_dict['star'][:, 0] * np.exp(vels[i] / cs.c), star_weights, left=0, right=0)
-        weights *= star_weights_shifted
+        #star_weights_shifted = np.interp(wave_lr, forward_model.templates_dict['star'][:, 0] * np.exp(vels[i] / cs.c), star_weights, left=0, right=0)
+        #weights *= star_weights_shifted
         
         # Further
         bad = np.where(~np.isfinite(model_lr) | (weights <= 0))[0]
@@ -150,7 +150,9 @@ def crude_brute_force(forward_model, iter_index=None):
     """
     
     pars = copy.deepcopy(forward_model.initial_parameters)
-    vels = np.arange(-250000, 250000, 500)
+    #vels = np.arange(-250000, 250000, 50)
+    
+    vels = np.arange(-40_000, -10_000, 50)
 
     # Stores the rms as a function of velocity
     rmss = np.empty(vels.size, dtype=np.float64) + np.nan
@@ -175,6 +177,8 @@ def crude_brute_force(forward_model, iter_index=None):
         
         # Construct the RMS
         rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights)) / np.nansum(weights)
+        
+    #stop()
 
     # Extract the best rv
     xcorr_star_vel = vels[np.nanargmin(rmss)]

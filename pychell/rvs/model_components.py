@@ -218,7 +218,7 @@ class ResidualBlazeModel(EmpiricalMult):
             self.splines_enabled = True
 
         # The estimate of the blaze wavelength
-        if 'blaze_wavelengths' in blueprint['blaze_wavelengths']:
+        if 'blaze_wavelengths' in blueprint:
             self.blaze_wave_estimate = blueprint['blaze_wavelengths'][self.order_num - 1]
         else:
             self.blaze_wave_estimate = None

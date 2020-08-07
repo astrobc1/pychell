@@ -201,11 +201,14 @@ def convolve_flux(wave, flux, R, compress=64):
     # The mean wavelength
     ml = np.nanmean(wave[good])
     
-    # The number of points in the lsf grid
-    nlsf = int(ng / compress)
+    nlsf = int(fluxlin.size / compress)
     
-    xlsf = np.arange(-(int(nlsf / 2) - 1), int(nlsf / 2) + 1, 1) * dl
-    fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2 - 1), int(nlsf / 2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
+    if nlsf % 2 == 0:
+        xlsf = np.arange(-(int(nlsf / 2) - 1), int(nlsf / 2) + 1, 1) * dl
+        fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2 - 1), int(nlsf/2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
+    else:
+        xlsf = np.arange(-(int(nlsf / 2)), int(nlsf / 2) + 1, 1) * dl
+        fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2), int(nlsf/2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
 
     sig = ml / (2 * np.sqrt(2 * np.log(2)) * R)
     lsf = np.exp(-0.5 * (xlsf / sig)**2)

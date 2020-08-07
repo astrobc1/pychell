@@ -293,20 +293,20 @@ def weighted_median(forward_models, iter_index=None, nights_for_template=None, t
     current_stellar_template = np.copy(forward_models.templates_dict['star'])
 
     # Stores the shifted high resolution residuals (all on the star grid)
-    residuals_hr = np.empty(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=np.float64)
-    bad_pix_hr = np.empty(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=bool)
-    tot_weights_hr = np.zeros(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=np.float64)
+    residuals_hr = np.empty(shape=(forward_models[0].n_model_pix, forward_models.n_spec), dtype=np.float64)
+    bad_pix_hr = np.empty(shape=(forward_models[0].n_model_pix, forward_models.n_spec), dtype=bool)
+    tot_weights_hr = np.zeros(shape=(forward_models[0].n_model_pix, forward_models.n_spec), dtype=np.float64)
     
     # Stores the weighted median grid. Is set via loop, so pre-allocate.
-    residuals_median = np.empty(forward_models.n_model_pix, dtype=np.float64)
+    residuals_median = np.empty(forward_models[0].n_model_pix, dtype=np.float64)
     
     # These show the min and max of of the residuals for all observations, useful for plotting if desired.
-    residuals_max = np.empty(forward_models.n_model_pix, dtype=np.float64)
-    residuals_min = np.empty(forward_models.n_model_pix, dtype=np.float64)
+    residuals_max = np.empty(forward_models[0].n_model_pix, dtype=np.float64)
+    residuals_min = np.empty(forward_models[0].n_model_pix, dtype=np.float64)
     
     
     # Weight by 1 / rms^2
-    rms = np.array([forward_models[ispec].opt[iter_index][0] for ispec in range(forward_models.n_spec)]) 
+    rms = np.array([fwm.opt[iter_index][0] for fwm in forward_models]) 
     rms_weights = 1 / rms**2
     good = np.where(np.isfinite(rms_weights))[0]
     bad = np.where(~np.isfinite(rms_weights))[0]
@@ -405,7 +405,7 @@ def weighted_median(forward_models, iter_index=None, nights_for_template=None, t
     # 1. If all weights at a given pixel are zero, set median value to zero.
     # 2. If there's more than one spectrum, compute the weighted median
     # 3. If there's only one spectrum, use those residuals, unless it's nan.
-    for ix in range(forward_models.n_model_pix):
+    for ix in range(forward_models[0].n_model_pix):
         if np.nansum(tot_weights_hr[ix, :]) == 0:
             residuals_median[ix] = 0
         else:
@@ -447,16 +447,16 @@ def weighted_average(forward_models, iter_index=None, nights_for_template=None, 
     current_stellar_template = np.copy(forward_models.templates_dict['star'])
 
     # Stores the shifted high resolution residuals (all on the star grid)
-    residuals_hr = np.empty(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=np.float64) + np.nan
-    bad_pix_hr = np.empty(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=bool)
-    tot_weights_hr = np.zeros(shape=(forward_models.n_model_pix, forward_models.n_spec), dtype=np.float64)
+    residuals_hr = np.empty(shape=(forward_models[0].n_model_pix, forward_models.n_spec), dtype=np.float64) + np.nan
+    bad_pix_hr = np.empty(shape=(forward_models[0].n_model_pix, forward_models.n_spec), dtype=bool)
+    tot_weights_hr = np.zeros(shape=(forward_models[0].n_model_pix, forward_models.n_spec), dtype=np.float64)
     
     # Stores the weighted median grid. Is set via loop, so pre-allocate.
-    residuals_average = np.empty(forward_models.n_model_pix, dtype=np.float64) + np.nan
+    residuals_average = np.empty(forward_models[0].n_model_pix, dtype=np.float64) + np.nan
     
     # These show the min and max of of the residuals for all observations, useful for plotting if desired.
-    residuals_max = np.empty(forward_models.n_model_pix, dtype=np.float64) + np.nan
-    residuals_min = np.empty(forward_models.n_model_pix, dtype=np.float64) + np.nan
+    residuals_max = np.empty(forward_models[0].n_model_pix, dtype=np.float64) + np.nan
+    residuals_min = np.empty(forward_models[0].n_model_pix, dtype=np.float64) + np.nan
     
     # Weight by 1 / rms^2
     rms = np.array([forward_models[ispec].opt[iter_index][0] for ispec in range(forward_models.n_spec)]) 
@@ -1168,7 +1168,7 @@ def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.98, smooth=True):
     return continuum
 
 
-def fit_continuum_wobble(x, y, mask, order=6, nsigma=[0.3,3.0], maxniter=50):
+def fit_continuum_wobble(x, y, badpix, order=6, nsigma=[0.3,3.0], maxniter=50):
     """Fit the continuum using sigma clipping. This function is a modified version from Megan Bedell's Wobble code.
     Args:
         x: The wavelengths.
@@ -1179,21 +1179,22 @@ def fit_continuum_wobble(x, y, mask, order=6, nsigma=[0.3,3.0], maxniter=50):
     Returns:
         The value of the continuum at the wavelengths in x in log space.
     """
-    good = np.where(np.isfinite(x) & np.isfinite(y))[0]
-    xx, yy = x[good], y[good]
+    
+    xx = np.copy(x)
     yy = np.copy(y)
-    yy = pcmath.median_filter1d(yy, 7)
-    A = np.vander(x - np.nanmean(x), order+1)
-    m = np.ones(len(x), dtype=bool)
+    yy = pcmath.median_filter1d(yy, 7, preserve_nans=True)
+    A = np.vander(xx - np.nanmean(xx), order+1)
+    mask = np.ones(len(xx), dtype=bool)
+    badpixcp = np.copy(badpix)
     for i in range(maxniter):
-        m[mask == 0] = 0  # mask out the bad pixels
-        w = np.linalg.solve(np.dot(A[m].T, A[m]), np.dot(A[m].T, yy[m]))
+        mask[badpixcp == 0] = 0
+        w = np.linalg.solve(np.dot(A[mask].T, A[mask]), np.dot(A[mask].T, yy[mask]))
         mu = np.dot(A, w)
         resid = yy - mu
         sigma = np.sqrt(np.nanmedian(resid**2))
-        m_new = (resid > -nsigma[0]*sigma) & (resid < nsigma[1]*sigma)
-        if m.sum() == m_new.sum():
-            m = m_new
+        mask_new = (resid > -nsigma[0]*sigma) & (resid < nsigma[1]*sigma)
+        if mask.sum() == mask_new.sum():
+            mask = mask_new
             break
-        m = m_new
+        mask = mask_new
     return mu
