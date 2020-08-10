@@ -53,6 +53,39 @@ forward_model_blueprints = {
         'vel': [-1000 * 300, 10, 1000 * 300]
     },
     
+    # Tellurics (from TAPAS)
+    'tellurics': {
+        'name': 'sim_tellurics',
+        'class_name': 'TelluricModelTAPAS',
+        'vel': [-500, -100, 500],
+        'species': {
+            'water': {
+                'input_file': 'telluric_water_tapas_palomar.npz',
+                'depth':[0.01, 1.5, 4.0]
+            },
+            'methane': {
+                'input_file': 'telluric_methane_tapas_palomar.npz',
+                'depth': [0.1, 1.0, 3.0]
+            },
+            'nitrous_oxide': {
+                'input_file': 'telluric_nitrous_oxide_tapas_palomar.npz',
+                'depth': [0.05, 0.65, 3.0]
+            },
+            'carbon_dioxide': {
+                'input_file': 'telluric_carbon_dioxide_tapas_palomar.npz',
+                'depth': [0.05, 0.65, 3.0]
+            },
+            'oxygen': {
+                'input_file': 'telluric_oxygen_tapas_palomar.npz',
+                'depth': [0.05, 0.65, 3.0]
+            },
+            'ozone': {
+                'input_file': 'telluric_ozone_tapas_palomar.npz',
+                'depth': [0.05, 0.65, 3.0]
+            }
+        }
+    },
+    
     'blaze': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
         'class_name': 'ResidualBlazeModel',
@@ -79,12 +112,11 @@ forward_model_blueprints = {
     # Determined by splines
     'wavelength_solution': {
         
-        'name': 'known',
+        'name': 'wavelength_sol_known',
         'class_name': 'WaveModelHybrid',
         
         'n_splines': 0,
-        #'n_delay_splines': 0,
-        #'base': [-0.35, -0.05, 0.2],
+        'n_delay_splines': 0,
         'spline': [-0.5, 0.01, 0.5]
     }
 }

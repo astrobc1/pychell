@@ -80,8 +80,8 @@ def weighted_brute_force(forward_model, iter_index):
     vels = np.linspace(v0 - forward_model.xcorr_options['range'], v0 + forward_model.xcorr_options['range'], num=forward_model.xcorr_options['n_vels'])
 
     # Stores the rms as a function of velocity
-    rmss = np.empty(vels.size, dtype=np.float64) + np.nan
-    xcorr = np.empty(vels.size, dtype=np.float64) + np.nan
+    rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
+    xcorr = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     
     # Starting weights are flux uncertainties and bad pixels. If flux unc are uniform, they have no effect.
     weights_init = np.copy(forward_model.data.badpix * forward_model.data.flux_unc)
@@ -96,8 +96,7 @@ def weighted_brute_force(forward_model, iter_index):
         weights_init *= tell_weights
     
     # Star weights depend on the amount of rv content.
-    R = np.nanmean(forward_model.templates_dict['star'][:, 0]) / (2 * pars[forward_model.models_dict['lsf'].par_names[0]].value * np.log(4))
-    rvc, _ = compute_rv_content(forward_model.templates_dict['star'][:, 0], forward_model.templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, R=R)
+    rvc, _ = compute_rv_content(forward_model.templates_dict['star'][:, 0], forward_model.templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, width=pars[forward_model.models_dict['lsf'].par_names[0]].value)
     star_weights = 1 / rvc**2
     
     for i in range(vels.size):
@@ -121,12 +120,15 @@ def weighted_brute_force(forward_model, iter_index):
         
         # Construct the RMS
         rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
+        
+    #if forward_model.spec_num in [18, 19, 20]:
+        #stop()
 
     # Extract the best rv
     xcorr_star_vel = vels[np.nanargmin(rmss)]
     xcorr_rv_init = xcorr_star_vel + forward_model.data.bc_vel # Actual RV is bary corr corrected
     vels_for_rv = vels + forward_model.data.bc_vel
-        
+
     # Fit with a polynomial
     use = np.where((vels_for_rv > xcorr_rv_init - 150) & (vels_for_rv < xcorr_rv_init + 150))[0]
     pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
@@ -150,12 +152,10 @@ def crude_brute_force(forward_model, iter_index=None):
     """
     
     pars = copy.deepcopy(forward_model.initial_parameters)
-    #vels = np.arange(-250000, 250000, 50)
-    
-    vels = np.arange(-40_000, -10_000, 50)
+    vels = np.arange(-250000, 250000, 500)
 
     # Stores the rms as a function of velocity
-    rmss = np.empty(vels.size, dtype=np.float64) + np.nan
+    rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     
     # Weights are bad pixels
     weights_init = np.copy(forward_model.data.badpix)
@@ -175,10 +175,8 @@ def crude_brute_force(forward_model, iter_index=None):
         if bad.size > 0:
             weights[bad] = 0
         
-        # Construct the RMS
-        rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights)) / np.nansum(weights)
-        
-    #stop()
+        # Compute the RMS
+        rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
 
     # Extract the best rv
     xcorr_star_vel = vels[np.nanargmin(rmss)]
@@ -226,17 +224,17 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     w = np.copy(weights)
     
     # Parameters are spectra and orders
-    init_pars = np.zeros(n_spec + n_ord, dtype=float) + np.nan
-    vlb = np.zeros(n_spec + n_ord, dtype=float) + np.nan
-    vub = np.zeros(n_spec + n_ord, dtype=float) + np.nan
+    init_pars = np.full(n_spec + n_ord, dtype=float, fill_value=np.nan)
+    vlb = np.full(n_spec + n_ord, dtype=float, fill_value=np.nan)
+    vub = np.full(n_spec + n_ord, dtype=float, fill_value=np.nan)
     vp = np.ones(n_spec + n_ord, dtype=int)
     
     # Copy rvs
     rvs_flagged = np.copy(rvs)
     
     # Stores single measurement rvs
-    rvs_single = np.zeros(n_spec, dtype=float) + np.nan
-    unc_single = np.zeros(n_spec, dtype=float) + np.nan
+    rvs_single = np.full(n_spec, dtype=float, fill_value=np.nan)
+    unc_single = np.full(n_spec, dtype=float, fill_value=np.nan)
 
     # Do an initial order offset and flag
     for o in range(n_ord):
@@ -313,8 +311,8 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
 
         
     # Nightly RVs
-    rvs_nightly_out = np.zeros(n_nights, dtype=float) + np.nan
-    unc_nightly_out = np.zeros(n_nights, dtype=float) + np.nan
+    rvs_nightly_out = np.full(n_nights, dtype=float, fill_value=np.nan)
+    unc_nightly_out = np.full(n_nights, dtype=float, fill_value=np.nan)
     f = 0
     l = n_obs_nights[0]
 
@@ -382,17 +380,17 @@ def combine_orders_fast(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     w *= unc_nightly
     
     # Parameters are spectra and orders
-    init_pars = np.zeros(n_nights + n_ord, dtype=float) + np.nan
-    vlb = np.zeros(n_nights + n_ord, dtype=float) + np.nan
-    vub = np.zeros(n_nights + n_ord, dtype=float) + np.nan
+    init_pars = np.zeros(n_nights + n_ord, dtype=float, fill_value=np.nan)
+    vlb = np.full(n_nights + n_ord, dtype=float, fill_value=np.nan)
+    vub = np.full(n_nights + n_ord, dtype=float, fill_value=np.nan)
     vp = np.ones(n_nights + n_ord, dtype=int)
     
     rvs_nightly_flagged = np.copy(rvs_nightly)
     rvs_flagged = np.copy(rvs)
     
     # Stores single measurement rvs
-    rvs_single = np.zeros(n_spec, dtype=float) + np.nan
-    unc_single = np.zeros(n_spec, dtype=float) + np.nan
+    rvs_single = np.full(n_spec, dtype=float, fill_value=np.nan)
+    unc_single = np.full(n_spec, dtype=float, fill_value=np.nan)
 
     # Do an initial order offset and flag
     for o in range(n_ord):
@@ -455,8 +453,8 @@ def combine_orders_fast(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
 
     
     # Nightly RVs from above
-    rvs_nightly_out = np.zeros(n_nights, dtype=float) + np.nan
-    unc_nightly_out = np.zeros(n_nights, dtype=float) + np.nan
+    rvs_nightly_out = np.full(n_nights, dtype=float, fill_value=np.nan)
+    unc_nightly_out = np.full(n_nights, dtype=float, fill_value=np.nan)
     f = 0
     l = n_obs_nights[0]
     if n_ord == 1:
@@ -534,7 +532,7 @@ def rv_solver_nightsonly(pars, rvs, weights, n_obs_nights):
     return rms, 1
  
 # Computes the RV content per pixel.
-def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None):
+def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=None):
     """Computes the radial-velocity information content per pixel and for a whole swath.
 
     Args:
@@ -544,6 +542,7 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None):
         blaze (bool, optional): Whether or not to modulate by a pseudo blaze function. The pseudo blaze is a polynomial where the end points 
         ron (int, optional): The read out noise of the detector. Defaults to 0.
         R (int, optional): The resolution to convolve the templates. Defaults to 80000.
+        width (int, optional): The LSF width to convolve the templates if R is not set. R=80000
     Returns:
         np.ndarray: The "rv information content" at each pixel, or precisely the uncertainty of measuring the rv of an individual "pixel".
         np.ndarray: The rv content for the whole swath ("uncertainty").
@@ -565,7 +564,7 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None):
         blz = np.polyval(pfit, wave)
         fluxmod *= blz
         
-    rvc_per_pix = np.zeros(nx, dtype=np.float64) + np.nan
+    rvc_per_pix = np.full(nx, dtype=np.float64, fill_value=np.nan)
     good = np.where(np.isfinite(wave) & np.isfinite(fluxmod))[0]
     ng = good.size
     flux_spline = scipy.interpolate.CubicSpline(wave[good], fluxmod[good], extrapolate=True, bc_type='clamped')

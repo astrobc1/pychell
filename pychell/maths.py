@@ -187,20 +187,38 @@ def median_filter2d(x, width, preserve_nans=True):
         
     return out
 
-def convolve_flux(wave, flux, R, compress=64):
+def convolve_flux(wave, flux, R=None, width=None, compress=64, uniform=False):
+    """Convolves flux with a simple Gaussian.
+
+    Args:
+        wave (np.ndarray): [description]
+        flux (np.ndarray): [description]
+        R (float, optional): The resolution to convolve down to. Defaults to None.
+        width (float, optional): The LSF width in units of wave. Defaults to None.
+        compress (int, optional): The number of LSF points is only int(nwave / compress). Defaults to 64.
+        uniform (bool, optional): Whether or not the wave grid is already uniform, which is necessary for standard convolution. Defaults to False.
+
+    Returns:
+        np.ndarray: The convolved flux
+    """
     
     good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
     ng = good.size
     
     # Interpolate onto a linearly spaced grid
-    cspline = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=True)
-    lingrid = np.linspace(wave[good[0]], wave[good[-1]], num=ng)
-    fluxlin = cspline(lingrid)
+    if not uniform:
+        lingrid = np.linspace(wave[good[0]], wave[good[-1]], num=ng)
+        fluxlin = scipy.interpolate.Akima1DInterpolator(wave[good], flux[good])(lingrid)
+    else:
+        lingrid, fluxlin = np.copy(wave), np.copy(flux)
+        
+    # The grid spacing
     dl = lingrid[1] - lingrid[0]
     
     # The mean wavelength
     ml = np.nanmean(wave[good])
     
+    # Number of starting points in lsf grid
     nlsf = int(fluxlin.size / compress)
     
     if nlsf % 2 == 0:
@@ -209,16 +227,51 @@ def convolve_flux(wave, flux, R, compress=64):
     else:
         xlsf = np.arange(-(int(nlsf / 2)), int(nlsf / 2) + 1, 1) * dl
         fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2), int(nlsf/2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
+    
+    if (R is None and width is None) or (R is not None and width is not None):
+        raise ValueError("Only R or width can be set!")
+    
+    # Set sigma
+    sig = width_from_R(R, ml) if R is not None else width
 
-    sig = ml / (2 * np.sqrt(2 * np.log(2)) * R)
+    # Construct and normalize LSF
     lsf = np.exp(-0.5 * (xlsf / sig)**2)
     lsf /= np.sum(lsf)
 
+    # Convolve
     fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
-    goodlinc = np.where(np.isfinite(fluxlinc))[0]
-    fluxc = scipy.interpolate.CubicSpline(lingrid, fluxlinc, extrapolate=False)(wave)
+    
+    # Interpolate back to the default grid
+    if not uniform:
+        goodlinc = np.where(np.isfinite(fluxlinc))[0]
+        fluxc = scipy.interpolate.CubicSpline(lingrid, fluxlinc, extrapolate=False)(wave)
+    else:
+        fluxc = fluxlinc
     
     return fluxc
+
+
+@njit
+def width_from_R(R, ml):
+    return ml / (2 * np.sqrt(2 * np.log(2)) * R)
+
+@njit
+def R_from_width(width, ml):
+    return ml / (2 * np.sqrt(2 * np.log(2)) * width)
+
+
+# Still updating this function...
+@njit(numba.types.float64[:](numba.types.float64[:], numba.types.float64[:]), parallel=True)
+def _convolve(x, k):
+    nx = x.size
+    nk = k.size
+    out = np.zeros(nx)
+    kf = k[::-1]
+    f, l = 0, nk
+    for i in prange(nx):
+        for j in range(nk):
+            out[i] += k[j] * x[f+j]
+    return out
 
 
 # Returns the hermite polynomial of degree deg over the variable x
@@ -417,7 +470,7 @@ def rolling_stddev_overcols(image, nbins):
     goody, goodx = np.where(np.isfinite(image))
     f, l = xarr[goodx[0]], xarr[goodx[-1]]
     bins = np.linspace(f, l, num=nbins + 1)
-    output = np.empty(nbins, dtype=np.float64) + np.nan
+    output = np.full(nbins, dtype=np.float64, fill_value=np.nan)
     for i in range(nbins):
         locs = np.where((xarr >= bins[i]) & (xarr < bins[i+1]))[0]
         if len(locs) == 0:

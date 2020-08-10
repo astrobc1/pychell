@@ -464,7 +464,9 @@ class GasCellModel(TemplateMult):
         if self.enabled:
             wave = wave + pars[self.par_names[0]].value
             flux = flux ** pars[self.par_names[1]].value
-            return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+            #return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+            return scipy.interpolate.Akima1DInterpolator(wave, flux)(wave_final)
+        
         else:
             return self.build_fake(wave_final.size)
 
@@ -503,7 +505,8 @@ class GasCellModelOrderDependent(TemplateMult):
         if self.enabled:
             wave = wave + pars[self.par_names[0]].value
             flux = flux ** pars[self.par_names[1]].value
-            return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+            #return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+            return scipy.interpolate.Akima1DInterpolator(wave, flux)(wave_final)
         else:
             return self.build_fake(wave_final.size)
 
@@ -556,7 +559,8 @@ class StarModel(TemplateMult):
         wave, flux = template[:, 0], template[:, 1]
         if self.enabled:
             wave_shifted = wave * np.exp(pars[self.par_names[0]].value / cs.c)
-            return np.interp(wave_final, wave_shifted, flux, left=np.nan, right=np.nan)
+            #return np.interp(wave_final, wave_shifted, flux, left=np.nan, right=np.nan)
+            return scipy.interpolate.Akima1DInterpolator(wave_shifted, flux)(wave_final)
         else:
             return self.build_fake(wave_final.size)
 
@@ -574,7 +578,8 @@ class StarModel(TemplateMult):
             print('Loading in Synthetic Stellar Template', flush=True)
             template_raw = np.loadtxt(self.input_file, delimiter=',')
             wave, flux = template_raw[:, 0], template_raw[:, 1]
-            flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False, bc_type='not-a-knot')(wave_even)
+            #flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False, bc_type='not-a-knot')(wave_even)
+            flux_interp = scipy.interpolate.Akima1DInterpolator(wave, flux)(wave_even)
             flux_interp /= pcmath.weighted_median(flux_interp, med_val=0.999)
             template = np.array([wave_even, flux_interp]).T
         else:
@@ -631,7 +636,8 @@ class TelluricModelTAPAS(TemplateMult):
         wave, flux = templates[single_species][:, 0], templates[single_species][:, 1]
         flux = flux ** depth
         wave_shifted = wave * np.exp(shift / cs.c)
-        return np.interp(wave_final, wave_shifted, flux, left=flux[0], right=flux[-1])
+        #return np.interp(wave_final, wave_shifted, flux, left=flux[0], right=flux[-1])
+        return scipy.interpolate.Akima1DInterpolator(wave, flux)(wave_final)
 
 
     def init_parameters(self, forward_model):

@@ -355,7 +355,7 @@ class ForwardModels(list):
         args_to_pass = (forward_model, iter_index)
         
         # Construct the Nelder Mead Solver and run
-        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-10)
+        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-6, xtol=1E-6)
         opt_result = solver.solve()
 
         # Pass best fit parameters and optimization result to forward model
@@ -411,10 +411,10 @@ class ForwardModels(list):
                 iter_pass.append((self[ispec], iter_index))
 
             # Cross Correlate in Parallel
-            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in range(self.n_spec))
+            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
             
         else:
-            ccf_results = [ccf_method(self[ispec], iter_index) for ispec in range(self.n_spec)]
+            ccf_results = [ccf_method(self[ispec], iter_index) for ispec in tqdm.tqdm(range(self.n_spec))]
         
         # Pass to arrays
         if iter_index is None:
@@ -715,7 +715,7 @@ class ForwardModel:
         ax.plot(wave[good], residuals[good], color=(255/255, 169/255, 22/255), lw=0.8)
         
         # The worst N pixels that were flagged
-        ax.plot(wave[good][bad_data_locs], residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
+        #ax.plot(wave[good][bad_data_locs], residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
         
         # Plot the convolved low res templates for debugging 
         # Plots the star and tellurics by default. Plots gas cell if present.
@@ -867,7 +867,7 @@ class iSHELLForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
             stop()
@@ -949,7 +949,8 @@ class CHIRONForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        good = np.where(np.isfinite(model))[0]
+        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
             stop()
@@ -991,7 +992,8 @@ class PARVIForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars, wave_grid=self.data.wave_grid)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        good = np.where(np.isfinite(model))[0]
+        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
             stop()
@@ -1033,7 +1035,7 @@ class MinervaAustralisForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
             stop()
@@ -1079,7 +1081,8 @@ class MinervaNorthForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        good = np.where(np.isfinite(model))[0]
+        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
             stop()
@@ -1129,7 +1132,8 @@ class NIRSPECForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        good = np.where(np.isfinite(model))[0]
+        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
             stop()
@@ -1176,7 +1180,8 @@ class PARVI_devForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        good = np.where(np.isfinite(model))[0]
+        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
             stop()
@@ -1234,6 +1239,9 @@ class SimulatedForwardModel(ForwardModel):
         if self.models_dict['star'].enabled:
             model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
             
+        if self.models_dict['tellurics'].enabled:
+            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            
         if self.models_dict['blaze'].enabled:
             model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
@@ -1245,7 +1253,8 @@ class SimulatedForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=model[0], right=model[-1])
+        good = np.where(np.isfinite(model))[0]
+        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
             stop()

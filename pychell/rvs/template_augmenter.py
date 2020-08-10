@@ -511,7 +511,7 @@ def weighted_average(forward_models, iter_index=None, nights_for_template=None, 
         # Even though bad pixels are ignored later when median combining residuals,
         # they will still affect interpolation in unwanted ways.
         good = np.where(np.isfinite(forward_models[ispec].residuals[-1]) & (forward_models[ispec].data.badpix == 1))
-        residuals_interp_hr = scipy.interpolate.CubicSpline(wave_stellar_frame[good], forward_models[ispec].residuals[-1][good].flatten(), bc_type='not-a-knot', extrapolate=False)(current_stellar_template[:, 0])
+        residuals_interp_hr = scipy.interpolate.Akima1DInterpolator(wave_stellar_frame[good], forward_models[ispec].residuals[-1][good].flatten())(current_stellar_template[:, 0])
 
         # Determine values with np.nans and set weights equal to zero
         bad = np.where(~np.isfinite(residuals_interp_hr))[0]
@@ -1166,7 +1166,6 @@ def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.98, smooth=True):
     cspline = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=n_knots).astype(int)], extrapolate=False, bc_type='not-a-knot')
     continuum = cspline(x)
     return continuum
-
 
 def fit_continuum_wobble(x, y, badpix, order=6, nsigma=[0.3,3.0], maxniter=50):
     """Fit the continuum using sigma clipping. This function is a modified version from Megan Bedell's Wobble code.
