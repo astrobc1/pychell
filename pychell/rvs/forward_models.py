@@ -989,7 +989,7 @@ class PARVIForwardModel(ForwardModel):
             model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
 
         # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars, wave_grid=self.data.wave_grid)
+        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
         good = np.where(np.isfinite(model))[0]

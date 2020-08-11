@@ -27,16 +27,13 @@ forward_model_settings = {
     # The echelle orders to run
     "do_orders": [11, 13, 15],
     
-    # OPTIONAL:
+    # Some optional arguments:
     
     # Number of times to fit with a real stellar template
     "n_template_fits": 3,
     
     # Number of cores, parallelized over spectra
     "n_cores": 1,
-    
-    # Whether or not to perform cross-corr
-    "do_xcorr": True,
     
     # Helpful diagnistics
     "verbose_plot": True,
@@ -87,7 +84,7 @@ model_blueprints = {
     },
     
     # Fabry Perot cavity with two parameters
-    # Disable completely, since this example data has fringing removed through flat division
+    # Disable completely, since this example data relies on fringing removed through flat division
     'fringing': {
         'n_delay': 100
     }

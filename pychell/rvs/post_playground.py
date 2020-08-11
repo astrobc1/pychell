@@ -11,7 +11,7 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 import datetime
 from pdb import set_trace as stop
 
-def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, method=None, use_rms=False, debug=False, xcorr=False):
+def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, method=None, use_rms=False, debug=False, xcorr=False, phase_to=None, tc=None):
     """Combines RVs across orders through a weighted TFA scheme.
 
     Args:
@@ -24,6 +24,8 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
         use_rms (bool, optional): Whether or not to consider the rms of the fits as weights. Defaults to False.
         debug (bool, optional): If True, the code stops using pdb.set_trace() before exiting this function. Defaults to False.
         xcorr (bool, optional): Whether or not to use the xcorr RVs instead of the NM RVs. Defaults to False.
+        phase_to (float, optional): The period to phase to for plotting the RVs.
+        tc (float, optional): The tc to phase to for plotting the RVs.
     Returns:
         tuple: The results returned by the call to method.
     """
@@ -118,8 +120,8 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     
     # Plot the final rvs
     fname = output_path_root + tag + '_final_rvs.png'
-    plot_final_rvs(star_name, spectrograph, rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], *rvs_out, phase_to=None, show=True, fname=None)
-        
+    plot_final_rvs(star_name, spectrograph, rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], *rvs_out, phase_to=phase_to, show=True, fname=None, tc=tc)
+
     # Save to a text file
     fname = output_path_root + tag + '_final_rvs.txt'
     np.savetxt(fname, np.array([rvs_dict['BJDS'], rvs_out[0], rvs_out[1]]).T, delimiter=',')
@@ -356,16 +358,21 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
         stop()
         
     
-def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, show=True, fname=None):
+def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, tc=None, show=True, fname=None):
     
     if phase_to is None:
         phase_to = 1E20
+        
+    if tc is None:
+        alpha = 0
+    else:
+        alpha = tc - phase_to / 2
     
     # Single rvs
-    plt.errorbar(bjds%phase_to, rvs_single-np.nanmedian(rvs_single), yerr=unc_single, linewidth=0, elinewidth=1, marker='.', markersize=10, markerfacecolor='pink', color='green', alpha=0.8)
+    plt.errorbar((bjds - alpha)%phase_to, rvs_single-np.nanmedian(rvs_single), yerr=unc_single, linewidth=0, elinewidth=1, marker='.', markersize=10, markerfacecolor='pink', color='green', alpha=0.8)
 
     # Nightly RVs
-    plt.errorbar(bjds_nightly%phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, linewidth=0, elinewidth=3, marker='o', markersize=10, markerfacecolor='blue', color='grey', alpha=0.9)
+    plt.errorbar((bjds_nightly - alpha)%phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, linewidth=0, elinewidth=3, marker='o', markersize=10, markerfacecolor='blue', color='grey', alpha=0.9)
     
     plt.title(star_name.replace('_', ' ') + ', ' + spectrograph + ' Relative RVs')
     plt.xlabel('BJD - BJD$_{0}$')
@@ -379,7 +386,7 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
             
             
             
-def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=None):
+def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=None, debug=False):
     
     if phase_to is None:
         phase_to = 1E20
@@ -394,7 +401,7 @@ def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=
     n_nights = len(n_obs_nights)
     
     iter_indexes = np.zeros(n_spec)
-    print_rv_summary(rvs_dict, {}, do_orders, iter_indexes, xcorr):
+    print_rv_summary(rvs_dict, {}, do_orders, iter_indexes, xcorr=False)
     
     # No weights
     weights = np.ones((n_orders, n_spec))
@@ -417,3 +424,5 @@ def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=
     plt.legend()
     plt.show()
     
+    if debug:
+        stop()

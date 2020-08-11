@@ -101,10 +101,10 @@ class SpecData1d:
         from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
         
         # BJD
-        self.bjd = JDUTC_to_BJDTDB(JDUTC=self.JD, starname=star_name, obsname=obs_name)[0]
+        self.bjd = JDUTC_to_BJDTDB(JDUTC=self.JD, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430')[0]
         
         # bc vel
-        self.bc_vel = get_BC_vel(JDUTC=self.JD, starname=star_name, obsname=obs_name)[0]
+        self.bc_vel = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430')[0]
     
     def set_bc_info(self, bjd=None, bc_vel=None):
         """ Basic setter method for the BJD and barycenter velocity.
@@ -135,7 +135,7 @@ class SpecData1d:
             bjds (np.ndarray): The BJDs of the observations
             bc_vels (np.ndarray): The bary-center velocities of the observations.
         """
-        bjds, bc_vels = np.loadtxt(file, delimiter=',')
+        bjds, bc_vels = np.loadtxt(file, delimiter=',', unpack=True)
         return bjds, bc_vels
     
     
@@ -159,12 +159,12 @@ class SpecData1d:
         jds = np.array([fwm.data.JD for fwm in forward_models], dtype=float)
         
         # BJDs
-        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name, obsname=obs_name)[0]
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430')[0]
         
         # bc vels
-        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name, obsname=obs_name)[0]
+        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430')[0]
         
-        for i in range(len(forward_models)):
+        for i in range(forward_models.n_spec):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
             
         return bjds, bc_vels
@@ -226,28 +226,34 @@ class SpecDataCHIRON(SpecData1d):
 class SpecDataPARVI(SpecData1d):
     
     """ Class for extracted 1-dimensional spectra from PARVI.
-    """    
+    """
     def parse(self, forward_model):
         
         # Load the flux, flux unc, and bad pix arrays. Also load the known wavelength grid for a starting point
-        fits_data = fits.open(self.input_file)[0]
+        fits_file = fits.open(self.input_file)
+        data = fits_file[1].data
+        header = fits_file[0].header
         oi = self.order_num - 1
-        self.wave_grid, self.flux, self.flux_unc = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 5].astype(np.float64), fits_data.data[oi, :, 6].astype(np.float64)
+        
+        # 0,1,2 are wave,counts,counts_var
+        self.default_wave_grid, self.flux, self.flux_unc = data[0, oi, :].astype(np.float64), data[7, oi, :].astype(np.float64), data[8, oi, :].astype(np.float64)
         
         # Normalize according to 98th percentile in flux
         continuum = pcmath.weighted_median(self.flux, med_val=0.98)
         self.flux /= continuum
         self.flux_unc /= continuum
         
-        # Create bad pix array, further cropped later
+        # Create bad pix array, further cropped later according to crop_pix
         self.badpix = np.ones(self.flux.size, dtype=np.float64)
-        bad = np.where(~np.isfinite(self.flux) | (self.flux == 0) | (self.flux_unc == 0) | (self.flux_unc > 0.5))[0]
+        bad = np.where(~np.isfinite(self.flux))[0]
         if bad.size > 0:
             self.badpix[bad] = 0
         
         # Convert wavelength grid to Angstroms, required!
-        self.wave_grid *= 10
-        self.JD = float(fits_data.header['JD'])
+        self.default_wave_grid *= 10
+        
+        # JD (mid expsosure) from header
+        self.JD = float(header['MJD']) # + 2450000
         
         
 class SpecDataMinervaAustralis(SpecData1d):
@@ -364,40 +370,9 @@ class SpecDataNIRSPEC(SpecData1d):
         # TEMP
         self.JD = 2455293.84426
         
-        
-class SpecDataPARVI_dev(SpecData1d):
-    """ Class for extracted 1D spectra from PARVI using Chaz example txt file.
-    """
-        
-    def parse(self):
-        #txt file example uses one file per order.  this might not be what self.input_file is about.
-        txt_data = np.genfromtxt(self.input_file).T
-        self.default_wave_grid, self.flux, self.flux_unc = txt_data[3].astype(np.float64), txt_data[4].astype(np.float64), txt_data[5].astype(np.float64)
-        #print("JWD sanity check default_wave_grid on load: ",self.default_wave_grid)
-
-        # Create bad pix array, further cropped later
-        self.badpix = np.ones(self.flux.size, dtype=np.float64)
-        bad = np.where(~np.isfinite(self.flux) | (self.flux <= 0) | (self.flux_unc == 0) | (self.flux_unc > 0.5))[0]
-        if bad.size > 0:
-            self.badpix[bad] = 0
-
-        #input data was normalized before application of simulated atmospheric effects.  renormalize flux and flux_unc to prevent problems in blaze fitting.
-        factor = 1.0/np.mean(self.flux)
-        self.flux*=factor
-        self.flux_unc*=factor
-        print("Renormalizing with factor of ",factor," for file ",self.input_file)
-        
-        # Convert wavelength grid to Angstroms, required!
-        self.default_wave_grid *= 10
-        # JWD I think chaz gave the wrong units.
-        self.default_wave_grid *= 1000
-
-        # use average observed time to get JD (all times should be equal)
-        self.JD = np.mean(txt_data[0]).astype(np.float64)+2450000
-        
 class SpecDataSimulated(SpecData1d):
     
-    """ Simulated Data.
+    """ Simulated Data for internal testing.
     """
     def parse(self, forward_model):
         
@@ -421,6 +396,7 @@ class SpecDataSimulated(SpecData1d):
         self.JD = float(fits_data.header['JD'])
         
         
+    @staticmethod
     def calculate_bc_info_all(forward_models, obs_name, star_name):
         """ Computes the bary-center information for all observations.
 
