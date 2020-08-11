@@ -867,6 +867,7 @@ class iSHELLForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
+        good = np.where(np.isfinite(model))[0]
         model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
@@ -1035,6 +1036,7 @@ class MinervaAustralisForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
+        good = np.where(np.isfinite(model))[0]
         model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
