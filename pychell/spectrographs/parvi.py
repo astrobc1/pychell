@@ -14,7 +14,6 @@ observatory = "Palomar"
 
 redux_settings = NotImplemented
 
-
 ####################################################################
 ####### RADIAL VELOCITIES ##########################################
 ####################################################################
@@ -95,7 +94,7 @@ forward_model_blueprints = {
         'hermdeg': 0,
         'compress': 64,
         'n_delay': 0,
-        'width': [0.1, 0.1, 0.1], # LSF width, in angstroms
+        'width': [0.08, 0.08, 0.08], # LSF width, in angstroms
         'ak': [-0.075, 0.001, 0.075] # See cale et al 2019 or arfken et al some year for definition of ak > 0
     },
     

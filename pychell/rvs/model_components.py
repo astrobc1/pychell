@@ -716,43 +716,39 @@ class LSFModel(SpectralComponent):
 
         # The number of model pixels
         self.nx_model = forward_model.n_model_pix
-
+        
         # The number of points in the grid
-        self.nx = int(self.nx_model / self.compress)
+        self.nx_lsf = int(self.nx_model / self.compress)
 
         # The actual LSF x grid
-        if self.nx % 2 == 0:
-            self.x = np.arange(-(int(self.nx / 2) - 1),
-                               int(self.nx / 2) + 1, 1) * self.dl
-        else:
-            self.x = np.arange(-(int(self.nx / 2)),
-                               int(self.nx / 2) + 1, 1) * self.dl
-            
-        if hasattr(forward_model.data, 'default_lsf'):
-            self.default_lsf = forward_model.data.default_lsf
+        if self.nx_lsf % 2 != 0:
+            self.nx_lsf += 1
+        
+        # Grid for LSF
+        self.x = np.arange(-int(self.nx_lsf / 2), int(self.nx_lsf / 2) + 1, 1) * self.dl
+        
+        # Set the default LSF
+        if hasattr(forward_model.data, 'default_lsf') and forward_model.data.default_lsf is not None:
+            self.default_lsf_raw = forward_model.data.default_lsf
+            self.default_lsf = scipy.interpolate.CubicSpline(self.default_lsf_raw[:, 0], self.default_lsf_raw[:, 1])(self.x)
         else:
             self.default_lsf = None
 
     # Returns a delta function
     def build_fake(self):
-        delta = np.zeros(self.nx, dtype=float)
-        delta[int(self.nx / 2)] = 1.0
+        delta = np.zeros(self.nx_lsf, dtype=float)
+        delta[int(self.nx_lsf / 2)] = 1.0
         return delta
 
     # Convolves the flux
     def convolve_flux(self, raw_flux, pars=None, lsf=None):
         if lsf is None and pars is None:
-            sys.exit("ERROR: Cannot construct LSF with no parameters")
+            raise ValueError("Cannot construct LSF with no parameters")
         if not self.enabled:
-            return raw_flux 
+            return raw_flux
         if lsf is None:
             lsf = self.build(pars)
-        if self.nx % 2 == 0:
-            padded_flux = np.pad(raw_flux, pad_width=(int(self.nx / 2 - 1), int(
-                self.nx/2)), mode='constant', constant_values=(raw_flux[0], raw_flux[-1]))
-        else:
-            padded_flux = np.pad(raw_flux, pad_width=(int(
-                self.nx / 2), int(self.nx/2)), mode='constant', constant_values=(raw_flux[0], raw_flux[-1]))
+        padded_flux = np.pad(raw_flux, pad_width=(int(self.nx_lsf / 2), int(self.nx_lsf / 2)), mode='constant', constant_values=(raw_flux[0], raw_flux[-1]))
         convolved_flux = np.convolve(padded_flux, lsf, 'valid')
         return convolved_flux
     

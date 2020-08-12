@@ -220,23 +220,24 @@ def convolve_flux(wave, flux, R=None, width=None, compress=64, uniform=False):
     
     # Number of starting points in lsf grid
     nlsf = int(fluxlin.size / compress)
-    
-    if nlsf % 2 == 0:
-        xlsf = np.arange(-(int(nlsf / 2) - 1), int(nlsf / 2) + 1, 1) * dl
-        fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2 - 1), int(nlsf/2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
-    else:
-        xlsf = np.arange(-(int(nlsf / 2)), int(nlsf / 2) + 1, 1) * dl
-        fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2), int(nlsf/2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
+    if nlsf % 2 != 0:
+        nlsf += 1
     
     if (R is None and width is None) or (R is not None and width is not None):
         raise ValueError("Only R or width can be set!")
     
     # Set sigma
     sig = width_from_R(R, ml) if R is not None else width
+    
+    # LSF grid
+    xlsf = np.arange(-nlsf / 2, nlsf / 2 + 1) * dl
 
     # Construct and normalize LSF
     lsf = np.exp(-0.5 * (xlsf / sig)**2)
     lsf /= np.sum(lsf)
+    
+    # Pad
+    fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2), int(nlsf / 2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
 
     # Convolve
     fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
@@ -259,19 +260,24 @@ def width_from_R(R, ml):
 def R_from_width(width, ml):
     return ml / (2 * np.sqrt(2 * np.log(2)) * width)
 
-
-# Still updating this function...
-@njit(numba.types.float64[:](numba.types.float64[:], numba.types.float64[:]), parallel=True)
+# Need to jit
 def _convolve(x, k):
     nx = x.size
     nk = k.size
-    out = np.zeros(nx)
+    n_pad = int(nk / 2)
+    nx = x.size
+    xp = np.zeros(nx + 2 * n_pad, dtype=float)
+    xp[n_pad:-n_pad] = x
+    xp[0:n_pad] = x[-1]
+    xp[-n_pad:] = x[0]
+    xc = np.zeros(nx)
     kf = k[::-1]
-    f, l = 0, nk
-    for i in prange(nx):
+    for i in range(nx):
+        s = 0.0
         for j in range(nk):
-            out[i] += k[j] * x[f+j]
-    return out
+            s += kf[j] * xp[i + j]
+        xc[i] = s
+    return xc
 
 
 # Returns the hermite polynomial of degree deg over the variable x
