@@ -386,10 +386,15 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
             
             
             
-def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=None, debug=False):
+def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=None, debug=False, tc=None):
     
     if phase_to is None:
         phase_to = 1E20
+        
+    if tc is None:
+        alpha = 0
+    else:
+        alpha = tc - phase_to / 2
     
     # Parse RVs
     rvs_dict = parser.parse_rvs(output_path_root, do_orders)
@@ -418,9 +423,9 @@ def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=
     
     # Plot
     for o in range(n_orders):
-        plt.plot((bjds-bjdsn[0])%phase_to, rvs[o, :] - np.nanmedian(rvs_nightly), marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]))
+        plt.plot((bjds - alpha)%phase_to, rvs[o, :] - np.nanmedian(rvs_nightly), marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]))
         
-    plt.errorbar((bjdsn - bjdsn[0])%phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
+    plt.errorbar((bjdsn - alpha)%phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
     plt.legend()
     plt.show()
     

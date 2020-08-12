@@ -119,5 +119,8 @@ forward_model_settings = {
     # Model Resolution (n_model_pixels = model_resolution * n_data_pixels)
     # This is only important because of the instrument line profile (LSF)
     # 8 seems sufficient.
-    'model_resolution': 8
+    'model_resolution': 8,
+    
+    # Whether or not bc weights are included in the stellar template augmentation.
+    'use_bc_weights': False,
 }

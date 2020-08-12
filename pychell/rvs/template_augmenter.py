@@ -390,7 +390,7 @@ def weighted_median(forward_models, iter_index=None, nights_for_template=None, t
 
     # Loop over spectra and check which bin an observation belongs to
     # Then update the weights accordingly.
-    if len(nights_for_template) == 0:
+    if len(nights_for_template) == 0 and forward_models.use_bc_weights:
         for ispec in range(forward_models.n_spec):
             vbc = forward_models[ispec].data.bc_vel
             y = np.where(histx >= vbc)[0][0] - 1
