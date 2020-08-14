@@ -183,7 +183,7 @@ class ForwardModels(list):
         else:
             print('Computing barycentric corrections ...')
             bc_computer = self[0].data.__class__.calculate_bc_info_all
-            self.BJDS, self.bc_vels = bc_computer(self, obs_name=self.observatory, star_name=self.star_name)
+            self.BJDS, self.bc_vels = bc_computer(self, observatory=self.observatory, star_name=self.star_name)
             
 
         if self.compute_bc_only:
@@ -333,7 +333,7 @@ class ForwardModels(list):
         # Print summary
         print('***************************************', flush=True)
         print('** Target: ' + self.star_name, flush=True)
-        print('** Spectrograph: ' + self.observatory + ' / ' + self.spectrograph, flush=True)
+        print('** Spectrograph: ' + self.observatory['name'] + ' / ' + self.spectrograph, flush=True)
         print('** Observations: ' + str(self.n_spec) + ' spectra, ' + str(self.n_nights) + ' nights', flush=True)
         print('** Echelle Order: ' + str(self.order_num), flush=True)
         print('** TAG: ' + self.tag, flush=True)

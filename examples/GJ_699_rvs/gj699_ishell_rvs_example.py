@@ -1,7 +1,6 @@
 import pychell.rvs.driver
 import os
 
-# This dictionary must contain the following required args.
 forward_model_settings = {
     
     # REQUIRED:
@@ -22,14 +21,20 @@ forward_model_settings = {
     "star_name": "GJ_699",
     
     # Appended to the front of all filenames
-    "tag": "defaul_test_run",
+    "tag": "default_test_run",
     
     # The echelle orders to run
     "do_orders": [11, 13, 15],
     
-    # Some optional arguments:
+    # The templates required for fitting (a one time download)
+    "templates_path": os.path.dirname(os.path.realpath(__file__)) + os.sep, # For current directory
     
-    # Number of times to fit with a real stellar template
+    # This is optional and defaults to False, but for the first time it must be set to True, so we include it here.
+    "force_download_templates": True,
+    
+    # OPTIONAL (and have defaults):
+    
+    # Number of times to fit with a real stellar template.
     "n_template_fits": 3,
     
     # Number of cores, parallelized over spectra
@@ -46,15 +51,17 @@ forward_model_settings = {
     # cslsq = cubic spline regression
     "template_augmenter": 'cubic_spline_lsq',
     
-    # Once a first stellar template is generated, it may be updated via Adam (gradient-based) optimizing (akine to Wobble).
+    # Once a first stellar template is generated, it may be updated via Adam optimizing (gradient based) (akine to Wobble).
+    # Possible entries are 'star' and/or 'lab'
     # Here, we still use the default of not optimizing the star with Adam.
     "templates_to_optimize": [],
     
     # n_model_pix = model_resolution * n_data_pix
     "model_resolution": 8,
     
-    # If true, only computes bc info and exits
-    "compute_bc_only": False
+    # If true, only computes bc info and exits (by default is false)
+    "compute_bc_only": False,
+    
 }
 
 # This dictionary can be empty to use the instrument provided default model
@@ -63,24 +70,24 @@ model_blueprints = {
     
     # The star
     'star': {
-        'input_file': None
+        'input_file': None # To start from a flat template (no star)
     },
     
-    # The default blaze is a quadratic + splines for iSHELL.
+    # The default blaze is defined with cubic splines for iSHELL.
     'blaze': {
         'n_splines': 6,
-        'n_delay_splines': 1
+        "poly_order": None
     },
     
-    # Hermite Gaussian LSF
+    # Hermite Gaussian LSF of degree 2 (three terms)
     'lsf': {
         'hermdeg': 2
     },
     
-    # Quadratic (3 Lagrange points) + splines
+    # iSHELL wls is determined by cubic splines
     'wavelength_solution': {
         'n_splines': 6,
-        'n_delay': 0
+        "poly_order": None # Purely splines
     },
     
     # Fabry Perot cavity with two parameters

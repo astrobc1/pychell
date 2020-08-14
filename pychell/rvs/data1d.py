@@ -160,12 +160,12 @@ class SpecData1d:
     
     
     @staticmethod
-    def calculate_bc_info_all(forward_models, obs_name, star_name):
+    def calculate_bc_info_all(forward_models, observatory, star_name):
         """ Computes the bary-center information for all observations.
 
         Args:
             forward_models (ForwardModels): The list of forward model objects.
-            obs_name (str): The name of the observatory to be looked up on EarthLocations.
+            observatory (dict): A dictionary of observatory information. The name entry is looked up on EarthLocations.
             star_name (str): The name of the star to be queuried on SIMBAD.
         Returns:
             bjds (np.ndarray): The BJDs of the observations
@@ -179,10 +179,10 @@ class SpecData1d:
         jds = np.array([fwm.data.JD for fwm in forward_models], dtype=float)
         
         # BJDs
-        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=True)[0]
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=observatory['name'], ephemeris='de430', leap_update=True)[0]
         
         # bc vels
-        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=True)[0]
+        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=observatory['name'], ephemeris='de430', leap_update=True)[0]
         
         for i in range(forward_models.n_spec):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])

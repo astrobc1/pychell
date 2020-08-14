@@ -64,7 +64,7 @@ def download_templates(dest, file_id=None):
         os.makedirs(dest)
         
     if os.path.exists(dest + 'templates'):
-        raise ValueError("Move existing templates folder in pychell_templates")
+        raise ValueError("Move existing templates sub folder in templates_path")
         
     print('Downloading Templates to')
     print('  ' + dest)
@@ -82,6 +82,7 @@ def download_templates(dest, file_id=None):
             parent_dir = p.parents[1]
             p.rename(parent_dir / p.name)
         os.rmdir(dest + 'templates')
+        print('Success! Remember to set force_download_templates to False for future runs!')
     except Exception as e:
         print("ERROR: Unable to download templates!")
         logging.error(traceback.format_exc())

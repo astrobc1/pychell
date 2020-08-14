@@ -240,7 +240,7 @@ class PolySplineBlaze(EmpiricalMult):
             
         # Parameter names
         self.base_par_names = []
-        for i in range(self.poly_order + 1):
+        for i in range(self.n_poly_pars):
             self.base_par_names.append('_poly_' + str(i)) # starts at zero
 
         # Set the spline parameter names and knots
@@ -265,7 +265,7 @@ class PolySplineBlaze(EmpiricalMult):
 
         # The polynomial coeffs
 
-        if self.n_poly_pars > 0:
+        if self.poly_enabled:
             poly_pars = np.array([pars[self.par_names[i]].value for i in range(self.poly_order + 1)])
         
             # Build polynomial
@@ -310,6 +310,7 @@ class PolySplineBlaze(EmpiricalMult):
             wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
             log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
             continuum = np.exp(log_continuum)
+            good = np.where(np.isfinite(continuum))[0]
         
         # Poly parameters
         for i in range(self.n_poly_pars):
@@ -323,7 +324,7 @@ class PolySplineBlaze(EmpiricalMult):
                 if self.n_poly_pars > 0 or forward_model.remove_continuum:
                     forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], vary=self.splines_enabled))
                 else:
-                    k = np.argmin(np.abs(wave - self.spline_set_points[ispline]))
+                    k = np.argmin(np.abs(wave[good] - self.spline_wave_set_points[ispline])) + good[0]
                     forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=continuum[k], minv=continuum[k] + self.blueprint['spline'][0], maxv=continuum[k] + self.blueprint['spline'][2], vary=self.splines_enabled))
                 
     def __repr__(self):
