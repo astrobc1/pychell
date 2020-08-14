@@ -283,7 +283,7 @@ class PolySplineBlaze(EmpiricalMult):
             spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars, self.n_poly_pars + self.n_spline_pars)], dtype=np.float64)
 
             # Build
-            spline_blaze = scipy.interpolate.CubicSpline(self.spline_wave_set_points, spline_pars, extrapolate=True, bc_type='not-a-knot')(wave_final)
+            spline_blaze = scipy.interpolate.CubicSpline(self.spline_wave_set_points, spline_pars, extrapolate=False, bc_type='not-a-knot')(wave_final)
             
             # Return if no polynomial
             if not self.poly_enabled:
@@ -306,11 +306,10 @@ class PolySplineBlaze(EmpiricalMult):
     def init_parameters(self, forward_model):
         
         # Estimate the continuum if needed
-        if self.n_poly_pars == 0 and not forward_model.remove_continuum:
-            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
-            log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
-            continuum = np.exp(log_continuum)
-            good = np.where(np.isfinite(continuum))[0]
+        wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+        log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
+        continuum = np.exp(log_continuum)
+        good = np.where(np.isfinite(continuum))[0]
         
         # Poly parameters
         for i in range(self.n_poly_pars):
@@ -321,7 +320,7 @@ class PolySplineBlaze(EmpiricalMult):
         if self.n_spline_pars > 0:
             for i in range(self.n_poly_pars, self.n_poly_pars + self.n_spline_pars):
                 ispline = i - self.n_poly_pars
-                if self.n_poly_pars > 0 or forward_model.remove_continuum:
+                if self.n_poly_pars > 0 ^ forward_model.remove_continuum:
                     forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], vary=self.splines_enabled))
                 else:
                     k = np.argmin(np.abs(wave[good] - self.spline_wave_set_points[ispline])) + good[0]
