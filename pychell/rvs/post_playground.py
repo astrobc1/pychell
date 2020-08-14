@@ -154,7 +154,7 @@ def compute_redchi2s(rvs_single, unc_single, rvs_nightly, unc_nightly, n_obs_nig
             l += n_obs_nights[inight+1]
     return redchi2s, redchi2s_nightly
     
-def lsperiodogram(t, rvs, pmin=1.3, pmax=None):
+def lsperiodogram(t, rvs, pmin=1.3, pmax=None, dp=0.01):
     """Computes a Lomb-Scargle periodogram.
 
     Args:
@@ -168,9 +168,9 @@ def lsperiodogram(t, rvs, pmin=1.3, pmax=None):
     """
     good = np.where(np.isfinite(rvs))[0]
     dt = np.nanmax(t[good]) - np.nanmin(t[good])
-    tp = np.arange(pmin, 1.5*dt, .001)
+    tp = np.arange(pmin, 1.5*dt, dp)
     af = 2 * np.pi / tp
-    pgram = scipy.signal.lombscargle(t[good], rvs[good], af)
+    pgram = scipy.signal.lombscargle(t[good], rvs[good] - np.median(rvs[good]), af)
     return tp, pgram
     
 def gen_rv_mask_single_order(bad_rvs_dict, n_obs_nights):
@@ -361,7 +361,9 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
 def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, tc=None, show=True, fname=None):
     
     if phase_to is None:
-        phase_to = 1E20
+        _phase_to = 1E20
+    else:
+        _phase_to = phase_to
         
     if tc is None:
         alpha = 0
@@ -375,7 +377,10 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
     plt.errorbar((bjds_nightly - alpha)%phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, linewidth=0, elinewidth=3, marker='o', markersize=10, markerfacecolor='blue', color='grey', alpha=0.9)
     
     plt.title(star_name.replace('_', ' ') + ', ' + spectrograph + ' Relative RVs')
-    plt.xlabel('BJD - BJD$_{0}$')
+    if phase_to is None:
+        plt.xlabel('BJD - BJD$_{0}$')
+    else:
+        plt.xlabel('Phase [days, P = '  str(round(_phase_to, 3)) + ']')
     plt.ylabel('RV [m/s]')
     
     if show:
@@ -386,10 +391,12 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
             
             
             
-def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=None, debug=False, tc=None):
+def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=False, flag=False, phase_to=None, debug=False, tc=None):
     
     if phase_to is None:
-        phase_to = 1E20
+        _phase_to = 1E20
+    else:
+        _phase_to = phase_to
         
     if tc is None:
         alpha = 0
@@ -406,7 +413,7 @@ def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=
     n_nights = len(n_obs_nights)
     
     iter_indexes = np.zeros(n_spec)
-    print_rv_summary(rvs_dict, {}, do_orders, iter_indexes, xcorr=False)
+    print_rv_summary(rvs_dict, {}, do_orders, iter_indexes, xcorr=xcorr)
     
     # No weights
     weights = np.ones((n_orders, n_spec))
@@ -414,18 +421,21 @@ def rvs_quicklook(output_path_root, do_orders, iter_index, flag=False, phase_to=
     # Get RVs
     rvs = np.zeros((n_orders, n_spec))
     for o in range(n_orders):
-        rr = rvs_dict['rvs'][o, :, iter_index]
+        if xcorr:
+            rr = rvs_dict['rvsx'][o, :, iter_index]
+        else:
+            rr = rvs_dict['rvs'][o, :, iter_index]
         rvs[o, :] = rr - np.nanmedian(rr)
-        print('')
         
     # Combine
     rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_from_all(rvs, weights, n_obs_nights, flag_outliers=flag, thresh=5)
     
     # Plot
     for o in range(n_orders):
-        plt.plot((bjds - alpha)%phase_to, rvs[o, :] - np.nanmedian(rvs_nightly), marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]))
+        if phase_to is not None:
+            plt.plot((bjds - alpha)%_phase_to, rvs[o, :] - np.nanmedian(rvs_nightly), marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]))
         
-    plt.errorbar((bjdsn - alpha)%phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
+    plt.errorbar((bjdsn - alpha)%_phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
     plt.legend()
     plt.show()
     

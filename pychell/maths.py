@@ -363,13 +363,13 @@ def mad(x):
     return np.nanmedian(np.abs(x - np.nanmedian(x)))
 
 # This calculates the weighted percentile of a data set.
-def weighted_median(data, weights=None, med_val=0.5):
+def weighted_median(data, weights=None, percentile=0.5):
     """Computes the weighted percentile of a data set
 
     Args:
         data (np.ndarray): The input data.
         weights (np.ndarray, optional): How to weight the data. Defaults to uniform weights.
-        med_val (float, optional): The desired percentile. Defaults to 0.5.
+        percentile (float, optional): The desired percentile. Defaults to 0.5.
 
     Returns:
         float: The weighted percentile of the data.
@@ -386,14 +386,14 @@ def weighted_median(data, weights=None, med_val=0.5):
     inds = np.argsort(data)
     data_s = data[inds]
     weights_s = weights[inds]
-    med_val = med_val * np.nansum(weights)
-    if np.any(weights > med_val):
+    percentile = percentile * np.nansum(weights)
+    if np.any(weights > percentile):
         good = np.where(weights == np.nanmax(weights))[0][0]
         w_median = data[good]
     else:
         cs_weights = np.nancumsum(weights_s)
-        idx = np.where(cs_weights <= med_val)[0][-1]
-        if weights_s[idx] == med_val:
+        idx = np.where(cs_weights <= percentile)[0][-1]
+        if weights_s[idx] == percentile:
             w_median = np.nanmean(data_s[idx:idx+2])
         else:
             w_median = data_s[idx+1]
@@ -663,7 +663,7 @@ def estimate_continuum(x, y, width=7, n_knots=14, cont_val=0.9):
         if np.all(~np.isfinite(y[use])):
             continuum_coarse[ix] = np.nan
         else:
-            continuum_coarse[ix] = weighted_median(y[use], weights=None, med_val=cont_val)
+            continuum_coarse[ix] = weighted_median(y[use], weights=None, percentile=cont_val)
     
     good = np.where(np.isfinite(y))[0]
     knot_points = x[np.linspace(good[0], good[-1], num=n_knots).astype(int)]

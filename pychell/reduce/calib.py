@@ -52,7 +52,7 @@ def generate_master_flat(individuals, bias_subtraction=False, dark_subtraction=F
         if dark_subtraction:
             master_dark = individuals[i].master_dark.parse_image()
             flats_cube[i, :, :] -= master_dark
-        flats_cube[i, :, :] /= pcmath.weighted_median(flats_cube[i, :, :], med_val=flatfield_percentile)
+        flats_cube[i, :, :] /= pcmath.weighted_median(flats_cube[i, :, :], percentile=flatfield_percentile)
         bad = np.where((flats_cube[i, :, :] < 0) | (flats_cube[i, :, :] > flatfield_percentile*100))
         if bad[0].size > 0:
             flats_cube[i, :, :][bad] = np.nan
@@ -250,7 +250,7 @@ def correct_flat_artifacts(flat, redux_settings):
 
         # Parameters
         # Amplitude, Phase, Period, Period Slope (y-intercept is pixel=0)
-        amp_guess = pcmath.weighted_median(np.abs(fit_y - 1), med_val=0.9)
+        amp_guess = pcmath.weighted_median(np.abs(fit_y - 1), percentile=0.9)
 
         period_guess = period_estimates_ishell[o]
         init_pars = np.array([amp_guess, 2 * np.pi, period_guess, -0.0015])

@@ -146,123 +146,11 @@ def cubic_spline_lsq(forward_models, iter_index=None, nights_for_template=None, 
         n = np.where((waves_shifted_lr_flat > knots_init[iknot]) & (waves_shifted_lr_flat < knots_init[iknot+1]))[0].size
         if n == 0:
             bad_knots.append(iknot)
-    bad_knots = np.array(bad_knots)
     knots = np.delete(knots_init, bad_knots)
     
     # Do the fit
     tot_weights_lr_flat /= np.nansum(tot_weights_lr_flat)
-    spline_fitter = scipy.interpolate.LSQUnivariateSpline(waves_shifted_lr_flat, residuals_lr_flat, t=knots[1:-1], w=tot_weights_lr_flat, k=3, ext=1, bbox=[waves_shifted_lr_flat[0], waves_shifted_lr_flat[-1]], check_finite=True)
-    
-    # Use the fit to determine the hr residuals to add
-    residuals_hr_fit = spline_fitter(current_stellar_template[:, 0])
-
-    # Remove bad regions
-    bad = np.where((current_stellar_template[:, 0] <= knots[0]) | (current_stellar_template[:, 0] >= knots[-1]))[0]
-    if bad.size > 0:
-        residuals_hr_fit[bad] = 0
-
-    # Augment the template
-    new_flux = current_stellar_template[:, 1] + residuals_hr_fit
-    
-    locs = np.where(new_flux > 1)[0]
-    if locs.size > 0:
-        new_flux[locs] = 1
-
-    forward_models.templates_dict['star'][:, 1] = new_flux
-    
-    
-def cubic_spline_lsq_nobcweights(forward_models, iter_index, nights_for_template=None, templates_to_optimize=None):
-    """Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. This function is identical to cubic_spline_lsq but does not include barycenter weighting.
-
-    Args:
-        forward_models (ForwardModels): The list of forward model objects
-        iter_index (int): The iteration to use.
-        nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
-    """
-
-    current_stellar_template = np.copy(forward_models.templates_dict['star'])
-    
-    # Storage Arrays for the low res grid
-    # This is for the low res reiduals where the star is constructed via a least squares cubic spline.
-    # Before the residuals are added, they are normalized.
-    waves_shifted_lr = np.empty(shape=(forward_models[0].data.flux.size, forward_models.n_spec), dtype=np.float64)
-    residuals_lr = np.empty(shape=(forward_models[0].data.flux.size, forward_models.n_spec), dtype=np.float64)
-    tot_weights_lr = np.empty(shape=(forward_models[0].data.flux.size, forward_models.n_spec), dtype=np.float64)
-    
-    # Weight by 1 / rms^2
-    rms = np.array([forward_models[ispec].opt[-1][0] for ispec in range(forward_models.n_spec)])
-    rms_weights = 1 / rms**2
-    good = np.where(np.isfinite(rms_weights))[0]
-    bad = np.where(~np.isfinite(rms_weights))[0]
-    if good.size == 0:
-        rms_weights = np.ones(forward_models.n_spec)
-
-    # All nights
-    if nights_for_template is None or len(nights_for_template) == 0:
-        template_spec_indices = np.arange(forward_models.n_spec).astype(int)
-    # Night with highest co-added S/N
-    if nights_for_template == 'best':
-        night_index = determine_best_night(rms, forward_models.n_obs_nights)
-        template_spec_indices = list(forward_models.get_all_spec_indices_from_night(night_index, forward_models.n_obs_nights))
-    # User specified nights
-    else:
-        template_spec_indices = []
-        for night in nights_for_template:
-            template_spec_indices += list(forward_models.get_all_spec_indices_from_night(night - 1, forward_models.n_obs_nights))
-            
-    # Loop over spectra
-    for ispec in range(forward_models.n_spec):
-
-        # De-shift residual wavelength scale according to the barycenter correction
-        # Or best doppler shift if using a non flat initial template
-        if forward_models[0].models_dict['star'].from_synthetic:
-            waves_shifted_lr[:, ispec] = forward_models[ispec].wavelength_solutions[-1] * np.exp(-1 * forward_models[ispec].best_fit_pars[-1][forward_models[ispec].models_dict['star'].par_names[0]].value / cs.c)
-        else:
-            waves_shifted_lr[:, ispec] = forward_models[ispec].wavelength_solutions[-1] * np.exp(forward_models[ispec].data.bc_vel / cs.c)
-            
-        residuals_lr[:, ispec] = np.copy(forward_models[ispec].residuals[-1])
-        
-
-        # Telluric weights
-        tell_flux_hr = forward_models[ispec].models_dict['tellurics'].build(forward_models[ispec].best_fit_pars[-1], forward_models.templates_dict['tellurics'], current_stellar_template[:, 0])
-        tell_flux_hr_convolved = forward_models[ispec].models_dict['lsf'].convolve_flux(tell_flux_hr, pars=forward_models[ispec].best_fit_pars[-1])
-        tell_flux_lr_convolved = np.interp(forward_models[ispec].wavelength_solutions[-1], current_stellar_template[:, 0], tell_flux_hr_convolved, left=np.nan, right=np.nan)
-        tell_weights = tell_flux_lr_convolved**2
-        
-        tot_weights_lr[:, ispec] = forward_models[ispec].data.badpix * rms_weights[ispec]
-        
-        # Final weights
-        if len(nights_for_template) != 1:
-            tot_weights_lr[:, ispec] = tot_weights_lr[:, ispec] * tell_weights
-            
-    # Now to co-add residuals according to a least squares cubic spline
-    # Flatten the arrays
-    waves_shifted_lr_flat = waves_shifted_lr.flatten()
-    residuals_lr_flat = residuals_lr.flatten()
-    tot_weights_lr_flat = tot_weights_lr.flatten()
-    
-    # Remove all bad pixels.
-    good = np.where(np.isfinite(waves_shifted_lr_flat) & np.isfinite(residuals_lr_flat) & (tot_weights_lr_flat > 0))[0]
-    waves_shifted_lr_flat, residuals_lr_flat, tot_weights_lr_flat = waves_shifted_lr_flat[good], residuals_lr_flat[good], tot_weights_lr_flat[good]
-
-    # Sort the wavelengths
-    sorted_inds = np.argsort(waves_shifted_lr_flat)
-    waves_shifted_lr_flat, residuals_lr_flat, tot_weights_lr_flat = waves_shifted_lr_flat[sorted_inds], residuals_lr_flat[sorted_inds], tot_weights_lr_flat[sorted_inds]
-    
-    # Knot points are roughly the detector grid.
-    knots_init = np.linspace(waves_shifted_lr_flat[0]+0.01, waves_shifted_lr_flat[-1]-0.01, num=forward_models[0].data.flux.size)
-    bad_knots = []
-    for iknot in range(len(knots_init) - 1):
-        n = np.where((waves_shifted_lr_flat > knots_init[iknot]) & (waves_shifted_lr_flat < knots_init[iknot+1]))[0].size
-        if n == 0:
-            bad_knots.append(iknot)
-    bad_knots = np.array(bad_knots)
-    knots = np.delete(knots_init, bad_knots)
-    
-
-    # Do the fit
-    tot_weights_lr_flat /= np.nansum(tot_weights_lr_flat)
-    spline_fitter = scipy.interpolate.LSQUnivariateSpline(waves_shifted_lr_flat, residuals_lr_flat, t=knots[1:-1], w=tot_weights_lr_flat, k=3, ext=1, bbox=[waves_shifted_lr_flat[0], waves_shifted_lr_flat[-1]], check_finite=True)
+    spline_fitter = scipy.interpolate.LSQUnivariateSpline(waves_shifted_lr_flat, residuals_lr_flat, t=knots[1:-1], w=tot_weights_lr_flat, k=3, ext=1)
     
     # Use the fit to determine the hr residuals to add
     residuals_hr_fit = spline_fitter(current_stellar_template[:, 0])
@@ -543,7 +431,7 @@ def weighted_average(forward_models, iter_index=None, nights_for_template=None, 
 
     # Loop over spectra and check which bin an observation belongs to
     # Then update the weights accordingly.
-    if len(nights_for_template) == 0:
+    if len(nights_for_template) == 0 and forward_models.use_bc_weights:
         for ispec in range(forward_models.n_spec):
             vbc = forward_models[ispec].data.bc_vel
             y = np.where(histx >= vbc)[0][0] - 1
@@ -558,7 +446,7 @@ def weighted_average(forward_models, iter_index=None, nights_for_template=None, 
     # 1. If all weights at a given pixel are zero, set median value to zero.
     # 2. If there's more than one spectrum, compute the weighted median
     # 3. If there's only one spectrum, use those residuals, unless it's nan.
-    for ix in range(forward_models.n_model_pix):
+    for ix in range(forward_models[0].n_model_pix):
         if np.nansum(tot_weights_hr[ix, :]) == 0:
             residuals_average[ix] = 0
         else:
@@ -609,7 +497,7 @@ def global_fit(forward_models, templates_to_optimize=None, iter_index=None, nigh
     """
     
     # The number of lsf points
-    n_lsf_pts = forward_models[0].models_dict['lsf'].nx
+    n_lsf_pts = forward_models[0].models_dict['lsf'].nx_lsf
     
     # The high resolution master grid (also stellar template grid)
     wave_hr_master = torch.from_numpy(forward_models.templates_dict['star'][:, 0])
@@ -713,142 +601,7 @@ def global_fit(forward_models, templates_to_optimize=None, iter_index=None, nigh
     if 'lab' in templates_to_optimize:
         residual_lab_flux_fit = model.residual_lab_flux.detach().numpy()
         forward_models.templates_dict['residual_lab'] = np.array([np.copy(forward_models.templates_dict['star'][:, 0]), residual_lab_flux_fit]).T
-    
-
-
-
-        class Interp1d(torch.autograd.Function):
-            def __call__(self, x, y, xnew, out=None):
-                return self.forward(x, y, xnew, out)
-
-            def forward(ctx, x, y, xnew, out=None):
-
-                # making the vectors at least 2D
-                is_flat = {}
-                require_grad = {}
-                v = {}
-                device = []
-                for name, vec in {'x': x, 'y': y, 'xnew': xnew}.items():
-                    assert len(vec.shape) <= 2, 'interp1d: all inputs must be '\
-                                                'at most 2-D.'
-                    if len(vec.shape) == 1:
-                        v[name] = vec[None, :]
-                    else:
-                        v[name] = vec
-                    is_flat[name] = v[name].shape[0] == 1
-                    require_grad[name] = vec.requires_grad
-                    device = list(set(device + [str(vec.device)]))
-                assert len(device) == 1, 'All parameters must be on the same device.'
-                device = device[0]
-
-                # Checking for the dimensions
-                assert (v['x'].shape[1] == v['y'].shape[1]
-                        and (
-                            v['x'].shape[0] == v['y'].shape[0]
-                            or v['x'].shape[0] == 1
-                            or v['y'].shape[0] == 1
-                            )
-                        ), ("x and y must have the same number of columns, and either "
-                            "the same number of row or one of them having only one "
-                            "row.")
-
-                reshaped_xnew = False
-                if ((v['x'].shape[0] == 1) and (v['y'].shape[0] == 1)
-                and (v['xnew'].shape[0] > 1)):
-                    # if there is only one row for both x and y, there is no need to
-                    # loop over the rows of xnew because they will all have to face the
-                    # same interpolation problem. We should just stack them together to
-                    # call interp1d and put them back in place afterwards.
-                    original_xnew_shape = v['xnew'].shape
-                    v['xnew'] = v['xnew'].contiguous().view(1, -1)
-                    reshaped_xnew = True
-
-                # identify the dimensions of output and check if the one provided is ok
-                D = max(v['x'].shape[0], v['xnew'].shape[0])
-                shape_ynew = (D, v['xnew'].shape[-1])
-                if out is not None:
-                    if out.numel() != shape_ynew[0]*shape_ynew[1]:
-                        # The output provided is of incorrect shape.
-                        # Going for a new one
-                        out = None
-                    else:
-                        ynew = out.reshape(shape_ynew)
-                if out is None:
-                    ynew = torch.zeros(*shape_ynew, dtype=y.dtype, device=device)
-
-                # moving everything to the desired device in case it was not there
-                # already (not handling the case things do not fit entirely, user will
-                # do it if required.)
-                for name in v:
-                    v[name] = v[name].to(device)
-
-                # calling searchsorted on the x values.
-                #ind = ynew
-                #searchsorted(v['x'].contiguous(), v['xnew'].contiguous(), ind)
-                ind = np.searchsorted(v['x'].contiguous().numpy().flatten(), v['xnew'].contiguous().numpy().flatten())
-                ind = torch.tensor(ind)
-                # the `-1` is because searchsorted looks for the index where the values
-                # must be inserted to preserve order. And we want the index of the
-                # preceeding value.
-                ind -= 1
-                # we clamp the index, because the number of intervals is x.shape-1,
-                # and the left neighbour should hence be at most number of intervals
-                # -1, i.e. number of columns in x -2
-                ind = torch.clamp(ind, 0, v['x'].shape[1] - 1 - 1).long()
-
-                # helper function to select stuff according to the found indices.
-                def sel(name):
-                    if is_flat[name]:
-                        return v[name].contiguous().view(-1)[ind]
-                    return torch.gather(v[name], 1, ind)
-
-                # activating gradient storing for everything now
-                enable_grad = False
-                saved_inputs = []
-                for name in ['x', 'y', 'xnew']:
-                    if require_grad[name]:
-                        enable_grad = True
-                        saved_inputs += [v[name]]
-                    else:
-                        saved_inputs += [None, ]
-                # assuming x are sorted in the dimension 1, computing the slopes for
-                # the segments
-                is_flat['slopes'] = is_flat['x']
-                # now we have found the indices of the neighbors, we start building the
-                # output. Hence, we start also activating gradient tracking
-                with torch.enable_grad() if enable_grad else contextlib.suppress():
-                    v['slopes'] = (
-                            (v['y'][:, 1:]-v['y'][:, :-1])
-                            /
-                            (v['x'][:, 1:]-v['x'][:, :-1])
-                        )
-
-                    # now build the linear interpolation
-                    ynew = sel('y') + sel('slopes')*(
-                                            v['xnew'] - sel('x'))
-
-                    if reshaped_xnew:
-                        ynew = ynew.view(original_xnew_shape)
-
-                ctx.save_for_backward(ynew, *saved_inputs)
-                return ynew
-
-            @staticmethod
-            def backward(ctx, grad_out):
-                inputs = ctx.saved_tensors[1:]
-                gradients = torch.autograd.grad(
-                                ctx.saved_tensors[0],
-                                [i for i in inputs if i is not None],
-                                grad_out, retain_graph=True)
-                result = [None, ] * 5
-                pos = 0
-                for index in range(len(inputs)):
-                    if inputs[index] is not None:
-                        result[index] = gradients[pos]
-                        pos += 1
-                return (*result,)
         
-      
         
 # Class to optimize the forward model
 if 'torch' in sys.modules:
@@ -890,10 +643,9 @@ if 'torch' in sys.modules:
             # The lsf (optional)
             if lsfs is not None:
                 self.nx_lsf = lsfs.shape[0]
+                self.n_pad_model = int(np.floor(self.nx_lsf / 2))
                 self.lsfs = torch.ones(1, 1, self.nx_lsf, self.n_spec, dtype=torch.float64)
                 self.lsfs[0, 0, :, :] = lsfs
-                self.nx_pad1 = int(self.nx_lsf / 2) - 1
-                self.nx_pad2 = int(self.nx_lsf / 2)
             else:
                 self.lsfs = None
 
@@ -918,9 +670,11 @@ if 'torch' in sys.modules:
                     model = self.base_flux_models[:, ispec] + self.residual_lab_flux
                     
                 # Convolution. NOTE: PyTorch convolution is a pain in the ass
+                # Second NOTE: Anything in PyTorch is a pain in the ass
+                # Third NOTE: Wtf kind of language does the ML community even speak?
                 if self.lsfs is not None:
-                    model_p = torch.ones((1, 1, self.nx_model + self.nx_pad1 + self.nx_pad2), dtype=torch.float64)
-                    model_p[0, 0, self.nx_pad1:(-self.nx_pad2)] = model
+                    model_p = torch.ones((1, 1, self.nx_model + 2 * self.n_pad_model), dtype=torch.float64)
+                    model_p[0, 0, self.n_pad_model:-self.n_pad_model] = model
                     conv = torch.nn.Conv1d(in_channels=1, out_channels=1, kernel_size=1, stride=1, padding=0, bias=False)
                     conv.weight.data = self.lsfs[:, :, :, ispec]
                     model = conv(model_p).flatten()
@@ -930,7 +684,7 @@ if 'torch' in sys.modules:
                 models_lr[good, ispec] = self.Interp1d()(self.wave_hr_master, model, self.waves_lr[good, ispec])
 
             # Weighted RMS
-            good = torch.where(torch.isfinite(self.weights) & (self.weights > 0) & torch.isfinite(models_lr))[0]
+            good = torch.where(torch.isfinite(self.weights) & (self.weights > 0) & torch.isfinite(models_lr))
             wdiffs2 = (models_lr[good] - self.data_flux[good])**2 * self.weights[good]
             loss = torch.sqrt(torch.sum(wdiffs2) / (torch.sum(self.weights[good])))
 
@@ -945,9 +699,7 @@ if 'torch' in sys.modules:
                 [0, 0, 3, -2],
                 [0, 0, -1, 1]
                 ], dtype=tt[-1].dtype)
-            return [
-                sum( A[i, j]*tt[j] for j in range(4) )
-                for i in range(4) ]
+            return [sum(A[i, j]*tt[j] for j in range(4)) for i in range(4)]
             
         @classmethod
         def h_poly(cls, t):
@@ -1160,7 +912,7 @@ def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.98, smooth=True):
         if use.size == 0 or np.all(~np.isfinite(ys[use])):
             continuum_coarse[ix] = np.nan
         else:
-            continuum_coarse[ix] = pcmath.weighted_median(ys[use], weights=None, med_val=cont_val)
+            continuum_coarse[ix] = pcmath.weighted_median(ys[use], weights=None, percentile=cont_val)
     good = np.where(np.isfinite(ys))[0]
     knot_points = x[np.linspace(good[0], good[-1], num=n_knots).astype(int)]
     cspline = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=n_knots).astype(int)], extrapolate=False, bc_type='not-a-knot')

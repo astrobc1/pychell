@@ -57,7 +57,7 @@ def trace_orders_from_flat_field(master_flat, redux_settings):
         y_low = y_ranges[i]
         y_top = y_ranges[i+1]
         for x in range(first_x, last_x):
-            flat_smooth[y_low:y_top, x] = flat_smooth[y_low:y_top, x] / pcmath.weighted_median(flat_smooth[y_low:y_top, x], med_val=0.99)
+            flat_smooth[y_low:y_top, x] = flat_smooth[y_low:y_top, x] / pcmath.weighted_median(flat_smooth[y_low:y_top, x], percentile=0.99)
 
     # Only consider regions where the flux is greater than 50%
     order_locations_all = np.zeros(shape=(ny, nx), dtype=float)
@@ -119,8 +119,8 @@ def trace_orders_from_flat_field(master_flat, redux_settings):
                     rys_lr[x] = np.nan
                 else:
                     rys_lr[x] = np.max(label_locs[0][colx_ylocs]) - np.min(label_locs[0][colx_ylocs])
-            wmin = pcmath.weighted_median(rys_lr, med_val=0.05)
-            wmax = pcmath.weighted_median(rys_lr, med_val=0.95)
+            wmin = pcmath.weighted_median(rys_lr, percentile=0.05)
+            wmax = pcmath.weighted_median(rys_lr, percentile=0.95)
             good = np.where(rys_lr > 0.8*wmax)[0]
             good_finite = np.where(np.isfinite(rys_lr))[0]
             rys_lr_good = rys_lr[good[0]:good[-1]]
@@ -179,7 +179,7 @@ def trace_orders_empirical(data, redux_settings):
         #y_low = y_ranges[i]
         #y_top = y_ranges[i+1]
     for x in range(nx):
-        data_smooth[:, x] = data_smooth[:, x] / pcmath.weighted_median(data_smooth[:, x], med_val=0.99)
+        data_smooth[:, x] = data_smooth[:, x] / pcmath.weighted_median(data_smooth[:, x], percentile=0.99)
 
     # Only consider regions where the flux is greater than 50%
     order_locations_all = np.zeros(shape=(ny, nx), dtype=float)

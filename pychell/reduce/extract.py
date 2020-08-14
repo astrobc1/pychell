@@ -190,7 +190,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
         
     # Flag obvious bad pixels
     trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
-    med_val = pcmath.weighted_median(trace_image_smooth, med_val=0.99)
+    med_val = pcmath.weighted_median(trace_image_smooth, percentile=0.99)
     bad = np.where((trace_image < 0) & (trace_image > 2*med_val))
     if bad[0].size > 0:
         trace_image[bad] = np.nan
@@ -237,7 +237,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
         sky = estimate_sky(trace_image, y_positions_refined, trace_profile_cspline, height, n_sky_rows=redux_settings['n_sky_rows'], M=M)
         tp = trace_profile_cspline(trace_profile_cspline.x)
         _, trace_max = estimate_trace_max(trace_profile_cspline)
-        tp -= pcmath.weighted_median(tp, med_val=0.05)
+        tp -= pcmath.weighted_median(tp, percentile=0.05)
         bad = np.where(tp < 0)[0]
         if bad.size > 0:
             tp[bad] = np.nan
@@ -277,7 +277,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
     # Flag according to outliers in 1d spectrum
     thresh = 0.3
     spec1d_smooth = pcmath.median_filter1d(spec1d, 3)
-    continuum = pcmath.weighted_median(spec1d_smooth, med_val=0.99)
+    continuum = pcmath.weighted_median(spec1d_smooth, percentile=0.99)
     bad = np.where(np.abs(spec1d_smooth - spec1d) / continuum > thresh)[0]
     if bad.size > 0:
         spec1d[bad] = np.nan
@@ -433,7 +433,7 @@ def flag_bad_pixels(trace_image, current_spectrum, y_positions, trace_profile_cs
         
     # Smooth the current spectrum
     current_spec_smooth = pcmath.median_filter1d(current_spectrum, 5)
-    continuum = pcmath.weighted_median(current_spec_smooth, med_val=0.95)
+    continuum = pcmath.weighted_median(current_spec_smooth, percentile=0.95)
     
     # Deviations
     deviations = np.empty(shape=(ny, nx), dtype=np.float64) + np.nan
@@ -978,10 +978,10 @@ def plot_extracted_spectra(data, reduced_orders, boxcar_spectra):
                 
                 
                 # Plot the boxcar extracted spectrum
-                axarr[row, col].plot(xpixels[f:l], flux_box[f:l] / pcmath.weighted_median(flux_box[f:l], med_val=0.99) + itrace, color='red', label='Boxcar', lw=0.5)
+                axarr[row, col].plot(xpixels[f:l], flux_box[f:l] / pcmath.weighted_median(flux_box[f:l], percentile=0.99) + itrace, color='red', label='Boxcar', lw=0.5)
                 
                 # Plot the optimally extracted spectrum
-                axarr[row, col].plot(xpixels[f:l], flux_opt[f:l] / pcmath.weighted_median(flux_opt[f:l], med_val=0.99) + itrace, color='black', label='Optimal', lw=0.5)
+                axarr[row, col].plot(xpixels[f:l], flux_opt[f:l] / pcmath.weighted_median(flux_opt[f:l], percentile=0.99) + itrace, color='black', label='Optimal', lw=0.5)
                 
             # Title
             axarr[row, col].set_title('Order ' + str(order_num))
@@ -1042,7 +1042,7 @@ def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline,
     if redux_settings['sky_subtraction']:
         sky = estimate_sky(trace_image_smooth, y_positions, trace_profile_cspline, height, n_sky_rows=redux_settings['n_sky_rows'], M=redux_settings['oversample'])
         tp = trace_profile_cspline(trace_profile_cspline.x)
-        tp -= pcmath.weighted_median(tp, med_val=0.05)
+        tp -= pcmath.weighted_median(tp, percentile=0.05)
         
         bad = np.where(tp < 0)[0]
         if bad.size > 0:
@@ -1067,7 +1067,7 @@ def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline,
     spectrum_1d_estimate_smooth = pcmath.median_filter1d(spectrum_1d_estimate, width=5)
     
     # Normalize
-    spectrum_1d_estimate_smooth /= pcmath.weighted_median(spectrum_1d_estimate_smooth, med_val=0.98)
+    spectrum_1d_estimate_smooth /= pcmath.weighted_median(spectrum_1d_estimate_smooth, percentile=0.98)
 
     # Cross correlate each data column with the trace profile estimate
     y_positions_xcorr = np.zeros(nx) + np.nan

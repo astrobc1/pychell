@@ -169,7 +169,7 @@ def init_night(user_redux_settings):
     redux_settings.update(pcconfig.general_settings)
     
     # Update with the default instrument dictionaries
-    spec_module = importlib.import_module('pychell.spectrographs.' + user_redux_settings['spectrograph'].lower() + '.settings')
+    spec_module = importlib.import_module('pychell.spectrographs.' + user_redux_settings['spectrograph'].lower())
     redux_settings.update(spec_module.redux_settings)
     
     # User settings

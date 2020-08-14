@@ -101,10 +101,10 @@ class SpecData1d:
         from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
         
         # BJD
-        self.bjd = JDUTC_to_BJDTDB(JDUTC=self.JD, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430')[0]
+        self.bjd = JDUTC_to_BJDTDB(JDUTC=self.JD, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=True)[0]
         
         # bc vel
-        self.bc_vel = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430')[0]
+        self.bc_vel = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=True)[0]
     
     def set_bc_info(self, bjd=None, bc_vel=None):
         """ Basic setter method for the BJD and barycenter velocity.
@@ -117,7 +117,27 @@ class SpecData1d:
             self.BJD = bjd
         if bc_vel is not None:
             self.bc_vel = bc_vel
+      
+    @staticmethod
+    def star_from_simbad(star_name):
+        star_dict = {}
+        try:
+            Simbad.add_votable_fields('PLX')
+            Simbad.add_votable_fields('velocity')
+            Simbad.add_votable_fields('pm')
+            simbad_result = Simbad.query_object(star_name)
+            ra_list = simbad_result['ra'].split(' ')
+            star_dict['ra'] = (ra_list[0] + ra_list[1] / 60 + ra_list[2] / 3600) * 15
+            dec_list = simbad_result['dec'].split(' ')
+            star_dict['dec'] = dec_list[0] + dec_list[1] / 60 + dec_list[2] / 3600
+            star_dict['px'] = simbad_result['PLX_VALUE'][0]
+            star_dict['rv'] = simbad_result['RVZ_RADVEL'][0]
+            star_dict['pmra'] = simbad_result['PMRA'][0]
+            star_dict['pmdec'] = simbad_result['PMDEC'][0]
+        except:
+            raise ValueError("Could not parse simbad for " + star_name)
         
+        return star_dict
 
     def parse(self, *args, **kwargs):
         """ A default parse method which must be implemented for each instrument.
@@ -159,10 +179,10 @@ class SpecData1d:
         jds = np.array([fwm.data.JD for fwm in forward_models], dtype=float)
         
         # BJDs
-        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430')[0]
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=True)[0]
         
         # bc vels
-        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430')[0]
+        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=True)[0]
         
         for i in range(forward_models.n_spec):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
@@ -190,9 +210,9 @@ class SpecDataiSHELL(SpecData1d):
         self.flux_unc = self.flux_unc[::-1]
         
         # Normalize to 99th percentile
-        med_val = pcmath.weighted_median(self.flux, med_val=0.99)
-        self.flux /= med_val
-        self.flux_unc /= med_val
+        continuum = pcmath.weighted_median(self.flux, percentile=0.99)
+        self.flux /= continuum
+        self.flux_unc /= continuum
         
         # Define the JD of this observation using the mid point of the observation
         self.JD = float(fits_data.header['TCS_UTC']) + 2400000.5 + float(fits_data.header['ITIME']) / (2 * 3600 * 24)
@@ -210,7 +230,7 @@ class SpecDataCHIRON(SpecData1d):
         fits_data.verify('fix')
         
         self.default_wave_grid, self.flux = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64)
-        self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
+        self.flux /= pcmath.weighted_median(self.flux, percentile=0.98)
         
         # For CHIRON, generate a dumby uncertainty grid and a bad pix array that will be updated or used
         self.flux_unc = np.zeros_like(self.flux) + 1E-3
@@ -239,7 +259,7 @@ class SpecDataPARVI(SpecData1d):
         self.default_wave_grid, self.flux, self.flux_unc = data[0, oi, :].astype(np.float64), data[7, oi, :].astype(np.float64), data[8, oi, :].astype(np.float64)
         
         # Normalize according to 98th percentile in flux
-        continuum = pcmath.weighted_median(self.flux, med_val=0.98)
+        continuum = pcmath.weighted_median(self.flux, percentile=0.98)
         self.flux /= continuum
         self.flux_unc /= continuum
         
@@ -272,9 +292,9 @@ class SpecDataMinervaAustralis(SpecData1d):
         self.badpix = np.ones(len(self.flux), dtype=np.float64)
         
         # Normalize
-        med_val = pcmath.weighted_median(self.flux, med_val=0.99)
-        self.flux /= med_val
-        self.flux_unc /= med_val
+        continuum = pcmath.weighted_median(self.flux, percentile=0.99)
+        self.flux /= continuum
+        self.flux_unc /= continuum
         
         
     @staticmethod
@@ -328,7 +348,7 @@ class SpecDataMinervaNorth(SpecData1d):
         self.flux_unc = np.zeros_like(self.flux) + 1E-3
         
         # Normalize to 1.
-        self.flux /= pcmath.weighted_median(self.flux, med_val=0.98)
+        self.flux /= pcmath.weighted_median(self.flux, percentile=0.98)
         self.badpix = np.ones_like(self.flux)
         
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.        
@@ -360,9 +380,9 @@ class SpecDataNIRSPEC(SpecData1d):
         #self.flux_unc = self.flux_unc[::-1]
         
         # Normalize to 99th percentile
-        med_val = pcmath.weighted_median(self.flux, med_val=0.99)
-        self.flux /= med_val
-        self.flux_unc /= med_val
+        continuum = pcmath.weighted_median(self.flux, percentile=0.99)
+        self.flux /= continuum
+        self.flux_unc /= continuum
         
         # Define the JD of this observation using the mid point of the observation
         #self.JD = float(fits_data.header['TCS_UTC']) + 2400000.5 + float(fits_data.header['ITIME']) / (2 * 3600 * 24)
@@ -384,7 +404,7 @@ class SpecDataSimulated(SpecData1d):
         self.flux_unc = np.zeros_like(self.flux) + 1E-3
         
         # Normalize according to 98th percentile in flux
-        #continuum = pcmath.weighted_median(self.flux, med_val=0.99)
+        #continuum = pcmath.weighted_median(self.flux, percentile=0.99)
         #self.flux /= continuum
         
         # Create bad pix array, further cropped later

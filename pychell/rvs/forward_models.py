@@ -90,6 +90,14 @@ class ForwardModels(list):
         # Print summary
         self.print_init_summary()
         
+        # Post init things
+        # Remove continuum or not
+        if self.remove_continuum:
+            for fwm in self:
+                wave = fwm.models_dict['wavelength_solution'].build(fwm.initial_parameters)
+                log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(fwm.data.flux), fwm.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
+                fwm.data.flux = np.exp(np.log(fwm.data.flux) - log_continuum)
+        
     def generate_nightly_rvs(self, iter_index):
         """Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed.
 
@@ -173,6 +181,7 @@ class ForwardModels(list):
             for ispec in range(self.n_spec):
                 self[ispec].data.set_bc_info(self.BJDS[ispec], self.bc_vels[ispec])
         else:
+            print('Computing barycentric corrections ...')
             bc_computer = self[0].data.__class__.calculate_bc_info_all
             self.BJDS, self.bc_vels = bc_computer(self, obs_name=self.observatory, star_name=self.star_name)
             
@@ -191,9 +200,9 @@ class ForwardModels(list):
         self.rvs_dict = {}
         
         # Nelder-Mead RVs
-        self.rvs_dict['rvs'] = np.empty(shape=(self.n_spec, self.n_template_fits), dtype=np.float64)
-        self.rvs_dict['rvs_nightly'] = np.empty(shape=(self.n_nights, self.n_template_fits), dtype=np.float64)
-        self.rvs_dict['unc_nightly'] = np.empty(shape=(self.n_nights, self.n_template_fits), dtype=np.float64)
+        self.rvs_dict['rvs'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+        self.rvs_dict['rvs_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+        self.rvs_dict['unc_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
         
         # X Corr RVs
         if self.xcorr_options['method'] is not None:
@@ -205,12 +214,12 @@ class ForwardModels(list):
             self.xcorr_options['n_vels'] = int(2 * self.xcorr_options['range'] / self.xcorr_options['step'])
             
             # Initiate arrays for xcorr rvs.
-            self.rvs_dict['rvs_xcorr'] = np.empty(shape=(self.n_spec, self.n_template_fits), dtype=np.float64)
-            self.rvs_dict['rvs_xcorr_nightly'] = np.empty(shape=(self.n_nights, self.n_template_fits), dtype=np.float64)
-            self.rvs_dict['unc_xcorr_nightly'] = np.empty(shape=(self.n_nights, self.n_template_fits), dtype=np.float64)
-            self.rvs_dict['xcorrs'] = np.empty(shape=(self.xcorr_options['n_vels'], 2*self.n_spec, self.n_template_fits), dtype=np.float64)
-            self.rvs_dict['line_bisectors'] = np.empty(shape=(self.xcorr_options['n_bs'], self.n_spec, self.n_template_fits), dtype=np.float64)
-            self.rvs_dict['bisector_spans'] = np.empty(shape=(self.n_spec, self.n_template_fits), dtype=np.float64)
+            self.rvs_dict['rvs_xcorr'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['rvs_xcorr_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['unc_xcorr_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['xcorrs'] = np.full(shape=(self.xcorr_options['n_vels'], 2*self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['line_bisectors'] = np.full(shape=(self.xcorr_options['n_bs'], self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['bisector_spans'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
             
         else:
             self.do_xcorr = False
@@ -715,7 +724,7 @@ class ForwardModel:
         ax.plot(wave[good], residuals[good], color=(255/255, 169/255, 22/255), lw=0.8)
         
         # The worst N pixels that were flagged
-        #ax.plot(wave[good][bad_data_locs], residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
+        ax.plot(wave[good][bad_data_locs], residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
         
         # Plot the convolved low res templates for debugging 
         # Plots the star and tellurics by default. Plots gas cell if present.

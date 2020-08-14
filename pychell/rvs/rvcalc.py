@@ -614,7 +614,7 @@ def compute_bisector_span(cc_vels, ccf, n_bs=1000):
 
     # First normalize the CCF function
     ccf = ccf - np.nanmin(ccf)
-    continuum = pcmath.weighted_median(ccf, med_val=0.95)
+    continuum = pcmath.weighted_median(ccf, percentile=0.95)
     ccfn = ccf / continuum
     
     # Get the velocities and offset such that the best vel is at zero
