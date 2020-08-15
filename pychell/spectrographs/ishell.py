@@ -135,13 +135,13 @@ forward_model_blueprints = {
     # The default blaze is a quadratic + splines.
     'blaze': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'PolySplineBlaze',
+        'class_name': 'SplineBlaze',
         'n_splines': 0,
         'poly_order': 2,
-        'poly_6': [-5.5E-5, -2E-6, 5.5E-5],
-        'poly_5': [-5.5E-5, -2E-6, 5.5E-5],
-        'poly_4': [-5.5E-5, -2E-6, 5.5E-5],
-        'poly_3': [-5.5E-5, -2E-6, 5.5E-5],
+        'poly_6': [-5.5E-9, -2E-6, 5.5E-9],
+        'poly_5': [-5.5E-8, -2E-6, 5.5E-8],
+        'poly_4': [-5.5E-7, -2E-6, 5.5E-7],
+        'poly_3': [-5.5E-6, -2E-6, 5.5E-6],
         'poly_2': [-5.5E-5, -2E-6, 5.5E-5],
         'poly_1': [-0.001, 1E-5, 0.001],
         'poly_0': [0.96, 1.0, 1.08],
@@ -168,7 +168,7 @@ forward_model_blueprints = {
     'wavelength_solution': {
         
         'name': 'csplines_wavesol',
-        'class_name': 'PolySplineWavelengthSolution',
+        'class_name': 'SplineWavelengthSolution',
         
         # The three pixels to span the detector corresponding to the above wavelengths
         # They are chosen as such because we typically use pixels 200-1848 only.

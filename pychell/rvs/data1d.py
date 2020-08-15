@@ -190,7 +190,7 @@ class SpecData1d:
         return bjds, bc_vels
 
     
-class SpecDataiSHELL(SpecData1d):
+class iSHELL(SpecData1d):
     """ Class for extracted 1-dimensional spectra from iSHELL on the NASA IRTF.
     """
         
@@ -218,7 +218,7 @@ class SpecDataiSHELL(SpecData1d):
         self.JD = float(fits_data.header['TCS_UTC']) + 2400000.5 + float(fits_data.header['ITIME']) / (2 * 3600 * 24)
         
 
-class SpecDataCHIRON(SpecData1d):
+class CHIRON(SpecData1d):
     """ Class for extracted 1-dimensional spectra from CHIRON on the SMARTS 1.5 m telescope.
     """
     def parse(self, forward_model):
@@ -243,7 +243,7 @@ class SpecDataCHIRON(SpecData1d):
             self.JD = Time(fits_data.header['DATE-OBS'].replace('T', ' '), scale='utc').jd + float(fits_data.header['EXPTIME']) / (2 * 3600 * 24)
         
         
-class SpecDataPARVI(SpecData1d):
+class PARVI(SpecData1d):
     
     """ Class for extracted 1-dimensional spectra from PARVI.
     """
@@ -276,7 +276,7 @@ class SpecDataPARVI(SpecData1d):
         self.JD = float(header['MJD']) # + 2450000
         
         
-class SpecDataMinervaAustralis(SpecData1d):
+class MinervaAustralis(SpecData1d):
         
     def parse(self, forward_model):
         
@@ -328,7 +328,7 @@ class SpecDataMinervaAustralis(SpecData1d):
         return bjds, bc_vels
     
     
-class SpecDataMinervaNorth(SpecData1d):
+class MinervaNorth(SpecData1d):
     
     """ Class for extracted 1-dimensional spectra from the MINERVA North array.
     """
@@ -340,16 +340,15 @@ class SpecDataMinervaNorth(SpecData1d):
         fits_data = fits.open(self.input_file)[0]
         fits_data.verify('fix')
         
-        # The minerva telescope number to grab (1-4)
-        self.tel_num = forward_model.tel_num
+        self.tel_num = int(self.input_file[-6])
         
-        # The flux
-        self.flux = fits_data.data[self.tel_num - 1, self.order_num - 1, :].astype(np.float64)
-        self.flux_unc = np.zeros_like(self.flux) + 1E-3
+        # The Thar wave grid, flux, flux unc, and mask
+        self.default_wave_grid, self.flux, self.flux_unc, self.badpix = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64), fits_data.data[self.order_num - 1, :, 2].astype(np.float64), fits_data.data[self.order_num - 1, :, 3].astype(np.float64)
         
         # Normalize to 1.
-        self.flux /= pcmath.weighted_median(self.flux, percentile=0.98)
-        self.badpix = np.ones_like(self.flux)
+        continuum = pcmath.weighted_median(self.flux, percentile=0.98)
+        self.flux /= continuum
+        self.flux_unc /= continuum
         
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.        
         try:
@@ -360,7 +359,7 @@ class SpecDataMinervaNorth(SpecData1d):
         
         
         
-class SpecDataNIRSPEC(SpecData1d):
+class NIRSPEC(SpecData1d):
     """ Class for extracted 1-dimensional spectra from iSHELL on the NASA IRTF.
     """
         
@@ -390,7 +389,7 @@ class SpecDataNIRSPEC(SpecData1d):
         # TEMP
         self.JD = 2455293.84426
         
-class SpecDataSimulated(SpecData1d):
+class Simulated(SpecData1d):
     
     """ Simulated Data for internal testing.
     """

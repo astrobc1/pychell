@@ -81,7 +81,7 @@ forward_model_blueprints = {
     
     'blaze': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'PolySplineBlaze',
+        'class_name': 'SplineBlaze',
         'n_splines': 10,
         'spline': [-0.1, 0.01, 0.1],
         'poly_2': [-5.5E-5, -2E-6, 5.5E-5],
@@ -109,7 +109,7 @@ forward_model_blueprints = {
     'wavelength_solution': {
         
         'name': 'wavesol_csplines',
-        'class_name': 'PolySplineWavelengthSolution',
+        'class_name': 'HybridWavelengthSolution',
         
         # The three pixels to span the detector
         'quad_pixel_set_points': [199, 1023, 1847],
@@ -125,6 +125,6 @@ forward_model_blueprints = {
         
         'n_splines': 0,
         'n_delay_splines': 0,
-        'spline': [-0.05, 0.0001, 0.05]
+        'spline': [-0.01, 0.0001, 0.01]
     }
 }

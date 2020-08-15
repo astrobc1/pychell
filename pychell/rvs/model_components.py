@@ -183,7 +183,8 @@ class TemplateMult(MultModelComponent):
 
 
 #### Blaze Models ####
-class PolySplineBlaze(EmpiricalMult):
+
+class PolyBlaze(EmpiricalMult):
     """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
     
     .. math:
@@ -206,31 +207,7 @@ class PolySplineBlaze(EmpiricalMult):
         
         # The polynomial order
         self.poly_order = blueprint['poly_order']
-        
-        # Whether or not the polynomial is enabled
-        if self.poly_order is not None:
-            self.poly_enabled = True
-            self.n_poly_pars = self.poly_order + 1
-        else:
-            self.poly_enabled = False
-            self.n_poly_pars = 0
-
-        # The number of spline knots is n_splines + 1
-        self.n_splines = blueprint['n_splines']
-
-        # The number of iterations to delay the wavelength splines
-        self.n_delay_splines = blueprint['n_delay_splines']
-
-        # Whether or not the splines are enabled
-        if self.n_splines == 0:
-            self.splines_enabled = False
-            self.n_spline_pars = 0
-        elif self.n_delay_splines > 0:
-            self.splines_enabled = False
-            self.n_spline_pars = self.n_splines + 1
-        else:
-            self.splines_enabled = True
-            self.n_spline_pars = self.n_splines + 1
+        self.n_poly_pars = self.poly_order + 1
 
         # The estimate of the blaze wavelength
         if 'blaze_wavelengths' in blueprint:
@@ -242,12 +219,6 @@ class PolySplineBlaze(EmpiricalMult):
         self.base_par_names = []
         for i in range(self.n_poly_pars):
             self.base_par_names.append('_poly_' + str(i)) # starts at zero
-
-        # Set the spline parameter names and knots
-        if self.n_splines > 0:
-            self.spline_wave_set_points = np.linspace(self.wave_bounds[0], self.wave_bounds[1], num=self.n_splines + 1)
-            for i in range(self.n_splines+1):
-                self.base_par_names.append('_spline_' + str(i+1))
                 
         self.par_names = [self.name + s for s in self.base_par_names]
 
@@ -260,74 +231,94 @@ class PolySplineBlaze(EmpiricalMult):
         # Blaze wavelength or average
         blaze_wavelength = self.blaze_wave_estimate if self.blaze_wave_estimate is not None else np.nanmean(wave_final)
         
-        # Starting blaze
-        blaze = np.zeros(wave_final.size)
-
         # The polynomial coeffs
-
-        if self.poly_enabled:
-            poly_pars = np.array([pars[self.par_names[i]].value for i in range(self.poly_order + 1)])
+        poly_pars = np.array([pars[self.par_names[i]].value for i in range(self.poly_order + 1)])
         
-            # Build polynomial
-            poly_blaze = np.polyval(poly_pars[::-1], wave_final - blaze_wavelength)
-
-            # Return if no splines
-            if not self.splines_enabled:
-                return poly_blaze
-            else:
-                blaze += poly_blaze
+        # Build polynomial
+        poly_blaze = np.polyval(poly_pars[::-1], wave_final - blaze_wavelength)
         
-        if self.splines_enabled:
-
-            # Get the spline parameters
-            spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars, self.n_poly_pars + self.n_spline_pars)], dtype=np.float64)
-
-            # Build
-            spline_blaze = scipy.interpolate.CubicSpline(self.spline_wave_set_points, spline_pars, extrapolate=False, bc_type='not-a-knot')(wave_final)
-            
-            # Return if no polynomial
-            if not self.poly_enabled:
-                return spline_blaze
-            else:
-                blaze += spline_blaze
-            
-        # Both were enabled
-        
-        return blaze
-        
-
-    # To enable/disable splines.
-    def update(self, forward_model, iter_index):
-        if iter_index == self.n_delay_splines - 1 and self.n_splines > 0:
-            self.splines_enabled = True
-            for ispline in range(self.n_splines + 1):
-                forward_model.initial_parameters[self.par_names[ispline + 3]].vary = True
+        return poly_blaze
 
     def init_parameters(self, forward_model):
-        
-        # Estimate the continuum if needed
-        wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
-        log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
-        continuum = np.exp(log_continuum)
-        good = np.where(np.isfinite(continuum))[0]
         
         # Poly parameters
         for i in range(self.n_poly_pars):
             pname = 'poly_' + str(i)
             forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint[pname][1], minv=self.blueprint[pname][0], maxv=self.blueprint[pname][2], vary=self.enabled))
 
+    def __repr__(self):
+        return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
+    
+    
+    
+class SplineBlaze(EmpiricalMult):
+    """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
+    
+    .. math:
+        B(\\lambda) = (\\sum_{k=0}^{N} a_{i} \\lambda^{k} ) sinc(b (\\lambda - \\lambda_{B}))^{2d}
+    
+
+    Attributes:
+        poly_order (int): The polynomial order.
+        n_splines (int): The number of wavelength splines.
+        n_delay_splines (int): The number of iterations to delay the splines.
+        splines_enabled (bool): Whether or not the splines are enabled.
+        blaze_wave_estimate (bool): The estimate of the blaze wavelegnth. If not provided, defaults to the average of the wavelength grid provided in the build method.
+        spline_set_points (np.ndarray): The location of the spline knots.
+    """
+
+    def __init__(self, forward_model, blueprint):
+        
+        # Super
+        super().__init__(forward_model, blueprint)
+
+        # The number of spline knots is n_splines + 1
+        self.n_splines = blueprint['n_splines']
+        if self.n_splines == 0:
+            self.enabled = False
+            self.n_spline_pars = 0
+        else:
+            self.n_spline_pars = self.n_splines + 1
+
+        # Set the spline parameter names and knots
+        self.spline_wave_set_points = np.linspace(self.wave_bounds[0], self.wave_bounds[1], num=self.n_splines + 1)
+        for i in range(self.n_splines+1):
+            self.base_par_names.append('_spline_' + str(i+1))
+                
+        self.par_names = [self.name + s for s in self.base_par_names]
+
+    def build(self, pars, wave_final):
+        
+        # If not enabled, return ones
+        if not self.enabled:
+            return self.build_fake(wave_final.size)
+
+        # Get the spline parameters
+        spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_spline_pars)], dtype=np.float64)
+
+        # Build
+        spline_blaze = scipy.interpolate.CubicSpline(self.spline_wave_set_points, spline_pars, extrapolate=False, bc_type='not-a-knot')(wave_final)
+        
+        return spline_blaze
+
+    def init_parameters(self, forward_model):
+        
+        # Estimate the continuum
+        wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+        log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
+        continuum = np.exp(log_continuum)
+        good = np.where(np.isfinite(continuum))[0]
+
         # Spline parameters
-        if self.n_spline_pars > 0:
-            for i in range(self.n_poly_pars, self.n_poly_pars + self.n_spline_pars):
-                ispline = i - self.n_poly_pars
-                if self.n_poly_pars > 0 ^ forward_model.remove_continuum:
-                    forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], vary=self.splines_enabled))
-                else:
-                    k = np.argmin(np.abs(wave[good] - self.spline_wave_set_points[ispline])) + good[0]
-                    forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=continuum[k], minv=continuum[k] + self.blueprint['spline'][0], maxv=continuum[k] + self.blueprint['spline'][2], vary=self.splines_enabled))
+        for i in range(self.n_spline_pars):
+            if forward_model.remove_continuum:
+                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1] + 1, minv=self.blueprint['spline'][0] + 1, maxv=self.blueprint['spline'][2] + 1, vary=self.enabled))
+            else:
+                k = np.argmin(np.abs(wave[good] - self.spline_wave_set_points[i])) + good[0]
+                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=continuum[k], minv=continuum[k] + self.blueprint['spline'][0], maxv=continuum[k] + self.blueprint['spline'][2], vary=self.enabled))
                 
     def __repr__(self):
-        return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ' , Splines Active: ' + str(self.splines_enabled) + ']'
+        return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
 
 
 class SincBlaze(EmpiricalMult):
@@ -851,7 +842,7 @@ class WavelengthSolution(SpectralComponent):
         return wave_bounds
 
 
-class PolySplineWavelengthSolution(WavelengthSolution):
+class PolyWavelengthSolution(WavelengthSolution):
     """ Class for a full wavelength solution defined through cubic splines.
 
     Attributes:
@@ -869,31 +860,7 @@ class PolySplineWavelengthSolution(WavelengthSolution):
         
         # The polynomial order
         self.poly_order = blueprint['poly_order']
-        
-        # Whether or not the polynomial is enabled
-        if self.poly_order is not None:
-            self.poly_enabled = True
-            self.n_poly_pars = self.poly_order + 1
-        else:
-            self.poly_enabled = False
-            self.n_poly_pars = 0
-
-        # The number of spline knots is n_splines + 1
-        self.n_splines = blueprint['n_splines']
-
-        # The number of iterations to delay the wavelength splines
-        self.n_delay_splines = blueprint['n_delay_splines']
-
-        # Whether or not the splines are enabled
-        if self.n_splines == 0:
-            self.splines_enabled = False
-            self.n_spline_pars = 0
-        elif self.n_delay_splines > 0:
-            self.splines_enabled = False
-            self.n_spline_pars = self.n_splines + 1
-        else:
-            self.splines_enabled = True
-            self.n_spline_pars = self.n_splines + 1
+        self.n_poly_pars = self.poly_order + 1
             
         # Parameter names
         self.base_par_names = []
@@ -909,18 +876,10 @@ class PolySplineWavelengthSolution(WavelengthSolution):
         wave_estimate = np.polyval(coeffs, np.arange(self.nx))
         
         # Polynomial lagrange points
-        if self.n_poly_pars > 0:
-            self.poly_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_poly_pars).astype(int)
-            self.poly_wave_zero_points = wave_estimate[self.poly_pixel_set_points]
-            for i in range(self.n_poly_pars):
-                self.base_par_names.append('_poly_lagrange_' + str(i + 1))
-
-        # Set the spline parameter names and knots
-        if self.n_spline_pars > 0:
-            self.spline_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_spline_pars).astype(int)
-            self.spline_wave_zero_points = np.zeros(self.n_spline_pars) if self.n_poly_pars > 0 else wave_estimate[self.spline_pixel_set_points]
-            for i in range(self.n_spline_pars):
-                self.base_par_names.append('_spline_' + str(i + 1))
+        self.poly_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_poly_pars).astype(int)
+        self.poly_wave_zero_points = wave_estimate[self.poly_pixel_set_points]
+        for i in range(self.n_poly_pars):
+            self.base_par_names.append('_poly_lagrange_' + str(i + 1))
                 
         self.par_names = [self.name + s for s in self.base_par_names]
 
@@ -928,46 +887,19 @@ class PolySplineWavelengthSolution(WavelengthSolution):
         
         # The detector grid
         pixel_grid = np.arange(self.nx)
+            
+        # Lagrange points
+        poly_lagrange_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars)])
         
-        # Starting wavelength grid
-        wave = np.zeros(self.nx)
-
-        # The polynomial
-        if self.n_poly_pars > 0 and self.poly_enabled:
-            
-            # Lagrange points
-            poly_lagrange_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars)])
-            
-            # Get the coefficients
-            V = np.vander(self.poly_pixel_set_points, N=self.n_poly_pars)
-            Vinv = np.linalg.inv(V)
-            coeffs = np.dot(Vinv, self.poly_wave_zero_points + poly_lagrange_pars)
+        # Get the coefficients
+        V = np.vander(self.poly_pixel_set_points, N=self.n_poly_pars)
+        Vinv = np.linalg.inv(V)
+        coeffs = np.dot(Vinv, self.poly_wave_zero_points + poly_lagrange_pars)
+    
+        # Build full polynomial
+        poly_wave = np.polyval(coeffs, pixel_grid)
         
-            # Build full polynomial
-            poly_wave = np.polyval(coeffs, pixel_grid)
-            
-            # Return if no splines
-            if not self.splines_enabled:
-                return poly_wave
-            else:
-                wave += poly_wave
-        
-        if self.splines_enabled:
-
-            # Get the spline parameters
-            spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars, self.n_poly_pars + self.n_spline_pars)], dtype=np.float64)
-            
-            # Build the spline model
-            spline_wave = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, spline_pars + self.spline_wave_zero_points, extrapolate=False, bc_type='not-a-knot')(pixel_grid)
-            
-            # Return if no polynomial
-            if not self.poly_enabled:
-                return spline_wave
-            else:
-                wave += spline_wave
-            
-        # Both were enabled
-        return wave
+        return poly_wave
 
     def init_parameters(self, forward_model):
             
@@ -975,15 +907,75 @@ class PolySplineWavelengthSolution(WavelengthSolution):
         for i in range(self.n_poly_pars):
             forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['poly_lagrange'][1], minv=self.blueprint['poly_lagrange'][0], maxv=self.blueprint['poly_lagrange'][2], vary=True))
 
+    def update(self, forward_model, iter_index):
+        pass
+    
+    
+class SplineWavelengthSolution(WavelengthSolution):
+    """ Class for a full wavelength solution defined through cubic splines.
+
+    Attributes:
+        poly_order (int): The polynomial order.
+        n_splines (int): The number of wavelength splines.
+        quad_pixel_set_points (np.ndarray): The three pixel points to use as set points in the quadratic.
+        quad_wave_zero_points (np.ndarray): Estimates of the corresonding zero points of quad_pixel_set_points.
+        spline_pixel_set_points (np.ndarray): The location of the spline knots in pixel space.
+    """
+
+    def __init__(self, forward_model, blueprint):
+
+        # Call super method
+        super().__init__(forward_model, blueprint)
+        
+        # The number of spline knots is n_splines + 1
+        self.n_splines = blueprint['n_splines']
+        self.n_spline_pars = self.n_splines + 1
+            
+        # Parameter names
+        self.base_par_names = []
+            
+        # Required for all instruments to get things going.
+        self.quad_pixel_set_points = np.array(blueprint['quad_pixel_set_points'])
+        self.quad_wave_zero_points = np.array([blueprint['quad_set_point_1'][self.order_num - 1],
+                                               blueprint['quad_set_point_2'][self.order_num - 1],
+                                               blueprint['quad_set_point_3'][self.order_num - 1]])
+        
+        # Estimate the wave grid
+        coeffs = pcmath.poly_coeffs(self.quad_pixel_set_points, self.quad_wave_zero_points)
+        wave_estimate = np.polyval(coeffs, np.arange(self.nx))
+
+        # Set the spline parameter names and knots
+        self.spline_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_spline_pars).astype(int)
+        self.spline_wave_zero_points = wave_estimate[self.spline_pixel_set_points]
+        for i in range(self.n_spline_pars):
+            self.base_par_names.append('_spline_' + str(i + 1))
+                
+        self.par_names = [self.name + s for s in self.base_par_names]
+
+    def build(self, pars):
+        
+        # The detector grid
+        pixel_grid = np.arange(self.nx)
+
+        # Get the spline parameters
+        spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars, self.n_poly_pars + self.n_spline_pars)], dtype=np.float64)
+        
+        # Build the spline model
+        spline_wave = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, spline_pars + self.spline_wave_zero_points, extrapolate=False, bc_type='not-a-knot')(pixel_grid)
+        
+        return spline_wave
+
+    def init_parameters(self, forward_model):
+
         # Spline parameters
-        for i in range(self.n_poly_pars, self.n_poly_pars + self.n_spline_pars):
+        for i in range(self.n_spline_pars):
             forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], vary=True))
 
     def update(self, forward_model, iter_index):
         pass
 
 
-class WaveModelHybrid(WavelengthSolution):
+class HybridWavelengthSolution(WavelengthSolution):
     """ Class for a wavelength solution which starts from some pre-derived solution (say a ThAr lamp), with the option of an additional spline offset if further constrained by a gas cell.
 
     Attributes:

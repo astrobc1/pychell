@@ -535,7 +535,7 @@ class ForwardModel:
         self.target_function = getattr(pctargetfuns, self.target_function)
         
         # Initialize the data
-        data_class_init = getattr(pcdata, 'SpecData' + forward_model_settings['spectrograph'])
+        data_class_init = getattr(pcdata, forward_model_settings['spectrograph'])
         self.data = data_class_init(input_file, self)
         self.n_data_pix = self.data.flux.size
         
