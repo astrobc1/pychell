@@ -380,7 +380,7 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
     if phase_to is None:
         plt.xlabel('BJD - BJD$_{0}$')
     else:
-        plt.xlabel('Phase [days, P = '  str(round(_phase_to, 3)) + ']')
+        plt.xlabel('Phase [days, P = ' +  str(round(_phase_to, 3)) + ']')
     plt.ylabel('RV [m/s]')
     
     if show:

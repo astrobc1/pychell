@@ -433,7 +433,7 @@ class GasCell(TemplateMult):
         
     def init_optimize(self, forward_model):
         wave, flux = forward_model.templates_dict['gas_cell'][:, 0], forward_model.templates_dict['gas_cell'][:, 1]
-        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=True)(forward_model.templates_dict['star'][:, 0])
+        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
         flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
         forward_model.templates_dict['gas_cell'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
 
