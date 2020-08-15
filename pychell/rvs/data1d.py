@@ -81,7 +81,7 @@ class SpecData1d:
             self.badpix[self.flux.size - self.crop_pix[1] - 1:] = 0
             
         # Mask any flux less than 5 percent
-        bad = np.where((self.flux < 0.05) | ~np.isfinite(self.flux))[0]
+        bad = np.where((self.flux < 0.05) | ~np.isfinite(self.flux) | (self.badpix == 0) | ~np.isfinite(self.badpix) | ~np.isfinite(self.flux_unc))[0]
         if bad.size > 0:
             self.flux[bad] = np.nan
             self.flux_unc[bad] = np.nan
