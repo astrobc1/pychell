@@ -76,6 +76,9 @@ class ForwardModels(list):
 
         # Initiate the data, models, and outputs
         self.init(forward_model_settings, model_blueprints)
+        
+        # Optimize anything else
+        self.init_optimize()
 
         # Remaining instance members
 
@@ -231,6 +234,10 @@ class ForwardModels(list):
         for ispec in range(self.n_spec):
             self[ispec].init_parameters()
 
+    def init_optimize(self):
+        for fwm in self:
+            fwm.init_optimize()
+    
     # Stores the forward model outputs in .npz files for all iterations
     # Stores the RVs in a single .npz
     def save_results(self):
@@ -635,6 +642,9 @@ class ForwardModel:
             self.models_dict[model].init_parameters(self)
         self.initial_parameters.sanity_lock()
 
+    def init_optimize(self):
+        for model in self.models_dict:
+            self.models_dict[model].init_optimize(self)
 
     # Save outputs after last iteration. This method can be implemented or not and super can be called or not.
     def save_results(self, output_path_opt, output_path_datamodels):
@@ -920,6 +930,7 @@ class iSHELLForwardModel(ForwardModel):
             stop()
 
         return wavelength_solution, model
+    
     
 class CHIRONForwardModel(ForwardModel):
     

@@ -10,7 +10,7 @@ from scipy import constants as cs  # cs.c = speed of light in m/s
 import numpy as np  # Math, Arrays
 import sys
 from scipy.special import legendre
-import scipy.interpolate  # Cubic interpolation, Akima interpolation
+import scipy.interpolate  # Cubic, Akima interpolation
 
 # Graphics
 import matplotlib.pyplot as plt
@@ -105,6 +105,9 @@ class SpectralComponent:
         
     def estimate(self, forward_model):
         return self.build(forward_model.initial_parameters)
+    
+    def init_optimize(self, forward_model):
+        pass
     
 
 
@@ -248,7 +251,7 @@ class PolyBlaze(EmpiricalMult):
 
     def __repr__(self):
         return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
-    
+
     
     
 class SplineBlaze(EmpiricalMult):
@@ -306,6 +309,7 @@ class SplineBlaze(EmpiricalMult):
         # Estimate the continuum
         wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
         log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
+            
         continuum = np.exp(log_continuum)
         good = np.where(np.isfinite(continuum))[0]
 
@@ -420,14 +424,13 @@ class GasCell(TemplateMult):
             wave = wave + pars[self.par_names[0]].value
             flux = flux ** pars[self.par_names[1]].value
             return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
-            #return scipy.interpolate.Akima1DInterpolator(wave, flux)(wave_final)
         
         else:
             return self.build_fake(wave_final.size)
 
     def load_template(self, forward_model):
         print('Loading in Gas Cell Template', flush=True)
-        pad = 5
+        pad = 0.5
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
         good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
@@ -440,7 +443,12 @@ class GasCell(TemplateMult):
         
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['shift'][1], minv=self.blueprint['shift'][0], maxv=self.blueprint['shift'][2], mcmcscale=0.1, vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['depth'][1], minv=self.blueprint['depth'][0], maxv=self.blueprint['depth'][2], mcmcscale=0.001, vary=True))
-
+        
+    def init_optimize(self, forward_model):
+        wave, flux = forward_model.templates_dict['gas_cell'][:, 0], forward_model.templates_dict['gas_cell'][:, 1]
+        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=True)(forward_model.templates_dict['star'][:, 0])
+        flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
+        forward_model.templates_dict['gas_cell'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
 
 class GasCellCHIRON(TemplateMult):
     """ A gas cell model for CHIRON.
@@ -460,14 +468,13 @@ class GasCellCHIRON(TemplateMult):
         if self.enabled:
             wave = wave + pars[self.par_names[0]].value
             flux = flux ** pars[self.par_names[1]].value
-            #return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
-            return scipy.interpolate.Akima1DInterpolator(wave, flux)(wave_final)
+            return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
         else:
             return self.build_fake(wave_final.size)
 
     def load_template(self, forward_model):
         print('Loading in Gas Cell Template ...', flush=True)
-        pad = 5
+        pad = 0.5
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
         good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
@@ -482,6 +489,12 @@ class GasCellCHIRON(TemplateMult):
         depth = self.blueprint['depth']
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=shift, minv=shift - self.blueprint['shift_range'][0], maxv=shift + self.blueprint['shift_range'][1], mcmcscale=0.1, vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=depth[1], minv=depth[0], maxv=depth[2], mcmcscale=0.001, vary=self.enabled))
+        
+    def init_optimize(self, forward_model):
+        wave, flux = forward_model.templates_dict['gas_cell'][:, 0], forward_model.templates_dict['gas_cell'][:, 1]
+        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=True)(forward_model.templates_dict['star'][:, 0])
+        flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
+        forward_model.templates_dict['gas_cell'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
 
 
 #### Star ####
@@ -516,7 +529,6 @@ class Star(TemplateMult):
         if self.enabled:
             wave_shifted = wave * np.exp(pars[self.par_names[0]].value / cs.c)
             return np.interp(wave_final, wave_shifted, flux, left=np.nan, right=np.nan)
-            #return scipy.interpolate.Akima1DInterpolator(wave_shifted, flux)(wave_final)
         else:
             return self.build_fake(wave_final.size)
 
@@ -535,13 +547,17 @@ class Star(TemplateMult):
             template_raw = np.loadtxt(self.input_file, delimiter=',')
             wave, flux = template_raw[:, 0], template_raw[:, 1]
             flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False, bc_type='not-a-knot')(wave_even)
-            #flux_interp = scipy.interpolate.Akima1DInterpolator(wave, flux)(wave_even)
             flux_interp /= pcmath.weighted_median(flux_interp, percentile=0.999)
             template = np.array([wave_even, flux_interp]).T
         else:
             template = np.array([wave_even, np.ones(wave_even.size)]).T
 
         return template
+    
+    def init_optimize(self, forward_model):
+        wave, flux = forward_model.templates_dict['star'][:, 0], forward_model.templates_dict['star'][:, 1]
+        flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux, pars=forward_model.initial_parameters)
+        forward_model.templates_dict['star'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
 
 
 #### Tellurics ####
@@ -594,12 +610,9 @@ class TelluricsTAPAS(TemplateMult):
         flux = flux ** depth
         wave_shifted = wave * np.exp(shift / cs.c)
         return np.interp(wave_final, wave_shifted, flux, left=flux[0], right=flux[-1])
-        #return scipy.interpolate.Akima1DInterpolator(wave, flux)(wave_final)
-
 
     def init_parameters(self, forward_model):
         
-
         # Components
         for itell, tell in enumerate(self.species):
             max_range = np.nanmax(forward_model.templates_dict['tellurics'][tell][:, 1]) - np.nanmin(forward_model.templates_dict['tellurics'][tell][:, 1])
@@ -622,7 +635,7 @@ class TelluricsTAPAS(TemplateMult):
 
     def load_template(self, forward_model):
         templates = {}
-        pad = 5
+        pad = 0.5
         for i in range(self.n_species):
             print('Loading in Telluric Template For ' + self.species[i], flush=True)
             template = np.load(self.species_input_files[self.species[i]])
@@ -642,6 +655,14 @@ class TelluricsTAPAS(TemplateMult):
                 ss += tell + ': Deactive, '
         ss = ss[0:-2]
         return ss + ']'
+    
+    def init_optimize(self, forward_model):
+        ts = forward_model.templates_dict['tellurics']
+        for t in ts:
+            wave, flux = ts[t][:, 0], ts[t][:, 1]
+            flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=True)(forward_model.templates_dict['star'][:, 0])
+            flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
+            ts[t][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.999)
 
 
 #### LSF ####
@@ -819,9 +840,8 @@ class WavelengthSolution(SpectralComponent):
     def estimate_bounds(forward_model, blueprint):
 
         if hasattr(forward_model.data, 'default_wave_grid') and forward_model.data.default_wave_grid is not None:
-            wave_pad = 1  # Angstroms
             wave_estimate = np.copy(forward_model.data.default_wave_grid)
-            wave_bounds = [wave_estimate[forward_model.pix_bounds[0]] - wave_pad, wave_estimate[forward_model.pix_bounds[1]] + wave_pad]
+            wave_bounds = [wave_estimate[forward_model.pix_bounds[0]], wave_estimate[forward_model.pix_bounds[1]]]
         else:
             # Make an array for the base wavelengths
             quad_wave_set_points = np.array([blueprint['quad_set_point_1'][forward_model.order_num - 1],
@@ -836,8 +856,7 @@ class WavelengthSolution(SpectralComponent):
 
             # Wavelength end points are larger to account for changes in the wavelength solution
             # The stellar template is further padded to account for barycenter sampling
-            wave_pad = 1  # Angstroms
-            wave_bounds = [wave_estimate[forward_model.pix_bounds[0]] - wave_pad, wave_estimate[forward_model.pix_bounds[1]] + wave_pad]
+            wave_bounds = [wave_estimate[forward_model.pix_bounds[0]], wave_estimate[forward_model.pix_bounds[1]]]
 
         return wave_bounds
 
