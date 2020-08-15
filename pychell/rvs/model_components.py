@@ -197,8 +197,6 @@ class PolyBlaze(EmpiricalMult):
     Attributes:
         poly_order (int): The polynomial order.
         n_splines (int): The number of wavelength splines.
-        n_delay_splines (int): The number of iterations to delay the splines.
-        splines_enabled (bool): Whether or not the splines are enabled.
         blaze_wave_estimate (bool): The estimate of the blaze wavelegnth. If not provided, defaults to the average of the wavelength grid provided in the build method.
         spline_set_points (np.ndarray): The location of the spline knots.
     """
@@ -264,8 +262,6 @@ class SplineBlaze(EmpiricalMult):
     Attributes:
         poly_order (int): The polynomial order.
         n_splines (int): The number of wavelength splines.
-        n_delay_splines (int): The number of iterations to delay the splines.
-        splines_enabled (bool): Whether or not the splines are enabled.
         blaze_wave_estimate (bool): The estimate of the blaze wavelegnth. If not provided, defaults to the average of the wavelength grid provided in the build method.
         spline_set_points (np.ndarray): The location of the spline knots.
     """
@@ -385,7 +381,6 @@ class SincBlaze(EmpiricalMult):
 
     def init_parameters(self, forward_model):
         
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['base_amp'][1], minv=self.blueprint['base_amp'][0], maxv=self.blueprint['base_amp'][2], mcmcscale=0.1, vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base_b'][1], minv=self.blueprint['base_b'][0], maxv=self.blueprint['base_b'][2], mcmcscale=0.1, vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base_c'][1], minv=self.blueprint['base_c'][0], maxv=self.blueprint['base_c'][2], mcmcscale=0.1, vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[3], value=self.blueprint['base_d'][1], minv=self.blueprint['base_d'][0], maxv=self.blueprint['base_d'][2], mcmcscale=0.1, vary=True))
@@ -393,14 +388,6 @@ class SincBlaze(EmpiricalMult):
             for i in range(self.n_splines + 1):
                 forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(
                     name=self.par_names[i+4], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
-
-    # To enable/disable splines.
-    def update(self, forward_model, iter_index):
-        super().update(forward_model, iter_index)
-        if iter_index == self.n_delay_splines - 1 and self.n_splines > 0:
-            self.splines_enabled = True
-            for ispline in range(self.n_splines + 1):
-                forward_model.initial_parameters[self.par_names[ispline + 3]].vary = True
 
 
 #### Gas Cell ####
@@ -999,7 +986,6 @@ class HybridWavelengthSolution(WavelengthSolution):
 
     Attributes:
         n_splines (int): The number of wavelength splines.
-        n_delay_splines (int): The number of iterations to delay the splines.
         splines_enabled (bool): Whether or not the splines are enabled.
         spline_pixel_set_points (np.ndarray): The location of the spline knots.
     """
@@ -1015,10 +1001,7 @@ class HybridWavelengthSolution(WavelengthSolution):
         self.n_splines = blueprint['n_splines']
 
         # The number of iterations to delay the wavelength splines
-        self.n_delay_splines = blueprint['n_delay_splines']
         if self.n_splines == 0:
-            self.splines_enabled = False
-        elif self.n_delay_splines > 0:
             self.splines_enabled = False
         else:
             self.splines_enabled = True
@@ -1045,13 +1028,6 @@ class HybridWavelengthSolution(WavelengthSolution):
 
     def build_fake(self):
         pass
-
-    # To enable/disable splines.
-    def update(self, forward_model, iter_index):
-        if iter_index == self.n_delay_splines - 1 and self.n_splines > 0:
-            self.splines_enabled = True
-            for ispline in range(self.n_splines + 1):
-                forward_model.initial_parameters[self.par_names[ispline + 3]].vary = True
 
     def init_parameters(self, forward_model):
         
