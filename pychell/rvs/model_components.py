@@ -964,7 +964,7 @@ class SplineWavelengthSolution(WavelengthSolution):
         pixel_grid = np.arange(self.nx)
 
         # Get the spline parameters
-        spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars, self.n_poly_pars + self.n_spline_pars)], dtype=np.float64)
+        spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_spline_pars)], dtype=np.float64)
         
         # Build the spline model
         spline_wave = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, spline_pars + self.spline_wave_zero_points, extrapolate=False, bc_type='not-a-knot')(pixel_grid)
