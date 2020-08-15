@@ -83,7 +83,7 @@ forward_model_blueprints = {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
         'class_name': 'SplineBlaze',
         'n_splines': 10,
-        'spline': [-0.1, 0.001, 0.1],
+        'spline': [-0.1, 0.001, 0.15],
         'poly_2': [-5.5E-5, -2E-6, 5.5E-5],
         'poly_1': [-0.001, 1E-5, 0.001],
         'poly_0': [0.96, 1.0, 1.08],
