@@ -430,7 +430,7 @@ class GasCell(TemplateMult):
 
     def load_template(self, forward_model):
         print('Loading in Gas Cell Template', flush=True)
-        pad = 0.5
+        pad = 1
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
         good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
@@ -474,7 +474,7 @@ class GasCellCHIRON(TemplateMult):
 
     def load_template(self, forward_model):
         print('Loading in Gas Cell Template ...', flush=True)
-        pad = 0.5
+        pad = 1
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
         good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
@@ -635,7 +635,7 @@ class TelluricsTAPAS(TemplateMult):
 
     def load_template(self, forward_model):
         templates = {}
-        pad = 0.5
+        pad = 1
         for i in range(self.n_species):
             print('Loading in Telluric Template For ' + self.species[i], flush=True)
             template = np.load(self.species_input_files[self.species[i]])
