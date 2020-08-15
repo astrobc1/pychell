@@ -354,6 +354,7 @@ class MinervaNorth(SpecData1d):
         self.default_wave_grid, self.flux, self.flux_unc, self.badpix = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64), fits_data.data[self.order_num - 1, :, 2].astype(np.float64), fits_data.data[self.order_num - 1, :, 3].astype(np.float64)
 
         self.flux_unc = np.zeros(self.flux.size) + 1E-3
+        self.badpix = np.ones(self.flux.size)
         
         # Normalize to 1.
         continuum = pcmath.weighted_median(self.flux, percentile=0.98)

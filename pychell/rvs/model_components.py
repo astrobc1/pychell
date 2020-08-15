@@ -305,7 +305,7 @@ class SplineBlaze(EmpiricalMult):
         # Estimate the continuum
         wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
         log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
-            
+
         continuum = np.exp(log_continuum)
         good = np.where(np.isfinite(continuum))[0]
 
