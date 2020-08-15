@@ -10,7 +10,7 @@ default_templates_path = pychell.rvs.__file__[0:-11] + 'default_templates' + os.
 #############################
 
 spectrograph = 'NIRSPEC'
-observatory = 'Keck'
+observatory = {"name" : 'Keck'}
 
 ####################################################################
 ####### Reduction / Extraction #####################################
@@ -81,7 +81,7 @@ forward_model_blueprints = {
     # The star
     'star': {
         'name': 'star',
-        'class_name': 'StarModel',
+        'class_name': 'Star',
         'input_file': None,
         'vel': [-1000 * 300, 10, 1000 * 300]
     },
@@ -89,7 +89,7 @@ forward_model_blueprints = {
     # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'kband_tellurics',
-        'class_name': 'TelluricModelTAPAS',
+        'class_name': 'TelluricsTAPAS',
         'vel': [0, 0, 0],
         'species': {
             'water': {
@@ -114,22 +114,21 @@ forward_model_blueprints = {
     # The default blaze is a quadratic + splines.
     'blaze': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'ResidualBlazeModel',
+        'class_name': 'PolyBlaze',
         'n_splines': 14,
-        'base_quad': [-5.5E-5, -2E-6, 5.5E-5],
-        'base_lin': [-0.001, 1E-5, 0.001],
-        'base_zero': [0.96, 1.0, 1.08],
-        'spline': [-0.135, 0.01, 0.135],
-        'n_delay_splines': 0,
+        'poly_2': [-5.5E-5, -2E-6, 5.5E-5],
+        'poly_1': [-0.001, 1E-5, 0.001],
+        'poly_0': [0.96, 1.0, 1.08],
+        'spline': [-0.135, 0.01, 0.135]
         
-        # Blaze is centered on the blaze wavelength. Crude estimates
+        # Blaze is centered on the blaze wavelength. under testing
         'blaze_wavelengths': [20500.0, 0, 0, 0]
     },
     
     # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
-        'class_name': 'LSFHermiteModel',
+        'class_name': 'HermiteLSF',
         'hermdeg': 6,
         'n_delay': 0,
         'compress': 64,
@@ -141,7 +140,7 @@ forward_model_blueprints = {
     'wavelength_solution': {
         
         'name': 'lagrange_wavesol_splines',
-        'class_name': 'WaveSolModelQuadratic',
+        'class_name': 'PolyWavelengthSolution',
         
         # The three pixels to span the detector corresponding to the above wavelengths
         # They are chosen as such because we typically use pixels 200-1848 only.

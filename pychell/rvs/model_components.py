@@ -442,7 +442,7 @@ class GasCell(TemplateMult):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['depth'][1], minv=self.blueprint['depth'][0], maxv=self.blueprint['depth'][2], mcmcscale=0.001, vary=True))
 
 
-class GasCellModelCHIRON(TemplateMult):
+class GasCellCHIRON(TemplateMult):
     """ A gas cell model for CHIRON.
     """
 

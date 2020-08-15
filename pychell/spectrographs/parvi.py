@@ -3,7 +3,7 @@ import numpy as np
 import pychell.rvs
 
 spectrograph = "PARVI"
-observatory = "Palomar"
+observatory = {"name" :"Palomar"}
 
 # These settings are currently tuned for PARVI simulations.
 
@@ -37,7 +37,7 @@ forward_model_blueprints = {
     # The star
     'star': {
         'name': 'star',
-        'class_name': 'StarModel',
+        'class_name': 'Star',
         'input_file': None,
         'vel': [-3E5, 100, 3E5]
     },
@@ -45,7 +45,7 @@ forward_model_blueprints = {
     # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'nir_tellurics',
-        'class_name': 'TelluricModelTAPAS',
+        'class_name': 'TelluricsTAPAS',
         'vel': [0, 0, 0],
         'species': {
             'water': {
@@ -77,20 +77,18 @@ forward_model_blueprints = {
     
     # The default blaze is a quadratic + splines.
     'blaze': {
-        'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'ResidualBlazeModel',
+        'name': 'blaze', # The blaze model after a division from a flat field
+        'class_name': 'PolyBlaze',
         'n_splines': 0,
-        'base_quad': [0, 0, 0],
-        'base_lin': [0, 0, 0],
-        'base_zero': [1, 1, 1],
-        'spline': [-0.025, 0.001, 0.025],
-        'n_delay_splines': 0
+        'poly_2': [0, 0, 0],
+        'poly_1': [0, 0, 0],
+        'poly_0': [1, 1, 1]
     },
     
     # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
-        'class_name': 'LSFHermiteModel',
+        'class_name': 'HermiteLSF',
         'hermdeg': 0,
         'compress': 64,
         'n_delay': 0,
@@ -101,7 +99,7 @@ forward_model_blueprints = {
     # Frequency comb (no splines since no gas cell)
     'wavelength_solution': {
         'name': 'laser_comb_wls',
-        'class_name': 'WaveModelHybrid',
+        'class_name': 'HybridWavelengthSolution',
         'n_splines': 0,
         'n_delay_splines': 0,
         'spline': [-0.15, 0.01, 0.15]

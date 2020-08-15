@@ -11,7 +11,7 @@ import pychell.rvs
 #############################
 
 spectrograph = 'Simulated'
-observatory = 'IRTF'
+observatory = {"name": 'IRTF'}
 
 ####################################################################
 ####### Reduction / Extraction #####################################
@@ -48,7 +48,7 @@ forward_model_blueprints = {
     # The star
     'star': {
         'name': 'star',
-        'class_name': 'StarModel',
+        'class_name': 'Star',
         'input_file': None,
         'vel': [-1000 * 300, 10, 1000 * 300]
     },
@@ -56,7 +56,7 @@ forward_model_blueprints = {
     # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'sim_tellurics',
-        'class_name': 'TelluricModelTAPAS',
+        'class_name': 'TelluricsTAPAS',
         'vel': [-500, -100, 500],
         'species': {
             'water': {
@@ -88,20 +88,19 @@ forward_model_blueprints = {
     
     'blaze': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'ResidualBlazeModel',
+        'class_name': 'PolyBlaze',
         'n_splines': 0,
-        'base_quad': [0, 0, 0],
-        'base_lin': [-0.0001, 1E-5, 0.0001],
-        'base_zero': [0.99, 1.0, 1.01],
+        'poly_2': [0, 0, 0],
+        'poly_1': [-0.0001, 1E-5, 0.0001],
+        'poly_0': [0.99, 1.0, 1.01],
         'spline': [-0.135, 0.01, 0.135],
-        'n_delay': 0,
-        'n_delay_splines': 0
+        'n_delay': 0
     },
     
     # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
-        'class_name': 'LSFHermiteModel',
+        'class_name': 'HermiteLSF',
         'hermdeg': 6,
         'n_delay': 0,
         'compress': 64,
@@ -113,7 +112,7 @@ forward_model_blueprints = {
     'wavelength_solution': {
         
         'name': 'wavelength_sol_known',
-        'class_name': 'WaveModelHybrid',
+        'class_name': 'HybridWavelengthSolution',
         
         'n_splines': 0,
         'n_delay_splines': 0,

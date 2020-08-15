@@ -10,7 +10,7 @@ default_templates_path = pychell.rvs.__file__[0:-11] + 'default_templates' + os.
 #############################
 
 spectrograph = 'CHIRON'
-observatory = 'CTIO'
+observatory = {"name": 'CTIO'}
 
 
 ####################################################################
