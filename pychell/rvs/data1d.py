@@ -86,6 +86,14 @@ class SpecData1d:
             self.flux[bad] = np.nan
             self.flux_unc[bad] = np.nan
             self.badpix[bad] = 0
+            
+        # Further flag any clearly deviant pixels
+        flux_smooth = pcmath.median_filter1d(self.flux, width=7)
+        bad = np.where(np.abs(flux_smooth - self.flux) > 0.3)[0]
+        if bad.size > 0:
+            self.flux[bad] = np.nan
+            self.flux_unc[bad] = np.nan
+            self.badpix[bad] = 0
         
     # Calculate bc info for only this observation
     def calculate_bc_info(self, obs_name, star_name):
@@ -344,6 +352,8 @@ class MinervaNorth(SpecData1d):
         
         # The Thar wave grid, flux, flux unc, and mask
         self.default_wave_grid, self.flux, self.flux_unc, self.badpix = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64), fits_data.data[self.order_num - 1, :, 2].astype(np.float64), fits_data.data[self.order_num - 1, :, 3].astype(np.float64)
+
+        self.flux_unc = np.zeros(self.flux.size) + 1E-3
         
         # Normalize to 1.
         continuum = pcmath.weighted_median(self.flux, percentile=0.98)
