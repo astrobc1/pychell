@@ -120,7 +120,7 @@ class ForwardModels(list):
         weights = 1 / rms**2
         
         # The NM RVs
-        rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvs, weights, self.n_obs_nights, flag_outliers=False)
+        rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvs, weights, self.n_obs_nights, flag_outliers=True)
         self.rvs_dict['rvs'][:, iter_index] = rvs
         self.rvs_dict['rvs_nightly'][:, iter_index] = rvs_nightly
         self.rvs_dict['unc_nightly'][:, iter_index] = unc_nightly
@@ -128,7 +128,7 @@ class ForwardModels(list):
         # The xcorr RVs
         if self.do_xcorr:
             rvsx = self.rvs_dict['rvs_xcorr'][:, iter_index]
-            rvsx_nightly, uncx_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvsx, weights, self.n_obs_nights, flag_outliers=False)
+            rvsx_nightly, uncx_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvsx, weights, self.n_obs_nights, flag_outliers=True)
             self.rvs_dict['rvs_xcorr_nightly'][:, iter_index] = rvsx_nightly
             self.rvs_dict['unc_xcorr_nightly'][:, iter_index] = uncx_nightly
         
@@ -1110,6 +1110,39 @@ class MinervaNorthForwardModel(ForwardModel):
             stop()
         
         return wavelength_solution, model_lr
+    
+    # Returns the high res model on the fiducial grid with no stellar template and the low res wavelength solution
+    def build_hr_nostar(self, pars, iter_index):
+        
+        # The final high res wave grid for the model
+        # Eventually linearly interpolated to the data grid (wavelength solution)
+        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        
+        model = np.ones_like(final_hr_wave_grid)
+        
+        # Gas Cell
+        if self.models_dict['gas_cell'].enabled:
+            model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
+        
+        # All tellurics
+        if self.models_dict['tellurics'].enabled:
+            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+        
+        # Blaze Model
+        if self.models_dict['blaze'].enabled:
+            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        
+        # Residual lab flux
+        if 'residual_lab' in self.templates_dict:
+            model += self.templates_dict['residual_lab'][:, 1]
+
+        # Generate the wavelength solution of the data
+        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
+        
+        if self.debug:
+            stop()
+
+        return wavelength_solution, model
     
     
 class NIRSPECForwardModel(ForwardModel):

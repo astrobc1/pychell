@@ -657,7 +657,7 @@ def compute_bisector_span(cc_vels, ccf, n_bs=1000):
     return line_bisectors, bisector_span
 
 
-def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights, flag_outliers=False, thresh=5):
+def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights, flag_outliers=False, thresh=4):
     """Computes nightly RVs for a single order.
 
     Args:
