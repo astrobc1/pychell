@@ -652,7 +652,6 @@ class TelluricsTAPAS(TemplateMult):
             wave, flux = ts[t][:, 0], ts[t][:, 1]
             flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
             flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
-            import matplotlib; matplotlib.use("MacOSX")
             ts[t][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.999)
 
 
