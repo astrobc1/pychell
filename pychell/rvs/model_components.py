@@ -479,7 +479,7 @@ class GasCellCHIRON(TemplateMult):
         
     def init_optimize(self, forward_model):
         wave, flux = forward_model.templates_dict['gas_cell'][:, 0], forward_model.templates_dict['gas_cell'][:, 1]
-        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=True)(forward_model.templates_dict['star'][:, 0])
+        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
         flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
         forward_model.templates_dict['gas_cell'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
 
@@ -618,7 +618,7 @@ class TelluricsTAPAS(TemplateMult):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1, vary=v))
         
         if not self.enabled:
-            self.n_delay = 1E20
+            self.n_delay = int(1E3)
 
     def update(self, forward_model, iter_index):
         super().update(forward_model, iter_index)
@@ -650,8 +650,9 @@ class TelluricsTAPAS(TemplateMult):
         ts = forward_model.templates_dict['tellurics']
         for t in ts:
             wave, flux = ts[t][:, 0], ts[t][:, 1]
-            flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=True)(forward_model.templates_dict['star'][:, 0])
+            flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
             flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
+            import matplotlib; matplotlib.use("MacOSX")
             ts[t][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.999)
 
 
@@ -674,13 +675,13 @@ class LSF(SpectralComponent):
         # Call super method
         super().__init__(forward_model, blueprint)
 
+        # The resolution of the model grid (dl = grid spacing)
+        self.dl = forward_model.dl
+        
         if 'compress' in blueprint:
             self.compress = blueprint['compress']
         else:
             self.compress = 64
-
-        # The resolution of the model grid (dl = grid spacing)
-        self.dl = forward_model.dl
 
         # The number of model pixels
         self.nx_model = forward_model.n_model_pix
@@ -725,6 +726,22 @@ class LSF(SpectralComponent):
     
     def update(self, forward_model, iter_index):
         super().update(forward_model, iter_index)
+        
+    def init_optimize(self, forward_model):
+        lsf_estim = self.build(pars=forward_model.initial_parameters)
+        good = np.where(lsf_estim > 1E-10)[0]
+        if good.size < lsf_estim.size - 2:
+            return
+        else:
+            f, l = np.min(good), np.max(good)
+            nx = l - f + 1
+            if nx % 2 == 0:
+                nx += 1
+                
+            self.nx_lsf = nx
+            self.compress = int(np.round(self.nx_model * self.nx_lsf))
+            self.n_pad_model = int(np.floor(self.nx_lsf / 2))
+            self.x = np.arange(-np.floor(self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1, 1) * self.dl
 
 
 class HermiteLSF(LSF):
@@ -919,7 +936,7 @@ class PolyWavelengthSolution(WavelengthSolution):
     def update(self, forward_model, iter_index):
         pass
     
-    
+
 class SplineWavelengthSolution(WavelengthSolution):
     """ Class for a full wavelength solution defined through cubic splines.
 
@@ -939,7 +956,7 @@ class SplineWavelengthSolution(WavelengthSolution):
         # The number of spline knots is n_splines + 1
         self.n_splines = blueprint['n_splines']
         self.n_spline_pars = self.n_splines + 1
-            
+
         # Parameter names
         self.base_par_names = []
             
@@ -1026,7 +1043,7 @@ class HybridWavelengthSolution(WavelengthSolution):
         else:
             pixel_grid = np.arange(self.nx)
             splines = np.array([pars[self.par_names[i]].value for i in range(self.n_splines + 1)], dtype=np.float64)
-            wave_spline = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, splines, bc_type='not-a-knot', extrapolate=True)(pixel_grid)
+            wave_spline = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, splines, bc_type='not-a-knot', extrapolate=False)(pixel_grid)
             return self.default_wave_grid + wave_spline
 
     def build_fake(self):

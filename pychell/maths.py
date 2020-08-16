@@ -260,17 +260,17 @@ def width_from_R(R, ml):
 def R_from_width(width, ml):
     return ml / (2 * np.sqrt(2 * np.log(2)) * width)
 
-# Need to jit
+# Works but is slow as all crap.
+@jit
 def _convolve(x, k):
     nx = x.size
     nk = k.size
     n_pad = int(nk / 2)
-    nx = x.size
-    xp = np.zeros(nx + 2 * n_pad, dtype=float)
+    xp = np.zeros(int(nx + 2 * n_pad), dtype=float)
     xp[n_pad:-n_pad] = x
     xp[0:n_pad] = x[-1]
     xp[-n_pad:] = x[0]
-    xc = np.zeros(nx)
+    xc = np.zeros(nx, dtype=float)
     kf = k[::-1]
     for i in range(nx):
         s = 0.0
@@ -278,6 +278,7 @@ def _convolve(x, k):
             s += kf[j] * xp[i + j]
         xc[i] = s
     return xc
+    
 
 
 # Returns the hermite polynomial of degree deg over the variable x
