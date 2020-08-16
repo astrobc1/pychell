@@ -120,9 +120,6 @@ def weighted_brute_force(forward_model, iter_index):
         
         # Construct the RMS
         rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
-        
-    #if forward_model.spec_num in [18, 19, 20]:
-        #stop()
 
     # Extract the best rv
     xcorr_star_vel = vels[np.nanargmin(rmss)]
@@ -182,25 +179,6 @@ def crude_brute_force(forward_model, iter_index=None):
     xcorr_star_vel = vels[np.nanargmin(rmss)]
     
     return xcorr_star_vel
-
-def generate_rv_contents(templates_dict, snr=100, blaze=True, ron=0, R=80000):
-    """Wrapper to compute the rv content for several templates
-
-    Args:
-        templates_dict (dict): The dictionary of templates. Each entry is  2-column array.
-        snr (int, optional): The peak snr per 1d-pixel. Defaults to 100.
-        blaze (bool, optional): Whether or not to modulate by a pseudo blaze function. The pseudo blaze is a polynomial where the end points are at 50 percent in flux. Defaults to True.
-        ron (int, optional): The read out noise of the detector. Defaults to 0.
-        R (int, optional): The resolution to convolve the templates. Defaults to 80000.
-    Returns:
-        dict: A dictionary of RV contents with keys corresponding to the templates_dict dictionary. 
-    """
-    
-    rv_contents = {}
-    for t in templates_dict:
-        rv_contents[t] = compute_rv_content(templates_dict[t][:, 0], templates_dict[t][:, 1], snr=snr, blaze=blaze, ron=ron, R=R)
-        
-    return rv_contents
 
 def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     """Combines RVs across orders.
@@ -380,7 +358,7 @@ def combine_orders_fast(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     w *= unc_nightly
     
     # Parameters are spectra and orders
-    init_pars = np.zeros(n_nights + n_ord, dtype=float, fill_value=np.nan)
+    init_pars = np.full(n_nights + n_ord, dtype=float, fill_value=np.nan)
     vlb = np.full(n_nights + n_ord, dtype=float, fill_value=np.nan)
     vub = np.full(n_nights + n_ord, dtype=float, fill_value=np.nan)
     vp = np.ones(n_nights + n_ord, dtype=int)
@@ -532,7 +510,7 @@ def rv_solver_nightsonly(pars, rvs, weights, n_obs_nights):
     return rms, 1
  
 # Computes the RV content per pixel.
-def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=None):
+def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=None, sampling=None, wave_to_sample=None):
     """Computes the radial-velocity information content per pixel and for a whole swath.
 
     Args:
@@ -543,39 +521,56 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
         ron (int, optional): The read out noise of the detector. Defaults to 0.
         R (int, optional): The resolution to convolve the templates. Defaults to 80000.
         width (int, optional): The LSF width to convolve the templates if R is not set. R=80000
+        sampling (float, optional): The desired sampling to compute the rv content on. Ideally, the input grid is sampled much higher than the detector grid for proper convolution, and sampling corresponds approximately to the detector grid.
     Returns:
         np.ndarray: The "rv information content" at each pixel, or precisely the uncertainty of measuring the rv of an individual "pixel".
         np.ndarray: The rv content for the whole swath ("uncertainty").
     """
     
-    nx = wave.size
+    nx_in = wave.size
     fluxmod = np.copy(flux)
+    wavemod = np.copy(wave)
     
     # Convert to PE
     fluxmod *= snr**2
     
     if R is not None:
-        fluxmod = pcmath.convolve_flux(wave, fluxmod, R=R)
+        fluxmod = pcmath.convolve_flux(wavemod, fluxmod, R=R)
+        
     if blaze:
         good = np.where(np.isfinite(wave) & np.isfinite(fluxmod))[0]
         ng = good.size
-        x, y = np.array([wave[good[0]], wave[good[int(ng/2)]], wave[good[-1]]]), np.array([0.5, 1, 0.5])
+        x, y = np.array([wavemod[good[0]], wavemod[good[int(ng/2)]], wave[good[-1]]]), np.array([0.5, 1, 0.5])
         pfit = pcmath.poly_coeffs(x, y)
         blz = np.polyval(pfit, wave)
         fluxmod *= blz
         
+    if sampling is not None:
+        good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
+        wave_new = np.arange(wave[0], wave[-1] + sampling, sampling)
+        fluxmod = scipy.interpolate.CubicSpline(wavemod[good], fluxmod, extrapolate=False)(wave_new)
+        wavemod = wave_new
+    elif wave_to_sample is not None:
+        good = np.where(np.isfinite(wave_to_sample))
+        bad = np.where(~np.isfinite(wave_to_sample))
+        fluxnew = np.full(wave_to_sample.size, fill_value=np.nan)
+        fluxnew[good] = scipy.interpolate.CubicSpline(wavemod, fluxmod, extrapolate=False)(wave_to_sample[good])
+        fluxmod = fluxnew
+        wavemod = wave_to_sample
+        
+    nx = wavemod.size
     rvc_per_pix = np.full(nx, dtype=np.float64, fill_value=np.nan)
-    good = np.where(np.isfinite(wave) & np.isfinite(fluxmod))[0]
+    good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
     ng = good.size
-    flux_spline = scipy.interpolate.CubicSpline(wave[good], fluxmod[good], extrapolate=True, bc_type='clamped')
+    flux_spline = scipy.interpolate.CubicSpline(wavemod[good], fluxmod[good], extrapolate=False)
     for i in range(nx):
         if i in good:
-            slope = flux_spline(wave[i], 1)
+            slope = flux_spline(wavemod[i], 1)
             if not np.isfinite(slope) or slope == 0:
                 continue
-            rvc_per_pix[i] = cs.c * np.sqrt(fluxmod[i] + ron**2) / (wave[i] * np.abs(slope))
+            rvc_per_pix[i] = cs.c * np.sqrt(fluxmod[i] + ron**2) / (wavemod[i] * np.abs(slope))
 
-    rvc_tot = np.nansum(1 / rvc_per_pix**2)**(-0.5)
+    rvc_tot = np.nansum(1 / rvc_per_pix**2)**-0.5
     
     return rvc_per_pix, rvc_tot
         

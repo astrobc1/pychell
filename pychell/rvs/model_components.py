@@ -616,6 +616,9 @@ class TelluricsTAPAS(TemplateMult):
             v = False
             self.enabled = False
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1, vary=v))
+        
+        if not self.enabled:
+            self.n_delay = 1E20
 
     def update(self, forward_model, iter_index):
         super().update(forward_model, iter_index)
