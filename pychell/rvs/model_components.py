@@ -346,6 +346,9 @@ class SincBlaze(EmpiricalMult):
         else:
             self.blaze_wave_estimate = None
             
+        # The echelle order number
+        self.echelle_order_num = forward_model.echelle_order_num
+            
         # Polynomial
         self.poly_order = blueprint['poly_order']
         self.n_poly_pars = self.poly_order + 1
@@ -358,7 +361,7 @@ class SincBlaze(EmpiricalMult):
         self.par_names = [self.name + s for s in self.base_par_names]
     
     def build(self, pars, wave_final):
-        
+
         # Sinc pars
         b = pars[self.par_names[0]].value
         c = pars[self.par_names[1]].value
@@ -370,24 +373,30 @@ class SincBlaze(EmpiricalMult):
         # Blaze wavelength or average
         blaze_wavelength = self.blaze_wave_estimate if self.blaze_wave_estimate is not None else np.nanmean(wave_final)
         
+        wave_min, wave_max = np.nanmin(wave_final), np.nanmax(wave_final)
+        x = (wave_final - wave_min) / wave_max
+        blaze_wavelength = (blaze_wavelength - wave_min) / wave_max
+        
         # Construct sinc model
-        sinc_blaze = np.abs(np.sinc(b * (wave_final - blaze_wavelength + c)))**(2 * d)
+        blw = blaze_wavelength + c
+        x = self.echelle_order_num * (1 - blw) / x
+        x *= np.pi * alpha
+        sinc_blaze = np.abs(np.sin(x))**(2 * d) / x**(2 * d)
         
         # Construct polynomial
-        poly_blaze = np.polyval(wave_final - blaze_wavelength)
+        poly_blaze = np.polyval(wave_final - blaze_wavelength) # intentionally use constant blaze wavelength here, no reason to use blw.
         
         # Return product
         return blaze_base * blaze_spline
 
     def init_parameters(self, forward_model):
         
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base_b'][1], minv=self.blueprint['base_b'][0], maxv=self.blueprint['base_b'][2], mcmcscale=0.1, vary=True))
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base_c'][1], minv=self.blueprint['base_c'][0], maxv=self.blueprint['base_c'][2], mcmcscale=0.1, vary=True))
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[3], value=self.blueprint['base_d'][1], minv=self.blueprint['base_d'][0], maxv=self.blueprint['base_d'][2], mcmcscale=0.1, vary=True))
-        if self.n_splines > 0:
-            for i in range(self.n_splines + 1):
-                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(
-                    name=self.par_names[i+4], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base_b'][1], minv=self.blueprint['base_b'][0], maxv=self.blueprint['b'][2], mcmcscale=0.1, vary=self.enabled))
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base_c'][1], minv=self.blueprint['base_c'][0], maxv=self.blueprint['c'][2], mcmcscale=0.1, vary=self.enabled))
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[3], value=self.blueprint['base_d'][1], minv=self.blueprint['base_d'][0], maxv=self.blueprint['d'][2], mcmcscale=0.1, vary=self.enabled))
+        
+        for i in range(self.n_poly_pars):
+            forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+3], value=self.blueprint['poly_' + str(i)][1], minv=self.blueprint['poly_' + str(i)][0], maxv=self.blueprint['poly_' + str(i)][2], mcmcscale=0.001, vary=self.enabled))
 
 
 #### Gas Cell ####
@@ -417,7 +426,7 @@ class GasCell(TemplateMult):
 
     def load_template(self, forward_model):
         print('Loading in Gas Cell Template', flush=True)
-        pad = 1
+        pad = 5
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
         good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
@@ -461,7 +470,7 @@ class GasCellCHIRON(TemplateMult):
 
     def load_template(self, forward_model):
         print('Loading in Gas Cell Template ...', flush=True)
-        pad = 1
+        pad = 5
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
         good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
@@ -625,7 +634,7 @@ class TelluricsTAPAS(TemplateMult):
 
     def load_template(self, forward_model):
         templates = {}
-        pad = 1
+        pad = 5
         for i in range(self.n_species):
             print('Loading in Telluric Template For ' + self.species[i], flush=True)
             template = np.load(self.species_input_files[self.species[i]])
@@ -934,7 +943,7 @@ class PolyWavelengthSolution(WavelengthSolution):
 
     def update(self, forward_model, iter_index):
         pass
-    
+
 
 class SplineWavelengthSolution(WavelengthSolution):
     """ Class for a full wavelength solution defined through cubic splines.
@@ -1142,6 +1151,3 @@ class FPCavityFringing(EmpiricalMult):
     def init_parameters(self, forward_model):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['d'][1], minv=self.blueprint['d'][0], maxv=self.blueprint['d'][2], mcmcscale=0.1, vary=self.enabled))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['fin'][1], minv=self.blueprint['fin'][0], maxv=self.blueprint['fin'][2], mcmcscale=0.1, vary=self.enabled))
-
-    def update(self, forward_model, iter_index):
-        super().update(forward_model, iter_index)

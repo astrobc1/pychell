@@ -427,6 +427,31 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
         if fname is not None:
             plt.savefig(fname)
             
+def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_templates, do_orders, iter_indexes, unit='Ang'):
+    
+    if unit == 'microns':
+        factor = 1E-4
+    elif unit == 'Ang':
+        factor = 1
+    else:
+        factor = 1E-1
+    
+    n_orders = len(do_orders)
+    
+    fig, axarr = plt.subplots(nrows=n_orders, ncols=1, figsize=(20, 16), dpi=250)
+    
+    for o in range(n_orders):
+        axarr[o].plot(stellar_templates[o][:, 0] * factor, stellar_templates[o][:, 1])
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].tick_params(axis='both', labelsize=10)
+    axarr[-1].set_xlabel('Wavelength [' + unit + ']')
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
+    fig.text(0.03, 0.5, 'Norm. flux', rotation=90, verticalalignment='center', horizontalalignment='center', fontsize=20)
+    fig.text(0.5, 0.97, star_name, fontsize=20, verticalalignment='center', horizontalalignment='center')
+    plt.savefig(output_path_root + 'stellar_templates.png')
+    
+    plt.close()
+            
             
             
 def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=False, flag=False, phase_to=None, debug=False, tc=None):
