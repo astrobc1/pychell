@@ -304,7 +304,8 @@ class SplineBlaze(EmpiricalMult):
         
         # Estimate the continuum
         wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
-        log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
+        log_continuum = fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
+            
 
         continuum = np.exp(log_continuum)
         good = np.where(np.isfinite(continuum))[0]
@@ -662,6 +663,127 @@ class TelluricsTAPAS(TemplateMult):
             flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
             flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
             ts[t][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.999)
+            
+            
+class TelluricsTAPASV2(TemplateMult):
+    """ A telluric model based on Templates obtained from TAPAS. These templates should be pre-fetched from TAPAS and specific to the observatory. Only water has a unique depth, with all others being identical. The model uses a common Doppler shift.
+
+    Attributes:
+        species (list): The names (strings) of the telluric species.
+        n_species (int): The number of telluric species.
+        species_enabled (dict): A dictionary with species as keys, and boolean values for items (True=enabled, False=disabled)
+        species_input_files (list): A list of input files (strings) for the individual species.
+    """
+
+    def __init__(self, forward_model, blueprint):
+
+        # Call super method
+        super().__init__(forward_model, blueprint)
+
+        self.base_par_names = ['_vel']
+
+        if len(blueprint['species'].keys()) == 0:
+            self.species = []
+            self.enabled = False
+        else:
+            self.species = list(blueprint['species'].keys())
+            self.n_species = len(self.species)
+            self.species_enabled = {}
+            self.species_input_files = {}
+            for itell in range(self.n_species):
+                self.species_input_files[self.species[itell]] = forward_model.templates_path + blueprint['species'][self.species[itell]]['input_file']
+                self.species_enabled[self.species[itell]] = True
+                
+        if 'water' in self.species:
+            self.base_par_names.append('_water_depth')
+        if len(self.species) > 2:
+            self.base_par_names.append('_airmass_depth')
+        if len(self.species) == 1 and 'water' not in self.species:
+            self.base_par_names.append('_airmass_depth')
+                
+        self.par_names = [self.name + s for s in self.base_par_names]
+
+    def build(self, pars, templates, wave_final):
+        if self.enabled:
+            flux = np.ones(wave_final.size, dtype=np.float64)
+            for i in range(self.n_species):
+                flux *= self.build_single_species(pars, templates, self.species[i], wave_final)
+            return flux
+        else:
+            return self.build_fake(wave_final.size)
+
+    def build_single_species(self, pars, templates, single_species, wave_final):
+        shift = pars[self.par_names[0]].value
+        if single_species == 'water' or 'water' not in self.species:
+            depth = pars[self.par_names[1]].value
+        else:
+            depth = pars[self.par_names[2]].value
+        wave, flux = templates[single_species][:, 0], templates[single_species][:, 1]
+        flux = flux ** depth
+        wave_shifted = wave * np.exp(shift / cs.c)
+        return np.interp(wave_final, wave_shifted, flux, left=flux[0], right=flux[-1])
+
+    def init_parameters(self, forward_model):
+            
+            if 'water' in self.species:
+                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['water_depth'][1], minv=self.blueprint['water_depth'][0], maxv=self.blueprint['water_depth'][2], vary=self.enabled))
+            if len(self.species) > 2:
+                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['airmass_depth'][1], minv=self.blueprint['airmass_depth'][0], maxv=self.blueprint['airmass_depth'][2], vary=self.enabled))
+            if len(self.species) == 1 and 'water' not in self.species:
+                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['airmass_depth'][1], minv=self.blueprint['airmass_depth'][0], maxv=self.blueprint['airmass_depth'][2], vary=self.enabled))
+
+    def update(self, forward_model, iter_index):
+        super().update(forward_model, iter_index)
+
+    def load_template(self, forward_model):
+        templates = {}
+        pad = 5
+        for i in range(self.n_species):
+            print('Loading in Telluric Template For ' + self.species[i], flush=True)
+            template = np.load(self.species_input_files[self.species[i]])
+            wave, flux = template['wave'], template['flux']
+            good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
+            wave, flux = wave[good], flux[good]
+            flux /= pcmath.weighted_median(flux, percentile=0.999)
+            templates[self.species[i]] = np.array([wave, flux]).T
+        return templates
+
+    def __repr__(self):
+        ss = ' Model Name: ' + self.name + ', Species: ['
+        for tell in self.species_enabled:
+            if self.species_enabled[tell]:
+                ss += tell + ': Active, '
+            else:
+                ss += tell + ': Deactive, '
+        ss = ss[0:-2]
+        return ss + ']'
+    
+    def init_optimize(self, forward_model):
+        ts = forward_model.templates_dict['tellurics']
+        for t in ts:
+            wave, flux = ts[t][:, 0], ts[t][:, 1]
+            flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
+            flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
+            ts[t][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.999)
+            
+        # Components
+        for itell, tell in enumerate(self.species):
+            max_range = np.nanmax(forward_model.templates_dict['tellurics'][tell][:, 1]) - np.nanmin(forward_model.templates_dict['tellurics'][tell][:, 1])
+            if max_range > 0.015:
+                self.species_enabled[tell] = True
+            else:
+                self.species_enabled[tell] = False
+                
+        # Shift
+        if np.any([self.species_enabled[tell] for tell in self.species_enabled]):
+            v = True
+        else:
+            v = False
+            self.enabled = False
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1, vary=v))
+        
+        if not self.enabled:
+            self.n_delay = int(1E3)
 
 
 #### LSF ####
@@ -1151,3 +1273,70 @@ class FPCavityFringing(EmpiricalMult):
     def init_parameters(self, forward_model):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['d'][1], minv=self.blueprint['d'][0], maxv=self.blueprint['d'][2], mcmcscale=0.1, vary=self.enabled))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['fin'][1], minv=self.blueprint['fin'][0], maxv=self.blueprint['fin'][2], mcmcscale=0.1, vary=self.enabled))
+        
+        
+# Misc Methods
+
+# This calculates the weighted median of a data set for rolling calculations
+def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.98, smooth=True):
+    """This will estimate the continuum with adjustable spline knots.
+
+    Args:
+        x (np.ndarray): The wavelength array.
+        y (np.ndarray): The flux array.
+        width (float, optional): The width of the window in units of x. Defaults to 7.
+        n_knots (int, optional): The number of spline knots. Defaults to 8.
+        cont_val (float, optional): The estimate of the percentile of the continuum. Defaults to 0.98.
+        smooth (bool, optional): Whether or not to smooth the input spectrum. Defaults to True.
+
+    Returns:
+        np.ndarray: The estimate of the continuum
+    """
+    nx = x.size
+    continuum_coarse = np.ones(nx, dtype=np.float64)
+    if smooth:
+        ys = pcmath.median_filter1d(y, width=7)
+    else:
+        ys = np.copy(y)
+    for ix in range(nx):
+        use = np.where((x > x[ix]-width/2) & (x < x[ix]+width/2) & np.isfinite(y))[0]
+        if use.size == 0 or np.all(~np.isfinite(ys[use])):
+            continuum_coarse[ix] = np.nan
+        else:
+            continuum_coarse[ix] = pcmath.weighted_median(ys[use], weights=None, percentile=cont_val)
+    good = np.where(np.isfinite(ys))[0]
+    knot_points = x[np.linspace(good[0], good[-1], num=n_knots).astype(int)]
+    cspline = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=n_knots).astype(int)], extrapolate=False, bc_type='not-a-knot')
+    continuum = cspline(x)
+    return continuum
+
+def fit_continuum_wobble(x, y, badpix, order=6, nsigma=[0.3,3.0], maxniter=50):
+    """Fit the continuum using sigma clipping. This function is nearly identical to Megan Bedell's Wobble code.
+    Args:
+        x: The wavelengths.
+        y: The log-fluxes.
+        order: The polynomial order to use
+        nsigma: The sigma clipping threshold: tuple (low, high)
+        maxniter: The maximum number of iterations to do
+    Returns:
+        The value of the continuum at the wavelengths in x in log space.
+    """
+    
+    xx = np.copy(x)
+    yy = np.copy(y)
+    yy = pcmath.median_filter1d(yy, 7, preserve_nans=True)
+    A = np.vander(xx - np.nanmean(xx), order+1)
+    mask = np.ones(len(xx), dtype=bool)
+    badpixcp = np.copy(badpix)
+    for i in range(maxniter):
+        mask[badpixcp == 0] = 0
+        w = np.linalg.solve(np.dot(A[mask].T, A[mask]), np.dot(A[mask].T, yy[mask]))
+        mu = np.dot(A, w)
+        resid = yy - mu
+        sigma = np.sqrt(np.nanmedian(resid**2))
+        mask_new = (resid > -nsigma[0]*sigma) & (resid < nsigma[1]*sigma)
+        if mask.sum() == mask_new.sum():
+            mask = mask_new
+            break
+        mask = mask_new
+    return mu
