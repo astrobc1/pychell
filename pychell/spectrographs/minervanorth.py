@@ -61,21 +61,18 @@ forward_model_blueprints = {
     # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'vis_tellurics',
-        'class_name': 'TelluricsTAPAS',
-        'vel': [-500, -100, 500],
-        'species': {
-            'water': {
-                'input_file': 'telluric_water_tapas_whipple.npz',
-                'depth':[0.01, 1.5, 4.0]
-            },
-            'ozone': {
-                'input_file': 'telluric_ozone_tapas_whipple.npz',
-                'depth': [0.1, 1.0, 3.0]
-            },
-            'oxygen': {
-                'input_file': 'telluric_oxygen_tapas_whipple.npz',
-                'depth': [0.05, 0.65, 3.0]
-            }
+        'class_name': 'TelluricsTAPASV2',
+        'vel': [-300, 0, 300],
+        'water_depth': [0.01, 1.5, 4.0],
+        'airmass_depth': [0.8, 1.2, 4.0],
+        'min_range': 0.01,
+        'input_files': {
+            'water': 'telluric_water_tapas_whipple.npz',
+            'methane': 'telluric_methane_tapas_whipple.npz',
+            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_whipple.npz',
+            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_whipple.npz',
+            'oxygen' : 'telluric_oxygen_tapas_whipple.npz',
+            'ozone': 'telluric_ozone_tapas_whipple.npz'
         }
     },
     

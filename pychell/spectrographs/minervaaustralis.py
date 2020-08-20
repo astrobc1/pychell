@@ -45,36 +45,20 @@ forward_model_blueprints = {
         'vel': [-400000, 0, 400000]
     },
     
-    # Tellurics (from TAPAS), NOTE: stealing CTIO until TAPAS is updated!!!!
+    # Tellurics (from TAPAS) NOTE: Still need proper tellurics, so steal Whipple
     'tellurics': {
-        'name': 'vis_tellurics', # NOTE: full parameter names are name + component + base_name.
-        'class_name': 'TelluricsTAPAS',
-        'vel': [-250, -100, 250],
-        'species': {
-            'water': {
-                'input_file': 'telluric_water_tapas_ctio.npz',
-                'depth': [0.01, 1.5, 4.0]
-            },
-            'methane': {
-                'input_file': 'telluric_methane_tapas_ctio.npz',
-                'depth': [0.1, 1.0, 3.0]
-            },
-            'nitrous_oxide': {
-                'input_file': 'telluric_nitrous_oxide_tapas_ctio.npz',
-                'depth': [0.05, 0.65, 3.0]
-            },
-            'carbon_dioxide': {
-                'input_file': 'telluric_carbon_dioxide_tapas_ctio.npz',
-                'depth': [0.05, 0.65, 3.0]
-            },
-            'oxygen': {
-                'input_file': 'telluric_oxygen_tapas_ctio.npz',
-                'depth': [0.1, 1.1, 3.0]
-            },
-            'ozone': {
-                'input_file': 'telluric_ozone_tapas_ctio.npz',
-                'depth': [0.05, 0.65, 3.0]
-            }
+        'name': 'vis_tellurics',
+        'class_name': 'TelluricsTAPASV2',
+        'vel': [-300, 0, 300],
+        'depth_water': [0.01, 1.5, 4.0],
+        'depth_airmass': [0.8, 1.2, 4.0],
+        'input_files': {
+            'water': 'telluric_water_tapas_whipple.npz',
+            'methane': 'telluric_methane_tapas_whipple.npz',
+            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_whipple.npz',
+            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_whipple.npz',
+            'oxygen' : 'telluric_oxygen_tapas_whipple.npz',
+            'ozone': 'telluric_ozone_tapas_whipple.npz'
         }
     },
     

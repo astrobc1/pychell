@@ -183,6 +183,33 @@ class TemplateMult(MultModelComponent):
             self.input_file = forward_model.templates_path + blueprint['input_file']
         else:
             self.input_file = None
+            
+            
+    def normalize_template(self, forward_model, wave, flux, uniform=False):
+        
+        if not uniform:
+            good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
+            dl = np.nanmedian(np.diff(wave))
+            wave_min, wave_max = np.nanmin(wave), np.nanmax(wave)
+            wave_lin = np.arange(wave_min, wave_max, dl)
+            flux_lin = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=False)(wave_lin)
+        else:
+            flux_lin = flux
+        
+        if 'lsf' in forward_model.models_dict:
+            flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_lin, pars=forward_model.initial_parameters)
+        else:
+            flux_conv = flux_lin
+
+        data_continuum = pcmath.weighted_median(flux_conv, percentile=0.999)
+        flux /= data_continuum
+        
+        return flux
+    
+    def template_range(self, forward_model, wave, flux):
+        good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
+        max_range = np.max(flux[good]) - np.min(flux[good])
+        return max_range
 
 
 #### Blaze Models ####
@@ -642,7 +669,6 @@ class TelluricsTAPAS(TemplateMult):
             wave, flux = template['wave'], template['flux']
             good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
             wave, flux = wave[good], flux[good]
-            flux /= pcmath.weighted_median(flux, percentile=0.999)
             templates[self.species[i]] = np.array([wave, flux]).T
         return templates
 
@@ -660,9 +686,8 @@ class TelluricsTAPAS(TemplateMult):
         ts = forward_model.templates_dict['tellurics']
         for t in ts:
             wave, flux = ts[t][:, 0], ts[t][:, 1]
-            flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
-            flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
-            ts[t][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.999)
+            flux = self.normalize_template(forward_model, wave, flux, uniform=False)
+            ts[t][:, 1] /= pcmath.weighted_median(flux, percentile=0.999)
             
             
 class TelluricsTAPASV2(TemplateMult):
@@ -680,110 +705,124 @@ class TelluricsTAPASV2(TemplateMult):
         # Call super method
         super().__init__(forward_model, blueprint)
 
-        self.base_par_names = ['_vel']
+        self.base_par_names = ['_vel', '_water_depth', '_airmass_depth']
+        
+        self.species = ['water', 'methane', 'carbon_dioxide', 'nitrous_oxide', 'oxygen', 'ozone']
+        self.n_species = len(self.species)
+        self.species_input_files = blueprint['input_files']
 
-        if len(blueprint['species'].keys()) == 0:
-            self.species = []
-            self.enabled = False
-        else:
-            self.species = list(blueprint['species'].keys())
-            self.n_species = len(self.species)
-            self.species_enabled = {}
-            self.species_input_files = {}
-            for itell in range(self.n_species):
-                self.species_input_files[self.species[itell]] = forward_model.templates_path + blueprint['species'][self.species[itell]]['input_file']
-                self.species_enabled[self.species[itell]] = True
-                
-        if 'water' in self.species:
-            self.base_par_names.append('_water_depth')
-        if len(self.species) > 2:
-            self.base_par_names.append('_airmass_depth')
-        if len(self.species) == 1 and 'water' not in self.species:
-            self.base_par_names.append('_airmass_depth')
-                
+        self.water_enabled, self.airmass_enabled = True, True
+        self.min_range = blueprint['min_range']
+
         self.par_names = [self.name + s for s in self.base_par_names]
 
     def build(self, pars, templates, wave_final):
         if self.enabled:
-            flux = np.ones(wave_final.size, dtype=np.float64)
-            for i in range(self.n_species):
-                flux *= self.build_single_species(pars, templates, self.species[i], wave_final)
+            flux = np.ones(wave_final.size)
+            if self.water_enabled:
+                flux *= self.build_component(pars, templates, 'water', wave_final)
+            if self.airmass_enabled:
+                flux *= self.build_component(pars, templates, 'airmass', wave_final)
             return flux
         else:
             return self.build_fake(wave_final.size)
 
-    def build_single_species(self, pars, templates, single_species, wave_final):
+    def build_component(self, pars, templates, single_species, wave_final):
         shift = pars[self.par_names[0]].value
-        if single_species == 'water' or 'water' not in self.species:
+        if single_species == 'water':
             depth = pars[self.par_names[1]].value
+            wave, flux = templates['water'][:, 0], templates['water'][:, 1]
         else:
             depth = pars[self.par_names[2]].value
-        wave, flux = templates[single_species][:, 0], templates[single_species][:, 1]
+            wave, flux = templates['airmass'][:, 0], templates['airmass'][:, 1]
+        
         flux = flux ** depth
         wave_shifted = wave * np.exp(shift / cs.c)
         return np.interp(wave_final, wave_shifted, flux, left=flux[0], right=flux[-1])
 
     def init_parameters(self, forward_model):
-            
-            if 'water' in self.species:
-                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['water_depth'][1], minv=self.blueprint['water_depth'][0], maxv=self.blueprint['water_depth'][2], vary=self.enabled))
-            if len(self.species) > 2:
-                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['airmass_depth'][1], minv=self.blueprint['airmass_depth'][0], maxv=self.blueprint['airmass_depth'][2], vary=self.enabled))
-            if len(self.species) == 1 and 'water' not in self.species:
-                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['airmass_depth'][1], minv=self.blueprint['airmass_depth'][0], maxv=self.blueprint['airmass_depth'][2], vary=self.enabled))
+        
+        # Velocity
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], vary=self.enabled))
+        
+        # Water Depth
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['water_depth'][1], minv=self.blueprint['water_depth'][0], maxv=self.blueprint['water_depth'][2], vary=self.enabled))
+        
+        # Remaining Components
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['airmass_depth'][1], minv=self.blueprint['airmass_depth'][0], maxv=self.blueprint['airmass_depth'][2], vary=self.enabled))
 
     def update(self, forward_model, iter_index):
         super().update(forward_model, iter_index)
 
     def load_template(self, forward_model):
+        print('Loading in Telluric Templates', flush=True)
         templates = {}
         pad = 5
-        for i in range(self.n_species):
-            print('Loading in Telluric Template For ' + self.species[i], flush=True)
-            template = np.load(self.species_input_files[self.species[i]])
-            wave, flux = template['wave'], template['flux']
+        
+        # Water
+        water = np.load(forward_model.templates_path + self.species_input_files['water'])
+        wave, flux = water['wave'], water['flux']
+        good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
+        wave, flux = wave[good], flux[good]
+        templates['water'] = np.array([wave, flux]).T
+        
+        # Remaining, do in a loop...
+        wave_water = templates['water'][:, 0]
+        flux = np.ones(wave_water.size)
+        for species in self.species:
+            if species == 'water':
+                continue
+            tell = np.load(forward_model.templates_path + self.species_input_files[species])
+            wave, _flux = tell['wave'], tell['flux']
             good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
-            wave, flux = wave[good], flux[good]
-            flux /= pcmath.weighted_median(flux, percentile=0.999)
-            templates[self.species[i]] = np.array([wave, flux]).T
+            wave, _flux = wave[good], _flux[good]
+            good = np.where(np.isfinite(wave) & np.isfinite(_flux))[0]
+            flux *= scipy.interpolate.CubicSpline(wave[good], _flux[good], extrapolate=False)(wave_water)
+            
+        templates['airmass'] = np.array([wave_water, flux]).T
+            
         return templates
 
     def __repr__(self):
-        ss = ' Model Name: ' + self.name + ', Species: ['
-        for tell in self.species_enabled:
-            if self.species_enabled[tell]:
-                ss += tell + ': Active, '
-            else:
-                ss += tell + ': Deactive, '
-        ss = ss[0:-2]
-        return ss + ']'
+        ss = ' Model Name: ' + self.name # + ', Relevant Species: ['
+        #for tell in self.species_relevant:
+        #    if self.species_relevant[tell]:
+        #       ss += tell + ', '
+        #if ss[0:-2] == ', ':
+        #   ss = ss[0:-2]
+        return ss #  + ']'
     
     def init_optimize(self, forward_model):
-        ts = forward_model.templates_dict['tellurics']
-        for t in ts:
-            wave, flux = ts[t][:, 0], ts[t][:, 1]
-            flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
-            flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
-            ts[t][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.999)
-            
-        # Components
-        for itell, tell in enumerate(self.species):
-            max_range = np.nanmax(forward_model.templates_dict['tellurics'][tell][:, 1]) - np.nanmin(forward_model.templates_dict['tellurics'][tell][:, 1])
-            if max_range > 0.015:
-                self.species_enabled[tell] = True
-            else:
-                self.species_enabled[tell] = False
-                
-        # Shift
-        if np.any([self.species_enabled[tell] for tell in self.species_enabled]):
-            v = True
-        else:
-            v = False
-            self.enabled = False
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1, vary=v))
         
-        if not self.enabled:
+        # Normalize the water flux
+        forward_model.templates_dict['tellurics']['water'][:, 1] = self.normalize_template(forward_model, forward_model.templates_dict['tellurics']['water'][:, 0], forward_model.templates_dict['tellurics']['water'][:, 1], uniform=False)
+        
+        water_range = self.template_range(forward_model, forward_model.templates_dict['tellurics']['water'][:, 0], forward_model.templates_dict['tellurics']['water'][:, 1])
+        
+        if water_range > self.min_range:
+            self.water_enabled = True
+        else:
+            self.water_enabled = False
+            forward_model.initial_parameters[self.par_names[1]].vary = False
+        
+        
+        # Normalize the other components
+        forward_model.templates_dict['tellurics']['airmass'][:, 1] = self.normalize_template(forward_model, forward_model.templates_dict['tellurics']['water'][:, 0], forward_model.templates_dict['tellurics']['airmass'][:, 1], uniform=False)
+        
+        airmass_range = self.template_range(forward_model, forward_model.templates_dict['tellurics']['airmass'][:, 0], forward_model.templates_dict['tellurics']['airmass'][:, 1])
+        if airmass_range > self.min_range:
+            self.airmass_enabled = True
+        else:
+            self.airmass_enabled = False
+            forward_model.initial_parameters[self.par_names[2]].vary = False
+
+        # Shift
+        shift_vary = True if self.water_enabled or self.airmass_enabled else False
+        
+        if not shift_vary:
+            self.enabled = False
             self.n_delay = int(1E3)
+            forward_model.initial_parameters[self.par_names[0]].vary = False
 
 
 #### LSF ####

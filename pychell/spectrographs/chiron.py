@@ -43,7 +43,7 @@ forward_model_blueprints = {
     # The star
     'star': {
         'name': 'star',
-        'class_name': 'StarModel',
+        'class_name': 'Star',
         'input_file': None,
         'vel': [-3E5, 0, 3E5]
     },
@@ -51,7 +51,7 @@ forward_model_blueprints = {
     # The methane gas cell
     'gas_cell': {
         'name': 'iodine_gas_cell', # NOTE: full parameter names are name + base_name.
-        'class_name': 'GasCellModelOrderDependent',
+        'class_name': 'GasCellCHIRON',
         'input_file': 'iodine_gas_cell_chiron_master_40K.npz',
         'depth': [1, 1, 1],
         'shifts': [-1.28151621, -1.28975381, -1.29827329, -1.30707465, -1.31615788, -1.32552298, -1.33516996, -1.34509881, -1.35530954, -1.36580215, -1.37657662, -1.38763298, -1.3989712, -1.4105913, -1.42249328, -1.43467713, -1.44714286, -1.45989046, -1.47291993, -1.48623128, -1.49982451, -1.5136996 , -1.52785658, -1.54229543, -1.55701615, -1.57201875, -1.58730322, -1.60286957, -1.61871779, -1.63484788, -1.65125985, -1.6679537 , -1.68492942, -1.70218701, -1.71972648, -1.73754783, -1.75565104, -1.77403614, -1.79270311, -1.81165195, -1.83088267, -1.85039526, -1.87018972, -1.89026606, -1.91062428, -1.93126437, -1.95218634, -1.97339018, -1.99487589, -2.01664348, -2.03869294, -2.06102428, -2.08363749, -2.10653258, -2.12970954, -2.15316838, -2.17690909, -2.20093168, -2.22523614, -2.24982247, -2.27469068, -2.29984077, -2.32527273],
@@ -60,47 +60,35 @@ forward_model_blueprints = {
     
     # Tellurics (from TAPAS)
     'tellurics': {
-        'name': 'vis_tellurics', # NOTE: full parameter names are name + species + base_name.
-        'class_name': 'TelluricModelTAPAS',
-        'vel': [-250, -100, 250],
-        'species': {
-            'water': {
-                'input_file': 'telluric_water_tapas_ctio.npz',
-                'depth': [0.01, 1.5, 4.0]
-            },
-            'methane': {
-                'input_file': 'telluric_methane_tapas_ctio.npz',
-                'depth': [0.1, 1.0, 3.0]
-            },
-            'nitrous_oxide': {
-                'input_file': 'telluric_nitrous_oxide_tapas_ctio.npz',
-                'depth': [0.05, 0.65, 3.0]
-            },
-            'carbon_dioxide': {
-                'input_file': 'telluric_carbon_dioxide_tapas_ctio.npz',
-                'depth': [0.05, 0.65, 3.0]
-            },
-            'oxygen': {
-                'input_file': 'telluric_oxygen_tapas_ctio.npz',
-                'depth': [0.1, 1.1, 3.0]
-            },
-            'ozone': {
-                'input_file': 'telluric_ozone_tapas_ctio.npz',
-                'depth': [0.05, 0.65, 3.0]
-            }
+        'name': 'vis_tellurics',
+        'class_name': 'TelluricsTAPASV2',
+        'vel': [-300, 0, 300],
+        'water_depth': [0.01, 1.5, 4.0],
+        'airmass_depth': [0.8, 1.2, 4.0],
+        'min_range': 0.01,
+        'input_files': {
+            'water': 'telluric_water_tapas_whipple.npz',
+            'methane': 'telluric_methane_tapas_whipple.npz',
+            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_whipple.npz',
+            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_whipple.npz',
+            'oxygen' : 'telluric_oxygen_tapas_whipple.npz',
+            'ozone': 'telluric_ozone_tapas_whipple.npz'
         }
     },
     
     # The default blaze is a quadratic + splines.
     'blaze': {
         'name': 'full_blaze', # The blaze model after a division from a flat field
-        'class_name': 'FullBlazeModel',
-        'n_splines': 0,
+        'class_name': 'SplineBlaze',
+        'n_splines': 10,
         'n_delay_splines': 0,
-        'base_amp': [1.02, 1.05, 1.4],
-        'base_b': [0.008, 0.01, 0.04],
-        'base_c': [-1, 0.01, 1],
-        'base_d': [0.51, 0.7, 0.9],
+        'poly_0': [1.02, 1.05, 1.4],
+        'poly_1': [-0.001, 0.0001, .001],
+        'poly_2': [-1E-5, -1E-7, 1E-5],
+        'b': [0.008, 0.01, 0.04],
+        'c': [-1, 0.01, 1],
+        'd': [0.51, 0.7, 0.9],
+        
         'spline': [-0.135, 0.01, 0.135],
         
         # Blaze is centered on the blaze wavelength.
@@ -110,7 +98,7 @@ forward_model_blueprints = {
     # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
-        'class_name': 'LSFHermiteModel',
+        'class_name': 'HermiteLSF',
         'hermdeg': 2,
         'n_delay': 0,
         'compress': 64,
@@ -121,8 +109,8 @@ forward_model_blueprints = {
     # Quadratic (Lagrange points) + splines
     'wavelength_solution': {
         'name': 'wavesol_ThAr_I2',
-        'class_name': 'WaveModelHybrid',
-        'n_splines': 10,
+        'class_name': 'HybridWavelengthSolution',
+        'n_splines': 6,
         'n_delay_splines': 0,
         'spline': [-0.03, 0.0005, 0.03]
     }

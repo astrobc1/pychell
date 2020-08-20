@@ -42,36 +42,21 @@ forward_model_blueprints = {
         'vel': [-3E5, 100, 3E5]
     },
     
-    # Tellurics (from TAPAS)
+    # Tellurics (from TAPAS) NOTE: Still need proper tellurics, so steal Whipple
     'tellurics': {
         'name': 'nir_tellurics',
-        'class_name': 'TelluricsTAPAS',
-        'vel': [0, 0, 0],
-        'species': {
-            'water': {
-                'input_file': 'telluric_water_tapas_palomar.npz',
-                'depth': [1, 1, 1]
-            },
-            'methane': {
-                'input_file': 'telluric_methane_tapas_palomar.npz',
-                'depth': [1, 1, 1]
-            },
-            'nitrous_oxide': {
-                'input_file': 'telluric_nitrous_oxide_tapas_palomar.npz',
-                'depth': [1, 1, 1]
-            },
-            'carbon_dioxide': {
-                'input_file': 'telluric_carbon_dioxide_tapas_palomar.npz',
-                'depth': [1, 1, 1]
-            },
-            'oxygen': {
-                'input_file': 'telluric_oxygen_tapas_palomar.npz',
-                'depth': [1, 1, 1]
-            },
-            'ozone': {
-                'input_file': 'telluric_ozone_tapas_palomar.npz',
-                'depth': [1, 1, 1]
-            }
+        'class_name': 'TelluricsTAPASV2',
+        'vel': [-300, 0, 300],
+        'water_depth': [0.01, 1.5, 4.0],
+        'airmass_depth': [0.8, 1.2, 4.0],
+        'min_range': 0.01,
+        'input_files': {
+            'water': 'telluric_water_tapas_palomar.npz',
+            'methane': 'telluric_methane_tapas_palomar.npz',
+            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_palomar.npz',
+            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_palomar.npz',
+            'oxygen' : 'telluric_oxygen_tapas_palomar.npz',
+            'ozone': 'telluric_ozone_tapas_palomar.npz'
         }
     },
     

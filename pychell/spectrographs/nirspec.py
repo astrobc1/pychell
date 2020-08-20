@@ -88,33 +88,26 @@ forward_model_blueprints = {
     
     # Tellurics (from TAPAS)
     'tellurics': {
-        'name': 'kband_tellurics',
-        'class_name': 'TelluricsTAPAS',
-        'vel': [0, 0, 0],
-        'species': {
-            'water': {
-                'input_file': 'telluric_water_tapas_maunakea.npz',
-                'depth':[0.01, 1.5, 4.0]
-            },
-            'methane': {
-                'input_file': 'telluric_methane_tapas_maunakea.npz',
-                'depth': [0.1, 1.0, 3.0]
-            },
-            'nitrous_oxide': {
-                'input_file': 'telluric_nitrous_oxide_tapas_maunakea.npz',
-                'depth': [0.05, 0.65, 3.0]
-            },
-            'carbon_dioxide': {
-                'input_file': 'telluric_carbon_dioxide_tapas_maunakea.npz',
-                'depth': [0.05, 0.65, 3.0]
-            }
+        'name': 'vis_tellurics',
+        'class_name': 'TelluricsTAPASV2',
+        'vel': [-300, 0, 300],
+        'water_depth': [0.01, 1.5, 4.0],
+        'airmass_depth': [0.8, 1.2, 4.0],
+        'min_range': 0.01,
+        'input_files': {
+            'water': 'telluric_water_tapas_maunakea.npz',
+            'methane': 'telluric_methane_tapas_maunakea.npz',
+            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_maunakea.npz',
+            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_maunakea.npz',
+            'oxygen' : 'telluric_oxygen_tapas_maunakea.npz',
+            'ozone': 'telluric_ozone_tapas_maunakea.npz'
         }
     },
     
     # The default blaze is a quadratic + splines.
     'blaze': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'PolyBlaze',
+        'class_name': 'SplineBlaze',
         'n_splines': 14,
         'poly_2': [-5.5E-5, -2E-6, 5.5E-5],
         'poly_1': [-0.001, 1E-5, 0.001],
@@ -140,25 +133,24 @@ forward_model_blueprints = {
     'wavelength_solution': {
         
         'name': 'lagrange_wavesol_splines',
-        'class_name': 'PolyWavelengthSolution',
+        'class_name': 'SplineWavelengthSolution',
         
         # The three pixels to span the detector corresponding to the above wavelengths
         # They are chosen as such because we typically use pixels 200-1848 only.
         # These pixels must correspond to the wavelengths in the array wavesol_base_wave_set_points_i[order]
-        'base_pixel_set_points': [99, 512, 923],
+        'quad_pixel_set_points': [99, 512, 923],
         
         # Left most set point for the quadratic wavelength solution
-        'base_set_point_1': [20426.363142799542, 0, 0, 0],
+        'quad_set_point_1': [20426.363142799542, 0, 0, 0],
 
         # Middle set point for the quadratic wavelength solution
-        'base_set_point_2': [20547.14884503126, 0, 0, 0],
+        'quad_set_point_2': [20547.14884503126, 0, 0, 0],
 
         # Right most set point for the quadratic wavelength solution
-        'base_set_point_3': [20671.664557571028, 0, 0, 0],
+        'quad_set_point_3': [20671.664557571028, 0, 0, 0],
         
         'n_splines': 6,
-        'n_delay_splines': 0,
-        'base': [-0.35, -0.05, 0.2],
+        'poly_lagrange': [-0.35, -0.05, 0.2],
         'spline': [-0.15, 0.01, 0.15]
     },
     
