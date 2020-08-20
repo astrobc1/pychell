@@ -54,7 +54,7 @@ def simple_rms(gp, forward_model, iter_index):
     diffs2 = (forward_model.data.flux - model_lr)**2
     good = np.where(np.isfinite(diffs2) & (weights > 0))[0]
     if good.size < 100:
-        return 1, -1
+        return 1E6, -1
     residuals2 = diffs2[good]
     weights = weights[good]
 

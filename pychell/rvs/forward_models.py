@@ -1103,8 +1103,7 @@ class MinervaNorthForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        good = np.where(np.isfinite(model))[0]
-        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
         
         if self.debug:
             stop()

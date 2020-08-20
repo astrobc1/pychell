@@ -280,7 +280,7 @@ class SplineBlaze(EmpiricalMult):
             self.n_spline_pars = self.n_splines + 1
 
         # Set the spline parameter names and knots
-        self.spline_wave_set_points = np.linspace(self.wave_bounds[0], self.wave_bounds[1], num=self.n_splines + 1)
+        self.spline_wave_set_points = np.linspace(self.wave_bounds[0] - 2, self.wave_bounds[1] + 2, num=self.n_splines + 1)
         for i in range(self.n_splines+1):
             self.base_par_names.append('_spline_' + str(i+1))
                 
