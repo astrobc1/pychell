@@ -657,7 +657,7 @@ def quad_coeffs(x, y):
 
 
 def poly_coeffs(x, y):
-    V = np.vander(x, 4)
+    V = np.vander(x)
     coeffs = np.linalg.solve(V, y)
     return coeffs
 
