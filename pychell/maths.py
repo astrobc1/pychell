@@ -658,7 +658,7 @@ def quad_coeffs(x, y):
 
 def poly_coeffs(x, y):
     V = np.vander(x, 4)
-    ceoffs = np.linalg.solve(V, y)
+    coeffs = np.linalg.solve(V, y)
     return coeffs
 
 def mask_to_binary(x, l):
