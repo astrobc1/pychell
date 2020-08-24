@@ -690,7 +690,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_
 
 
             
-def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=False, flag=False, phase_to=None, debug=False, tc=None):
+def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=False, flag=False, phase_to=None, debug=False, tc=None, thresh=5):
     
     if phase_to is None:
         _phase_to = 1E20
@@ -727,12 +727,11 @@ def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=F
         rvs[o, :] = rr - np.nanmedian(rr)
         
     # Combine
-    rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_from_all(rvs, mask, n_obs_nights, flag_outliers=flag, thresh=5)
+    rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_from_all(rvs, mask, n_obs_nights, flag_outliers=flag, thresh=thresh)
     
     # Plot
     for o in range(n_orders):
-        if phase_to is not None:
-            plt.plot((bjds - alpha)%_phase_to, rvs[o, :] - np.nanmedian(rvs_nightly), marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]))
+        plt.plot((bjds - alpha)%_phase_to, rvs[o, :] - np.nanmedian(rvs_nightly), marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]))
         
     plt.errorbar((bjdsn - alpha)%_phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
     plt.legend()

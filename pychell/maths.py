@@ -656,10 +656,10 @@ def quad_coeffs(x, y):
     return p
 
 
-#def poly_coeffs(x, y):
-    
-#    V = np.vander()
-#    np.linalg.solve()
+def poly_coeffs(x, y):
+    V = np.vander(x, 4)
+    ceoffs = np.linalg.solve(V, y)
+    return coeffs
 
 def mask_to_binary(x, l):
     """Converts a mask array of indices to a binary array.
