@@ -180,7 +180,7 @@ def crude_brute_force(forward_model, iter_index=None):
     
     return xcorr_star_vel
 
-def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
+def combine_orders(rvs, rvs_nightly, unc_nightly, init_weights, n_obs_nights):
     """Combines RVs across orders.
 
     Args:
@@ -199,7 +199,7 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     n_nights = len(n_obs_nights)
         
     # Copy the weights
-    w = np.copy(weights)
+    weights = np.copy(init_weights)
     
     # Parameters are spectra and orders
     init_pars = np.full(n_spec + n_ord, dtype=float, fill_value=np.nan)
@@ -214,20 +214,21 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     rvs_single = np.full(n_spec, dtype=float, fill_value=np.nan)
     unc_single = np.full(n_spec, dtype=float, fill_value=np.nan)
 
-    # Do an initial order offset and flag
+    # Do an initial order offset
     for o in range(n_ord):
         rvs_flagged[o, :] = rvs_flagged[o, :] - np.nanmedian(rvs_flagged[o, :])
 
-    # set bad rvs to nan
-    bad = np.where(w == 0)
+    # set bad spec to nan with zero weight
+    bad = np.where((weights <= 0) | ~np.isfinite(weights) | ~np.isfinite(rvs_flagged))
     if bad[0].size > 0:
         rvs_flagged[bad] = np.nan
+        weights[bad] = 0
     
     # Normalize weights
-    w /= np.nansum(w)
+    weights /= np.nansum(weights)
     
     # Initialize params
-    # Actual RVs with order offsets (above) subtracted off.
+    # Single measurement (single exposure, all orders) RVs
     for i in range(n_spec):
         init_pars[i] = 1
         vlb[i] = -np.inf
@@ -236,25 +237,28 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     # Order offsets, weighted average has been subtracted off, so should be nearly zero.
     for i in range(n_ord):
         init_pars[n_spec + i] = 1
-        vlb[n_spec + i] = -np.inf
-        vub[n_spec + i] = np.inf
+        vlb[n_spec + i] = -100
+        vub[n_spec + i] = 100
     
     # Force last order to have zero offset
     init_pars[-1] = 0
     vp[-1] = 0
     
-    # Disable bad spec
-    bad = np.where(np.nansum(w, axis=0) == 0)
-    vp[bad] = 0
+    # Disable spectra that are bad for all orders
+    bad = np.where(np.nansum(weights, axis=0) == 0)[0]
+    if bad.size > 0:
+        vp[bad] = 0
 
     vpi = np.where(vp)[0] # change to actual indicies
         
     # Do the optimization. result contains the lnightly RVs (n_nights,) and order offsets (n_ord,)
     print('Solving RVs')
 
-    result = NelderMead(rv_solver, init_pars, minvs=vlb, maxvs=vub, varies=vpi, ftol=1E-5, n_iterations=3, no_improve_break=3, args_to_pass=(rvs_flagged, w, n_obs_nights)).solve()
+    result = NelderMead(rv_solver, init_pars, minvs=vlb, maxvs=vub, varies=vpi, ftol=1E-5, n_iterations=3, no_improve_break=3, args_to_pass=(rvs_flagged, weights, n_obs_nights)).solve()
+    #result = scipy.optimize.minimize(rv_solver, init_pars, method='Powell', bounds=zip(vlb, vub), tol=1E-6, args=(rvs_flagged, weights, n_obs_nights))
     
     # Best pars
+    #best_pars = result.x
     best_pars = result[0]
     order_offsets = best_pars[n_spec:] # the order offsets
     
@@ -265,8 +269,8 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     # Calculate the individual order averaged RVs here
     # Could use the "Fit" RVs but would rather do a direct weighted formulation with only the offsets.
     for ispec in range(n_spec):
-        rr, ww = rvs_flagged[:, ispec], w[:, ispec]
-        good_finite = np.where((ww > 0) & np.isfinite(ww))[0]
+        rr, ww = rvs_flagged[:, ispec], weights[:, ispec]
+        good_finite = np.where((ww > 0) & np.isfinite(rr))[0]
         ng = good_finite.size
         if ng == 0:
             rvs_single[ispec] = np.nan
@@ -280,9 +284,9 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
         else:
             wstddev = pcmath.weighted_stddev(rr, ww)
             wmean = pcmath.weighted_mean(rr, ww)
-            bad = np.where(np.abs(rr - wmean) > 5*wstddev)
-            if bad[0].size > 0:
-                ng -= bad[0].size
+            bad = np.where(np.abs(rr - wmean) > 3*wstddev)[0]
+            if bad.size > 0:
+                ng -= bad.size
                 ww[bad] = 0
             rvs_single[ispec] = pcmath.weighted_mean(rr, ww)
             unc_single[ispec] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
@@ -295,8 +299,8 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     l = n_obs_nights[0]
 
     for inight in range(n_nights):
-        rr, ww = rvs_flagged[:, f:l].flatten(), w[:, f:l].flatten()
-        good_finite = np.where((ww > 0) & np.isfinite(ww))[0]
+        rr, ww = rvs_flagged[:, f:l].flatten(), weights[:, f:l].flatten()
+        good_finite = np.where((ww > 0) & np.isfinite(rr))[0]
         ng = good_finite.size
         if ng == 0:
             rvs_nightly_out[inight] = np.nan
@@ -310,14 +314,13 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
         else:
             wstddev = pcmath.weighted_stddev(rr, ww)
             wmean = pcmath.weighted_mean(rr, ww)
-            bad = np.where(np.abs(rr - wmean) > 5*wstddev)
-            if bad[0].size > 0:
-                ng -= bad[0].size
+            bad = np.where(np.abs(rr - wmean) > 3*wstddev)[0]
+            if bad.size > 0:
+                ng -= bad.size
                 ww[bad] = 0
             rvs_nightly_out[inight] = pcmath.weighted_mean(rr, ww)
             unc_nightly_out[inight] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
                 
-            
         if inight < n_nights - 1:
             f += n_obs_nights[inight]
             l += n_obs_nights[inight+1]
@@ -325,7 +328,7 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     return rvs_single, unc_single, rvs_nightly_out, unc_nightly_out
 
 
-def combine_orders_fast(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
+def combine_orders_fast(rvs, rvs_nightly, unc_nightly, init_weights, n_obs_nights):
     """Combines RVs across orders using a faster implementation of the above method.
 
     Args:
@@ -339,127 +342,173 @@ def combine_orders_fast(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
         np.ndarray: The nightly RVs averaged across orders.
         np.ndarray: The nightly RV uncertainties.
     """
+    
     n_ord, n_spec = rvs.shape
     n_nights = len(n_obs_nights)
+        
+    # Copy the weights
+    weights = np.copy(init_weights)
     
-    # Generate nightly weights
-    f, l = 0, n_obs_nights[0]
-    w = np.zeros_like(rvs_nightly)
-    for inight in range(n_nights):
-        for o in range(n_ord):
-            good = np.where(weights[o, f:l] > 0)[0]
-            if good.size > 0:
-                w[o, inight] = np.nanmean(weights[o, f:l])
-        if inight < n_nights - 1:
-            f += n_obs_nights[inight]
-            l += n_obs_nights[inight+1]
-
-    # Include nightly uncertainties
-    w *= unc_nightly
-    
-    # Parameters are spectra and orders
+    # Parameters are nightly rvs and orders
     init_pars = np.full(n_nights + n_ord, dtype=float, fill_value=np.nan)
     vlb = np.full(n_nights + n_ord, dtype=float, fill_value=np.nan)
     vub = np.full(n_nights + n_ord, dtype=float, fill_value=np.nan)
     vp = np.ones(n_nights + n_ord, dtype=int)
     
-    rvs_nightly_flagged = np.copy(rvs_nightly)
+    # Copy rvs
     rvs_flagged = np.copy(rvs)
     
     # Stores single measurement rvs
     rvs_single = np.full(n_spec, dtype=float, fill_value=np.nan)
     unc_single = np.full(n_spec, dtype=float, fill_value=np.nan)
 
-    # Do an initial order offset and flag
+    # Do an initial order offset
     for o in range(n_ord):
-        rvs_nightly_flagged[o, :] = rvs_nightly_flagged[o, :] - np.nanmedian(rvs_flagged[o, :])
+        rvs_flagged[o, :] = rvs_flagged[o, :] - np.nanmedian(rvs_flagged[o, :])
 
-    # set bad rvs to nan
-    bad = np.where(w == 0)
+    # set bad spec to nan with zero weight
+    bad = np.where((weights <= 0) | ~np.isfinite(weights) | ~np.isfinite(rvs_flagged))
     if bad[0].size > 0:
-        rvs_nightly_flagged[bad] = np.nan
+        rvs_flagged[bad] = np.nan
+        weights[bad] = 0
     
     # Normalize weights
-    w /= np.nansum(w)
+    weights /= np.nansum(weights)
     
     # Initialize params
-    # Actual RVs with order offsets (above) subtracted off.
+    # Single measurement (single exposure, all orders) RVs
+    f, l = 0, n_obs_nights[0]
     for i in range(n_nights):
-        init_pars[i] = 1
-        vlb[i] = -np.inf
-        vub[i] = np.inf
+        v = np.nanmedian(rvs_flagged[:, f:l])
+        if v == 0:
+            init_pars[i] = 1
+        else:
+            init_pars[i] = v
+        vlb[i] = v - 500
+        vub[i] = v + 500
+        
+        if i < n_nights - 1:
+            f += n_obs_nights[i]
+            l += n_obs_nights[i+1]
     
     # Order offsets, weighted average has been subtracted off, so should be nearly zero.
     for i in range(n_ord):
         init_pars[n_nights + i] = 1
-        vlb[n_nights + i] = -np.inf
-        vub[n_nights + i] = np.inf
+        vlb[n_nights + i] = -100
+        vub[n_nights + i] = 100
     
     # Force last order to have zero offset
     init_pars[-1] = 0
     vp[-1] = 0
     
-    # Disable bad nights
-    bad = np.where(np.nansum(w, axis=0) == 0)
-    vp[bad] = 0
+    # Disable nights that are bad for all orders
+    f, l = 0, n_obs_nights[0]
+    for i in range(n_nights):
+        if np.all(weights[:, f:l] == 0):
+            vp[i] = 0
+        if i < n_nights - 1:
+            f += n_obs_nights[i]
+            l += n_obs_nights[i+1]
+
     vpi = np.where(vp)[0] # change to actual indicies
-        
+
     # Do the optimization. result contains the lnightly RVs (n_nights,) and order offsets (n_ord,)
     print('Solving RVs')
-
-    result = NelderMead(rv_solver_nightsonly, init_pars, minvs=vlb, maxvs=vub, varies=vpi, ftol=1E-5, n_iterations=3, no_improve_break=3, args_to_pass=(rvs_nightly_flagged, w, n_obs_nights)).solve()
+    
+    #result = NelderMead(rv_solver_fast, init_pars, minvs=vlb, maxvs=vub, varies=vpi, ftol=1E-5, n_iterations=3, no_improve_break=3, args_to_pass=(rvs_flagged, weights, n_obs_nights)).solve()
+    result = scipy.optimize.minimize(rv_solver_fast, init_pars, method='Powell', tol=1E-6, args=(rvs_flagged, weights, n_obs_nights))
     
     # Best pars
-    best_pars = result[0]
+    #best_pars = result[0]
+    best_pars = result.x
     order_offsets = best_pars[n_nights:] # the order offsets
+    rvs_opt = best_pars[0:n_nights]
+    unc_opt = modifed_stddev(rvs, weights, rvs_opt, n_obs_nights)
+    
+    # Offset
+    for o in range(n_ord):
+        rvs_flagged[o, :] -= order_offsets[o]
     
     # Calculate the individual order averaged RVs here
     # Could use the "Fit" RVs but would rather do a direct weighted formulation with only the offsets.
-    w = np.copy(weights)
     for ispec in range(n_spec):
-        good = np.where(np.isfinite(rvs_flagged[:, ispec]))[0]
-        ng = good.size
+        rr, ww = rvs_flagged[:, ispec], weights[:, ispec]
+        good_finite = np.where((ww > 0) & np.isfinite(rr))[0]
+        ng = good_finite.size
         if ng == 0:
             rvs_single[ispec] = np.nan
             unc_single[ispec] = np.nan
         elif ng == 1:
-            rvs_single[ispec] = np.copy(rvs_flagged[good[0], ispec] - order_offsets)
+            rvs_single[ispec] = np.copy(rr[good_finite[0]])
             unc_single[ispec] = np.nan
+        elif ng in (2, 3):
+            rvs_single[ispec] = pcmath.weighted_mean(rr, ww)
+            unc_single[ispec] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
         else:
-            rvs_single[ispec] = pcmath.weighted_mean(rvs_flagged[good, ispec] - order_offsets, w[good, ispec])
-            unc_single[ispec] = pcmath.weighted_stddev(rvs_flagged[good, ispec] - order_offsets, w[good, ispec]) / np.sqrt(ng)
+            wstddev = pcmath.weighted_stddev(rr, ww)
+            wmean = pcmath.weighted_mean(rr, ww)
+            bad = np.where(np.abs(rr - wmean) > 3*wstddev)[0]
+            if bad.size > 0:
+                ng -= bad.size
+                ww[bad] = 0
+            rvs_single[ispec] = pcmath.weighted_mean(rr, ww)
+            unc_single[ispec] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
 
-    
-    # Nightly RVs from above
+        
+    # Nightly RVs
     rvs_nightly_out = np.full(n_nights, dtype=float, fill_value=np.nan)
     unc_nightly_out = np.full(n_nights, dtype=float, fill_value=np.nan)
     f = 0
     l = n_obs_nights[0]
-    if n_ord == 1:
-        w = np.ones(n_spec)
-    else:
-        w = 1 / unc_single**2
+
     for inight in range(n_nights):
-        good = np.where((w[f:l] > 0) & np.isfinite(w[f:l]))[0]
-        ng = good.size
+        rr, ww = rvs_flagged[:, f:l].flatten(), weights[:, f:l].flatten()
+        good_finite = np.where((ww > 0) & np.isfinite(rr))[0]
+        ng = good_finite.size
         if ng == 0:
             rvs_nightly_out[inight] = np.nan
             unc_nightly_out[inight] = np.nan
         elif ng == 1:
-            rvs_nightly_out[inight] = np.copy(rvs_single[f:l][good[0]])
+            rvs_nightly_out[inight] = np.copy(rr[good_finite[0]])
             unc_nightly_out[inight] = np.nan
+        elif ng in (2, 3):
+            rvs_nightly_out[inight] = pcmath.weighted_mean(rr, ww)
+            unc_nightly_out[inight] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
         else:
-            rvs_nightly_out[inight] = pcmath.weighted_mean(rvs_single[f:l][good], w[f:l][good])
-            unc_nightly_out[inight] = pcmath.weighted_stddev(rvs_single[f:l][good], w[f:l][good]) / np.sqrt(ng)
-            
+            wstddev = pcmath.weighted_stddev(rr, ww)
+            wmean = pcmath.weighted_mean(rr, ww)
+            bad = np.where(np.abs(rr - wmean) > 3*wstddev)[0]
+            if bad.size > 0:
+                ng -= bad.size
+                ww[bad] = 0
+            rvs_nightly_out[inight] = pcmath.weighted_mean(rr, ww)
+            unc_nightly_out[inight] = pcmath.weighted_stddev(rr, ww) / np.sqrt(ng)
+                
         if inight < n_nights - 1:
             f += n_obs_nights[inight]
             l += n_obs_nights[inight+1]
 
     return rvs_single, unc_single, rvs_nightly_out, unc_nightly_out
+
+
+
+def modifed_stddev(rvs, weights, mus, n_obs_nights):
+    n_nights = mus.size
+    unc = np.full(n_nights, fill_value=np.nan)
+    n_orders, n_spec = rvs.shape
+    f, l = 0, n_obs_nights[0]
+    for i in range(n_nights):
+        rr, ww = rvs[:, f:l].flatten(), weights[:, f:l].flatten()
+        ng = np.where(ww > 0)[0].size
+        if ng in (0, 1):
+            unc[i] = np.nan
+        else:
+            unc[i] = pcmath.weighted_stddev_mumod(rr, ww, mus[i]) / np.sqrt(ng)
+            
+        if i < n_nights - 1:
+            f += n_obs_nights[i]
+            l += n_obs_nights[i+1]
     
-    
- 
  
 # Wobble Method of combining RVs (Starting from single RVs)
 # pars[0:n] = rvs
@@ -476,38 +525,47 @@ def rv_solver(pars, rvs, weights, n_obs_nights):
     order_offsets = pars[n_spec:]
     term = np.empty(shape=(n_ord, n_spec), dtype=np.float64)
     
-    # MIN[(RV_j - RV_jo + VR_o)^2 * w_jo]
     for o in prange(n_ord):
         for i in range(n_spec):
             term[o, i] = weights[o, i]**2 * (rvs_individual[i] - rvs[o, i] + order_offsets[o])**2
-    rms = np.sqrt(np.nansum(term) / term.size)
+            
+    rms = np.sqrt(np.nansum(term)) # Technically not an rms
     
     bad = np.where(term > 5*rms)
     if bad[0].size > 0:
         term[bad] = 0
-    rms = np.sqrt(np.nansum(term) / term.size)
+    rms = np.sqrt(np.nansum(term))
     
-    return rms, 1
+    return rms
 
 # Wobble Method of combining RVs (Starting from single RVs)
 # pars[0:n] = rvs
 # pars[n:] = order offsets.
 @jit(parallel=True)
-def rv_solver_nightsonly(pars, rvs, weights, n_obs_nights):
-    n_ord = rvs.shape[0]
-    n_spec = rvs.shape[1]
-    n_nights = n_obs_nights.size
+def rv_solver_fast(pars, rvs, weights, n_obs_nights):
+    
+    n_ord, n_spec = rvs.shape
+    n_tot = n_ord * n_spec
+    n_nights = len(n_obs_nights)
     rvs_nightly = pars[:n_nights]
     order_offsets = pars[n_nights:]
-    term = np.empty(shape=(n_ord, n_nights), dtype=np.float64)
+    diffs = np.zeros(shape=(n_ord, n_spec), dtype=np.float64)
     
-    # MIN[(RV_j - RV_jo + VR_o)^2 * w_jo]
-    for o in prange(n_ord):
+    for o in range(n_ord):
+        f, l = 0, n_obs_nights[0]
         for i in range(n_nights):
-            term[o, i] = weights[o, i]**2 * (rvs_nightly[i] - rvs[o, i] + order_offsets[o])**2
-    rms = np.sqrt(np.nansum(term) / term.size)
-
-    return rms, 1
+            diffs[o, f:l] = weights[o, f:l]**2 * (rvs_nightly[i] - rvs[o, f:l] + order_offsets[o])**2
+            if i < n_nights - 1:
+                f += n_obs_nights[i]
+                l += n_obs_nights[i+1]
+    
+    good = np.where(weights > 0)
+    diffs  = diffs[good].flatten()
+    ss = np.argsort(diffs)
+    diffs[ss[-int(0.05 * n_tot):]] = 0
+    rms = np.sqrt(np.nansum(diffs)) # Technically not an rms
+    
+    return rms
  
 # Computes the RV content per pixel.
 def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=None, sampling=None, wave_to_sample=None):

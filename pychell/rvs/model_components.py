@@ -718,17 +718,18 @@ class TelluricsTAPASV2(TemplateMult):
 
     def build(self, pars, templates, wave_final):
         if self.enabled:
+            vel = pars[self.par_names[0]].value
             flux = np.ones(wave_final.size)
             if self.water_enabled:
                 flux *= self.build_component(pars, templates, 'water', wave_final)
             if self.airmass_enabled:
                 flux *= self.build_component(pars, templates, 'airmass', wave_final)
+            flux = pcmath.doppler_shift(wave_final, flux, vel=vel, interp='linear')
             return flux
         else:
             return self.build_fake(wave_final.size)
 
     def build_component(self, pars, templates, single_species, wave_final):
-        shift = pars[self.par_names[0]].value
         if single_species == 'water':
             depth = pars[self.par_names[1]].value
             wave, flux = templates['water'][:, 0], templates['water'][:, 1]
@@ -737,8 +738,8 @@ class TelluricsTAPASV2(TemplateMult):
             wave, flux = templates['airmass'][:, 0], templates['airmass'][:, 1]
         
         flux = flux ** depth
-        wave_shifted = wave * np.exp(shift / cs.c)
-        return np.interp(wave_final, wave_shifted, flux, left=flux[0], right=flux[-1])
+        return np.interp(wave_final, wave, flux, left=np.nan, right=np.nan)
+        return flux
 
     def init_parameters(self, forward_model):
         

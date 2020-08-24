@@ -270,13 +270,13 @@ class ForwardModels(list):
                 args_pass.append((self[spec_num], iter_index, self.n_spec))
             
             # Call the parallel job via joblib.
-            self[:] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.solver_wrapper)(*args_pass[ispec]) for ispec in range(self.n_spec))
+            self[:] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].solver_wrapper)(*args_pass[ispec]) for ispec in range(self.n_spec))
 
         else:
             # Fit one at a time
             for ispec in range(self.n_spec):
                 print('    Performing Nelder-Mead Fit For Spectrum '  + str(ispec+1) + ' of ' + str(self.n_spec), flush=True)
-                self[ispec] = self.solver_wrapper(self[ispec], iter_index, self.n_spec)
+                self[ispec] = self[0].solver_wrapper(self[ispec], iter_index, self.n_spec)
         
         # Cross correlate if set
         if self.do_xcorr and self.n_template_fits > 0 and self[0].models_dict['star'].enabled:
@@ -346,61 +346,6 @@ class ForwardModels(list):
         print('** TAG: ' + self.tag, flush=True)
         print('** N Iterations: ' + str(self.n_template_fits), flush=True)
         print('***************************************', flush=True)
-
-
-    # Wrapper for parallel processing. Solves and plots the forward model results. Also does xcorr if set.
-    @staticmethod
-    def solver_wrapper(forward_model, iter_index, n_spec_tot):
-        """A wrapper for forward modeling and cross-correlating a single spectrum.
-
-        Args:
-            forward_model (ForwardModel): The forward model object
-            iter_index (int): The iteration index.
-            n_spec_tot (int): The total number of spectra for printing purposes.
-            output_path_plot (str, optional): output path for plots. Defaults to None and uses object default.
-            verbose_print (bool, optional): Whether or not to print optimization results. Defaults to False.
-            verbose_plot (bool, optional): Whether or not to plot templates with the forward model. Defaults to False.
-
-        Returns:
-            forward_model (ForwardModel): The updated forward model since we possibly fit in parallel.
-        """
-        # Start the timer
-        stopwatch = pcutils.StopWatch()
-        
-        # Construct the extra arguments to pass to the target function
-        args_to_pass = (forward_model, iter_index)
-        
-        # Construct the Nelder Mead Solver and run
-        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-6, xtol=1E-6)
-        opt_result = solver.solve()
-
-        # Pass best fit parameters and optimization result to forward model
-        forward_model.best_fit_pars.append(opt_result[0])
-        forward_model.opt.append(opt_result[1:])
-
-        # Build the best fit forward model
-        best_wave, best_model = forward_model.build_full(forward_model.best_fit_pars[-1], iter_index)
-
-        # Pass wavelength solution and best model to forward model
-        forward_model.wavelength_solutions.append(best_wave)
-        forward_model.models.append(best_model)
-
-        # Compute the residuals between the data and model, don't flag bad pixels here. Cropped may still be nan.
-        forward_model.residuals.append(forward_model.data.flux - best_model)
-
-        # Print diagnostics if set
-        if forward_model.verbose_print:
-            print('RMS = %' + str(round(100*opt_result[1], 5)))
-            print('Function Calls = ' + str(opt_result[2]))
-            forward_model.pretty_print()
-        
-        print('    Fit Spectrum ' + str(forward_model.spec_num) + ' of ' + str(n_spec_tot) + ' in ' + str(round((stopwatch.time_since())/60, 2)) + ' min', flush=True)
-
-        # Output a plot
-        forward_model.plot_model(iter_index)
-
-        # Return new forward model object since we possibly fit in parallel
-        return forward_model
 
 
     def cross_correlate_spectra(self, iter_index=None):
@@ -517,7 +462,8 @@ class ForwardModels(list):
             fname = self.run_output_path_rvs + self.tag + '_bisectorspans_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
             plt.savefig(fname)
             plt.close()
-        
+
+     
         
 class ForwardModel:
     
@@ -839,8 +785,63 @@ class ForwardModel:
         else:
             f = np.sum(n_obs_nights[0:night_index])
             return f + sub_spec_index
+
+
+    # Wrapper for parallel processing. Solves and plots the forward model results. Also does xcorr if set.
+    @staticmethod
+    def solver_wrapper(forward_model, iter_index, n_spec_tot):
+        """A wrapper for forward modeling and cross-correlating a single spectrum.
+
+        Args:
+            forward_model (ForwardModel): The forward model object
+            iter_index (int): The iteration index.
+            n_spec_tot (int): The total number of spectra for printing purposes.
+            output_path_plot (str, optional): output path for plots. Defaults to None and uses object default.
+            verbose_print (bool, optional): Whether or not to print optimization results. Defaults to False.
+            verbose_plot (bool, optional): Whether or not to plot templates with the forward model. Defaults to False.
+
+        Returns:
+            forward_model (ForwardModel): The updated forward model since we possibly fit in parallel.
+        """
+        # Start the timer
+        stopwatch = pcutils.StopWatch()
         
-            
+        # Construct the extra arguments to pass to the target function
+        args_to_pass = (forward_model, iter_index)
+        
+        # Construct the Nelder Mead Solver and run
+        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-6, xtol=1E-6)
+        opt_result = solver.solve()
+
+        # Pass best fit parameters and optimization result to forward model
+        forward_model.best_fit_pars.append(opt_result[0])
+        forward_model.opt.append(opt_result[1:])
+
+        # Build the best fit forward model
+        best_wave, best_model = forward_model.build_full(forward_model.best_fit_pars[-1], iter_index)
+
+        # Pass wavelength solution and best model to forward model
+        forward_model.wavelength_solutions.append(best_wave)
+        forward_model.models.append(best_model)
+
+        # Compute the residuals between the data and model, don't flag bad pixels here. Cropped may still be nan.
+        forward_model.residuals.append(forward_model.data.flux - best_model)
+
+        # Print diagnostics if set
+        if forward_model.verbose_print:
+            print('RMS = %' + str(round(100*opt_result[1], 5)))
+            print('Function Calls = ' + str(opt_result[2]))
+            forward_model.pretty_print()
+        
+        print('    Fit Spectrum ' + str(forward_model.spec_num) + ' of ' + str(n_spec_tot) + ' in ' + str(round((stopwatch.time_since())/60, 2)) + ' min', flush=True)
+
+        # Output a plot
+        forward_model.plot_model(iter_index)
+
+        # Return new forward model object since we possibly fit in parallel
+        return forward_model
+  
+  
 class iSHELLForwardModel(ForwardModel):
 
     def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):

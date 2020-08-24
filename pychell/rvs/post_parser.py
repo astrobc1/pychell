@@ -15,9 +15,10 @@ def parse_forward_models(output_path_root, do_orders=None):
     
     if do_orders is None:
         do_order = get_orders(output_path_root)
-    
-    forward_models = np.empty(shape=(n_ord, n_spec), dtype=object)
+        
     n_orders = len(do_orders)
+    n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'Fits' + os.sep + '*.pkl'))
+    forward_models = np.empty(shape=(n_orders, n_spec), dtype=object)
     for o in range(n_orders):
         for ispec in range(n_spec):
             forward_models[o, ispec] = parse_forward_model(output_path_root, do_orders[o], ispec + 1)

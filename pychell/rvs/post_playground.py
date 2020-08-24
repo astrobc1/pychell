@@ -4,7 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pychell
 import pychell.rvs.forward_models as pcfoward_models
+import pychell.maths as pcmath
 import os
+import scipy.constants as cs
 import copy
 import scipy.signal
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
@@ -106,7 +108,6 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
             
     # Median nightly S / N for each order to compare against the photon limit
     nightly_snrs = np.nanmedian(nightly_snrs, axis=1)
-        
     
     # Get for RVs for the desired iterations
     rvs = np.zeros((n_orders, n_spec))
@@ -148,25 +149,27 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     
     # Plot the final rvs
     fname = output_path_root + tag + '_final_rvs.png'
-    plot_final_rvs(star_name, spectrograph, rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], *rvs_out, phase_to=phase_to, show=True, fname=None, tc=tc)
+    rvs_single, unc_single, rvs_nightly, unc_nightly = rvs_out[0], rvs_out[1], rvs_out[2], rvs_out[3]
+    plot_final_rvs(star_name, spectrograph, rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=phase_to, show=True, fname=None, tc=tc)
 
     # Save to a text file
     fname = output_path_root + tag + '_final_rvs.txt'
-    np.savetxt(fname, np.array([rvs_dict['BJDS'], rvs_out[0], rvs_out[1]]).T, delimiter=',')
+    np.savetxt(fname, np.array([rvs_dict['BJDS'], rvs_single, unc_single]).T, delimiter=',')
     fname = output_path_root + tag + '_final_rvs_nightly.txt'
-    np.savetxt(fname, np.array([rvs_dict['BJDS_nightly'], rvs_out[2], rvs_out[3]]).T, delimiter=',')
+    np.savetxt(fname, np.array([rvs_dict['BJDS_nightly'], rvs_nightly, unc_nightly]).T, delimiter=',')
     
     # redchi2s, redchi2s_nightly = compute_redchi2s(rvs_out[0], rvs_out[1], rvs_out[2], rvs_out[3], rvs_dict['n_obs_nights'])
     
     # Plot the RV contents and error bars
-    plt.plot(do_orders, rvcs, label='Photon noise limit', lw=2, marker='X', markersize=12, mfc='hotpink', c='black')
-    plt.title(star_name.replace('_', ' ') + ' ' + spectrograph + ' RV Precision')
-    plt.plot(do_orders, np.nanmedian(unc_nightly, axis=1), label='Median Nightly RV uncertainties', lw=2, marker='X', markersize=12, mfc='green')
-    plt.xticks(do_orders)
-    plt.legend()
-    plt.ylabel('$\sigma_{RV}$')
-    plt.xlabel('Order')
-    plt.show()
+    if templates is not None:
+        plt.plot(do_orders, rvcs, label='Photon noise limit', lw=2, marker='X', markersize=12, mfc='hotpink', c='black')
+        plt.title(star_name.replace('_', ' ') + ' ' + spectrograph + ' RV Precision')
+        plt.plot(do_orders, np.nanmedian(unc_nightly, axis=1), label='Median Nightly RV uncertainties', lw=2, marker='X', markersize=12, mfc='green')
+        plt.xticks(do_orders)
+        plt.legend()
+        plt.ylabel('$\sigma_{RV}$')
+        plt.xlabel('Order')
+        plt.show()
     
     #rvs_out += (redchi2s,)
     
@@ -307,6 +310,9 @@ def gen_rv_weights(rvs_dict, bad_rvs_dict, rms=None, rvcs=None):
     # RMS weights
     if rms is not None:
         weights_rms = 1 / rms**2
+        bad = np.where(rms > 2 * np.nanmedian(rms))
+        if bad[0].size > 0:
+            weights_rms[bad] = 0
         weights_rms *= mask
     else:
         weights_rms = np.ones_like(mask)
@@ -316,7 +322,7 @@ def gen_rv_weights(rvs_dict, bad_rvs_dict, rms=None, rvcs=None):
     if rvcs is not None:
         weights_rvcont = np.outer(1 / rvcs**2, np.ones(n_spec))
     else:
-        weights_rvcont = np.copy(mask)
+        weights_rvcont = np.ones_like(mask)
     weights_rvcont /= np.nansum(weights_rvcont)
     
     # Combine weights
@@ -406,13 +412,13 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
     if tc is None:
         alpha = 0
     else:
-        alpha = tc - phase_to / 2
+        alpha = tc - _phase_to / 2
     
     # Single rvs
-    plt.errorbar((bjds - alpha)%phase_to, rvs_single-np.nanmedian(rvs_single), yerr=unc_single, linewidth=0, elinewidth=1, marker='.', markersize=10, markerfacecolor='pink', color='green', alpha=0.8)
+    plt.errorbar((bjds - alpha)%_phase_to, rvs_single-np.nanmedian(rvs_single), yerr=unc_single, linewidth=0, elinewidth=1, marker='.', markersize=10, markerfacecolor='pink', color='green', alpha=0.8)
 
     # Nightly RVs
-    plt.errorbar((bjds_nightly - alpha)%phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, linewidth=0, elinewidth=3, marker='o', markersize=10, markerfacecolor='blue', color='grey', alpha=0.9)
+    plt.errorbar((bjds_nightly - alpha)%_phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, linewidth=0, elinewidth=3, marker='o', markersize=10, markerfacecolor='blue', color='grey', alpha=0.9)
     
     plt.title(star_name.replace('_', ' ') + ', ' + spectrograph + ' Relative RVs')
     if phase_to is None:
@@ -439,6 +445,7 @@ def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_temp
     n_orders = len(do_orders)
     
     fig, axarr = plt.subplots(nrows=n_orders, ncols=1, figsize=(20, 16), dpi=250)
+    axarr = np.atleast_1d(axarr)
     
     for o in range(n_orders):
         axarr[o].plot(stellar_templates[o][:, 0] * factor, stellar_templates[o][:, 1])
@@ -452,7 +459,236 @@ def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_temp
     
     plt.close()
             
+
+def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, frame='star', unit='Ang', debug=False, star_name=None):
+    
+    n_orders = len(do_orders)
+    
+    forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+    
+    stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indexes=iter_indexes)
+    
+    if star_name is None:
+        star_name = forward_models[0, 0].star_name
+    
+    if unit == 'microns':
+        factor = 1E-4
+    elif unit == 'Ang':
+        factor = 1
+    else:
+        factor = 1E-1
+    
+    n_orders, n_spec = forward_models.shape
+    nxhr = forward_models[0, 0].templates_dict['star'][:, 0].size
+    plot_height_single = 4
+    fig, axarr = plt.subplots(nrows=n_orders, ncols=1, figsize=(10, int(plot_height_single*n_orders)), dpi=250)
+    axarr = np.atleast_1d(axarr)
+    
+    for o in range(n_orders):
+        
+        star_wave = forward_models[o, 0].templates_dict['star'][:, 0]
+        res = np.zeros((n_spec, nxhr))
+        
+        for i in range(n_spec):
             
+            if frame == 'star':
+                
+                if iter_indexes[o] == 0 and not forward_models[o, i].from_synthetic:
+                    vel = forward_models[o, i].data.bc_vel
+                else:
+                    vel = forward_models[o, i].best_fit_pars[iter_indexes[o]][forward_models[o, i].models_dict['star'].par_names[0]].value
+                    
+                # Shift the residuals
+                wave_shifted = forward_models[o, i].wavelength_solutions[iter_indexes[o]] * np.exp(vel / cs.c)
+            
+                # Interpolate for sanity / consistency
+                good = np.where(np.isfinite(forward_models[o, i].residuals[iter_indexes[o]]) & np.isfinite(wave_shifted))[0]
+                residuals_shifted = scipy.interpolate.CubicSpline(wave_shifted[good], forward_models[o, i].residuals[iter_indexes[o]][good], extrapolate=False)(star_wave)
+                res[i, :] = residuals_shifted
+                
+                # Plot
+                axarr[o].plot(wave_shifted * factor, forward_models[o, i].residuals[iter_indexes[o]], alpha=0.7)
+                
+            else:
+                
+                good = np.where(np.isfinite(forward_models[o, i].residuals[iter_indexes[o]]) & np.isfinite(forward_models[o, i].wavelength_solutions[iter_indexes[o]]))[0]
+                residuals_shifted = scipy.interpolate.CubicSpline(forward_models[o, i].wavelength_solutions[iter_indexes[o]][good], forward_models[o, i].residuals[iter_indexes[o]][good], extrapolate=False)(star_wave)
+                
+                res[i, :] = residuals_shifted
+
+                # Plot
+                axarr[o].plot(forward_models[o, i].wavelength_solutions[iter_indexes[o]] * factor, forward_models[o, i].residuals[iter_indexes[o]], alpha=0.7)
+            
+        axarr[o].plot(star_wave * factor, np.nanmedian(res, axis=0), c='black')
+            
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].tick_params(axis='both', labelsize=10)
+    axarr[-1].set_xlabel('Wavelength [' + unit + ']')
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
+    plt.tight_layout()
+    fig.text(0.03, 0.5, 'Norm. flux', rotation=90, verticalalignment='center', horizontalalignment='center', fontsize=10)
+    fig.text(0.5, 0.97, star_name, fontsize=10, verticalalignment='center', horizontalalignment='center')
+    plt.savefig(output_path_root + 'residuals.png')
+    
+    if debug:
+        plt.show()
+    
+    plt.close()
+    
+    
+    
+def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indexes, debug=False, star_name=None, forward_models=None):
+    
+    # Load forward models
+    if forward_models is None:
+        forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+    
+    if star_name is None:
+        star_name = forward_models[0, 0].star_name
+    
+    n_orders, n_spec = forward_models.shape
+    plot_height_single = 4
+    fig, axarr = plt.subplots(nrows=n_orders, ncols=1, figsize=(10, int(plot_height_single*n_orders)), dpi=250)
+    axarr = np.atleast_1d(axarr)
+    
+    for o in range(n_orders):
+        
+        xdefault = forward_models[o, 0].models_dict['lsf'].x
+        nxlsf = xdefault.size
+        lsfs = np.zeros((nxlsf, n_spec))
+        
+        for i in range(n_spec):
+            
+            # Build LSF
+            x = forward_models[o, i].models_dict['lsf'].x
+            lsf = forward_models[o, i].models_dict['lsf'].build(pars=forward_models[o, i].best_fit_pars[iter_indexes[o]])
+            
+            # Plot
+            axarr[o].plot(x, lsf, alpha=0.7)
+            
+            # Interpolate
+            lsfs[:, i] = scipy.interpolate.CubicSpline(x, lsf, extrapolate=False)(xdefault)
+            
+        axarr[o].plot(xdefault, np.nanmedian(lsfs, axis=1), c='black')
+        good = np.where(lsfs[:, 0] / np.nanmax(lsfs[:, 0]) > 1E-6)[0]
+        f, l = x[good[0]], x[good[-1]]
+            
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].tick_params(axis='both', labelsize=10)
+        axarr[o].set_xlabel('Wavelength [Ang], Mean $\lambda=$' + str(round(np.nanmean(forward_models[o, 0].templates_dict['star'][:, 0]), 3)))
+        axarr[o].set_xlim(f, l)
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
+    plt.tight_layout()
+    fig.text(0.03, 0.5, 'Normalized LSF profile', rotation=90, verticalalignment='center', horizontalalignment='center', fontsize=10)
+    fig.text(0.5, 0.97, star_name, fontsize=10, verticalalignment='center', horizontalalignment='center')
+    plt.savefig(output_path_root + 'lsf_profiles.png')
+    
+    if debug:
+        plt.show()
+    
+    plt.close()
+    
+    return forward_models
+    
+    
+def inspect_wls(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_name=None, debug=False, forward_models=None):
+    
+    # Load forward models
+    if forward_models is None:
+        forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+    
+    if star_name is None:
+        star_name = forward_models[0, 0].star_name
+    
+    n_orders, n_spec = forward_models.shape
+    plot_height_single = 4
+    fig, axarr = plt.subplots(nrows=n_orders, ncols=1, figsize=(10, int(plot_height_single*n_orders)), dpi=250)
+    axarr = np.atleast_1d(axarr)
+    
+    for o in range(n_orders):
+        
+        npix = forward_models[o, 0].data.flux.size
+        pix = np.arange(npix)
+        wlss = np.zeros((npix, n_spec))
+        
+        for i in range(n_spec):
+            
+            # Build wls
+            wls = forward_models[o, i].models_dict['wavelength_solution'].build(forward_models[o, i].best_fit_pars[iter_indexes[o]])
+            wlss[:, i] = wls
+            
+        mwls = np.nanmedian(wlss, axis=1)
+        
+        for i in range(n_spec):
+            
+            # Plot
+            axarr[o].plot(pix, mwls - wlss[:, i], alpha=0.7)
+            
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].tick_params(axis='both', labelsize=10)
+    axarr[-1].set_xlabel('Detector Pixels')
+    plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
+    plt.tight_layout()
+    fig.text(0.03, 0.5, 'Wavelength Solution', rotation=90, verticalalignment='center', horizontalalignment='center', fontsize=10)
+    fig.text(0.5, 0.97, star_name, fontsize=10, verticalalignment='center', horizontalalignment='center')
+    plt.savefig(output_path_root + 'wavelength_solutions.png')
+    
+    if debug:
+        plt.show()
+    
+    plt.close()
+    
+    return forward_models
+    
+def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_name=None, debug=False, forward_models=None):
+    
+    # Load forward models
+    if forward_models is None:
+        forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+    
+    if star_name is None:
+        star_name = forward_models[0, 0].star_name
+    
+    n_orders, n_spec = forward_models.shape
+    plot_height_single = 4
+    fig, axarr = plt.subplots(nrows=n_orders, ncols=1, figsize=(10, int(plot_height_single*n_orders)), dpi=250)
+    axarr = np.atleast_1d(axarr)
+    
+    for o in range(n_orders):
+        
+        x = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].best_fit_pars[iter_indexes[o]])
+        nx = x.size
+        
+        blazes = np.zeros((nx, n_spec))
+        
+        for i in range(n_spec):
+            
+            # Build blaze
+            blaze = forward_models[o, i].models_dict['blaze'].build(forward_models[o, i].best_fit_pars[iter_indexes[o]], x)
+            
+            # Plot
+            axarr[o].plot(x, blaze, alpha=0.7)
+            
+            blazes[:, i] = blaze
+            
+        axarr[o].plot(x, np.nanmedian(blazes, axis=1), c='black')
+            
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].tick_params(axis='both', labelsize=10)
+    axarr[-1].set_xlabel('Wavelength [Ang]')
+    plt.subplots_adjust(left=0.15, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
+    plt.tight_layout()
+    fig.text(0.5, 0.97, star_name, fontsize=10, verticalalignment='center', horizontalalignment='center')
+    plt.savefig(output_path_root + 'continuums.png')
+    
+    if debug:
+        plt.show()
+    
+    plt.close()
+    
+    return forward_models
+
+
             
 def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=False, flag=False, phase_to=None, debug=False, tc=None):
     

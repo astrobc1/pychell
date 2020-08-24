@@ -704,6 +704,188 @@ def optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, 
 
     return spec, spec_unc
 
+
+def fit_2d_wrapper(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, detector_props, exp_time, sky=None, M=16, n_iters=100, n_chunks=5):
+    
+    ny, nx = trace_image.shape
+    
+    goody, goodx = np.where(badpix_mask == 1)
+    x_start, x_end = goodx[0], goodx[-1]
+    y_start, y_end = goody[0], goody[-1]
+    x_chunks = np.linspace(x_start, x_end, num=n_chunks+1).astype(int)
+    
+    xarr = np.arange(nx)
+    yarr = np.arange(ny)
+    
+    for ichunk in range(n_chunks):
+        
+        chunk_x_start, chunk_x_end = x_chunks[ichunk], x_chunks[ichunk + 1]
+        goody_chunk, _ = np.where(badpix_mask[:, chunk_x_start:chunk_x_end] == 1)
+        chunk_y_start, chunk_y_end = goody_chunk[0], goody_chunk[-1]
+        
+        trace_image_chunk = trace_image[chunk_y_start:chunk_y_end, chunk_x_start:chunk_x_end]
+        badpix_mask_chunk = badpix_mask[chunk_y_start:chunk_y_end, chunk_x_start:chunk_x_end]
+        y_positions_chunk = y_positions[chunk_x_start:chunk_x_end] - chunk_y_start
+        pixel_fractions_chunk = pixel_fractions[chunk_y_start:chunk_y_end, chunk_x_start:chunk_x_end]
+        sky_chunk = sky[chunk_x_start:chunk_x_end]
+        fit_result = fit_2d_chunk_modgauss(trace_image_chunk, y_positions_chunk, trace_profile_cspline, badpix_mask_chunk, pixel_fractions_chunk, height, redux_settings, detector_props, sky=sky_chunk, fit_profile=True, fit_sky=False, fit_ypos=True)
+        
+        ypos = optimal_extraction_pmassey()
+    
+    
+
+def fit_2d_chunk_modgauss(trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, detector_props, sky=None, fit_profile=True, fit_sky=False, fit_ypos=True):
+    
+    # The chunk shape
+    ny, nx = trace_image.shape
+    
+    # Good pixels
+    goody, goodx = np.where(pixel_fractions == 1)
+    
+    # The trace image position determined by a quadratic
+    if fit_ypos:
+        trace_pos_poly_order = 2
+        n_trace_pos_pars = trace_pos_poly_order + 1
+        ypos_xsample = np.array([goodx[10], goodx.size / 2 - 1, goodx[-10]])
+        ypos_pars = np.copy(y_positions[ypos_xsample])
+        ypos_pars_bounds = [(ypos_pars[0] - 5, ypos_pars[0] + 5), (ypos_pars[1] - 5, ypos_pars[1] + 5), (ypos_pars[2] - 5, ypos_pars[2] + 5)]
+        ypos_par_inds = (0, 1, 2)
+    else:
+        trace_pos_poly_order = None
+        n_trace_pos_pars = 0
+        ypos_pars = []
+        ypos_par_inds = None
+    
+    # Trace Pars
+    if fit_profile:
+        n_trace_profile_pars = 2
+        trace_profile = trace_profile_cspline(trace_profile_cspline.x)
+        trace_profile /= np.nanmax(trace_profile)
+        left_cut = np.max(np.where((trace_profile < 0.5) & trace_profile_cspline.x < 0)[0])
+        right_cut = np.min(np.where((trace_profile < 0.5) & trace_profile_cspline.x > 0)[0])
+        sigma_guess = (right_cut - left_cut) / 2.355
+        d_guess = 2
+        trace_profile_pars = [sigma_guess, d_guess]
+        trace_profile_bounds = [(sigma_guess * 0.5, sigma_guess * 1.5), (1, 3)]
+        trace_profile_par_inds = (n_trace_pos_pars, n_trace_pos_pars + 1, n_trace_pos_pars + 2)
+    else:
+        trace_profile_par_inds = None
+        n_trace_profile_pars = 0
+        
+    # Sky Pars
+    if fit_sky:
+        sky_poly_order = 2
+        n_sky_pars = sky_poly_order + 1
+        sky_xsample = np.array([goodx[10], goodx.size / 2 - 1, goodx[-10]])
+        sky_pars = np.copy(sky[sky_xsample])
+        sky_pars_bounds = [(sky_pars[0] - 5, sky_pars[0] + 5), (sky_pars[1] - 5, sky_pars[1] + 5), (sky_pars[2] - 5, sky_pars[2] + 5)]
+        sky_par_inds = (n_trace_pos_pars + n_trace_profile_pars, n_trace_pos_pars + n_trace_profile_pars + 1, n_trace_pos_pars + n_trace_profile_pars + 2)
+    else:
+        sky_par_inds = None
+        n_sky_pars = 0
+        
+    # Optimize
+    xarr, yarr = np.arange(nx), np.arange(ny)
+    init_pars = np.array(ypos_pars + trace_profile_pars + sky_pars)
+    bounds = ypos_pars_bounds + trace_profile_pars_bounds + sky_pars_bounds
+    args = (trace_image, xarr, yarr, spec1d, pixel_fractions, weights, trace_profile_cspline, y_positions, sky, ypos_par_inds, profile_par_inds, sky_par_inds)
+    result = scipy.optimize.minimize(fit_2d_chunk_solver, init_pars, bounds=bounds, tol=1E-6, method='Powell', args=args)
+    best_pars = result.x
+    
+    # Extract pars
+    ypos_pars = best_pars[ypos_par_inds] if fit_ypos else None
+    trace_profile_pars = best_pars[trace_profile_par_inds] if fit_profile else None
+    sky_pars = best_pars[sky_par_inds] if fit_sky else None
+        
+    return ypos_pars, trace_profile_pars, sky_pars
+    
+    
+
+def fit_2d_chunk_solver(pars, trace_image, xarr, yarr, spec1d, pixel_fractions, weights, trace_profile_cspline=None, y_positions=None, sky=None, ypos_par_inds=None, profile_par_inds=None, sky_par_inds=None):
+    
+    # The image dimensions
+    ny, nx = trace_image.shape
+    
+    # y positions
+    if ypos_par_inds is not None:
+        ypos = np.polyval(pars[0:3], xarr)
+    else:
+        ypos = y_positions
+    
+    # profile params
+    if profile_par_inds is not None:
+        sigma, d = pars[3], pars[4]
+        
+    
+    # Background params
+    if sky_par_inds is not None:
+        B = np.polyval(pars[5:8], xarr)
+    else:
+        B = sky
+        
+    # Model
+    model = np.full(shape=(ny, nx), fill_value=np.nan)
+    
+    for x in range(nx):
+        
+        # Good and bad
+        bad = np.where(pixel_fractions[:, x] <= 1)[0]
+        good = np.where(pixel_fractions[:, x] == 1)[0]
+        
+        if good.size == 0:
+            continue
+        
+        # Build Profile
+        if trace_profile_cspline is None:
+            P = pcmath.gauss_modified(xarr[good], 1, ypos[x], sigma, d)
+        else:
+            P = scipy.interpolate.CubicSpline(trace_profile_cspline.x + ypos[x], trace_profile_cspline(trace_profile_cspline.x))(xarr[good])
+            
+        P /= np.nansum(P)
+        model[good, x] = P * spec1d[x] + B[x]
+        
+    good = np.where((weights > 0))[0]
+    nflag = 50
+    wdiffs2 = (weights[good] * (trace_image[good] - model[good])**2).flatten().sort()
+    wdiffs2[-nflag:] = 0
+    chi2 = np.nansum(wdiffs2) / (good.size - nflag - 1)
+    return chi2
+
+
+def fit_2d_chunk_(pars, trace_image, xarr, yarr, yarrhr, spec1d, pixel_fractions, weights):
+    
+    # The image dimensions
+    ny, nx = trace_image.shape
+    
+    # y positions
+    y = np.polyval(pars[0:3], xarr)
+    
+    # profile params
+    sigma, d = pars[3], pars[4]
+    
+    # Background params
+    B = np.polyval(pars[5:8], xarr)
+    
+    for x in prange(nx):
+        P = pcmath.gauss_modified(xarrhr, 1, y[x], sigma, d)
+        P = scipy.interpolate.CubicSpline(xarrhr, P, extrapolate=False)(yarr)
+        good = np.where(pixel_fractions[:, x] == 1)[0]
+        if good.size == 0:
+            continue
+        P = P[good]
+        P /= np.nansum(P)
+        star = P * spec1d
+        model[:, x] = star + B[x]
+        
+    wdiffs2 = weights * (trace_image - model)**2
+    good = np.where((weights > 0) & np.isfinite(wdiffs2))[0]
+    wdiffs2 = wdiffs2[good].flatten()
+    wdiffs2 = np.sort(wdiffs2)
+    wdiffs2[-50:] = 0
+    chi2 = np.nansum(wdiffs2) / (ng - 50)
+    return chi2
+
+
 def generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions, badpix_mask, height, min_profile_flux=0.05):
     """Computes the fraction of each pixel to use according to a minumum profile flux.
 

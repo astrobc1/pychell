@@ -24,6 +24,17 @@ import numba
 import numba.types as nt
 from llc import jit_filter_function
 
+def doppler_shift(wave, flux, vel, wave_out=None, interp='linear'):
+    if wave_out is None:
+        wave_out = wave
+    wave_shifted = wave * np.exp(vel / cs.c)
+    if interp == 'linear':
+        flux_out = np.interp(wave_out, wave_shifted, flux, left=np.nan, right=np.nan)
+    elif interp == 'cubic':
+        flux_out = scipy.interpolate.CubicSpline(wave_shifted, flux, extrapolate=False)(wave_out)
+    return flux_out
+    
+
 @jit_filter_function
 def fmedian(x):
     """Fast median calculation for median filtering arrays, called by generic_filter.
@@ -418,6 +429,25 @@ def weighted_stddev(x, w):
     var = np.nansum(dev ** 2 * weights) / bias_estimator
     return np.sqrt(var)
 
+
+
+def weighted_stddev_mumod(x, w, mu):
+    """Computes the weighted standard deviation of a dataset with bias correction.
+
+    Args:
+        x (np.ndarray): The input array.
+        w (np.ndarray): The weights.
+        mu (np.ndarray): The mean.
+
+    Returns:
+        float: The weighted standard deviation.
+    """
+    weights = w / np.nansum(w)
+    dev = x - mu
+    bias_estimator = 1.0 - np.nansum(weights ** 2) / np.nansum(weights) ** 2
+    var = np.nansum(dev ** 2 * weights) / bias_estimator
+    return np.sqrt(var)
+
 # This calculates the weighted mean of array x with weights w
 @jit
 def weighted_mean(x, w):
@@ -609,7 +639,7 @@ def reduced_chi_square(x, err):
 # Given 3 data points this returns the polynomial coefficients via matrix inversion, effectively
 # In theory equivalent to np.polyval(x, y, deg=2)
 @jit
-def poly_coeffs(x, y):
+def quad_coeffs(x, y):
     """Computes quadratic coefficients given three points.
 
     Args:
@@ -625,6 +655,11 @@ def poly_coeffs(x, y):
     p = np.array([a2, a1, a0])
     return p
 
+
+#def poly_coeffs(x, y):
+    
+#    V = np.vander()
+#    np.linalg.solve()
 
 def mask_to_binary(x, l):
     """Converts a mask array of indices to a binary array.
