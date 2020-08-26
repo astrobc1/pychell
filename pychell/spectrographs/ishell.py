@@ -182,7 +182,6 @@ forward_model_blueprints = {
         
         'n_splines': 6,
         'n_delay_splines': 0,
-        'poly_order': None,
         'poly_lagrange': [-0.35, -0.05, 0.2],
         'spline': [-0.5, 0.01, 0.5]
     },
