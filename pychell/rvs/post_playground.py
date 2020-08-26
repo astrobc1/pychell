@@ -149,14 +149,14 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     
     # Plot the final rvs
     fname = output_path_root + tag + '_final_rvs.png'
-    rvs_single, unc_single, rvs_nightly, unc_nightly = rvs_out[0], rvs_out[1], rvs_out[2], rvs_out[3]
-    plot_final_rvs(star_name, spectrograph, rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=phase_to, show=True, fname=None, tc=tc)
+    rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out = rvs_out[0], rvs_out[1], rvs_out[2], rvs_out[3]
+    plot_final_rvs(star_name, spectrograph, rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out, phase_to=phase_to, show=True, fname=None, tc=tc)
 
     # Save to a text file
     fname = output_path_root + tag + '_final_rvs.txt'
-    np.savetxt(fname, np.array([rvs_dict['BJDS'], rvs_single, unc_single]).T, delimiter=',')
+    np.savetxt(fname, np.array([rvs_dict['BJDS'], rvs_single_out, unc_single_out]).T, delimiter=',')
     fname = output_path_root + tag + '_final_rvs_nightly.txt'
-    np.savetxt(fname, np.array([rvs_dict['BJDS_nightly'], rvs_nightly, unc_nightly]).T, delimiter=',')
+    np.savetxt(fname, np.array([rvs_dict['BJDS_nightly'], rvs_nightly_out, unc_nightly_out]).T, delimiter=',')
     
     # redchi2s, redchi2s_nightly = compute_redchi2s(rvs_out[0], rvs_out[1], rvs_out[2], rvs_out[3], rvs_dict['n_obs_nights'])
     
@@ -460,7 +460,7 @@ def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_temp
     plt.close()
             
 
-def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, frame='star', unit='Ang', debug=False, star_name=None):
+def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, frame='star', templates=[], unit='Ang', debug=False, star_name=None, nsample=1):
     
     n_orders = len(do_orders)
     
@@ -487,16 +487,17 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
     for o in range(n_orders):
         
         star_wave = forward_models[o, 0].templates_dict['star'][:, 0]
-        res = np.zeros((n_spec, nxhr))
+        res = np.full(shape=(n_spec, nxhr), fill_value=np.nan)
         
-        for i in range(n_spec):
+        # Residuals
+        for i in range(0, n_spec, nsample):
             
             if frame == 'star':
                 
-                if iter_indexes[o] == 0 and not forward_models[o, i].from_synthetic:
+                if iter_indexes[o] == 0 and not forward_models[o, i].models_dict['star'].from_synthetic:
                     vel = forward_models[o, i].data.bc_vel
                 else:
-                    vel = forward_models[o, i].best_fit_pars[iter_indexes[o]][forward_models[o, i].models_dict['star'].par_names[0]].value
+                    vel = -1 * forward_models[o, i].best_fit_pars[iter_indexes[o]][forward_models[o, i].models_dict['star'].par_names[0]].value
                     
                 # Shift the residuals
                 wave_shifted = forward_models[o, i].wavelength_solutions[iter_indexes[o]] * np.exp(vel / cs.c)
@@ -512,17 +513,39 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
             else:
                 
                 good = np.where(np.isfinite(forward_models[o, i].residuals[iter_indexes[o]]) & np.isfinite(forward_models[o, i].wavelength_solutions[iter_indexes[o]]))[0]
-                residuals_shifted = scipy.interpolate.CubicSpline(forward_models[o, i].wavelength_solutions[iter_indexes[o]][good], forward_models[o, i].residuals[iter_indexes[o]][good], extrapolate=False)(star_wave)
+                residuals_interp = scipy.interpolate.CubicSpline(forward_models[o, i].wavelength_solutions[iter_indexes[o]][good], forward_models[o, i].residuals[iter_indexes[o]][good], extrapolate=False)(star_wave)
                 
-                res[i, :] = residuals_shifted
+                res[i, :] = residuals_interp
 
                 # Plot
                 axarr[o].plot(forward_models[o, i].wavelength_solutions[iter_indexes[o]] * factor, forward_models[o, i].residuals[iter_indexes[o]], alpha=0.7)
-            
+        
+        for t in templates:
+            if type(forward_models[o, i].templates_dict[t]) is dict:
+                for tt in forward_models[o, 0].templates_dict[t]:
+                    w, f = forward_models[o, 0].templates_dict[t][tt][:, 0], forward_models[o, i].templates_dict[t][tt][:, 1]
+                    ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
+                    ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
+                    fc = forward_models[o, 0].models_dict['lsf'].convolve_flux(ff, pars=forward_models[o, i].initial_parameters)
+                    axarr[o].plot(ww, fc - np.nanmin(fc) + 0.2, alpha=0.8, label=tt)
+            else:
+                w, f = forward_models[o, 0].templates_dict[t][:, 0], forward_models[o, 0].templates_dict[t][:, 1]
+                ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
+                ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
+                fc = forward_models[o, 0].models_dict['lsf'].convolve_flux(ff, pars=forward_models[o, 0].initial_parameters)
+                axarr[o].plot(ww, fc - np.nanmin(fc) + 0.2, alpha=0.8, label=t)
+                
+            if frame == 'star' and t == 'star':
+                w, f = forward_models[o, 0].templates_dict[t][:, 0], forward_models[o, 0].templates_dict[t][:, 1]
+                fc = forward_models[o, 0].models_dict['lsf'].convolve_flux(f, pars=forward_models[o, 0].initial_parameters)
+                axarr[o].plot(ww, fc - np.nanmin(fc) + 0.2, alpha=0.8, label=t)
+                
+                
         axarr[o].plot(star_wave * factor, np.nanmedian(res, axis=0), c='black')
             
         axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
         axarr[o].tick_params(axis='both', labelsize=10)
+        axarr[o].legend()
     axarr[-1].set_xlabel('Wavelength [' + unit + ']')
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
     plt.tight_layout()
@@ -532,6 +555,7 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
     
     if debug:
         plt.show()
+        stop()
     
     plt.close()
     

@@ -188,10 +188,6 @@ def weighted_median(forward_models, iter_index=None, nights_for_template=None, t
     # Stores the weighted median grid. Is set via loop, so pre-allocate.
     residuals_median = np.empty(forward_models[0].n_model_pix, dtype=np.float64)
     
-    # These show the min and max of of the residuals for all observations, useful for plotting if desired.
-    residuals_max = np.empty(forward_models[0].n_model_pix, dtype=np.float64)
-    residuals_min = np.empty(forward_models[0].n_model_pix, dtype=np.float64)
-    
     
     # Weight by 1 / rms^2
     rms = np.array([fwm.opt[iter_index][0] for fwm in forward_models]) 
@@ -303,10 +299,6 @@ def weighted_median(forward_models, iter_index=None, nights_for_template=None, t
                 residuals_median[ix] = residuals_hr[ix, 0]
             else:
                 residuals_median[ix] = 0
-
-        # Store the min and max
-        residuals_max[ix] = np.nanmax(residuals_hr[ix, :] * bad_pix_hr[ix, :])
-        residuals_min[ix] = np.nanmin(residuals_hr[ix, :] * bad_pix_hr[ix, :])
         
     # Change any nans to zero
     bad = np.where(~np.isfinite(residuals_median))[0]
@@ -341,10 +333,6 @@ def weighted_average(forward_models, iter_index=None, nights_for_template=None, 
     
     # Stores the weighted median grid. Is set via loop, so pre-allocate.
     residuals_average = np.empty(forward_models[0].n_model_pix, dtype=np.float64) + np.nan
-    
-    # These show the min and max of of the residuals for all observations, useful for plotting if desired.
-    residuals_max = np.empty(forward_models[0].n_model_pix, dtype=np.float64) + np.nan
-    residuals_min = np.empty(forward_models[0].n_model_pix, dtype=np.float64) + np.nan
     
     # Weight by 1 / rms^2
     rms = np.array([forward_models[ispec].opt[iter_index][0] for ispec in range(forward_models.n_spec)]) 
@@ -399,7 +387,7 @@ def weighted_average(forward_models, iter_index=None, nights_for_template=None, 
         # Even though bad pixels are ignored later when median combining residuals,
         # they will still affect interpolation in unwanted ways.
         good = np.where(np.isfinite(forward_models[ispec].residuals[-1]) & (forward_models[ispec].data.badpix == 1))
-        residuals_interp_hr = scipy.interpolate.Akima1DInterpolator(wave_stellar_frame[good], forward_models[ispec].residuals[-1][good].flatten())(current_stellar_template[:, 0])
+        residuals_interp_hr = scipy.interpolate.CubicSpline(wave_stellar_frame[good], forward_models[ispec].residuals[-1][good].flatten())(current_stellar_template[:, 0])
 
         # Determine values with np.nans and set weights equal to zero
         bad = np.where(~np.isfinite(residuals_interp_hr))[0]
@@ -464,10 +452,6 @@ def weighted_average(forward_models, iter_index=None, nights_for_template=None, 
                 residuals_average[ix] = residuals_hr[ix, 0]
             else:
                 residuals_average[ix] = 0
-
-        # Store the min and max
-        residuals_max[ix] = np.nanmax(residuals_hr[ix, :] * bad_pix_hr[ix, :])
-        residuals_min[ix] = np.nanmin(residuals_hr[ix, :] * bad_pix_hr[ix, :])
         
     # Change any nans to zero
     bad = np.where(~np.isfinite(residuals_average))[0]

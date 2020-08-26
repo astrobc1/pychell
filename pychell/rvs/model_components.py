@@ -1226,63 +1226,73 @@ class HybridWavelengthSolution(WavelengthSolution):
                 forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
 
 
-class LegendreWavelengthSolution(WavelengthSolution):
-
-    """ Class for a full wavelength solution via Hermite Polynomials.
+class LegPolyWavelengthSolution(WavelengthSolution):
+    """ Class for a full wavelength solution defined through cubic splines.
 
     Attributes:
-
+        poly_order (int): The polynomial order.
+        n_splines (int): The number of wavelength splines.
+        quad_pixel_set_points (np.ndarray): The three pixel points to use as set points in the quadratic.
+        quad_wave_zero_points (np.ndarray): Estimates of the corresonding zero points of quad_pixel_set_points.
+        spline_pixel_set_points (np.ndarray): The location of the spline knots in pixel space.
     """
 
     def __init__(self, forward_model, blueprint):
 
         # Call super method
         super().__init__(forward_model, blueprint)
-
+        
+        # The polynomial order
+        self.poly_order = blueprint['poly_order']
+        self.n_poly_pars = self.poly_order + 1
+            
+        # Parameter names
         self.base_par_names = []
-
-        # The pixel and wavelength set points for the quadratic (base parameters offset from these lagrange points)
+            
+        # Required for all instruments to get things going.
         self.quad_pixel_set_points = np.array(blueprint['quad_pixel_set_points'])
         self.quad_wave_zero_points = np.array([blueprint['quad_set_point_1'][self.order_num - 1],
                                                blueprint['quad_set_point_2'][self.order_num - 1],
                                                blueprint['quad_set_point_3'][self.order_num - 1]])
-
-        # Must be at least 2
-        self.legdeg = blueprint['legdeg']
-
-        # Legendre Polynomial Coeffs
-        for k in range(self.hermdeg + 1):
-            self.base_par_names.append('_a' + str(k))
-
+        
+        # Estimate the wave grid
+        coeffs = pcmath.poly_coeffs(self.quad_pixel_set_points, self.quad_wave_zero_points)
+        wave_estimate = np.polyval(coeffs, np.arange(self.nx))
+        
+        # Polynomial lagrange points
+        self.poly_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_poly_pars).astype(int)
+        self.poly_wave_zero_points = wave_estimate[self.poly_pixel_set_points]
+        for i in range(self.n_poly_pars):
+            self.base_par_names.append('_poly_lagrange_' + str(i + 1))
+                
         self.par_names = [self.name + s for s in self.base_par_names]
 
     def build(self, pars):
-
-        # The normalized detector grid, [-1, 1] (inclusive)
-        pixel_grid = np.linspace(-1, 1, num=self.nx)
-
-        # Construct Legendre polynomials
-        wave_sol = np.zeros(self.nx) + pars[self.par_names[0]].value
-        for l in range(1, self.leg_order + 1):
-            wave_sol += pars[self.par_names[l]].value * legendre(l)(pixel_grid)
-
+        
+        # The detector grid
+        pixel_grid = np.arange(self.nx)
+            
+        # Lagrange points
+        poly_lagrange_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars)])
+        
+        # Get the coefficients
+        coeffs = pcmath.leg_coeffs(self.poly_pixel_set_points, self.poly_wave_zero_points + poly_lagrange_pars)
+    
+        # Build full polynomial
+        wave_sol = np.zeros(self.nx)
+        for i in range(self.n_poly_pars):
+            wave_sol += coeffs[i] * scipy.special.eval_legendre(i, pixel_grid)
+        
         return wave_sol
 
     def init_parameters(self, forward_model):
-        
-        # The normalized detector grid, [-1, 1] (inclusive)
-        norm_pixel_grid = np.linspace(-1, 1, num=self.nx)
-        pfit = pcmath.poly_coeffs((self.quad_pixel_set_points - self.nx / 2) / (self.nx / 2), self.quad_wave_set_points)
-        wave = np.polyval(pfit, norm_pixel_grid)
-        legfit = np.polynomial.legendre.Legendre.fit(norm_pixel_grid, wave, deg=self.legdeg)
-        
-        for i in range(self.legdeg + 1):
-            forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=legfit[i], minv=legfit[i] - 0.001, maxv=legfit[i] + 0.001, vary=True))
+            
+        # Poly parameters
+        for i in range(self.n_poly_pars):
+            forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['poly_lagrange'][1], minv=self.blueprint['poly_lagrange'][0], maxv=self.blueprint['poly_lagrange'][2], vary=True))
 
-   # To enable/disable splines.
     def update(self, forward_model, iter_index):
         pass
-
 
 # Misc. models
 

@@ -656,6 +656,13 @@ def quad_coeffs(x, y):
     return p
 
 
+def leg_coeffs(x, y, deg=None):
+    if deg is None:
+        deg = len(x) - 1
+    V = np.polynomial.legendre.legvander(x, deg)
+    coeffs = np.linalg.solve(V, y)
+    return coeffs
+
 def poly_coeffs(x, y):
     V = np.vander(x)
     coeffs = np.linalg.solve(V, y)

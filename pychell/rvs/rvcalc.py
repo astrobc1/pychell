@@ -415,12 +415,12 @@ def combine_orders_fast(rvs, rvs_nightly, unc_nightly, init_weights, n_obs_night
     # Do the optimization. result contains the lnightly RVs (n_nights,) and order offsets (n_ord,)
     print('Solving RVs')
     
-    #result = NelderMead(rv_solver_fast, init_pars, minvs=vlb, maxvs=vub, varies=vpi, ftol=1E-5, n_iterations=3, no_improve_break=3, args_to_pass=(rvs_flagged, weights, n_obs_nights)).solve()
-    result = scipy.optimize.minimize(rv_solver_fast, init_pars, method='Powell', tol=1E-6, args=(rvs_flagged, weights, n_obs_nights))
+    result = NelderMead(rv_solver_fast, init_pars, minvs=vlb, maxvs=vub, varies=vpi, ftol=1E-5, n_iterations=3, no_improve_break=3, args_to_pass=(rvs_flagged, weights, n_obs_nights)).solve()
+    #result = scipy.optimize.minimize(rv_solver_fast, init_pars, method='Powell', tol=1E-6, args=(rvs_flagged, weights, n_obs_nights))
     
     # Best pars
-    #best_pars = result[0]
-    best_pars = result.x
+    best_pars = result[0]
+    #best_pars = result.x
     order_offsets = best_pars[n_nights:] # the order offsets
     rvs_opt = best_pars[0:n_nights]
     unc_opt = modifed_stddev(rvs, weights, rvs_opt, n_obs_nights)
