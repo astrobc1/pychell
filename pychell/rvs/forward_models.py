@@ -98,7 +98,7 @@ class ForwardModels(list):
         if self.remove_continuum:
             for fwm in self:
                 wave = fwm.models_dict['wavelength_solution'].build(fwm.initial_parameters)
-                log_continuum = pcaugmenter.fit_continuum_wobble(wave, np.log(fwm.data.flux), fwm.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
+                log_continuum = pcmodelcomponents.fit_continuum_wobble(wave, np.log(fwm.data.flux), fwm.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
                 fwm.data.flux = np.exp(np.log(fwm.data.flux) - log_continuum)
         
     def generate_nightly_rvs(self, iter_index):

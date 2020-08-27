@@ -48,17 +48,17 @@ def parse_rvs(output_path_root, do_orders=None):
     rvs_dict['do_xcorr'] = True if 'rvs_xcorr' in rvs0 else False
         
         
-    rvs_dict['rvs'] = np.zeros(shape=(n_orders, n_spec, n_iters)) + np.nan
-    rvs_dict['rvs_nightly'] = np.zeros(shape=(n_orders, n_nights, n_iters)) + np.nan
-    rvs_dict['unc_nightly'] = np.zeros(shape=(n_orders, n_nights, n_iters)) + np.nan
+    rvs_dict['rvs'] = np.full(shape=(n_orders, n_spec, n_iters), fill_value=np.nan)
+    rvs_dict['rvs_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
+    rvs_dict['unc_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
     rvs_dict['n_obs_nights'] = n_obs_nights
     rvs_dict['BJDS'] = rvs0['BJDS']
     rvs_dict['BJDS_nightly'] = rvs0['BJDS_nightly']
     
     if rvs_dict['do_xcorr']:
-        rvs_dict['rvsx'] = np.zeros(shape=(n_orders, n_spec, n_iters)) + np.nan
-        rvs_dict['rvsx_nightly'] = np.zeros(shape=(n_orders, n_nights, n_iters)) + np.nan
-        rvs_dict['uncx_nightly'] = np.zeros(shape=(n_orders, n_nights, n_iters)) + np.nan
+        rvs_dict['rvsx'] = np.full(shape=(n_orders, n_spec, n_iters), fill_value=np.nan)
+        rvs_dict['rvsx_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
+        rvs_dict['uncx_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
 
     # Load in rvs for each order
     for o in range(n_orders):
@@ -140,8 +140,11 @@ def parameter_unpack(pars, iter_indexes):
     varies_unpacked = np.empty(shape=(n_orders, n_spec, n_pars), dtype=bool)
     for o in range(n_orders):
         for ispec in range(n_spec):
-            pars_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['values']
-            varies_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['varies']
+            try:
+                pars_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['values']
+                varies_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['varies']
+            except:
+                stop()
                 
     return pars_unpacked, varies_unpacked
 

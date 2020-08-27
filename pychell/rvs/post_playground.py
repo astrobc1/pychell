@@ -42,43 +42,42 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     else:
         rv_method = getattr(pcrvcalc, method)
     
-    # Get the tag for this run
-    fwms = []
-    for o in do_orders:
-        fwms.append(parser.parse_forward_model(output_path_root, o, 1))
-    tag = fwms[0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
-    index_offset = int(not fwms[0].models_dict['star'].from_synthetic)
-    star_name = fwms[0].star_name
-    spectrograph = fwms[0].spectrograph
+    # Parse forward models
+    forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+    tag = forward_models[0, 0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
+    index_offset = int(not forward_models[0, 0].models_dict['star'].from_synthetic)
+    star_name = forward_models[0, 0].star_name
+    spectrograph = forward_models[0, 0].spectrograph
     
     # Parse the RVs
     rvs_dict = parser.parse_rvs(output_path_root, do_orders=do_orders)
     
+    # Number of spectra for each night
     n_obs_nights = rvs_dict['n_obs_nights']
     
-    # Mask rvs
+    # Mask rvs from user input
     rvs_dict, mask = gen_rv_mask(rvs_dict, bad_rvs_dict)
     
-    # Number of spectra and nights
+    # Numbers
     n_spec = np.sum(rvs_dict['n_obs_nights'])
     n_nights = len(rvs_dict['n_obs_nights'])
-    n_iters = rvs_dict['rvs'].shape[2]
+    n_iters_rvs = rvs_dict['rvs'].shape[2]
+    n_iters_pars = n_iters_rvs + index_offset
 
     # Parse the RMS and rvs, single iteration
     rms_all = parser.parse_rms(output_path_root, do_orders=do_orders)
-
+    
     # Regenerate nightly rvs
     for o in range(n_orders):
-        for jiter in range(n_iters):
+        for j in range(n_iters_rvs):
             
             # NM RVs
-            rvs_dict['rvs_nightly'][o, :, jiter], rvs_dict['unc_nightly'][o, :, jiter] = pcrvcalc.compute_nightly_rvs_single_order(rvs_dict['rvs'][o, :, jiter], 1 / rms_all[o, :, jiter + index_offset]**2, rvs_dict['n_obs_nights'], flag_outliers=False)
+            rvs_dict['rvs_nightly'][o, :, j], rvs_dict['unc_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvs_dict['rvs'][o, :, j], 1 / rms_all[o, :, j + index_offset]**2, n_obs_nights, flag_outliers=True)
             
             # xcorr RVs
             if rvs_dict['do_xcorr']:
-                rvs_dict['rvsx_nightly'][o, :, jiter], rvs_dict['uncx_nightly'][o, :, jiter] = pcrvcalc.compute_nightly_rvs_single_order(rvs_dict['rvs'][o, :, jiter], 1 / rms_all[o, :, jiter + index_offset]**2, rvs_dict['n_obs_nights'], flag_outliers=False)
+                rvs_dict['rvsx_nightly'][o, :, j], rvs_dict['uncx_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvs_dict['rvsx'][o, :, j], 1 / rms_all[o, :, j + index_offset]**2, n_obs_nights, flag_outliers=True)
             
-        
     # Determine which iteration to use
     if iter_index is None:
         iter_indexes = np.zeros(n_orders).astype(int) + n_iters - 1
@@ -86,6 +85,20 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
         _, iter_indexes = get_best_iterations(rvs_dict, xcorr)
     else:
         iter_indexes = np.zeros(n_orders).astype(int) + iter_index
+    
+    # Get for RVs for the desired iterations
+    rvs = np.zeros((n_orders, n_spec))
+    unc_nightly = np.zeros((n_orders, n_nights))
+    rvs_nightly = np.zeros((n_orders, n_nights))
+    for o in range(n_orders):
+        if xcorr:
+            rvs[o, :] = rvs_dict['rvsx'][o, :, iter_indexes[o]]
+            rvs_nightly[o, :] = rvs_dict['rvsx_nightly'][o, :, iter_indexes[o]]
+            unc_nightly[o, :] = rvs_dict['uncx_nightly'][o, :, iter_indexes[o]]
+        else:
+            rvs[o, :] = rvs_dict['rvs'][o, :, iter_indexes[o]]
+            rvs_nightly[o, :] = rvs_dict['rvs_nightly'][o, :, iter_indexes[o]]
+            unc_nightly[o, :] = rvs_dict['unc_nightly'][o, :, iter_indexes[o]]
         
     # Summary of rvs
     print_rv_summary(rvs_dict, bad_rvs_dict, do_orders, iter_indexes, xcorr)
@@ -109,34 +122,20 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     # Median nightly S / N for each order to compare against the photon limit
     nightly_snrs = np.nanmedian(nightly_snrs, axis=1)
     
-    # Get for RVs for the desired iterations
-    rvs = np.zeros((n_orders, n_spec))
-    unc_nightly = np.zeros((n_orders, n_nights))
-    rvs_nightly = np.zeros((n_orders, n_nights))
-    for o in range(n_orders):
-        if xcorr:
-            rvs[o, :] = rvs_dict['rvsx'][o, :, iter_indexes[o]]
-            rvs_nightly[o, :] = rvs_dict['rvsx_nightly'][o, :, iter_indexes[o]]
-            unc_nightly[o, :] = rvs_dict['uncx_nightly'][o, :, iter_indexes[o]]
-        else:
-            rvs[o, :] = rvs_dict['rvs'][o, :, iter_indexes[o]]
-            rvs_nightly[o, :] = rvs_dict['rvs_nightly'][o, :, iter_indexes[o]]
-            unc_nightly[o, :] = rvs_dict['unc_nightly'][o, :, iter_indexes[o]]
-    
     # Compute RV content of each order if set
     if templates is not None and len(templates) > 0:
         rvcs = np.zeros(n_orders)
         stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indexes=iter_indexes)
         for o in range(n_orders):
-            bad = np.where(fwms[o].data.badpix == 0)[0]
-            wave = fwms[o].models_dict['wavelength_solution'].build(fwms[o].initial_parameters)
+            bad = np.where(forward_models[o, 0].data.badpix == 0)[0]
+            wave = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].initial_parameters)
             wave[bad] = np.nan
             rvc = np.zeros(len(templates))
             for i, t in enumerate(templates):
                 if t == 'star':
-                    _, rvc[i] = pcrvcalc.compute_rv_content(stellar_templates[o][:, 0], stellar_templates[o][:, 1], snr=nightly_snrs[o], blaze=True, ron=0,width=fwms[o].initial_parameters[fwms[o].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
+                    _, rvc[i] = pcrvcalc.compute_rv_content(stellar_templates[o][:, 0], stellar_templates[o][:, 1], snr=nightly_snrs[o], blaze=True, ron=0,width=forward_models[o, 0].initial_parameters[forward_models[o, 0].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
                 else:
-                    _, rvc[i] = pcrvcalc.compute_rv_content(fwms[o].templates_dict[t][:, 0], fwms[o].templates_dict[t][:, 1], snr=nightly_snrs[o], blaze=True, ron=0,width=fwms[o].initial_parameters[fwms[o].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
+                    _, rvc[i] = pcrvcalc.compute_rv_content(forward_models[o, 0].templates_dict[t][:, 0], forward_models[o, 0].templates_dict[t][:, 1], snr=nightly_snrs[o], blaze=True, ron=0,width=forward_models[o, 0].initial_parameters[forward_models[o, 0].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
             rvcs[o] = np.nansum(rvc**2)**0.5
     else:
         rvcs = np.zeros(n_orders) + np.nanmedian(unc_nightly)
@@ -237,9 +236,9 @@ def print_rv_summary(rvs_dict, bad_rvs_dict, do_orders, iter_indexes, xcorr):
         print('Order ' + str(do_orders[o]))
         for k in range(n_iters):
             if xcorr:
-                stddev = np.nanstd(rvs_dict['rvsx'][o, :, k])
+                stddev = np.nanstd(rvs_dict['rvsx_nightly'][o, :, k])
             else:
-                stddev = np.nanstd(rvs_dict['rvs'][o, :, k])
+                stddev = np.nanstd(rvs_dict['rvs_nightly'][o, :, k])
             if k == iter_indexes[o]:
                 print(' ** Iteration ' +  str(k + 1) + ': ' + str(round(stddev, 4)) + ' m/s')
             else:
@@ -253,7 +252,7 @@ def get_best_iterations(rvs_dict, xcorr):
     best_iters = np.zeros(n_orders, dtype=int)
     best_stddevs = np.zeros(n_orders, dtype=int)
     for o in range(n_orders):
-        stddevs = np.zeros(n_iters) + np.nan
+        stddevs = np.full(n_iters, fill_value=np.nan)
         for k in range(n_iters):
             if xcorr:
                 stddevs[k] = np.nanstd(rvs_dict['rvsx_nightly'][o, :, k])
@@ -291,7 +290,6 @@ def gen_rv_mask(rvs_dict, bad_rvs_dict):
         for i in bad_rvs_dict['bad_spec']:
             mask[:, i] = 0
             rvs_dict_out['rvs'][:, i, :] = np.nan
-            
             if rvs_dict_out['do_xcorr']:
                 rvs_dict_out['rvsx'][:, i, :] = np.nan
             
@@ -304,16 +302,14 @@ def gen_rv_weights(rvs_dict, bad_rvs_dict, rms=None, rvcs=None):
     n_obs_nights =  rvs_dict['n_obs_nights']
     n_nights = len(n_obs_nights)
     
+    rvs_dict_out = copy.deepcopy(rvs_dict)
+    
     # Generate mask
-    rvs_dict, mask = gen_rv_mask(rvs_dict, bad_rvs_dict)
+    rvs_dict_out, mask = gen_rv_mask(rvs_dict_out, bad_rvs_dict)
     
     # RMS weights
     if rms is not None:
         weights_rms = 1 / rms**2
-        bad = np.where(rms > 2 * np.nanmedian(rms))
-        if bad[0].size > 0:
-            weights_rms[bad] = 0
-        weights_rms *= mask
     else:
         weights_rms = np.ones_like(mask)
     weights_rms /= np.nansum(weights_rms)
@@ -325,15 +321,14 @@ def gen_rv_weights(rvs_dict, bad_rvs_dict, rms=None, rvcs=None):
         weights_rvcont = np.ones_like(mask)
     weights_rvcont /= np.nansum(weights_rvcont)
     
-    # Combine weights
-    # NOTE: Normalization above is not perfect but meant to be ensure approximately similar scaling between weights if using additive (quadrature ) weights.
-    # For multiplicative weights, this doesn't matter.
-    weights = weights_rvcont * weights_rms
+    # Combine weights.
+    # NOTE: For multiplicative weights, the scaling of the individual weights does not matter.
+    weights = weights_rvcont * weights_rms * mask
     
     # Normalize
     weights /= np.nansum(weights)
 
-    return rvs_dict, weights
+    return rvs_dict_out, weights
 
 
 
