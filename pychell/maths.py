@@ -24,6 +24,33 @@ import numba
 import numba.types as nt
 from llc import jit_filter_function
 
+def measure_fwhm(x, lsf):
+    
+    max_loc = np.nanargmax(lsf)
+    max_val = np.nanmax(lsf)
+    
+    left = np.where(x < x[max_loc] & (lsf < 0.7 * max_val))[0]
+    right = np.where(x > x[max_loc] & (lsf < 0.7 * max_val))[0]
+    
+    left_x = intersection(x[left], lsf[left], 0.5 * max_val, precision = 1000)
+    right_x = intersection(x[right], lsf[right], 0.5 * max_val, precision = 1000)
+    fwhm = right_x - left_x
+    
+    return fwhm
+
+def sigmatofwhm(sigma):
+    return sigma * np.sqrt(8 * np.log(2))
+
+def fwhmtosigma(fwhm):
+    return fwhm / np.sqrt(8 * np.log(2))
+
+def Rfromlsf(wave, fwhm=None, sigma=None):
+    if fwhm is not None:
+        return wave / fwhm
+    else:
+        return wave / sigmatofwhm(sigma)
+    
+
 def doppler_shift(wave, flux, vel, wave_out=None, interp='linear'):
     if wave_out is None:
         wave_out = wave
@@ -32,6 +59,10 @@ def doppler_shift(wave, flux, vel, wave_out=None, interp='linear'):
         flux_out = np.interp(wave_out, wave_shifted, flux, left=np.nan, right=np.nan)
     elif interp == 'cubic':
         flux_out = scipy.interpolate.CubicSpline(wave_shifted, flux, extrapolate=False)(wave_out)
+    elif interp == 'akima':
+        flux_out = scipy.interpolate.Akima1DInterpolator(wave_shifted, flux)(wave_out)
+    elif interp == 'pchip':
+        flux_out = scipy.interpolate.PchipInterpolator(wave_shifted, flux, extrapolate=False)(wave_out)
     return flux_out
     
 

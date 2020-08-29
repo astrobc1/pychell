@@ -54,10 +54,6 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
         # This will construct the individual forward model objects (single spectrum)
         forward_models = pcforwardmodels.ForwardModels(forward_model_settings, model_blueprints, order_num) # basically a fancy list
         
-        # Get better estimation for star (eg xcorr for star)
-        if forward_models[0].models_dict['star'].from_synthetic:
-            forward_models.cross_correlate_spectra()
-        
         # Stores the stellar templates over iterations.
         stellar_templates = np.empty(shape=(forward_models[0].n_model_pix, forward_models.n_template_fits + 1), dtype=np.float64)
         stellar_templates[:, 0] = forward_models.templates_dict['star'][:, 0]

@@ -340,53 +340,70 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
     n_orders = len(do_orders)
     
     # Get the tag for this run
-    fwm_temp = parser.parse_forward_model(output_path_root, do_orders[0], 1)
-    tag = fwm_temp.tag + '_' + datetime.date.today().strftime("%d%m%Y")
-    index_offset = int(not fwm_temp.models_dict['star'].from_synthetic)
-    star_name = fwm_temp.star_name
-    spectrograph = fwm_temp.spectrograph
+    forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+    tag = forward_models[0, 0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
+    index_offset = int(not forward_models[0, 0].models_dict['star'].from_synthetic)
+    star_name = forward_models[0, 0].star_name
+    spectrograph = forward_models[0, 0].spectrograph
     
     # Parse the RVs
     rvs_dict = parser.parse_rvs(output_path_root, do_orders=do_orders)
     
+    rvs_dict, _ = gen_rv_mask(rvs_dict, bad_rvs_dict)
+    
     # Number of spectra and nights
     n_spec = np.sum(rvs_dict['n_obs_nights'])
     n_nights = len(rvs_dict['n_obs_nights'])
-    n_iters = rvs_dict['rvs'].shape[2]
+    n_iters_rvs = rvs_dict['rvs'].shape[2]
+    n_iters_pars = n_iters_rvs + index_offset
     
     # Determine which iteration to use
     if iter_index is None:
-        iter_indexes = np.zeros(n_orders).astype(int) + n_iters - 1
+        iter_indexes = np.zeros(n_orders).astype(int) + n_iters_rvs - 1
     elif iter_index == 'best':
         _, iter_indexes = get_best_iterations(rvs_dict, xcorr)
     else:
         iter_indexes = np.zeros(n_orders).astype(int) + iter_index
-        
-    pars = parser.parse_parameters(output_path_root, do_orders=do_orders)
-    pars_unpacked, varies_unpacked = parser.parameter_unpack(pars, iter_indexes + index_offset)
-    par_names = list(pars[0, 0, 0].keys())
+    
     for o in range(n_orders):
-        rvs_unpacked = rvs_dict['rvs'][o, :, iter_indexes[o]]
+        
+        vp = forward_models[o, 0].best_fit_pars[iter_indexes[o] + index_offset].unpack(keys='varies')['varies']
+        vpi = np.where(vp)[0]
+        nv = vpi.size
+        
+        pars = np.empty(shape=(n_spec, n_iters_pars, nv), dtype=object)
+        par_vals = np.full(shape=(n_spec, n_iters_pars, nv), dtype=float, fill_value=np.nan)
+        par_names = list(forward_models[o, 0].best_fit_pars[iter_indexes[o] + index_offset].keys())
+        par_names = [par_names[v] for v in vpi]
+        for ispec in range(n_spec):
+            for j in range(n_iters_pars):
+                for k in range(nv):
+                    pars[ispec, j, k] = forward_models[o, ispec].best_fit_pars[j][par_names[k]]
+                    par_vals[ispec, j, k] = pars[ispec, j, k].value
         
         n_cols = 5
-        varies_locs = np.where(varies_unpacked[o, 0, :])[0]
-        nv = varies_locs.size
         n_rows = int(np.ceil(nv / n_cols))
-        fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(16, 12), dpi=300)
+        fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(16, 12), dpi=400)
+        
         for row in range(n_rows):
             for col in range(n_cols):
                 
                 # The par index
-                ip = n_cols * row + col
+                k = n_cols * row + col
                 
-                if ip + 1 > nv:
+                if k + 1 > nv:
                     axarr[row, col].set_visible(False)
                     continue
+                    
+                n_iters_plot = np.min([10, n_iters_pars])
+                for ispec in range(n_spec):
+                    axarr[row, col].plot(rvs_dict['rvs'][o, ispec, -n_iters_plot:], par_vals[ispec, -n_iters_plot:, k], alpha=0.7, c='powderblue', lw=0.7)
                 
-                axarr[row, col].plot(rvs_unpacked - np.nanmedian(rvs_unpacked), pars_unpacked[o, :, varies_locs[ip]], marker='.', lw=0)
+                axarr[row, col].plot(rvs_dict['rvs'][o, :, iter_indexes[o]], par_vals[:, iter_indexes[o] + index_offset, k], marker='.', lw=0, c='black', markersize=8)
                 axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
-                axarr[row, col].set_ylabel(par_names[varies_locs[ip]].replace('_', ' '), fontsize=4)
+                axarr[row, col].set_ylabel(par_names[k].replace('_', ' '), fontsize=4)
                 axarr[row, col].tick_params(axis='both', which='major', labelsize=4)
+                axarr[row, col].grid(None)
         fig.suptitle(star_name.replace('_', ' ') + ' Parameter Correlations Order ' + str(do_orders[o]), fontsize=10)
         fname = output_path_root + 'Order' + str(do_orders[o]) + os.sep + tag + '_ord' + str(do_orders[o]) + '_parameter_corrs.png'
         plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.3, hspace=0.5)
@@ -396,6 +413,8 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
     if debug:
         stop()
         
+        
+
     
 def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, tc=None, show=True, fname=None):
     

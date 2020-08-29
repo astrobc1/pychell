@@ -123,4 +123,7 @@ forward_model_settings = {
     
     # Whether or not bc weights are included in the stellar template augmentation.
     'use_bc_weights': False,
+    
+    # Whether or not to compute the forward model in logspace
+    "opt_logspace": True,
 }

@@ -76,9 +76,6 @@ class ForwardModels(list):
 
         # Initiate the data, models, and outputs
         self.init(forward_model_settings, model_blueprints)
-        
-        # Optimize anything else
-        self.init_optimize()
 
         # Remaining instance members
 
@@ -92,6 +89,9 @@ class ForwardModels(list):
 
         # Print summary
         self.print_init_summary()
+        
+        # Crude tweaks for init optimization (CCF for star, estimate blaze, blah blah)
+        self.init_optimize()
         
         # Post init things
         # Remove continuum or not
@@ -235,6 +235,12 @@ class ForwardModels(list):
             self[ispec].init_parameters()
 
     def init_optimize(self):
+        
+        # cross correlate star in parallel
+        if self[0].models_dict['star'].from_synthetic:
+            self.cross_correlate_spectra(iter_index=None)
+        
+        # Perform remaining optimizing steps in parallel
         for fwm in self:
             fwm.init_optimize()
     
@@ -380,7 +386,7 @@ class ForwardModels(list):
         # Pass to arrays
         if iter_index is None:
             for ispec in range(self.n_spec):
-                self[ispec].initial_parameters[self[ispec].models_dict['star'].par_names[0]].setv(value=ccf_results[ispec])
+                self[ispec].initial_parameters[self[ispec].models_dict['star'].par_names[0]].setv(value=ccf_results[ispec], minv=ccf_results[ispec] - 5E3, maxv=ccf_results[ispec] + 5E3)
         else:
             for ispec in range(self.n_spec):
                 self.rvs_dict['xcorrs'][:, 2*ispec:2*ispec+2, iter_index] = np.array([ccf_results[ispec][0], ccf_results[ispec][1]]).T

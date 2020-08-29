@@ -428,7 +428,6 @@ class SincBlaze(EmpiricalMult):
 
 
 #### Gas Cell ####
-
 class GasCell(TemplateMult):
     """ A gas cell model which is consistent across orders.
     """
@@ -560,7 +559,6 @@ class Star(TemplateMult):
         super().update(forward_model, iter_index)
 
     def init_parameters(self, forward_model):
-        
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=-1*forward_model.data.bc_vel, minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], mcmcscale=0.1, vary=self.enabled))
 
     def load_template(self, forward_model):
@@ -956,6 +954,34 @@ class HermiteLSF(LSF):
             name=self.par_names[0], value=self.blueprint['width'][1], minv=self.blueprint['width'][0], maxv=self.blueprint['width'][2], mcmcscale=0.1, vary=self.enabled))
         for i in range(self.hermdeg):
             forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+1], value=self.blueprint['ak'][1], minv=self.blueprint['ak'][0], maxv=self.blueprint['ak'][2], mcmcscale=0.001, vary=True))
+            
+            
+class ModGaussLSF(LSF):
+    """ A Modified Gaussian LSF model.
+    """
+
+    def __init__(self, forward_model, blueprint):
+
+        # Call super
+        super().__init__(forward_model, blueprint)
+
+        self.base_par_names = ['_width', '_p']
+        self.par_names = [self.name + s for s in self.base_par_names]
+
+    def build(self, pars):
+        if self.enabled:
+            width = pars[self.par_names[0]].value
+            p = pars[self.par_names[1]].value
+            lsf = np.exp(-0.5 * np.abs(self.x / width)**p)
+            lsf /= np.nansum(lsf)
+            return lsf
+        else:
+            return self.build_fake()
+
+    def init_parameters(self, forward_model):
+        
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['width'][1], minv=self.blueprint['width'][0], maxv=self.blueprint['width'][2], mcmcscale=0.1, vary=self.enabled))
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['p'][1], minv=self.blueprint['p'][0], maxv=self.blueprint['p'][2], mcmcscale=0.001, vary=True))
 
 
 class APrioriLSF(LSF):

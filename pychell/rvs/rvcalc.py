@@ -110,8 +110,8 @@ def weighted_brute_force(forward_model, iter_index):
         wave_lr, model_lr = forward_model.build_full(pars, iter_index)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        #star_weights_shifted = np.interp(wave_lr, forward_model.templates_dict['star'][:, 0] * np.exp(vels[i] / cs.c), star_weights, left=0, right=0)
-        #weights *= star_weights_shifted
+        star_weights_shifted = np.interp(wave_lr, forward_model.templates_dict['star'][:, 0] * np.exp(vels[i] / cs.c), star_weights, left=0, right=0)
+        weights *= star_weights_shifted
         
         # Further
         bad = np.where(~np.isfinite(model_lr) | (weights <= 0))[0]
@@ -119,7 +119,10 @@ def weighted_brute_force(forward_model, iter_index):
             weights[bad] = 0
         
         # Construct the RMS
-        rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
+        if forward_model.opt_logspace:
+            rmss[i] = np.sqrt(np.nansum((np.log(forward_model.data.flux) - np.log(model_lr))**2 * weights) / np.nansum(weights))
+        else:
+            rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
 
     # Extract the best rv
     xcorr_star_vel = vels[np.nanargmin(rmss)]
@@ -174,6 +177,11 @@ def crude_brute_force(forward_model, iter_index=None):
         
         # Compute the RMS
         rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
+        
+    #if forward_model.spec_num == 5:
+        #stop()
+        #plt.plot(forward_model.data.flux); plt.plot(model_lr); plt.show()
+        
 
     # Extract the best rv
     xcorr_star_vel = vels[np.nanargmin(rmss)]
