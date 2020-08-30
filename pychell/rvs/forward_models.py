@@ -806,7 +806,7 @@ class ForwardModel:
         args_to_pass = (forward_model, iter_index)
         
         # Construct the Nelder Mead Solver and run
-        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-6, xtol=1E-6)
+        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-4, xtol=1E-4)
         opt_result = solver.solve()
 
         # Pass best fit parameters and optimization result to forward model
