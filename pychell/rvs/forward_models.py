@@ -603,16 +603,6 @@ class ForwardModel:
         
         ord_spec = '_ord' + str(self.order_num) + '_spec' + str(self.spec_num)
         
-        # Best fit parameters and opt array
-        #filename_opt = output_path_opt + self.tag + '_opt' + ord_spec + '.npz'
-        #np.savez(filename_opt, best_fit_pars=self.best_fit_pars, opt=self.opt)
-        
-        # Data flux, flux_unc, badpix, best fit forward models, and residuals
-        #filename_data_models = output_path_datamodels + self.tag + '_data_model' + ord_spec + '.npz'
-        #data_arr = np.array([self.data.flux, self.data.flux_unc, self.data.badpix]).T
-        
-        #np.savez(filename_data_models, wavelength_solutions=self.wavelength_solutions, residuals=self.residuals, models=self.models, data=data_arr)
-        
         # Also save model as a pickle
         self.save_to_pickle(output_path=output_path_datamodels)
                 

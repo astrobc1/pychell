@@ -632,20 +632,30 @@ def cross_correlate2(x1, y1, x2, y2, lags):
 
     return corrfun
 
-
-
-def intersection(x, y, yval, precision=1000):
+def intersection(x, y, yval, precision=None):
     
-    dx = np.nanmedian(np.abs(np.diff(x)))
-    dxhr = dx / precision
-    xhr = np.arange(np.nanmin(x), np.nanmax(x) + 1, dxhr)
-    good = np.where(np.isfinite(x) & np.isfinite(y))[0]
-    cspline = scipy.interpolate.CubicSpline(x[good], y[good], extrapolate=False)
-    yhr = cspline(xhr)
+    if precision is None:
+        precision = 1
     
-    index, _ = find_closest(yhr, yval)
+    if precision > 1:
+        dx = np.nanmedian(np.abs(np.diff(x)))
+        dxhr = dx / precision
+        xhr = np.arange(np.nanmin(x), np.nanmax(x) + 1, dxhr)
+        good = np.where(np.isfinite(x) & np.isfinite(y))[0]
+        cspline = scipy.interpolate.CubicSpline(x[good], y[good], extrapolate=False)
+        yhr = cspline(xhr)
     
-    return xhr[index], yhr[index]
+        index, _ = find_closest(yhr, yval)
+        
+        return xhr[index], yhr[index]
+        
+    else:
+        
+        index, _ = find_closest(y, yval)
+        
+        return x[index], y[index]
+    
+    
 
 # Calculates the reduced chi squared
 def reduced_chi_square(x, err):

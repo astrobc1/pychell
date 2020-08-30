@@ -276,7 +276,6 @@ class PolyBlaze(EmpiricalMult):
 
     def __repr__(self):
         return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
-
     
     
 class SplineBlaze(EmpiricalMult):
@@ -472,6 +471,7 @@ class GasCell(TemplateMult):
         flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
         flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
         forward_model.templates_dict['gas_cell'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
+
 
 class GasCellCHIRON(TemplateMult):
     """ A gas cell model for CHIRON.
@@ -1005,7 +1005,6 @@ class APrioriLSF(LSF):
         return super().convolve_flux(raw_flux, lsf=lsf)
         
 
-
 #### Wavelenth Soluton ####
 
 class WavelengthSolution(SpectralComponent):
@@ -1251,6 +1250,51 @@ class HybridWavelengthSolution(WavelengthSolution):
             for i in range(self.n_splines + 1):
                 forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], mcmcscale=0.001, vary=self.splines_enabled))
 
+    #def model_thar_fiber(self, forward_model):
+        
+    def model_gas_cell_fiber(self, forward_model):
+        
+        # Gas cell observation
+        gas_data = forward_model.data.gas_cell_cal
+        
+        # Wavelength Parameters
+        np.array([])
+        scipy.interpolate.CubicSpline()
+        
+        
+        
+    #def model_lfc_fiber(self, forward_model):
+    
+    def load_template(self, forward_model):
+        wave_template = np.load(forward_model.templates_path + forward_model.data.wave_cal_template_file)
+        good = np.where(np.isfinite(wave_template[:, 0]) & np.isfinite(wave_template[:, 1]))[0]
+        wave_template = wave_template[good, :]
+        if forward_model.wave_cal == 'gas_cell':
+            wave_template[:, 1] = self.normalize_template(forward_model, wave_template[:, 0], wave_template[:, 1], uniform=False)
+        return wave_template
+    
+    
+    def normalize_template(self, forward_model, wave, flux, uniform=False):
+        
+        if not uniform:
+            good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
+            dl = np.nanmedian(np.diff(wave))
+            wave_min, wave_max = np.nanmin(wave), np.nanmax(wave)
+            wave_lin = np.arange(wave_min, wave_max, dl)
+            flux_lin = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=False)(wave_lin)
+        else:
+            flux_lin = flux
+        
+        if 'lsf' in forward_model.models_dict:
+            flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_lin, pars=forward_model.initial_parameters)
+        else:
+            flux_conv = flux_lin
+
+        data_continuum = pcmath.weighted_median(flux_conv, percentile=0.999)
+        flux /= data_continuum
+        
+        return flux
+
 
 class LegPolyWavelengthSolution(WavelengthSolution):
     """ Class for a full wavelength solution defined through cubic splines.
@@ -1350,7 +1394,7 @@ class FPCavityFringing(EmpiricalMult):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['d'][1], minv=self.blueprint['d'][0], maxv=self.blueprint['d'][2], mcmcscale=0.1, vary=self.enabled))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['fin'][1], minv=self.blueprint['fin'][0], maxv=self.blueprint['fin'][2], mcmcscale=0.1, vary=self.enabled))
         
-        
+
 # Misc Methods
 
 # This calculates the weighted median of a data set for rolling calculations

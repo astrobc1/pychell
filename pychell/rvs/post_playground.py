@@ -13,7 +13,7 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 import datetime
 from pdb import set_trace as stop
 
-def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, method=None, use_rms=False, debug=False, xcorr=False, phase_to=None, tc=None):
+def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, method=None, use_rms=False, debug=False, xcorr=False, phase_to=None, tc=None, forward_models=None):
     """Combines RVs across orders through a weighted TFA scheme.
 
     Args:
@@ -38,7 +38,7 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     
     # The method to combine rvs with
     if method is None:
-        rv_method = getattr(pcrvcalc, 'combine_orders_fast')
+        rv_method = getattr(pcrvcalc, 'compute_relative_rvs_from_all')
     else:
         rv_method = getattr(pcrvcalc, method)
     
@@ -65,7 +65,11 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     n_iters_pars = n_iters_rvs + index_offset
 
     # Parse the RMS and rvs, single iteration
-    rms_all = parser.parse_rms(output_path_root, do_orders=do_orders)
+    rms_all = np.zeros((n_orders, n_spec, n_iters_pars))
+    for o in range(n_orders):
+        for i in range(n_spec):
+            for j in range(n_iters_pars):
+                rms_all[o, i, j] = forward_models[o, i].opt[j][0]
     
     # Regenerate nightly rvs
     for o in range(n_orders):
@@ -175,7 +179,7 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     if debug:
         stop()
         
-    return rvs_out
+    return fwms
     
 def compute_redchi2s(rvs_single, unc_single, rvs_nightly, unc_nightly, n_obs_nights):
     n_nights = len(rvs_nightly)
@@ -413,8 +417,6 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
     if debug:
         stop()
         
-        
-
     
 def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, tc=None, show=True, fname=None):
     
@@ -757,19 +759,34 @@ def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=F
     
     # Get RVs
     rvs = np.zeros((n_orders, n_spec))
+    rvsn = np.zeros((n_orders, n_nights))
+    uncn = np.zeros((n_orders, n_nights))
+    weights = np.zeros((n_orders, n_spec))
     for o in range(n_orders):
         if xcorr:
-            rr = rvs_dict['rvsx'][o, :, iter_index]
+            rvs[o, :] = rvs_dict['rvsx'][o, :, iter_index] - np.nanmedian(rvs_dict['rvsx'][o, :, iter_index])
+            rvsn[o, :] = rvs_dict['rvsx_nightly'][o, :, iter_index] - np.nanmedian(rvs_dict['rvsx_nightly'][o, :, iter_index])
+            uncn[o, :] = rvs_dict['uncx_nightly'][o, :, iter_index]
         else:
-            rr = rvs_dict['rvs'][o, :, iter_index]
-        rvs[o, :] = rr - np.nanmedian(rr)
+            rvs[o, :] = rvs_dict['rvs'][o, :, iter_index] - np.nanmedian(rvs_dict['rvs'][o, :, iter_index])
+            rvsn[o, :] = rvs_dict['rvs_nightly'][o, :, iter_index] - np.nanmedian(rvs_dict['rvs_nightly'][o, :, iter_index])
+            uncn[o, :] = rvs_dict['unc_nightly'][o, :, iter_index]
+        
+        f, l = 0, n_obs_nights[0]
+        for i in range(n_nights):
+            weights[o, f:l] = mask[o, f:l] * 1 / uncn[o, i]**2
+            if i <= n_nights - 1:
+                f += n_obs_nights[i]
+                l += n_obs_nights[i+1]
         
     # Combine
-    rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_from_all(rvs, mask, n_obs_nights, flag_outliers=flag, thresh=thresh)
+    rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_from_all(rvs, weights, n_obs_nights, flag_outliers=flag, thresh=thresh)
     
     # Plot
     for o in range(n_orders):
-        plt.plot((bjds - alpha)%_phase_to, rvs[o, :] - np.nanmedian(rvs_nightly), marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]))
+        plt.plot((bjds - alpha)%_phase_to, rvs[o, :] - np.nanmedian(rvs[o, :]), marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]), alpha=0.6)
+        plt.errorbar((bjdsn - alpha)%_phase_to, rvsn[o, :] - np.nanmedian(rvs_dict[o, :]), yerr=uncn[o, :], marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]), alpha=0.8)
+        
         
     plt.errorbar((bjdsn - alpha)%_phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
     plt.legend()
@@ -777,3 +794,5 @@ def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=F
     
     if debug:
         stop()
+        
+    

@@ -95,7 +95,7 @@ def weighted_brute_force(forward_model, iter_index):
         # Combine weights
         weights_init *= tell_weights
     
-    # Star weights depend on the amount of rv content.
+    # Star weights depend on the information content.
     rvc, _ = compute_rv_content(forward_model.templates_dict['star'][:, 0], forward_model.templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, width=pars[forward_model.models_dict['lsf'].par_names[0]].value)
     star_weights = 1 / rvc**2
     
@@ -135,7 +135,7 @@ def weighted_brute_force(forward_model, iter_index):
     xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
     
     # Bisector span
-    bspan_result = compute_bisector_span(vels_for_rv, rmss, n_bs=forward_model.xcorr_options['n_bs'])
+    bspan_result = compute_bisector_span(vels_for_rv, rmss, xcorr_rv, n_bs=forward_model.xcorr_options['n_bs'])
     
     return vels_for_rv, rmss, xcorr_rv, bspan_result[1]
 
@@ -177,10 +177,6 @@ def crude_brute_force(forward_model, iter_index=None):
         
         # Compute the RMS
         rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
-        
-    #if forward_model.spec_num == 5:
-        #stop()
-        #plt.plot(forward_model.data.flux); plt.plot(model_lr); plt.show()
         
 
     # Extract the best rv
@@ -521,7 +517,7 @@ def modifed_stddev(rvs, weights, mus, n_obs_nights):
 # Wobble Method of combining RVs (Starting from single RVs)
 # pars[0:n] = rvs
 # pars[n:] = order offsets.
-@jit(parallel=True)
+@jit
 def rv_solver(pars, rvs, weights, n_obs_nights):
     """Internal function to optimize the rv offsets between orders.
     """
@@ -533,7 +529,7 @@ def rv_solver(pars, rvs, weights, n_obs_nights):
     order_offsets = pars[n_spec:]
     term = np.empty(shape=(n_ord, n_spec), dtype=np.float64)
     
-    for o in prange(n_ord):
+    for o in range(n_ord):
         for i in range(n_spec):
             term[o, i] = weights[o, i]**2 * (rvs_individual[i] - rvs[o, i] + order_offsets[o])**2
             
@@ -549,7 +545,7 @@ def rv_solver(pars, rvs, weights, n_obs_nights):
 # Wobble Method of combining RVs (Starting from single RVs)
 # pars[0:n] = rvs
 # pars[n:] = order offsets.
-@jit(parallel=True)
+@jit
 def rv_solver_fast(pars, rvs, weights, n_obs_nights):
     
     n_ord, n_spec = rvs.shape
@@ -641,7 +637,7 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
     return rvc_per_pix, rvc_tot
         
 
-def compute_bisector_span(cc_vels, ccf, n_bs=1000):
+def compute_bisector_span(cc_vels, ccf, v0, n_bs=1000):
     """Computes the bisector span of a given cross-correlation (RMS brute force) function.
 
     Args:
@@ -662,10 +658,10 @@ def compute_bisector_span(cc_vels, ccf, n_bs=1000):
     # .. = Average(B(d)) for 0.1 to 0.4 = Average((v_l(d) + v_r(d)) / 2) for 0.1 to 0.4
     
     # The bottom "half"
-    drtop = (0.1, 0.4)
+    depth_range_bottom = (0.1, 0.4)
     
     # The top "half"
-    drbottom = (0.6, 0.8)
+    depth_range_top = (0.6, 0.8)
     
     # The depths are from 0 to 1 for the normalized CCF
     depths = np.linspace(0, 1, num=n_bs)
@@ -673,49 +669,32 @@ def compute_bisector_span(cc_vels, ccf, n_bs=1000):
     # Initialize the line bisector array (a function of CCF depth)
     line_bisectors = np.empty(depths.size, dtype=np.float64)
 
-    # First normalize the CCF function
+    # First normalize the RMS function
     ccf = ccf - np.nanmin(ccf)
     continuum = pcmath.weighted_median(ccf, percentile=0.95)
     ccfn = ccf / continuum
     
-    # Get the velocities and offset such that the best vel is at zero
-    best_vel = cc_vels[np.nanargmin(ccf)]
-    cc_vels = cc_vels - best_vel
+    # Remove v0
+    cc_vels = cc_vels - v0
     
-    # High res version of the ccf
-    cc_vels_hr = np.linspace(np.nanmin(cc_vels), np.nanmax(cc_vels), num=int(cc_vels.size*100))
-    good = np.where(np.isfinite(cc_vels) & np.isfinite(ccf))[0]
-    ccf_hr = scipy.interpolate.CubicSpline(cc_vels[good], ccfn[good], extrapolate=False)(cc_vels_hr)
+    cc_vels_hr = np.linspace(cc_vels[0], cc_vels[-1], num=cc_vels.size*1000)
+    ccf_hr = scipy.interpolate.CubicSpline(cc_vels, ccfn, extrapolate=False)(cc_vels_hr)
     
-    # The vels on the left and right of the best vel.
-    use_left = np.where(cc_vels < 0)[0]
-    use_right = np.where(cc_vels > 0)[0]
+    # Left and right side of CCF
     use_left_hr = np.where(cc_vels_hr < 0)[0]
     use_right_hr = np.where(cc_vels_hr > 0)[0]
-    if use_left.size == 0 or use_right.size == 0:
-        return np.nan, np.nan
-    
-    vel_max_ind_left, vel_max_ind_right = use_left[np.nanargmax(ccfn[use_left])], use_right[np.nanargmax(ccfn[use_right])]
-    vel_max_ind_left_hr, vel_max_ind_right_hr = use_left_hr[np.nanargmax(ccf_hr[use_left_hr])], use_right_hr[np.nanargmax(ccf_hr[use_right_hr])]
-    
-    use_left = np.where((cc_vels > cc_vels[vel_max_ind_left]) & (cc_vels < 0))[0]
-    use_right = np.where((cc_vels > 0) & (cc_vels < cc_vels[vel_max_ind_right]))[0]
-    
-    use_left_hr = np.where((cc_vels_hr > cc_vels_hr[vel_max_ind_left_hr]) & (cc_vels_hr < 0))[0]
-    use_right_hr = np.where((cc_vels_hr > 0) & (cc_vels_hr < cc_vels_hr[vel_max_ind_right_hr]))[0]
     
     # Compute the line bisector
     for idepth in range(depths.size):
-        d = depths[idepth]
-        vl = cc_vels_hr[use_left_hr[pcmath.find_closest(ccf_hr[use_left_hr], d)[0]]]
-        vr = cc_vels_hr[use_right_hr[pcmath.find_closest(ccf_hr[use_right_hr], d)[0]]]
+        vl, _ = pcmath.intersection(cc_vels_hr[use_left_hr], ccf_hr[use_left_hr], depths[idepth], precision=None)
+        vr, _ = pcmath.intersection(cc_vels_hr[use_right_hr], ccf_hr[use_right_hr], depths[idepth], precision=None)
         line_bisectors[idepth] = (vl + vr) / 2
 
     # Compute the bisector span
-    top = np.where((depths > drtop[0]) & (depths < drtop[1]))[0]
-    bottom = np.where((depths > drbottom[0]) & (depths < drbottom[1]))[0]
-    avg_top = np.nanmean(line_bisectors[top])
-    avg_bottom = np.nanmean(line_bisectors[bottom])
+    top_inds = np.where((depths > depth_range_top[0]) & (depths < depth_range_top[1]))[0]
+    bottom_inds = np.where((depths > depth_range_bottom[0]) & (depths < depth_range_bottom[1]))[0]
+    avg_top = np.nanmean(line_bisectors[top_inds])
+    avg_bottom = np.nanmean(line_bisectors[bottom_inds])
     
     # Store the bisector span
     bisector_span = avg_top - avg_bottom
@@ -821,3 +800,130 @@ def compute_nightly_rvs_from_all(rvs, weights, n_obs_nights, flag_outliers=False
             l += n_obs_nights[inight + 1]
             
     return rvs_nightly, unc_nightly
+
+
+
+def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
+    """Combines RVs considering the differences between all the data points
+
+    Args:
+        rvs (np.ndarray): RVs
+        weights (np.ndarray): Corresponding uncertainties
+    """
+    
+    # Numbers
+    n_orders, n_spec = rvs.shape
+    n_nights = len(n_obs_nights)
+    
+    # Define the differences
+    rvlij = np.zeros((n_orders, n_nights, n_nights))
+    unclij = np.zeros((n_orders, n_nights, n_nights))
+    for l in range(n_orders):
+        for i in range(n_nights):
+            for j in range(n_nights):
+                rvlij[l, i, j] = rvs_nightly[l, i] - rvs_nightly[l, j]
+                unclij[l, i, j] = unc_nightly[l, i] * unc_nightly[l, j]
+                
+    
+    wlij = np.zeros((n_orders, n_nights, n_nights))
+    for l in range(n_orders):
+        for i in range(n_nights):
+            for j in range(n_nights):
+                wlij[l, i, j] = (1 / unclij[l, i, j]**2) / np.nansum(1 / unclij[l, i, :]**2)
+
+    # Average over differences
+    rvli = np.nansum(wlij * rvlij, axis=2)
+    
+    # Average over orders
+    uncli = np.copy(unc_nightly)
+    wli = (1 / uncli**2) / np.nansum(1 / uncli**2, axis=0)
+            
+    rvi = np.nansum(wli * rvli, axis=0) / np.nansum(wli, axis=0)
+    unci = np.sqrt((1 / np.nansum(1 / uncli**2, axis=0)) / n_orders)
+        
+    return np.copy(rvs[0, :]), np.zeros(n_spec) + 10, rvi, unci
+
+
+
+def compute_relative_rvs_from_all(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
+    """Combines RVs considering the differences between all the data points
+
+    Args:
+        rvs (np.ndarray): RVs
+        weights (np.ndarray): Corresponding uncertainties
+    """
+    
+    # Numbers
+    n_orders, n_spec = rvs.shape
+    n_nights = len(n_obs_nights)
+    
+    # Determine differences and weights tensors
+    rvlij = np.zeros((n_orders, n_spec, n_spec))
+    wlij = np.zeros((n_orders, n_spec, n_spec))
+    for l in range(n_orders):
+        for i in range(n_spec):
+            for j in range(n_spec):
+                rvlij[l, i, j] = rvs[l, i] - rvs[l, j]
+                wlij[l, i, j] = weights[l, i] * weights[l, j]
+
+    # Average over differences
+    rvli = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+    uncli = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+    for l in range(n_orders):
+        for i in range(n_spec):
+            good = np.where(wlij[l, i, :] > 0)[0]
+            ng = good.size
+            if ng == 0:
+                continue
+            elif ng == 1:
+                rvli[l, i] = rvlij[l, i, good[0]]
+                uncli[l, i] = np.nan
+            else:
+                rvli[l, i] = pcmath.weighted_mean(rvlij[l, i, :], wlij[l, i, :])
+                uncli[l, i] = pcmath.weighted_stddev(rvlij[l, i, :], wlij[l, i, :]) / np.sqrt(ng)
+    
+    wli = (1 / uncli**2) / np.nansum(1 / uncli**2, axis=0)
+    
+    rvs_single_out = np.full(n_spec, fill_value=np.nan)
+    unc_single_out = np.full(n_spec, fill_value=np.nan)
+    rvs_nightly_out = np.full(n_nights, fill_value=np.nan)
+    unc_nightly_out = np.full(n_nights, fill_value=np.nan)
+    bad = np.where(~np.isfinite(wli))
+    if bad[0].size > 0:
+        wli[bad] = 0
+        
+    for i in range(n_spec):
+        good = np.where(wli[:, i] > 0)[0]
+        ng = good.size
+        if ng == 0:
+            continue
+        elif ng == 1:
+            rvs_single_out[i] = rvli[good[0], i]
+            unc_single_out[i] = rvli[good[0], i]
+        else:
+            rvs_single_out[i] = pcmath.weighted_mean(rvli[:, i], wli[:, i])
+            unc_single_out[i] = pcmath.weighted_stddev(rvli[:, i], wli[:, i]) / np.sqrt(ng)
+        
+    w = 1 / unc_single_out**2
+    bad = np.where(~np.isfinite(w))[0]
+    if bad.size > 0:
+        w[bad] = 0
+        
+    f, l = 0, n_obs_nights[0]
+    for i in range(n_nights):
+        ng = np.where(w[f:l] > 0)[0].size
+        if ng == 0:
+            rvs_nightly_out[i] = np.nan
+            unc_nightly_out[i] = np.nan
+        elif ng == 1:
+            rvs_nightly_out[i] = rvs_single_out[f + good[0]]
+            unc_nightly_out[i] = unc_single_out[f + good[0]]
+        else:
+            rvs_nightly_out[i] = pcmath.weighted_mean(rvs_single_out[f:l], w[f:l])
+            unc_nightly_out[i] = pcmath.weighted_stddev(rvs_single_out[f:l], w[f:l]) / np.sqrt(ng)
+            
+        if i < n_nights - 1:
+            f += n_obs_nights[i]
+            l += n_obs_nights[i+1]
+        
+    return rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out
