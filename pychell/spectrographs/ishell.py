@@ -154,7 +154,7 @@ forward_model_blueprints = {
         'n_delay': 0,
         'compress': 128,
         'width': [0.08, 0.12, 0.16], # LSF width, in angstroms
-        'ak': [-0.001, 0.001, 0.001] # Hermite polynomial coefficients
+        'ak': [-0.1, 0.001, 0.1] # Hermite polynomial coefficients
     },
     
     # Determined by splines
