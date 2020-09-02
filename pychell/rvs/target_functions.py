@@ -50,10 +50,7 @@ def simple_rms(gp, forward_model, iter_index):
     weights = np.copy(forward_model.data.badpix)
 
     # Differences
-    if forward_model.opt_logspace:
-        diffs2 = (np.log(forward_model.data.flux) - np.log(model_lr))**2
-    else:
-        diffs2 = (forward_model.data.flux - model_lr)**2
+    diffs2 = (forward_model.data.flux - model_lr)**2
         
     good = np.where(np.isfinite(diffs2) & (weights > 0))[0]
     if good.size < 100:

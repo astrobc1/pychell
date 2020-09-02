@@ -13,8 +13,8 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 import datetime
 from pdb import set_trace as stop
 
-def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, method=None, use_rms=False, debug=False, xcorr=False, phase_to=None, tc=None, forward_models=None):
-    """Combines RVs across orders through a weighted TFA scheme.
+def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, method=None, use_rms=False, debug=False, xcorr=False, phase_to=None, tc=None, kamp=None, forward_models=None, detrend=False, bis_thresh=None):
+    """Combines RVs across orders.
 
     Args:
         output_path_root (str): The full output path for this run.
@@ -43,7 +43,9 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
         rv_method = getattr(pcrvcalc, method)
     
     # Parse forward models
-    forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+    if forward_models is None:
+        forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+        
     tag = forward_models[0, 0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
     index_offset = int(not forward_models[0, 0].models_dict['star'].from_synthetic)
     star_name = forward_models[0, 0].star_name
@@ -63,6 +65,17 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     n_nights = len(rvs_dict['n_obs_nights'])
     n_iters_rvs = rvs_dict['rvs'].shape[2]
     n_iters_pars = n_iters_rvs + index_offset
+    
+    # Detrend RVs if applicable
+    if detrend:
+        for o in range(n_orders):
+            for j in range(n_iters_rvs):
+                good = np.where(np.isfinite(rvs_dict['rvsx'][o, :, j]) & np.isfinite(rvs_dict['BIS'][o, :, j]))[0]
+                bad = np.where(~np.isfinite(rvs_dict['rvsx'][o, :, j]) | ~np.isfinite(rvs_dict['BIS'][o, :, j]))[0]
+                if good.size == 0:
+                    continue
+                rvs_dict['rvsx'][o, good, j] = pcrvcalc.detrend_rvs(do_orders[o], rvs_dict['rvsx'][o, good, j], rvs_dict['BIS'][o, good, j], thresh=bis_thresh)
+                        
 
     # Parse the RMS and rvs, single iteration
     rms_all = np.zeros((n_orders, n_spec, n_iters_pars))
@@ -153,7 +166,7 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     # Plot the final rvs
     fname = output_path_root + tag + '_final_rvs.png'
     rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out = rvs_out[0], rvs_out[1], rvs_out[2], rvs_out[3]
-    plot_final_rvs(star_name, spectrograph, rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out, phase_to=phase_to, show=True, fname=None, tc=tc)
+    plot_final_rvs(star_name, spectrograph, rvs_dict['BJDS'], rvs_dict['BJDS_nightly'], rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out, phase_to=phase_to, show=True, fname=None, tc=tc, kamp=kamp)
 
     # Save to a text file
     fname = output_path_root + tag + '_final_rvs.txt'
@@ -179,7 +192,7 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     if debug:
         stop()
         
-    return fwms
+    return forward_models
     
 def compute_redchi2s(rvs_single, unc_single, rvs_nightly, unc_nightly, n_obs_nights):
     n_nights = len(rvs_nightly)
@@ -247,7 +260,7 @@ def print_rv_summary(rvs_dict, bad_rvs_dict, do_orders, iter_indexes, xcorr):
                 print(' ** Iteration ' +  str(k + 1) + ': ' + str(round(stddev, 4)) + ' m/s')
             else:
                 print('    Iteration ' +  str(k + 1) + ': ' + str(round(stddev, 4)) + ' m/s')
-            
+
 
 def get_best_iterations(rvs_dict, xcorr):
     
@@ -288,6 +301,7 @@ def gen_rv_mask(rvs_dict, bad_rvs_dict):
             rvs_dict_out['rvs'][:, inds, :] = np.nan
             if rvs_dict_out['do_xcorr']:
                 rvs_dict_out['rvsx'][:, inds, :] = np.nan
+                rvs_dict_out['BIS'][:, inds, :] = np.nan
     
     # Mask individual spectra
     if 'bad_spec' in bad_rvs_dict:
@@ -296,6 +310,7 @@ def gen_rv_mask(rvs_dict, bad_rvs_dict):
             rvs_dict_out['rvs'][:, i, :] = np.nan
             if rvs_dict_out['do_xcorr']:
                 rvs_dict_out['rvsx'][:, i, :] = np.nan
+                rvs_dict_out['BIS'][:, i, :] = np.nan
             
     return rvs_dict_out, mask
             
@@ -336,7 +351,7 @@ def gen_rv_weights(rvs_dict, bad_rvs_dict, rms=None, rvcs=None):
 
 
 
-def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, debug=False, xcorr=False):
+def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, debug=False, xcorr=False, forward_models=None):
     
     # Get the orders
     if do_orders is None:
@@ -344,7 +359,8 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
     n_orders = len(do_orders)
     
     # Get the tag for this run
-    forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+    if forward_models is None:
+        forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
     tag = forward_models[0, 0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
     index_offset = int(not forward_models[0, 0].models_dict['star'].from_synthetic)
     star_name = forward_models[0, 0].star_name
@@ -418,12 +434,14 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
         stop()
         
     
-def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, tc=None, show=True, fname=None):
+def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_single, rvs_nightly, unc_nightly, phase_to=None, tc=None, kamp=None, show=True, fname=None):
     
     if phase_to is None:
         _phase_to = 1E20
     else:
         _phase_to = phase_to
+        modelx = np.linspace(0, _phase_to, num=300)
+        modely = kamp * np.sin(2 * np.pi * modelx / _phase_to)
         
     if tc is None:
         alpha = 0
@@ -441,6 +459,7 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
         plt.xlabel('BJD - BJD$_{0}$')
     else:
         plt.xlabel('Phase [days, P = ' +  str(round(_phase_to, 3)) + ']')
+        plt.plot(modelx, modely, label='K = ' + str(kamp) + ' m/s')
     plt.ylabel('RV [m/s]')
     
     if show:

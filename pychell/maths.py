@@ -987,3 +987,17 @@ def shiftint1d(x, n, cval=np.nan):
     else:
         result[:] = x
     return result
+
+
+@njit
+def lorentz(x, mu, fwhm):
+    xx = (x - mu) / (fwhm / 2)
+    return 1 / (1 + xx**2)
+
+# A slightly more general solver
+def lorentz_solver(pars, x, data):
+    model = lorentz(x, *pars)
+    good = np.where(np.isfinite(data) & np.isfinite(model))[0]
+    n_good = good.size
+    rms = np.sqrt(np.nansum((data - model)**2) / n_good)
+    return rms

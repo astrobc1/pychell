@@ -7,6 +7,7 @@ from joblib import Parallel, delayed
 # Maths
 import numpy as np
 import scipy.interpolate
+import scipy.stats
 import scipy.constants as cs
 
 # LLVM
@@ -82,6 +83,7 @@ def weighted_brute_force(forward_model, iter_index):
     # Stores the rms as a function of velocity
     rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     xcorr = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
+    redchi2s = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     
     # Starting weights are flux uncertainties and bad pixels. If flux unc are uniform, they have no effect.
     weights_init = np.copy(forward_model.data.badpix * forward_model.data.flux_unc)
@@ -99,6 +101,7 @@ def weighted_brute_force(forward_model, iter_index):
     rvc, _ = compute_rv_content(forward_model.templates_dict['star'][:, 0], forward_model.templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, width=pars[forward_model.models_dict['lsf'].par_names[0]].value)
     star_weights = 1 / rvc**2
     
+    
     for i in range(vels.size):
         
         weights = np.copy(weights_init)
@@ -115,24 +118,27 @@ def weighted_brute_force(forward_model, iter_index):
         
         # Further
         bad = np.where(~np.isfinite(model_lr) | (weights <= 0))[0]
+        n_good = model_lr.size - bad.size 
         if bad.size > 0:
             weights[bad] = 0
         
-        # Construct the RMS
-        if forward_model.opt_logspace:
-            rmss[i] = np.sqrt(np.nansum((np.log(forward_model.data.flux) - np.log(model_lr))**2 * weights) / np.nansum(weights))
-        else:
-            rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
+        # Construct the RMS and chi2
+        redchi2s[i] = np.nansum((forward_model.data.flux - model_lr)**2 * weights / (np.nansum(weights) * forward_model.opt[-1][0]**2)) / (n_good - 1)
+        rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
 
     # Extract the best rv
-    xcorr_star_vel = vels[np.nanargmin(rmss)]
-    xcorr_rv_init = xcorr_star_vel + forward_model.data.bc_vel # Actual RV is bary corr corrected
+    M = np.nanargmin(redchi2s)
     vels_for_rv = vels + forward_model.data.bc_vel
+    xcorr_rv_init = vels[M] + forward_model.data.bc_vel
 
     # Fit with a polynomial
-    use = np.where((vels_for_rv > xcorr_rv_init - 150) & (vels_for_rv < xcorr_rv_init + 150))[0]
-    pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
-    xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
+    #use = np.where((vels_for_rv > xcorr_rv_init - 150) & (vels_for_rv < xcorr_rv_init + 150))[0]
+    #pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
+    
+    # Fit with polynomial
+    dv = vels_for_rv[1] - vels_for_rv[0]
+    xcorr_rv = xcorr_rv_init - (dv / 2) * ((redchi2s[M + 1] - redchi2s[M - 1]) / (redchi2s[M - 1] - 2 * redchi2s[M] + redchi2s[M + 1]))
+    unc_xcorr_rv = np.sqrt(2 * (dv**2) / (redchi2s[M - 1] - 2 * redchi2s[M] + redchi2s[M + 1]))
     
     # Bisector span
     bspan_result = compute_bisector_span(vels_for_rv, rmss, xcorr_rv, n_bs=forward_model.xcorr_options['n_bs'])
@@ -628,13 +634,15 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
     for i in range(nx):
         if i in good:
             slope = flux_spline(wavemod[i], 1)
-            if not np.isfinite(slope) or slope == 0:
-                continue
-            rvc_per_pix[i] = cs.c * np.sqrt(fluxmod[i] + ron**2) / (wavemod[i] * np.abs(slope))
+            if not (not np.isfinite(slope) or slope == 0 or not np.isfinite(fluxmod[i])):
+                rvc_per_pix[i] = cs.c * np.sqrt(fluxmod[i] + ron**2) / (wavemod[i] * np.abs(slope))
 
-    rvc_tot = np.nansum(1 / rvc_per_pix**2)**-0.5
-    
-    return rvc_per_pix, rvc_tot
+    good = np.where(np.isfinite(rvc_per_pix))[0]
+    if good.size == 0:
+        return np.nan, np.nan
+    else:
+        rvc_tot = np.nansum(1 / rvc_per_pix[good]**2)**-0.5
+        return rvc_per_pix, rvc_tot
         
 
 def compute_bisector_span(cc_vels, ccf, v0, n_bs=1000):
@@ -673,6 +681,9 @@ def compute_bisector_span(cc_vels, ccf, v0, n_bs=1000):
     ccf = ccf - np.nanmin(ccf)
     continuum = pcmath.weighted_median(ccf, percentile=0.95)
     ccfn = ccf / continuum
+    good = np.where(ccfn < continuum)[0]
+    best_loc = np.nanargmin(ccfn)
+    good = np.where(good)
     
     # Remove v0
     cc_vels = cc_vels - v0
@@ -701,6 +712,20 @@ def compute_bisector_span(cc_vels, ccf, v0, n_bs=1000):
     
     return line_bisectors, bisector_span
 
+def detrend_rvs(order_num, rvs, vec, thresh=None):
+    
+    if thresh is None:
+        thresh = 0
+        
+    pcc, _ = scipy.stats.pearsonr(vec, rvs)
+    if np.abs(pcc) < thresh:
+        print('Did not detrend order ' + str(order_num) + ', pcc = ' + str(round(pcc, 4)))
+        return rvs
+    else:
+        print('Detrending order ' + str(order_num) + ', pcc = ' + str(round(pcc, 4)))
+        pfit = np.polyfit(vec, rvs, 1)
+        rvs_out = rvs - np.polyval(pfit, vec)
+        return rvs_out
 
 def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights, flag_outliers=False, thresh=4):
     """Computes nightly RVs for a single order.
@@ -842,7 +867,6 @@ def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_o
     unci = np.sqrt((1 / np.nansum(1 / uncli**2, axis=0)) / n_orders)
         
     return np.copy(rvs[0, :]), np.zeros(n_spec) + 10, rvi, unci
-
 
 
 def compute_relative_rvs_from_all(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):

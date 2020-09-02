@@ -427,7 +427,7 @@ class Simulated(SpecData1d):
         
         
     @staticmethod
-    def calculate_bc_info_all(forward_models, obs_name, star_name):
+    def calculate_bc_info_all(forward_models, observatory, star_name):
         """ Computes the bary-center information for all observations.
 
         Args:
@@ -453,8 +453,8 @@ class Simulated(SpecData1d):
         # bc vels
         #bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=obs_name)[0]
         #bc_vels = get_BC_vel(JDUTC=jds, obsname=obs_name, starname = star_name)[0]
-        bjds = JDUTC_to_BJDTDB(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=obs_name, ephemeris='de430', leap_update=True)[0]
-        bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=obs_name, ephemeris='de430', leap_update=True)[0]
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=observatory['name'], ephemeris='de430', leap_update=True)[0]
+        bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=observatory['name'], ephemeris='de430', leap_update=True)[0]
         
         
         for i in range(forward_models.n_spec):

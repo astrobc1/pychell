@@ -11,7 +11,6 @@ observatory = {"name" :"Palomar"}
 ####### Reduction / Extraction #####################################
 ####################################################################
 
-
 redux_settings = NotImplemented
 
 ####################################################################
@@ -46,7 +45,7 @@ forward_model_blueprints = {
     'tellurics': {
         'name': 'nir_tellurics',
         'class_name': 'TelluricsTAPASV2',
-        'vel': [-300, 0, 300],
+        'vel': [-300, 1, 300],
         'water_depth': [0.01, 1.5, 4.0],
         'airmass_depth': [0.8, 1.2, 4.0],
         'min_range': 0.01,
@@ -63,11 +62,12 @@ forward_model_blueprints = {
     # The default blaze is a quadratic + splines.
     'blaze': {
         'name': 'blaze', # The blaze model after a division from a flat field
-        'class_name': 'PolyBlaze',
-        'n_splines': 0,
-        'poly_2': [0, 0, 0],
-        'poly_1': [0, 0, 0],
-        'poly_0': [1, 1, 1]
+        'class_name': 'SplineBlaze',
+        'n_splines': 10,
+        'spline': [-0.1, 0.01, 0.1],
+        'poly_2': [-1E-7, -1E-6, 1E-7],
+        'poly_1': [-1E-6, 1E-5, 1E-6],
+        'poly_0': [0.99, 1, 1.01]
     },
     
     # Hermite Gaussian LSF
@@ -75,9 +75,7 @@ forward_model_blueprints = {
         'name': 'lsf_hermite',
         'class_name': 'HermiteLSF',
         'hermdeg': 0,
-        'compress': 64,
-        'n_delay': 0,
-        'width': [0.08, 0.08, 0.08], # LSF width, in angstroms
+        'width': [0.05, 0.08, 0.011], # LSF width, in angstroms
         'ak': [-0.075, 0.001, 0.075] # See cale et al 2019 or arfken et al some year for definition of ak > 0
     },
     
@@ -85,8 +83,6 @@ forward_model_blueprints = {
     'wavelength_solution': {
         'name': 'laser_comb_wls',
         'class_name': 'HybridWavelengthSolution',
-        'n_splines': 0,
-        'n_delay_splines': 0,
-        'spline': [-0.15, 0.01, 0.15]
+        'n_splines': 0
     }
 }

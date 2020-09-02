@@ -59,6 +59,7 @@ def parse_rvs(output_path_root, do_orders=None):
         rvs_dict['rvsx'] = np.full(shape=(n_orders, n_spec, n_iters), fill_value=np.nan)
         rvs_dict['rvsx_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
         rvs_dict['uncx_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
+        rvs_dict['BIS'] = np.full(shape=(n_orders, n_spec, n_iters), fill_value=np.nan)
 
     # Load in rvs for each order
     for o in range(n_orders):
@@ -72,6 +73,7 @@ def parse_rvs(output_path_root, do_orders=None):
             rvs_dict['rvsx'][o, :, :] = rvfile['rvs_xcorr']
             rvs_dict['rvsx_nightly'][o, :, :] = rvfile['rvs_xcorr_nightly']
             rvs_dict['uncx_nightly'][o, :, :] = rvfile['unc_xcorr_nightly']
+            rvs_dict['BIS'][o, :, :] = rvfile['bisector_spans']
 
     return rvs_dict
 

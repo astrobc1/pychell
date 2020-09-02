@@ -806,12 +806,12 @@ class ForwardModel:
         args_to_pass = (forward_model, iter_index)
         
         # Construct the Nelder Mead Solver and run
-        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-4, xtol=1E-4)
+        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-6, xtol=1E-6)
         opt_result = solver.solve()
 
         # Pass best fit parameters and optimization result to forward model
-        forward_model.best_fit_pars.append(opt_result[0])
-        forward_model.opt.append(opt_result[1:])
+        forward_model.best_fit_pars.append(opt_result['xmin'])
+        forward_model.opt.append([opt_result['fmin'], opt_result['fcalls']])
 
         # Build the best fit forward model
         best_wave, best_model = forward_model.build_full(forward_model.best_fit_pars[-1], iter_index)
@@ -825,8 +825,8 @@ class ForwardModel:
 
         # Print diagnostics if set
         if forward_model.verbose_print:
-            print('RMS = %' + str(round(100*opt_result[1], 5)))
-            print('Function Calls = ' + str(opt_result[2]))
+            print('RMS = %' + str(round(100*opt_result['fmin'], 5)))
+            print('Function Calls = ' + str(opt_result['fcalls']))
             forward_model.pretty_print()
         
         print('    Fit Spectrum ' + str(forward_model.spec_num) + ' of ' + str(n_spec_tot) + ' in ' + str(round((stopwatch.time_since())/60, 2)) + ' min', flush=True)
