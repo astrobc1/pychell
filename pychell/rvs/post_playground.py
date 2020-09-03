@@ -792,11 +792,11 @@ def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=F
             uncn[o, :] = rvs_dict['unc_nightly'][o, :, iter_index]
         
         f, l = 0, n_obs_nights[0]
-        for i in range(n_nights):
-            weights[o, f:l] = mask[o, f:l] * 1 / uncn[o, i]**2
-            if i <= n_nights - 1:
-                f += n_obs_nights[i]
-                l += n_obs_nights[i+1]
+        for inight in range(n_nights):
+            weights[o, f:l] = mask[o, f:l] * 1 / uncn[o, inight]**2
+            if inight < n_nights - 1:
+                f += n_obs_nights[inight]
+                l += n_obs_nights[inight+1]
         
     # Combine
     rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_from_all(rvs, weights, n_obs_nights, flag_outliers=flag, thresh=thresh)
@@ -804,7 +804,7 @@ def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=F
     # Plot
     for o in range(n_orders):
         plt.plot((bjds - alpha)%_phase_to, rvs[o, :] - np.nanmedian(rvs[o, :]), marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]), alpha=0.6)
-        plt.errorbar((bjdsn - alpha)%_phase_to, rvsn[o, :] - np.nanmedian(rvs_dict[o, :]), yerr=uncn[o, :], marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]), alpha=0.8)
+        plt.errorbar((bjdsn - alpha)%_phase_to, rvsn[o, :] - np.nanmedian(rvsn[o, :]), yerr=uncn[o, :], marker='o', markersize=6, lw=0, label='Order ' + str(do_orders[o]), alpha=0.8)
         
         
     plt.errorbar((bjdsn - alpha)%_phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)

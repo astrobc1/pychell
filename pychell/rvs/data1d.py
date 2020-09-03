@@ -109,10 +109,10 @@ class SpecData1d:
         from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
         
         # BJD
-        self.bjd = JDUTC_to_BJDTDB(JDUTC=self.JD, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=True)[0]
+        self.bjd = JDUTC_to_BJDTDB(JDUTC=self.JD, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=False)[0]
         
         # bc vel
-        self.bc_vel = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=True)[0]
+        self.bc_vel = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=False)[0]
     
     def set_bc_info(self, bjd=None, bc_vel=None):
         """ Basic setter method for the BJD and barycenter velocity.
@@ -187,10 +187,10 @@ class SpecData1d:
         jds = np.array([fwm.data.JD for fwm in forward_models], dtype=float)
         
         # BJDs
-        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=observatory['name'], ephemeris='de430', leap_update=True)[0]
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=observatory['name'], leap_update=False)[0]
         
         # bc vels
-        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=observatory['name'], ephemeris='de430', leap_update=True)[0]
+        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=observatory['name'], leap_update=False)[0]
         
         for i in range(forward_models.n_spec):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
@@ -453,8 +453,8 @@ class Simulated(SpecData1d):
         # bc vels
         #bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=obs_name)[0]
         #bc_vels = get_BC_vel(JDUTC=jds, obsname=obs_name, starname = star_name)[0]
-        bjds = JDUTC_to_BJDTDB(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=observatory['name'], ephemeris='de430', leap_update=True)[0]
-        bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=observatory['name'], ephemeris='de430', leap_update=True)[0]
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=observatory['name'], ephemeris='de430', leap_update=False)[0]
+        bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=observatory['name'], ephemeris='de430', leap_update=False)[0]
         
         
         for i in range(forward_models.n_spec):
