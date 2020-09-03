@@ -571,7 +571,8 @@ class Star(TemplateMult):
             print('Loading in Synthetic Stellar Template', flush=True)
             template_raw = np.loadtxt(self.input_file, delimiter=',')
             wave, flux = template_raw[:, 0], template_raw[:, 1]
-            flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False, bc_type='not-a-knot')(wave_even)
+            good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
+            flux_interp = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=False, bc_type='not-a-knot')(wave_even)
             flux_interp /= pcmath.weighted_median(flux_interp, percentile=0.999)
             template = np.array([wave_even, flux_interp]).T
         else:
