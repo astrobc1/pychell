@@ -19,6 +19,7 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 # Science/math
 from scipy import constants as cs # cs.c = speed of light in m/s
 import numpy as np # Math, Arrays
+import scipy.signal
 try:
     import torch
 except:
@@ -312,6 +313,9 @@ def weighted_median(forward_models, iter_index=None, nights_for_template=None, t
     locs = np.where(new_flux > 1)[0]
     if locs.size > 0:
         new_flux[locs] = 1
+        
+    # Smooth
+    new_flux = scipy.signal.savgol_filter(new_flux, 39, 3, mode='constant', cval=np.nan)
 
     forward_models.templates_dict['star'][:, 1] = new_flux
 

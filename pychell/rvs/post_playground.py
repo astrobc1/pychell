@@ -13,6 +13,29 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 import datetime
 from pdb import set_trace as stop
 
+def combine_stellar_templates(output_path_root, do_orders=None, iter_index=None):
+    
+    if do_orders is None:
+        do_orders = parser.get_orders(output_path_root)
+        
+    n_orders = len(do_orders)
+    
+    stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indexes=[iter_index]*n_orders)
+    nxs = np.array([stellar_templates[o][:, 0].size for o in range(n_orders)])
+    wave_min, wave_max = np.nanmin(stellar_templates[0][:, 0]), np.nanmax(stellar_templates[-1][:, 0])
+    nx_master = int(np.average(nxs) * n_orders)
+    master_template_wave = np.linspace(wave_min, wave_max, num=nx_master)
+    
+    stellar_templates_interp = np.zeros((nx_master, n_orders))
+    for o in range(n_orders):
+        good = np.where(np.isfinite(stellar_templates[o][:, 0]) & np.isfinite(stellar_templates[o][:, 1]))[0]
+        stellar_templates_interp[:, o] = scipy.interpolate.CubicSpline(stellar_templates[o][good, 0], stellar_templates[o][good, 1], extrapolate=False)(master_template_wave)
+        
+    master_template_flux = np.nanmean(stellar_templates_interp, axis=1)
+    
+    np.savetxt(output_path_root + 'master_stellar_template.txt', np.array([master_template_wave, master_template_flux]).T, delimiter=',')
+        
+
 def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=None, templates=False, method=None, use_rms=False, debug=False, xcorr=False, phase_to=None, tc=None, kamp=None, forward_models=None, detrend=False, bis_thresh=None):
     """Combines RVs across orders.
 
