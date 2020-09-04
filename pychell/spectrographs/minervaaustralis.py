@@ -48,10 +48,11 @@ forward_model_blueprints = {
     # Tellurics (from TAPAS) NOTE: Still need proper tellurics, so steal Whipple
     'tellurics': {
         'name': 'vis_tellurics',
-        'class_name': 'TelluricsTAPASV2',
+        'class_name': 'TelluricsTAPAS',
         'vel': [-300, 0, 300],
         'depth_water': [0.01, 1.5, 4.0],
         'depth_airmass': [0.8, 1.2, 4.0],
+        'min_range': 0.01,
         'input_files': {
             'water': 'telluric_water_tapas_whipple.npz',
             'methane': 'telluric_methane_tapas_whipple.npz',
@@ -81,7 +82,6 @@ forward_model_blueprints = {
         'name': 'lsf_hermite',
         'class_name': 'HermiteLSF',
         'hermdeg': 0,
-        'compress': 64,
         'n_delay': 0,
         'width': [0.050, 0.12, 0.2], # LSF width, in angstroms
         'ak': [-0.03, 0.001, 0.2] # Hermite polynomial coefficients
@@ -92,7 +92,6 @@ forward_model_blueprints = {
         'name': 'wavesol_ThAr_I2',
         'class_name': 'HybridWavelengthSolution',
         'n_splines': 0, # Zero until I2 cell is implemented
-        'n_delay_splines': 0,
         'spline': [-0.03, 0.0005, 0.03]
     }
 }

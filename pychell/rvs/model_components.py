@@ -45,14 +45,16 @@ class SpectralComponent:
             blueprint (dict): The blueprints to construct this component from.
             order_num (int): The image order number.
         """
-        # Base class for spectral model components
-        # Store the blueprint so it doesn't need to be passed around
+        
+        # Store the blueprint AND auto-populate, may as well...
         self.blueprint = blueprint
+        
+        # Auto populate self
+        for key in blueprint:
+            setattr(self, key, blueprint[key])
 
         # Default enabled, user can further choose to disable after calling super()
-        if 'n_delay' in blueprint:
-            self.n_delay = blueprint['n_delay']
-        else:
+        if not hasattr(self, 'n_delay'):
             self.n_delay = 0
         
         # Whether or not to enable this model at the start    
@@ -60,15 +62,12 @@ class SpectralComponent:
 
         # The order number for this model
         self.order_num = forward_model.order_num
-
-        # The blueprint must contain a name for this model
-        self.name = blueprint['name']
         
-        # Parameter names
+        # No parameter names, probably overwritten with each instance
         self.base_par_names = []
         self.par_names = []
         
-        # The wavelength bounds for this model in the lab frame
+        # The wavelength bounds for this model in the lab frame with small padding
         self.wave_bounds = forward_model.wave_bounds
 
     # Must implement a build method
@@ -81,7 +80,7 @@ class SpectralComponent:
 
     # Called after each iteration, may overload.
     def update(self, forward_model, iter_index):
-        """Updates this model component given the iteration index and the n_delay attribute.
+        """Updates this model component given the iteration index and the n_delay attribute. This function may be extended / re-implmented for each model.
 
         Args:
             forward_model (ForwardModel): The forward model this model belongs to.
@@ -94,19 +93,27 @@ class SpectralComponent:
                 forward_model.initial_parameters[pname].vary = True
 
     def __repr__(self):
+        """Simple representation method
+
+        Returns:
+            str: The string representation of the model.
+        """
         return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
     
     def init_parameters(self, forward_model):
+        """Initializes the parameters for this model
+
+        Args:
+            forward_model (ForwardModel): The forward model this model belongs to.
+        """
         pass
-        
-        
-    def estimate_parameters(self, forward_model):
-        raise NotImplementedError("Must implement an estimate_parameters method for this class")
-        
-    def estimate(self, forward_model):
-        return self.build(forward_model.initial_parameters)
     
     def init_optimize(self, forward_model):
+        """Perform initial, pre-Nelder-Mead optimizations.
+
+        Args:
+            forward_model (ForwardModel): The forward model this model belongs to.
+        """
         pass
     
 
@@ -116,20 +123,7 @@ class MultModelComponent(SpectralComponent):
 
     Attributes:
         wave_bounds (list): The approximate left and right wavelength endpoints of the considered data.
-        base_par_names (list): The base parameter names (constant) for this model.
-        par_names (list): The full parameter names for this specific run.
     """
-
-    def __init__(self, forward_model, blueprint):
-        """Default constructor for a multiplicative model component.
-
-        Args:
-            blueprint (dict): The dictionary needed to construct this model component.
-            wave_bounds (list): A list of the approximate min and max wavelength bounds.
-            order_num (int, optional): The order number. Defaults to None.
-        """
-        # Call super method
-        super().__init__(forward_model, blueprint)
 
     # Effectively no model
     def build_fake(self, nx):
@@ -145,19 +139,9 @@ class MultModelComponent(SpectralComponent):
 
 
 class EmpiricalMult(MultModelComponent):
-    """ Base class for an empirically derived multiplicative (or log-additive) spectral component (i.e., based purely on parameters, no templates involved). As of now, this is purely a node in the Type tree and provides no additional functionality.
+    """ Base class for an empirically derived multiplicative (or log-additive) spectral component (i.e., based purely on parameters, no templates involved). As of now, this is purely a node in the Type heirarchy and provides no unique functionality.
     """
-
-    def __init__(self, forward_model, blueprint):
-        """Default constructor for an empirical multiplicative model component.
-
-        Args:
-            blueprint (dict): The dictionary needed to construct this model component.
-            wave_bounds (list): A list of the approximate min and max wavelength bounds.
-            order_num (int, optional): The order number. Defaults to None.
-        """
-        # Call super method
-        super().__init__(forward_model, blueprint)
+    pass
 
 
 class TemplateMult(MultModelComponent):
@@ -588,7 +572,7 @@ class Star(TemplateMult):
 
 #### Tellurics ####
 
-class TelluricsTAPAS(TemplateMult):
+class TelluricsTAPASOLD(TemplateMult):
     """ A telluric model based on Templates obtained from TAPAS. These templates should be pre-fetched from TAPAS and specific to the observatory. Each species has a unique depth, but the model is locked to a common Doppler shift.
 
     Attributes:
@@ -692,7 +676,7 @@ class TelluricsTAPAS(TemplateMult):
             ts[t][:, 1] /= pcmath.weighted_median(flux, percentile=0.999)
             
             
-class TelluricsTAPASV2(TemplateMult):
+class TelluricsTAPAS(TemplateMult):
     """ A telluric model based on Templates obtained from TAPAS. These templates should be pre-fetched from TAPAS and specific to the observatory. Only water has a unique depth, with all others being identical. The model uses a common Doppler shift.
 
     Attributes:

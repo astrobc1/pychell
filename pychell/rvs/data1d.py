@@ -306,7 +306,7 @@ class MinervaAustralis(SpecData1d):
         
         
     @staticmethod
-    def calculate_bc_info_all(forward_models, star_name, obs_name=None):
+    def calculate_bc_info_all(forward_models, observatory, star_name):
         """ Computes the bary-center information for all observations, specific to Mt. Kent.
 
         Args:

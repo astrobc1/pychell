@@ -110,7 +110,7 @@ forward_model_blueprints = {
     # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'kband_tellurics',
-        'class_name': 'TelluricsTAPASV2',
+        'class_name': 'TelluricsTAPAS',
         'vel': [-500, -100, 500],
         'water_depth': [0.01, 1.2, 5.0],
         'airmass_depth': [0.8, 1.2, 4.0],

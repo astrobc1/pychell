@@ -44,7 +44,7 @@ forward_model_blueprints = {
     # Tellurics (from TAPAS) NOTE: Still need proper tellurics, so steal Whipple
     'tellurics': {
         'name': 'nir_tellurics',
-        'class_name': 'TelluricsTAPASV2',
+        'class_name': 'TelluricsTAPAS',
         'vel': [-300, 1, 300],
         'water_depth': [0.01, 1.5, 4.0],
         'airmass_depth': [0.8, 1.2, 4.0],
