@@ -17,7 +17,7 @@ def parse_forward_models(output_path_root, do_orders=None):
         do_order = get_orders(output_path_root)
         
     n_orders = len(do_orders)
-    n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'Fits' + os.sep + '*.pkl'))
+    n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'ForwardModels' + os.sep + '*.pkl'))
     forward_models = np.empty(shape=(n_orders, n_spec), dtype=object)
     for o in range(n_orders):
         for ispec in range(n_spec):
@@ -46,7 +46,6 @@ def parse_rvs(output_path_root, do_orders=None):
     n_obs_nights = rvs0['n_obs_nights']
     n_nights = len(n_obs_nights)
     rvs_dict['do_xcorr'] = True if 'rvs_xcorr' in rvs0 else False
-        
         
     rvs_dict['rvs'] = np.full(shape=(n_orders, n_spec, n_iters), fill_value=np.nan)
     rvs_dict['rvs_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
@@ -80,7 +79,7 @@ def parse_rvs(output_path_root, do_orders=None):
 
 def parse_forward_model(output_path_root, order_num, spec_num):
     print('Parsing Forward Model For Order ' + str(order_num) + ', Observation ' + str(spec_num))
-    fname = glob.glob(output_path_root + 'Order' + str(order_num) + os.sep + 'Fits' + os.sep + '*_forward_model_*_spec' + str(spec_num) + '.pkl')[0]
+    fname = glob.glob(output_path_root + 'Order' + str(order_num) + os.sep + 'ForwardModels' + os.sep + '*_forward_model_*_spec' + str(spec_num) + '.pkl')[0]
     with open(fname, 'rb') as f:
             fwm = pickle.load(f)
     return fwm
@@ -91,11 +90,9 @@ def parse_templates(output_path_root, do_orders=None):
         do_order = get_orders(output_path_root)
         
     n_orders = len(do_orders)
-    templates = [{}]*n_orders
+    templates = []
     for o in range(n_orders):
-        fwm = parse_forward_model(output_path_root, order_num=do_orders[o], spec_num=1)
-        for t in fwm.templates_dict:
-            templates[o][t] = fwm.templates_dict[t]
+        templates.append(np.load(output_path_root + 'Order' + str(do_orders[o]) + os.sep + 'Templates' + os.sep + 'templates_dict.npz'))
             
     return templates
 
@@ -112,7 +109,7 @@ def parse_stellar_templates(output_path_root, do_orders=None, iter_indexes=None)
     return stellar_templates
 
 def parse_stellar_template(output_path_root, order_num, iter_index):
-    f = glob.glob(output_path_root + 'Order' + str(order_num) + os.sep + 'Stellar_Templates' + os.sep + '*.npz')[0]
+    f = glob.glob(output_path_root + 'Order' + str(order_num) + os.sep + 'Templates' + os.sep + '*stellar_templates*.npz')[0]
     template_temp = np.load(f)['stellar_templates']
     template = np.array([template_temp[:, 0], template_temp[:, iter_index + 1]]).T
     return template
@@ -124,7 +121,7 @@ def parse_rms(output_path_root, do_orders=None):
     
     n_orders = len(do_orders)
     fwm0 = parse_forward_model(output_path_root, do_orders[0], 1)
-    n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'Fits' + os.sep + '*.pkl'))
+    n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'ForwardModels' + os.sep + '*.pkl'))
     n_iters = fwm0.n_template_fits + (not fwm0.models_dict['star'].from_synthetic)
     rms = np.empty(shape=(n_orders, n_spec, n_iters), dtype=float)
     for o in range(n_orders):
@@ -142,11 +139,8 @@ def parameter_unpack(pars, iter_indexes):
     varies_unpacked = np.empty(shape=(n_orders, n_spec, n_pars), dtype=bool)
     for o in range(n_orders):
         for ispec in range(n_spec):
-            try:
-                pars_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['values']
-                varies_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['varies']
-            except:
-                stop()
+            pars_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['value']
+            varies_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['vary']
                 
     return pars_unpacked, varies_unpacked
 

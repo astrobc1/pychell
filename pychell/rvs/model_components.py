@@ -108,7 +108,7 @@ class SpectralComponent:
         """
         pass
     
-    def init_optimize(self, forward_model):
+    def init_optimize(self, forward_model, templates_dict):
         """Perform initial, pre-Nelder-Mead optimizations.
 
         Args:
@@ -318,7 +318,7 @@ class SplineBlaze(EmpiricalMult):
         
         # Estimate the continuum
         wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
-        log_continuum = fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
+        log_continuum = fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.mask, order=4, nsigma=[0.25, 3.0], maxniter=50)
         
         continuum = np.exp(log_continuum)
         good = np.where(np.isfinite(continuum))[0]
@@ -453,11 +453,11 @@ class GasCell(TemplateMult):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['shift'][1], minv=self.blueprint['shift'][0], maxv=self.blueprint['shift'][2], vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['depth'][1], minv=self.blueprint['depth'][0], maxv=self.blueprint['depth'][2], vary=True))
         
-    def init_optimize(self, forward_model):
-        wave, flux = forward_model.templates_dict['gas_cell'][:, 0], forward_model.templates_dict['gas_cell'][:, 1]
-        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
+    def init_optimize(self, forward_model, templates_dict):
+        wave, flux = templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1]
+        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(templates_dict['star'][:, 0])
         flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
-        forward_model.templates_dict['gas_cell'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
+        templates_dict['gas_cell'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
 
 
 class GasCellCHIRON(TemplateMult):
@@ -500,11 +500,9 @@ class GasCellCHIRON(TemplateMult):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=shift, minv=shift - self.blueprint['shift_range'][0], maxv=shift + self.blueprint['shift_range'][1], vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=depth[1], minv=depth[0], maxv=depth[2], vary=self.enabled))
         
-    def init_optimize(self, forward_model):
-        wave, flux = forward_model.templates_dict['gas_cell'][:, 0], forward_model.templates_dict['gas_cell'][:, 1]
-        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(forward_model.templates_dict['star'][:, 0])
-        flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
-        forward_model.templates_dict['gas_cell'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
+    def init_optimize(self, forward_model, templates_dict):
+        wave, flux = templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1]
+        templates_dict['gas_cell'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
 
 
 #### Star ####
@@ -537,8 +535,7 @@ class Star(TemplateMult):
     def build(self, pars, template, wave_final):
         wave, flux = template[:, 0], template[:, 1]
         if self.enabled:
-            wave_shifted = wave * np.exp(pars[self.par_names[0]].value / cs.c)
-            return np.interp(wave_final, wave_shifted, flux, left=np.nan, right=np.nan)
+            return pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=None, flux=flux)
         else:
             return self.build_fake(wave_final.size)
 
@@ -564,118 +561,13 @@ class Star(TemplateMult):
 
         return template
     
-    def init_optimize(self, forward_model):
-        wave, flux = forward_model.templates_dict['star'][:, 0], forward_model.templates_dict['star'][:, 1]
-        flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux, pars=forward_model.initial_parameters)
-        forward_model.templates_dict['star'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
+    def init_optimize(self, forward_model, templates_dict):
+        wave, flux = templates_dict['star'][:, 0], templates_dict['star'][:, 1]
+        templates_dict['star'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
 
 
 #### Tellurics ####
 
-class TelluricsTAPASOLD(TemplateMult):
-    """ A telluric model based on Templates obtained from TAPAS. These templates should be pre-fetched from TAPAS and specific to the observatory. Each species has a unique depth, but the model is locked to a common Doppler shift.
-
-    Attributes:
-        species (list): The names (strings) of the telluric species.
-        n_species (int): The number of telluric species.
-        species_enabled (dict): A dictionary with species as keys, and boolean values for items (True=enabled, False=disabled)
-        species_input_files (list): A list of input files (strings) for the individual species.
-    """
-
-    def __init__(self, forward_model, blueprint):
-
-        # Call super method
-        super().__init__(forward_model, blueprint)
-
-        self.base_par_names = ['_vel']
-
-        if len(blueprint['species'].keys()) == 0:
-            self.species = []
-            self.enabled = False
-        else:
-            self.species = list(blueprint['species'].keys())
-            self.n_species = len(self.species)
-            self.species_enabled = {}
-            self.species_input_files = {}
-            for itell in range(self.n_species):
-                self.species_input_files[self.species[itell]] = forward_model.templates_path + blueprint['species'][self.species[itell]]['input_file']
-                self.species_enabled[self.species[itell]] = True
-                self.base_par_names.append('_' + self.species[itell] + '_depth')
-        self.par_names = [self.name + s for s in self.base_par_names]
-
-    def build(self, pars, templates, wave_final):
-        if self.enabled:
-            flux = np.ones(wave_final.size, dtype=np.float64)
-            for i in range(self.n_species):
-                if self.species_enabled[self.species[i]]:
-                    flux *= self.build_single_species(pars, templates, self.species[i], i, wave_final)
-            return flux
-        else:
-            return self.build_fake(wave_final.size)
-
-    def build_single_species(self, pars, templates, single_species, species_i, wave_final):
-        shift = pars[self.par_names[0]].value
-        depth = pars[self.par_names[species_i + 1]].value
-        wave, flux = templates[single_species][:, 0], templates[single_species][:, 1]
-        flux = flux ** depth
-        wave_shifted = wave * np.exp(shift / cs.c)
-        return np.interp(wave_final, wave_shifted, flux, left=flux[0], right=flux[-1])
-
-    def init_parameters(self, forward_model):
-        
-        # Components
-        for itell, tell in enumerate(self.species):
-            max_range = np.nanmax(forward_model.templates_dict['tellurics'][tell][:, 1]) - np.nanmin(forward_model.templates_dict['tellurics'][tell][:, 1])
-            if max_range > 0.015:
-                self.species_enabled[tell] = True
-            else:
-                self.species_enabled[tell] = False
-            forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[itell+1], value=self.blueprint['species'][self.species[itell]]['depth'][1], minv=self.blueprint['species'][self.species[itell]]['depth'][0], maxv=self.blueprint['species'][self.species[itell]]['depth'][2], vary=self.species_enabled[tell]))
-            
-        # Shift
-        if np.any([self.species_enabled[tell] for tell in self.species_enabled]):
-            v = True
-        else:
-            v = False
-            self.enabled = False
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['vel'][1], minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], vary=v))
-        
-        if not self.enabled:
-            self.n_delay = int(1E3)
-
-    def update(self, forward_model, iter_index):
-        super().update(forward_model, iter_index)
-
-    def load_template(self, forward_model):
-        templates = {}
-        pad = 5
-        for i in range(self.n_species):
-            print('Loading in Telluric Template For ' + self.species[i], flush=True)
-            template = np.load(self.species_input_files[self.species[i]])
-            wave, flux = template['wave'], template['flux']
-            good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
-            wave, flux = wave[good], flux[good]
-            templates[self.species[i]] = np.array([wave, flux]).T
-        return templates
-
-    def __repr__(self):
-        ss = ' Model Name: ' + self.name + ', Species: ['
-        for tell in self.species_enabled:
-            if self.species_enabled[tell]:
-                ss += tell + ': Active, '
-            else:
-                ss += tell + ': Deactive, '
-        ss = ss[0:-2]
-        return ss + ']'
-    
-    def init_optimize(self, forward_model):
-        ts = forward_model.templates_dict['tellurics']
-        for t in ts:
-            wave, flux = ts[t][:, 0], ts[t][:, 1]
-            flux = self.normalize_template(forward_model, wave, flux, uniform=False)
-            ts[t][:, 1] /= pcmath.weighted_median(flux, percentile=0.999)
-            
-            
 class TelluricsTAPAS(TemplateMult):
     """ A telluric model based on Templates obtained from TAPAS. These templates should be pre-fetched from TAPAS and specific to the observatory. Only water has a unique depth, with all others being identical. The model uses a common Doppler shift.
 
@@ -710,7 +602,7 @@ class TelluricsTAPAS(TemplateMult):
                 flux *= self.build_component(pars, templates, 'water', wave_final)
             if self.airmass_enabled:
                 flux *= self.build_component(pars, templates, 'airmass', wave_final)
-            flux = pcmath.doppler_shift(wave_final, flux, vel=vel, interp='linear')
+            flux = pcmath.doppler_shift(wave_final, vel=vel, flux=flux, interp='linear')
             return flux
         else:
             return self.build_fake(wave_final.size)
@@ -771,20 +663,15 @@ class TelluricsTAPAS(TemplateMult):
         return templates
 
     def __repr__(self):
-        ss = ' Model Name: ' + self.name # + ', Relevant Species: ['
-        #for tell in self.species_relevant:
-        #    if self.species_relevant[tell]:
-        #       ss += tell + ', '
-        #if ss[0:-2] == ', ':
-        #   ss = ss[0:-2]
-        return ss #  + ']'
+        ss = ' Model Name: ' + self.name
+        return ss
     
-    def init_optimize(self, forward_model):
+    def init_optimize(self, forward_model, templates_dict):
         
         # Normalize the water flux
-        forward_model.templates_dict['tellurics']['water'][:, 1] = self.normalize_template(forward_model, forward_model.templates_dict['tellurics']['water'][:, 0], forward_model.templates_dict['tellurics']['water'][:, 1], uniform=False)
+        templates_dict['tellurics']['water'][:, 1] = self.normalize_template(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['water'][:, 1], uniform=False)
         
-        water_range = self.template_range(forward_model, forward_model.templates_dict['tellurics']['water'][:, 0], forward_model.templates_dict['tellurics']['water'][:, 1])
+        water_range = self.template_range(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['water'][:, 1])
         
         if water_range > self.min_range:
             self.water_enabled = True
@@ -794,9 +681,9 @@ class TelluricsTAPAS(TemplateMult):
         
         
         # Normalize the other components
-        forward_model.templates_dict['tellurics']['airmass'][:, 1] = self.normalize_template(forward_model, forward_model.templates_dict['tellurics']['water'][:, 0], forward_model.templates_dict['tellurics']['airmass'][:, 1], uniform=False)
+        templates_dict['tellurics']['airmass'][:, 1] = self.normalize_template(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['airmass'][:, 1], uniform=False)
         
-        airmass_range = self.template_range(forward_model, forward_model.templates_dict['tellurics']['airmass'][:, 0], forward_model.templates_dict['tellurics']['airmass'][:, 1])
+        airmass_range = self.template_range(forward_model, templates_dict['tellurics']['airmass'][:, 0], templates_dict['tellurics']['airmass'][:, 1])
         if airmass_range > self.min_range:
             self.airmass_enabled = True
         else:
@@ -883,7 +770,7 @@ class LSF(SpectralComponent):
     def update(self, forward_model, iter_index):
         super().update(forward_model, iter_index)
         
-    def init_optimize(self, forward_model):
+    def init_optimize(self, forward_model, templates_dict):
         lsf_estim = self.build(pars=forward_model.initial_parameters)
         good = np.where(lsf_estim > 1E-10)[0]
         if good.size < lsf_estim.size - 2:

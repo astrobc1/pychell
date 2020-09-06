@@ -24,16 +24,38 @@ import numba
 import numba.types as nt
 from llc import jit_filter_function
 
-def measure_fwhm(x, lsf):
+def rmsloss(x, y, weights=None, flag_worst=None):
     
-    max_loc = np.nanargmax(lsf)
-    max_val = np.nanmax(lsf)
+    # Compute squared diffs
+    if weights is not None:
+        diffs2 = (x - y)**2 * weights
+    else:
+        diffs2 = (x - y)**2
     
-    left = np.where(x < x[max_loc] & (lsf < 0.7 * max_val))[0]
-    right = np.where(x > x[max_loc] & (lsf < 0.7 * max_val))[0]
+    # Ignore worst N pixels
+    if flag_worst is not None:
+        ss = np.argsort(diffs2)
+        if weights is not None:
+            weights[ss[-1*flag_worst:]] = 0
+        diffs2[ss[-1*flag_worst:]] = np.nan
+        
+    if weights is None:
+        good = np.where(np.isfinite(diffs2))[0]
+        return np.sqrt(np.nansum(diffs2) / good.size)
+    else:
+        good = np.where((weights > 0) & np.isfinite(diffs2))[0]
+        return np.sqrt(np.nansum(diffs2[good]) / np.nansum(weights[good]))
+
+def measure_fwhm(x, y):
     
-    left_x = intersection(x[left], lsf[left], 0.5 * max_val, precision = 1000)
-    right_x = intersection(x[right], lsf[right], 0.5 * max_val, precision = 1000)
+    max_loc = np.nanargmax(y)
+    max_val = np.nanmax(y)
+    
+    left = np.where(x < x[max_loc] & (y < 0.7 * max_val))[0]
+    right = np.where(x > x[max_loc] & (y < 0.7 * max_val))[0]
+    
+    left_x = intersection(x[left], y[left], 0.5 * max_val, precision = 1000)
+    right_x = intersection(x[right], y[right], 0.5 * max_val, precision = 1000)
     fwhm = right_x - left_x
     
     return fwhm
@@ -50,19 +72,69 @@ def Rfromlsf(wave, fwhm=None, sigma=None):
     else:
         return wave / sigmatofwhm(sigma)
     
+    
+def rolling_clip(x, y, weights=None, width=None, method='median', nsigma=3, percentile=None):
+    
+    mask = np.zeros(x.size)
+    
+    good = np.where(np.isfinite(xx) & np.isfinite(yy))[0]
+    xx, yy = x[good], y[good]
+    mask[good] = 1
+    
+    if percentile is None:
+        percentile = 0.5
+    
+    if weights is None:
+        weights = np.ones(xx.size)
+    else:
+        ww = weights[good]
+        
+    xs, xe, xx.min(), xx.max()
+    nbins = (xe - xs) / width + 1
+    bins = np.linspace(xe - 1E-10, xs + 1E-10, num=nbins)
+    for i in range(len(bins) - 1):
+        use = np.where((xx >= bins[i]) & (xx <= bins[i+1]))[0]
+        if use.size > 5:
+            if method == 'median':
+                wmed = weighted_median(yy[use], weights=ww[use], percentile=percentile)
+                wavg = wmed
+                meddev = weighted_median(yy[use] - wmed, weights=ww[use], percentile=percentile)
+                wstddev = meddev * 1.4826
+            else:
+                wavg = weighted_mean(yy[use], ww[use])
+                wstddev = weighted_stddev(yy[use], ww[use])
+                
+            bad = np.where(np.abs(yy[use] - wavg) > nsigma * wstddev)[0]
+            if bad.size > 0:
+                mask[bad] = 0
+            
+            
+                
+    return mask
+            
+    
+    
+    
+    
+    
+    
 
-def doppler_shift(wave, flux, vel, wave_out=None, interp='linear'):
+def doppler_shift(wave, vel, wave_out=None, flux=None, interp='linear'):
     if wave_out is None:
         wave_out = wave
-    wave_shifted = wave * np.exp(vel / cs.c)
+    z = vel / cs.c
+    wave_shifted = wave * np.sqrt((1 + z) / (1 - z))
+    if interp is None and flux is None:
+        return wave_shifted
+    good = np.where(np.isfinite(wave_shifted) & np.isfinite(flux))[0]
     if interp == 'linear':
-        flux_out = np.interp(wave_out, wave_shifted, flux, left=np.nan, right=np.nan)
+        flux_out = np.interp(wave_out, wave_shifted[good], flux[good], left=np.nan, right=np.nan)
     elif interp == 'cubic':
-        flux_out = scipy.interpolate.CubicSpline(wave_shifted, flux, extrapolate=False)(wave_out)
+        flux_out = scipy.interpolate.CubicSpline(wave_shifted[good], flux[good], extrapolate=False)(wave_out)
     elif interp == 'akima':
-        flux_out = scipy.interpolate.Akima1DInterpolator(wave_shifted, flux)(wave_out)
+        flux_out = scipy.interpolate.Akima1DInterpolator(wave_shifted[good], flux[good])(wave_out)
     elif interp == 'pchip':
-        flux_out = scipy.interpolate.PchipInterpolator(wave_shifted, flux, extrapolate=False)(wave_out)
+        flux_out = scipy.interpolate.PchipInterpolator(wave_shifted[good], flux[good], extrapolate=False)(wave_out)
     return flux_out
     
 
@@ -990,11 +1062,11 @@ def shiftint1d(x, n, cval=np.nan):
 
 
 @njit
-def lorentz(x, mu, fwhm):
+def lorentz(x, amp, mu, fwhm):
     xx = (x - mu) / (fwhm / 2)
-    return 1 / (1 + xx**2)
+    return amp / (1 + xx**2)
 
-# A slightly more general solver
+
 def lorentz_solver(pars, x, data):
     model = lorentz(x, *pars)
     good = np.where(np.isfinite(data) & np.isfinite(model))[0]

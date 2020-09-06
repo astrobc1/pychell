@@ -2,7 +2,7 @@
 from collections import OrderedDict
 from abc import ABC, abstractmethod # Abstract classes
 import glob # File searching
-import os # OS 
+import os # OS
 import sys # sys utils
 from pdb import set_trace as stop # debugging
 
@@ -49,6 +49,7 @@ class SpecData1d:
             spec_num (int): The spectral image number, defaults to None.
             crop_pix (list): Pixels to crop on the left and right of the data arrays. Pixels are not removed, but rather changed to nan with corresponding values of zero in the bad pixel mask, defaults to None, or no cropped pixels. If pixels are already cropped, then this will still be performed but have no effect, which is fine.
         """
+        
         # Store the input file, spec, and order num
         self.input_file = input_file
         self.base_input_file = os.path.basename(self.input_file)
@@ -76,16 +77,16 @@ class SpecData1d:
             self.flux_unc[0:self.crop_pix[0]] = np.nan
             self.flux_unc[self.flux.size - self.crop_pix[1] - 1:] = np.nan
             
-            # Bad pix
-            self.badpix[0:self.crop_pix[0]] = 0
-            self.badpix[self.flux.size - self.crop_pix[1] - 1:] = 0
+            # Bad pix mask
+            self.mask[0:self.crop_pix[0]] = 0
+            self.mask[self.flux.size - self.crop_pix[1] - 1:] = 0
             
         # Sanity
-        bad = np.where((self.flux < 0.05) | ~np.isfinite(self.flux) | (self.badpix == 0) | ~np.isfinite(self.badpix) | ~np.isfinite(self.flux_unc))[0]
+        bad = np.where((self.flux < 0.05) | ~np.isfinite(self.flux) | (self.mask == 0) | ~np.isfinite(self.mask) | ~np.isfinite(self.flux_unc))[0]
         if bad.size > 0:
             self.flux[bad] = np.nan
             self.flux_unc[bad] = np.nan
-            self.badpix[bad] = 0
+            self.mask[bad] = 0
             
         # Further flag any clearly deviant pixels
         flux_smooth = pcmath.median_filter1d(self.flux, width=7)
@@ -93,26 +94,7 @@ class SpecData1d:
         if bad.size > 0:
             self.flux[bad] = np.nan
             self.flux_unc[bad] = np.nan
-            self.badpix[bad] = 0
-        
-    # Calculate bc info for only this observation
-    def calculate_bc_info(self, obs_name, star_name):
-        """ Computes the bary-center Julian Day and bary-center velocities for this observation and stores them in place.
-
-        Args:
-            obs_name (str): The name of the observatory to be looked up on EarthLocations.
-            star_name (str): The name of the star to be queuried on SIMBAD.
-        """
-        
-        # Import the barycorrpy module
-        from barycorrpy import get_BC_vel
-        from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
-        
-        # BJD
-        self.bjd = JDUTC_to_BJDTDB(JDUTC=self.JD, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=False)[0]
-        
-        # bc vel
-        self.bc_vel = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=obs_name, ephemeris='de430', leap_update=False)[0]
+            self.mask[bad] = 0
     
     def set_bc_info(self, bjd=None, bc_vel=None):
         """ Basic setter method for the BJD and barycenter velocity.
@@ -168,13 +150,11 @@ class SpecData1d:
     
     
     @staticmethod
-    def calculate_bc_info_all(forward_models, observatory, star_name):
+    def calculate_bc_info_all(forward_models):
         """ Computes the bary-center information for all observations.
 
         Args:
             forward_models (ForwardModels): The list of forward model objects.
-            observatory (dict): A dictionary of observatory information. The name entry is looked up on EarthLocations.
-            star_name (str): The name of the star to be queuried on SIMBAD.
         Returns:
             bjds (np.ndarray): The BJDs of the observations
             bc_vels (np.ndarray): The bary-center velocities of the observations.
@@ -187,13 +167,16 @@ class SpecData1d:
         jds = np.array([fwm.data.JD for fwm in forward_models], dtype=float)
         
         # BJDs
-        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=observatory['name'], leap_update=False)[0]
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=forward_models.star_name.replace('_', ' '), obsname=forward_models.observatory['name'], leap_update=False)[0]
         
         # bc vels
-        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), obsname=observatory['name'], leap_update=False)[0]
+        bc_vels = get_BC_vel(JDUTC=jds, starname=forward_models.star_name.replace('_', ' '), obsname=forward_models.observatory['name'], leap_update=False)[0]
         
         for i in range(forward_models.n_spec):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
+            
+        forward_models.BJDS = bjds
+        forward_models.bc_vels = bc_vels
             
         return bjds, bc_vels
 
@@ -210,11 +193,11 @@ class iSHELL(SpecData1d):
         fits_data = fits.open(self.input_file)[0]
         fits_data.verify('fix')
         oi = self.order_num - 1
-        self.flux, self.flux_unc, self.badpix = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
+        self.flux, self.flux_unc, self.mask = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
 
         # Flip the data so wavelength is increasing for iSHELL data
         self.flux = self.flux[::-1]
-        self.badpix = self.badpix[::-1]
+        self.mask = self.mask[::-1]
         self.flux_unc = self.flux_unc[::-1]
         
         # Normalize to 99th percentile
@@ -242,7 +225,7 @@ class CHIRON(SpecData1d):
         
         # For CHIRON, generate a dumby uncertainty grid and a bad pix array that will be updated or used
         self.flux_unc = np.zeros_like(self.flux) + 1E-3
-        self.badpix = np.ones_like(self.flux)
+        self.mask = np.ones_like(self.flux)
         
         # JD from exposure meter. Sometimes it is not set in the header, so use the timing mid point in that case.
         if not (fits_data.header['EMMNWB'][0:2] == '00'):
@@ -272,10 +255,10 @@ class PARVI(SpecData1d):
         self.flux_unc /= continuum
         
         # Create bad pix array, further cropped later according to crop_pix
-        self.badpix = np.ones(self.flux.size, dtype=np.float64)
+        self.mask = np.ones(self.flux.size, dtype=np.float64)
         bad = np.where(~np.isfinite(self.flux))[0]
         if bad.size > 0:
-            self.badpix[bad] = 0
+            self.mask[bad] = 0
         
         # Convert wavelength grid to Angstroms, required!
         self.default_wave_grid *= 10
@@ -290,14 +273,16 @@ class MinervaAustralis(SpecData1d):
         
         # Load the flux, flux unc, and bad pix arrays
         # TOI257_ThAr_KiwiSpec_2019Aug05_0007_wcal_fib3
-        self.default_wave_grid = np.loadtxt(self.input_file + '_wave.txt').T[:, ::-1][:, self.order_num]
-        self.flux = np.loadtxt(self.input_file + '_spec.txt').T[:, ::-1][:, self.order_num]
-        self.flux_unc = np.loadtxt(self.input_file + '_specerr.txt').T[:, ::-1][:, self.order_num]
-        self.JD = np.loadtxt(self.input_file + '_JD.txt')
-        itime = np.loadtxt(self.input_file + '_ExpLength.txt')
+        base_input_file = self.input_file[0:-9]
+        self.default_wave_grid = np.loadtxt(base_input_file + '_wave.txt').T[:, ::-1][:, self.order_num - 1]
+
+        self.flux = np.loadtxt(base_input_file + '_spec.txt').T[:, ::-1][:, self.order_num - 1]
+        self.flux_unc = np.loadtxt(base_input_file + '_specerr.txt').T[:, ::-1][:, self.order_num - 1]
+        self.JD = np.loadtxt(base_input_file + '_JD.txt')
+        itime = np.loadtxt(base_input_file + '_ExpLength.txt')
         self.JD += (itime / 2) / (86400)
         
-        self.badpix = np.ones(len(self.flux), dtype=np.float64)
+        self.mask = np.ones(self.flux.size, dtype=np.float64)
         
         # Normalize
         continuum = pcmath.weighted_median(self.flux, percentile=0.99)
@@ -306,17 +291,16 @@ class MinervaAustralis(SpecData1d):
         
         
     @staticmethod
-    def calculate_bc_info_all(forward_models, observatory, star_name):
+    def calculate_bc_info_all(forward_models):
         """ Computes the bary-center information for all observations, specific to Mt. Kent.
 
         Args:
             forward_models (ForwardModels): The list of forward model objects.
-            obs_name (str): The name of the observatory, not actually used.
-            star_name (str): The name of the star to be queuried on SIMBAD.
         Returns:
             bjds (np.ndarray): The BJDs of the observations
             bc_vels (np.ndarray): The bary-center velocities of the observations.
         """
+        
         # Import the barycorrpy module
         from barycorrpy import get_BC_vel
         from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
@@ -325,13 +309,16 @@ class MinervaAustralis(SpecData1d):
         jds = np.array([fwm.data.JD for fwm in forward_models], dtype=float)
         
         # BJDs
-        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=star_name.replace('_', ' '), lat=27.7977, longi=151.8554, alt=682)[0]
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, starname=forward_models.star_name.replace('_', ' '), lat=forward_models[0].observatory['lat'], longi=forward_models[0].observatory['lon'], alt=forward_models[0].observatory['alt'], leap_update=False)[0]
         
         # bc vels
-        bc_vels = get_BC_vel(JDUTC=jds, starname=star_name.replace('_', ' '), lat=27.7977, longi=151.8554, alt=682)[0]
+        bc_vels = get_BC_vel(JDUTC=jds, starname=forward_models.star_name.replace('_', ' '), lat=forward_models[0].observatory['lat'], longi=forward_models[0].observatory['lon'], alt=forward_models[0].observatory['alt'], leap_update=False)[0]
         
         for i in range(len(forward_models)):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
+            
+        forward_models.BJDS = bjds
+        forward_models.bc_vels = bc_vels
         
         return bjds, bc_vels
     
@@ -351,10 +338,10 @@ class MinervaNorth(SpecData1d):
         self.tel_num = int(self.input_file[-6])
         
         # The Thar wave grid, flux, flux unc, and mask
-        self.default_wave_grid, self.flux, self.flux_unc, self.badpix = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64), fits_data.data[self.order_num - 1, :, 2].astype(np.float64), fits_data.data[self.order_num - 1, :, 3].astype(np.float64)
+        self.default_wave_grid, self.flux, self.flux_unc, self.mask = fits_data.data[self.order_num - 1, :, 0].astype(np.float64), fits_data.data[self.order_num - 1, :, 1].astype(np.float64), fits_data.data[self.order_num - 1, :, 2].astype(np.float64), fits_data.data[self.order_num - 1, :, 3].astype(np.float64)
 
         self.flux_unc = np.zeros(self.flux.size) + 1E-3
-        self.badpix = np.ones(self.flux.size)
+        self.mask = np.ones(self.flux.size)
         
         # Normalize to 1.
         continuum = pcmath.weighted_median(self.flux, percentile=0.98)
@@ -382,11 +369,11 @@ class NIRSPEC(SpecData1d):
         fits_data = fits.open(self.input_file)[0]
         fits_data.verify('fix')
         oi = self.order_num - 1
-        self.flux, self.flux_unc, self.badpix = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
+        self.flux, self.flux_unc, self.mask = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
 
         # Flip the data so wavelength is increasing for iSHELL data
         #self.flux = self.flux[::-1]
-        #self.badpix = self.badpix[::-1]
+        #self.mask = self.mask[::-1]
         #self.flux_unc = self.flux_unc[::-1]
         
         # Normalize to 99th percentile
@@ -418,22 +405,20 @@ class Simulated(SpecData1d):
         #self.flux /= continuum
         
         # Create bad pix array, further cropped later
-        self.badpix = np.ones(self.flux.size, dtype=np.float64)
+        self.mask = np.ones(self.flux.size, dtype=np.float64)
         bad = np.where(~np.isfinite(self.flux) | (self.flux == 0) | (self.flux_unc == 0) | (self.flux_unc > 0.5))[0]
         if bad.size > 0:
-            self.badpix[bad] = 0
+            self.mask[bad] = 0
 
         self.JD = float(fits_data.header['JD'])
         
         
     @staticmethod
-    def calculate_bc_info_all(forward_models, observatory, star_name):
+    def calculate_bc_info_all(forward_models):
         """ Computes the bary-center information for all observations.
 
         Args:
             forward_models (ForwardModels): The list of forward model objects.
-            obs_name (str): The name of the observatory to be looked up on EarthLocations.
-            star_name (str): The name of the star to be queuried on SIMBAD.
         Returns:
             bjds (np.ndarray): The BJDs of the observations
             bc_vels (np.ndarray): The bary-center velocities of the observations.
@@ -453,8 +438,8 @@ class Simulated(SpecData1d):
         # bc vels
         #bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=obs_name)[0]
         #bc_vels = get_BC_vel(JDUTC=jds, obsname=obs_name, starname = star_name)[0]
-        bjds = JDUTC_to_BJDTDB(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=observatory['name'], ephemeris='de430', leap_update=False)[0]
-        bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=observatory['name'], ephemeris='de430', leap_update=False)[0]
+        bjds = JDUTC_to_BJDTDB(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=forward_models.observatory['name'], ephemeris='de430', leap_update=False)[0]
+        bc_vels = get_BC_vel(JDUTC=jds, ra=269.4520820833333, dec=4.693364166666667, pmra=-802.803, pmdec=10362.542, px=547.4506, rv=-110510.0, epoch=2451545.0, obsname=forward_models.observatory['name'], ephemeris='de430', leap_update=False)[0]
         
         
         for i in range(forward_models.n_spec):

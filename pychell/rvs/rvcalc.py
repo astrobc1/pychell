@@ -22,6 +22,9 @@ import pychell.maths as pcmath
 import pychell.utils as pcutils
 import copy
 
+# Optimization
+from robustneldermead.neldermead import NelderMead
+
 
 def get_nightly_jds(jds, sep=0.5):
     """Computes nightly (average) JDs (or BJDs) for a time-series observation over several nights.
@@ -63,7 +66,7 @@ def get_nightly_jds(jds, sep=0.5):
     return jds_nightly, n_obs_nights
 
 
-def weighted_brute_force(forward_model, iter_index):
+def weighted_brute_force(forward_model, templates_dict, iter_index):
     """Performs a pseudo weighted cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.
 
     Args:
@@ -76,77 +79,87 @@ def weighted_brute_force(forward_model, iter_index):
         (float): The BIS.
     """
     
-    pars = copy.deepcopy(forward_model.best_fit_pars[-1])
+    pars = copy.deepcopy(forward_model.opt_results[-1][0])
     v0 = pars[forward_model.models_dict['star'].par_names[0]].value
     vels = np.linspace(v0 - forward_model.xcorr_options['range'], v0 + forward_model.xcorr_options['range'], num=forward_model.xcorr_options['n_vels'])
 
     # Stores the rms as a function of velocity
     rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
-    xcorr = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
-    redchi2s = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     
     # Starting weights are flux uncertainties and bad pixels. If flux unc are uniform, they have no effect.
-    weights_init = np.copy(forward_model.data.badpix * forward_model.data.flux_unc)
+    weights_init = np.copy(forward_model.data.mask * forward_model.data.flux_unc)
     
     # Flag regions of heavy tellurics
     if 'tellurics' in forward_model.models_dict and forward_model.models_dict['tellurics'].enabled:
-        tell_flux_hr = forward_model.models_dict['tellurics'].build(pars, forward_model.templates_dict['tellurics'], forward_model.templates_dict['star'][:, 0])
+        tell_flux_hr = forward_model.models_dict['tellurics'].build(pars, templates_dict['tellurics'], templates_dict['star'][:, 0])
         tell_flux_hrc = forward_model.models_dict['lsf'].convolve_flux(tell_flux_hr, pars=pars)
-        tell_flux_lr = np.interp(forward_model.wavelength_solutions[-1], forward_model.templates_dict['star'][:, 0], tell_flux_hrc, left=0, right=0)
+        tell_flux_lr = np.interp(forward_model.models_dict['wavelength_solution'].build(pars), templates_dict['star'][:, 0], tell_flux_hrc, left=0, right=0)
         tell_weights = tell_flux_lr**2
         # Combine weights
         weights_init *= tell_weights
     
     # Star weights depend on the information content.
-    rvc, _ = compute_rv_content(forward_model.templates_dict['star'][:, 0], forward_model.templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, width=pars[forward_model.models_dict['lsf'].par_names[0]].value)
+    rvc, _ = compute_rv_content(templates_dict['star'][:, 0], templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, width=pars[forward_model.models_dict['lsf'].par_names[0]].value)
     star_weights = 1 / rvc**2
     
     
     for i in range(vels.size):
         
+        # Copy the weights
         weights = np.copy(weights_init)
         
         # Set the RV parameter to the current step
         pars[forward_model.models_dict['star'].par_names[0]].setv(value=vels[i])
         
         # Build the model
-        wave_lr, model_lr = forward_model.build_full(pars, iter_index)
+        wave_lr, model_lr = forward_model.build_full(pars, templates_dict)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        star_weights_shifted = np.interp(wave_lr, forward_model.templates_dict['star'][:, 0] * np.exp(vels[i] / cs.c), star_weights, left=0, right=0)
+        star_weights_shifted = pcmath.doppler_shift(wave_lr, vels[i], flux=star_weights, interp='linear')
         weights *= star_weights_shifted
         
-        # Further
-        bad = np.where(~np.isfinite(model_lr) | (weights <= 0))[0]
-        n_good = model_lr.size - bad.size 
-        if bad.size > 0:
-            weights[bad] = 0
-        
-        # Construct the RMS and chi2
-        redchi2s[i] = np.nansum((forward_model.data.flux - model_lr)**2 * weights / (np.nansum(weights) * forward_model.opt[-1][0]**2)) / (n_good - 1)
-        rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
+        # Construct the RMS
+        rmss[i] = pcmath.rmsloss(forward_model.data.flux, model_lr, weights=weights)
 
     # Extract the best rv
-    M = np.nanargmin(redchi2s)
+    M = np.nanargmin(rmss)
     vels_for_rv = vels + forward_model.data.bc_vel
     xcorr_rv_init = vels[M] + forward_model.data.bc_vel
 
     # Fit with a polynomial
-    #use = np.where((vels_for_rv > xcorr_rv_init - 150) & (vels_for_rv < xcorr_rv_init + 150))[0]
-    #pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
+    # Include 3 points on each side of min vel
+    use = np.arange(M-3, M+3).astype(int)
+    pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
+    xcorr_rv = pfit[1] / (-2 * pfit[0])
     
-    # Fit with polynomial
-    dv = vels_for_rv[1] - vels_for_rv[0]
-    xcorr_rv = xcorr_rv_init - (dv / 2) * ((redchi2s[M + 1] - redchi2s[M - 1]) / (redchi2s[M - 1] - 2 * redchi2s[M] + redchi2s[M + 1]))
-    unc_xcorr_rv = np.sqrt(2 * (dv**2) / (redchi2s[M - 1] - 2 * redchi2s[M] + redchi2s[M + 1]))
+    # Estimate uncertainty
+    xcorr_rv_unc = ccf_uncertainty(vels_for_rv, rmss, xcorr_rv_init, forward_model.data.mask.sum())
     
     # Bisector span
-    bspan_result = compute_bisector_span(vels_for_rv, rmss, xcorr_rv, n_bs=forward_model.xcorr_options['n_bs'])
+    try:
+        bspan_result = compute_bisector_span(vels_for_rv, rmss, xcorr_rv, n_bs=forward_model.xcorr_options['n_bs'])
+    except:
+        bspan_result = (np.nan, np.nan)
     
-    return vels_for_rv, rmss, xcorr_rv, bspan_result[1]
+    return vels_for_rv, rmss, xcorr_rv, xcorr_rv_unc, bspan_result[1]
 
+def ccf_uncertainty(cc_vels, ccf, v0, n):
+    
+    # First normalize the RMS function
+    ccff = -1 * ccf
+    baseline = pcmath.weighted_median(ccff, percentile=0.05)
+    ccff -= baseline
+    ccff /= np.nanmax(ccff)
+    use = np.where(ccff > 0.05)[0]
+    init_pars = np.array([1, v0, 1000])
+    solver = NelderMead(pcmath.lorentz_solver, init_pars, args_to_pass=(cc_vels[use], ccff[use]))
+    result = solver.solve()
+    best_pars = result['xmin']
+    unc = (best_pars[2] / 2.355) / np.sqrt(n)
+    return unc
+    
 
-def crude_brute_force(forward_model, iter_index=None):
+def crude_brute_force(forward_model, templates_dict, iter_index=None):
     """Performs a pseudo cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.
 
     Args:
@@ -164,7 +177,7 @@ def crude_brute_force(forward_model, iter_index=None):
     rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     
     # Weights are bad pixels
-    weights_init = np.copy(forward_model.data.badpix)
+    weights_init = np.copy(forward_model.data.mask)
         
     for i in range(vels.size):
         
@@ -174,15 +187,10 @@ def crude_brute_force(forward_model, iter_index=None):
         pars[forward_model.models_dict['star'].par_names[0]].setv(value=vels[i])
         
         # Build the model
-        _, model_lr = forward_model.build_full(pars, iter_index)
-        
-        # Weights
-        bad = np.where(~np.isfinite(model_lr) | (weights <= 0))[0]
-        if bad.size > 0:
-            weights[bad] = 0
+        _, model_lr = forward_model.build_full(pars, templates_dict)
         
         # Compute the RMS
-        rmss[i] = np.sqrt(np.nansum((forward_model.data.flux - model_lr)**2 * weights) / np.nansum(weights))
+        rmss[i] = pcmath.rmsloss(forward_model.data.flux, model_lr, weights=weights)
         
 
     # Extract the best rv
@@ -265,11 +273,9 @@ def combine_orders(rvs, rvs_nightly, unc_nightly, init_weights, n_obs_nights):
     print('Solving RVs')
 
     result = NelderMead(rv_solver, init_pars, minvs=vlb, maxvs=vub, varies=vpi, ftol=1E-5, n_iterations=3, no_improve_break=3, args_to_pass=(rvs_flagged, weights, n_obs_nights)).solve()
-    #result = scipy.optimize.minimize(rv_solver, init_pars, method='Powell', bounds=zip(vlb, vub), tol=1E-6, args=(rvs_flagged, weights, n_obs_nights))
     
     # Best pars
-    #best_pars = result.x
-    best_pars = result[0]
+    best_pars = result['xmin']
     order_offsets = best_pars[n_spec:] # the order offsets
     
     # Offset
@@ -426,11 +432,9 @@ def combine_orders_fast(rvs, rvs_nightly, unc_nightly, init_weights, n_obs_night
     print('Solving RVs')
     
     result = NelderMead(rv_solver_fast, init_pars, minvs=vlb, maxvs=vub, varies=vpi, ftol=1E-5, n_iterations=3, no_improve_break=3, args_to_pass=(rvs_flagged, weights, n_obs_nights)).solve()
-    #result = scipy.optimize.minimize(rv_solver_fast, init_pars, method='Powell', tol=1E-6, args=(rvs_flagged, weights, n_obs_nights))
     
     # Best pars
-    best_pars = result[0]
-    #best_pars = result.x
+    best_pars = result['xmin']
     order_offsets = best_pars[n_nights:] # the order offsets
     rvs_opt = best_pars[0:n_nights]
     unc_opt = modifed_stddev(rvs, weights, rvs_opt, n_obs_nights)
@@ -606,23 +610,24 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
         fluxmod = pcmath.convolve_flux(wavemod, fluxmod, R=R)
         
     if blaze:
-        good = np.where(np.isfinite(wave) & np.isfinite(fluxmod))[0]
+        good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
         ng = good.size
-        x, y = np.array([wavemod[good[0]], wavemod[good[int(ng/2)]], wave[good[-1]]]), np.array([0.5, 1, 0.5])
+        x, y = np.array([wavemod[good[0]], wavemod[good[int(ng/2)]], wavemod[good[-1]]]), np.array([0.5, 1, 0.5])
         pfit = pcmath.poly_coeffs(x, y)
-        blz = np.polyval(pfit, wave)
+        blz = np.polyval(pfit, wavemod)
         fluxmod *= blz
         
     if sampling is not None:
         good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
-        wave_new = np.arange(wave[0], wave[-1] + sampling, sampling)
-        fluxmod = scipy.interpolate.CubicSpline(wavemod[good], fluxmod, extrapolate=False)(wave_new)
+        wave_new = np.arange(wavemod[0], wavemod[-1] + sampling, sampling)
+        fluxmod = scipy.interpolate.CubicSpline(wavemod[good], fluxmod[good], extrapolate=False)(wave_new)
         wavemod = wave_new
     elif wave_to_sample is not None:
-        good = np.where(np.isfinite(wave_to_sample))
-        bad = np.where(~np.isfinite(wave_to_sample))
+        good1 = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
+        good2 = np.where(np.isfinite(wave_to_sample))
+        bad2 = np.where(~np.isfinite(wave_to_sample))
         fluxnew = np.full(wave_to_sample.size, fill_value=np.nan)
-        fluxnew[good] = scipy.interpolate.CubicSpline(wavemod, fluxmod, extrapolate=False)(wave_to_sample[good])
+        fluxnew[good2] = scipy.interpolate.CubicSpline(wavemod[good1], fluxmod[good1], extrapolate=False)(wave_to_sample[good2])
         fluxmod = fluxnew
         wavemod = wave_to_sample
         

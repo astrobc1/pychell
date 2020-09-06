@@ -93,11 +93,18 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     if detrend:
         for o in range(n_orders):
             for j in range(n_iters_rvs):
-                good = np.where(np.isfinite(rvs_dict['rvsx'][o, :, j]) & np.isfinite(rvs_dict['BIS'][o, :, j]))[0]
-                bad = np.where(~np.isfinite(rvs_dict['rvsx'][o, :, j]) | ~np.isfinite(rvs_dict['BIS'][o, :, j]))[0]
+                good = np.where(np.isfinite(rvs_dict['rvs'][o, :, j]) & np.isfinite(rvs_dict['BIS'][o, :, j]))[0]
+                bad = np.where(~np.isfinite(rvs_dict['rvs'][o, :, j]) | ~np.isfinite(rvs_dict['BIS'][o, :, j]))[0]
                 if good.size == 0:
                     continue
-                rvs_dict['rvsx'][o, good, j] = pcrvcalc.detrend_rvs(do_orders[o], rvs_dict['rvsx'][o, good, j], rvs_dict['BIS'][o, good, j], thresh=bis_thresh)
+                rvs_dict['rvs'][o, good, j] = pcrvcalc.detrend_rvs(do_orders[o], rvs_dict['rvs'][o, good, j], rvs_dict['BIS'][o, good, j], thresh=bis_thresh)
+                
+                if xcorr:
+                    good = np.where(np.isfinite(rvs_dict['rvsx'][o, :, j]) & np.isfinite(rvs_dict['BIS'][o, :, j]))[0]
+                    bad = np.where(~np.isfinite(rvs_dict['rvsx'][o, :, j]) | ~np.isfinite(rvs_dict['BIS'][o, :, j]))[0]
+                    if good.size == 0:
+                        continue
+                    rvs_dict['rvsx'][o, good, j] = pcrvcalc.detrend_rvs(do_orders[o], rvs_dict['rvsx'][o, good, j], rvs_dict['BIS'][o, good, j], thresh=bis_thresh)
                         
 
     # Parse the RMS and rvs, single iteration
@@ -105,7 +112,7 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     for o in range(n_orders):
         for i in range(n_spec):
             for j in range(n_iters_pars):
-                rms_all[o, i, j] = forward_models[o, i].opt[j][0]
+                rms_all[o, i, j] = forward_models[o, i].opt_results[j][1]
     
     # Regenerate nightly rvs
     for o in range(n_orders):
@@ -162,20 +169,22 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     # Median nightly S / N for each order to compare against the photon limit
     nightly_snrs = np.nanmedian(nightly_snrs, axis=1)
     
+    templates_dicts = parser.parse_templates(output_path_root, do_orders=do_orders)
+    
     # Compute RV content of each order if set
     if templates is not None and len(templates) > 0:
         rvcs = np.zeros(n_orders)
         stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indexes=iter_indexes)
         for o in range(n_orders):
-            bad = np.where(forward_models[o, 0].data.badpix == 0)[0]
+            bad = np.where(forward_models[o, 0].data.mask == 0)[0]
             wave = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].initial_parameters)
             wave[bad] = np.nan
             rvc = np.zeros(len(templates))
             for i, t in enumerate(templates):
                 if t == 'star':
-                    _, rvc[i] = pcrvcalc.compute_rv_content(stellar_templates[o][:, 0], stellar_templates[o][:, 1], snr=nightly_snrs[o], blaze=True, ron=0,width=forward_models[o, 0].initial_parameters[forward_models[o, 0].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
+                    _, rvc[i] = pcrvcalc.compute_rv_content(stellar_templates[o][:, 0], stellar_templates[o][:, 1], snr=nightly_snrs[o], blaze=True, ron=0, width=forward_models[o, 0].initial_parameters[forward_models[o, 0].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
                 else:
-                    _, rvc[i] = pcrvcalc.compute_rv_content(forward_models[o, 0].templates_dict[t][:, 0], forward_models[o, 0].templates_dict[t][:, 1], snr=nightly_snrs[o], blaze=True, ron=0,width=forward_models[o, 0].initial_parameters[forward_models[o, 0].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
+                    _, rvc[i] = pcrvcalc.compute_rv_content(templates_dicts[o][t][:, 0], templates_dicts[o][t][:, 1], snr=nightly_snrs[o], blaze=True, ron=0,width=forward_models[o, 0].initial_parameters[forward_models[o, 0].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
             rvcs[o] = np.nansum(rvc**2)**0.5
     else:
         rvcs = np.zeros(n_orders) + np.nanmedian(unc_nightly)
@@ -410,18 +419,18 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
     
     for o in range(n_orders):
         
-        vp = forward_models[o, 0].best_fit_pars[iter_indexes[o] + index_offset].unpack(keys='varies')['varies']
+        vp = forward_models[o, 0].opt_results[iter_indexes[o] + index_offset][0].unpack(keys='vary')['vary']
         vpi = np.where(vp)[0]
         nv = vpi.size
         
         pars = np.empty(shape=(n_spec, n_iters_pars, nv), dtype=object)
         par_vals = np.full(shape=(n_spec, n_iters_pars, nv), dtype=float, fill_value=np.nan)
-        par_names = list(forward_models[o, 0].best_fit_pars[iter_indexes[o] + index_offset].keys())
+        par_names = list(forward_models[o, 0].opt_results[iter_indexes[o] + index_offset][0].keys())
         par_names = [par_names[v] for v in vpi]
         for ispec in range(n_spec):
             for j in range(n_iters_pars):
                 for k in range(nv):
-                    pars[ispec, j, k] = forward_models[o, ispec].best_fit_pars[j][par_names[k]]
+                    pars[ispec, j, k] = forward_models[o, ispec].opt_results[j][0][par_names[k]]
                     par_vals[ispec, j, k] = pars[ispec, j, k].value
         
         n_cols = 5
@@ -526,6 +535,8 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
     
     stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indexes=iter_indexes)
     
+    templates_dicts = parser.parse_templates(output_path_root, do_orders=do_orders)
+    
     if star_name is None:
         star_name = forward_models[0, 0].star_name
     
@@ -537,14 +548,14 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
         factor = 1E-1
     
     n_orders, n_spec = forward_models.shape
-    nxhr = forward_models[0, 0].templates_dict['star'][:, 0].size
+    nxhr = templates_dicts[o]['star'][:, 0].size
     plot_height_single = 4
     fig, axarr = plt.subplots(nrows=n_orders, ncols=1, figsize=(10, int(plot_height_single*n_orders)), dpi=250)
     axarr = np.atleast_1d(axarr)
     
     for o in range(n_orders):
         
-        star_wave = forward_models[o, 0].templates_dict['star'][:, 0]
+        star_wave = templates_dicts[o]['star'][:, 0]
         res = np.full(shape=(n_spec, nxhr), fill_value=np.nan)
         
         # Residuals
@@ -555,7 +566,7 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
                 if iter_indexes[o] == 0 and not forward_models[o, i].models_dict['star'].from_synthetic:
                     vel = forward_models[o, i].data.bc_vel
                 else:
-                    vel = -1 * forward_models[o, i].best_fit_pars[iter_indexes[o]][forward_models[o, i].models_dict['star'].par_names[0]].value
+                    vel = -1 * forward_models[o, i].opt_results[iter_indexes[o]][0][forward_models[o, i].models_dict['star'].par_names[0]].value
                     
                 # Shift the residuals
                 wave_shifted = forward_models[o, i].wavelength_solutions[iter_indexes[o]] * np.exp(vel / cs.c)
@@ -579,22 +590,22 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
                 axarr[o].plot(forward_models[o, i].wavelength_solutions[iter_indexes[o]] * factor, forward_models[o, i].residuals[iter_indexes[o]], alpha=0.7)
         
         for t in templates:
-            if type(forward_models[o, i].templates_dict[t]) is dict:
-                for tt in forward_models[o, 0].templates_dict[t]:
-                    w, f = forward_models[o, 0].templates_dict[t][tt][:, 0], forward_models[o, i].templates_dict[t][tt][:, 1]
+            if type(templates_dicts[o][t]) is dict:
+                for tt in templates_dicts[o][t]:
+                    w, f = templates_dicts[o][tt][:, 0], templates_dicts[o][t][tt][:, 1]
                     ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
                     ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
                     fc = forward_models[o, 0].models_dict['lsf'].convolve_flux(ff, pars=forward_models[o, i].initial_parameters)
                     axarr[o].plot(ww, fc - np.nanmin(fc) + 0.2, alpha=0.8, label=tt)
             else:
-                w, f = forward_models[o, 0].templates_dict[t][:, 0], forward_models[o, 0].templates_dict[t][:, 1]
+                w, f = templates_dicts[o][t][:, 0], templates_dicts[o][t][:, 1]
                 ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
                 ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
                 fc = forward_models[o, 0].models_dict['lsf'].convolve_flux(ff, pars=forward_models[o, 0].initial_parameters)
                 axarr[o].plot(ww, fc - np.nanmin(fc) + 0.2, alpha=0.8, label=t)
                 
             if frame == 'star' and t == 'star':
-                w, f = forward_models[o, 0].templates_dict[t][:, 0], forward_models[o, 0].templates_dict[t][:, 1]
+                w, f = templates_dicts[o][t][:, 0], templates_dicts[o][t][:, 1]
                 fc = forward_models[o, 0].models_dict['lsf'].convolve_flux(f, pars=forward_models[o, 0].initial_parameters)
                 axarr[o].plot(ww, fc - np.nanmin(fc) + 0.2, alpha=0.8, label=t)
                 
@@ -627,6 +638,8 @@ def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indexes, debug=F
     
     if star_name is None:
         star_name = forward_models[0, 0].star_name
+        
+    templates_dicts = parser.parse_templates(output_path_root, do_orders=do_orders)
     
     n_orders, n_spec = forward_models.shape
     plot_height_single = 4
@@ -643,7 +656,7 @@ def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indexes, debug=F
             
             # Build LSF
             x = forward_models[o, i].models_dict['lsf'].x
-            lsf = forward_models[o, i].models_dict['lsf'].build(pars=forward_models[o, i].best_fit_pars[iter_indexes[o]])
+            lsf = forward_models[o, i].models_dict['lsf'].build(pars=forward_models[o, i].opt_results[iter_indexes[o]][0])
             
             # Plot
             axarr[o].plot(x, lsf, alpha=0.7)
@@ -657,7 +670,7 @@ def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indexes, debug=F
             
         axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
         axarr[o].tick_params(axis='both', labelsize=10)
-        axarr[o].set_xlabel('Wavelength [Ang], Mean $\lambda=$' + str(round(np.nanmean(forward_models[o, 0].templates_dict['star'][:, 0]), 3)))
+        axarr[o].set_xlabel('Wavelength [Ang], Mean $\lambda=$' + str(round(np.nanmean(templates_dicts[o]['star'][:, 0]), 3)))
         axarr[o].set_xlim(f, l)
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
     plt.tight_layout()
@@ -696,7 +709,7 @@ def inspect_wls(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_na
         for i in range(n_spec):
             
             # Build wls
-            wls = forward_models[o, i].models_dict['wavelength_solution'].build(forward_models[o, i].best_fit_pars[iter_indexes[o]])
+            wls = forward_models[o, i].models_dict['wavelength_solution'].build(forward_models[o, i].opt_results[iter_indexes[o]][0])
             wlss[:, i] = wls
             
         mwls = np.nanmedian(wlss, axis=1)
@@ -738,7 +751,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_
     
     for o in range(n_orders):
         
-        x = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].best_fit_pars[iter_indexes[o]])
+        x = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].opt_results[iter_indexes[o]][0])
         nx = x.size
         
         blazes = np.zeros((nx, n_spec))
@@ -746,7 +759,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_
         for i in range(n_spec):
             
             # Build blaze
-            blaze = forward_models[o, i].models_dict['blaze'].build(forward_models[o, i].best_fit_pars[iter_indexes[o]], x)
+            blaze = forward_models[o, i].models_dict['blaze'].build(forward_models[o, i].opt_results[iter_indexes[o]][0], x)
             
             # Plot
             axarr[o].plot(x, blaze, alpha=0.7)

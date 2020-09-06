@@ -111,7 +111,7 @@ forward_model_settings = {
     # Cross correlation / bisector span stuff for each iteration. Will take longer.
     # A cross correlation will still be run to estimate the correct overall RV before fitting
     # if starting from a synthetic template
-    'xcorr_options': {'method': 'weighted_brute_force', 'n_bs': 1000, 'step': 100, 'range': 1E4},
+    'xcorr_options': {'method': 'weighted_brute_force', 'n_bs': 1000, 'step': 10, 'range': 1E4},
     
     # Whether or not to crudely remove the continuum from the data before any optimizing.
     'remove_continuum': False,
@@ -122,8 +122,5 @@ forward_model_settings = {
     'model_resolution': 8,
     
     # Whether or not bc weights are included in the stellar template augmentation.
-    'use_bc_weights': False,
-    
-    # Whether or not to compute the forward model in logspace
-    "opt_logspace": False
+    'use_bc_weights': False
 }

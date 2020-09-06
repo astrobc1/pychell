@@ -67,25 +67,19 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
             # Check if any parameters are enabled
             if not np.any([forward_models[0].initial_parameters[pname].vary for pname in forward_models[0].initial_parameters]):
                 print('No parameters to optimize, moving on', flush=True)
-                for ispec in range(forward_models.n_spec):
-                    fwm = forward_models[ispec]
-                    start_wave, start_flux = fwm.build_full(fwm.initial_parameters, None)
-                    fwm.best_fit_pars.append(fwm.initial_parameters)
-                    fwm.wavelength_solutions.append(start_wave)
-                    fwm.models.append(start_flux)
-                    fwm.opt.append([np.nan, np.nan])
-                    fwm.residuals.append(fwm.data.flux - start_flux)
-                forward_models.template_augmenter(forward_models, iter_index=0, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
+                for fwm in forward_models:
+                    fwm.opt_results.append((fwm.initial_parameters, np.nan, np.nan))
+                forward_models.template_augmenter(forward_models, iter_index=0)
                 forward_models.update_models(0)
             else:
                 
                 forward_models.fit_spectra(0)
 
-                if forward_model_settings['n_template_fits'] == 0:
+                if forward_models.n_template_fits == 0:
                     forward_models.save_results()
                     continue
                 else:
-                    forward_models.template_augmenter(forward_models, iter_index=0, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
+                    forward_models.template_augmenter(forward_models, iter_index=0)
                     forward_models.update_models(0)
                 
         stellar_templates[:, 1] = np.copy(forward_models.templates_dict['star'][:, 1])
@@ -121,7 +115,7 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
                 if hasattr(forward_models, 'templates_to_optimize') and len(forward_models.templates_to_optimize) > 0:
                     pcaugmenter.global_fit(forward_models, iter_index=iter_index, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
                 else:
-                    forward_models.template_augmenter(forward_models, iter_index=iter_index, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
+                    forward_models.template_augmenter(forward_models, iter_index=iter_index)
 
                 # Update the forward model initial_parameters.
                 forward_models.update_models(iter_index)
@@ -135,10 +129,7 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
         forward_models.save_results()
 
         # Save Stellar Template Outputs
-        np.savez(forward_models.run_output_path_stellar_templates + os.sep + forward_models.tag + '_stellar_templates_ord' + str(order_num) + '.npz', stellar_templates=stellar_templates)
-        
-        if 'lab_coherence' in forward_models.templates_dict:
-            np.savez(forward_models.run_output_path_stellar_templates + os.sep + forward_models.tag + '_lab_coherence_ord' + str(order_num) + '.npz', lab_coherence=forward_models.templates_dict['lab_coherence'])
+        np.savez(forward_models.run_output_path + forward_models.o_folder + 'Templates' + os.sep + forward_models.tag + '_stellar_templates_ord' + str(order_num) + '.npz', stellar_templates=stellar_templates)
 
     # End the clock!
     print('ALL DONE! Runtime: ' + str(round(stopwatch.time_since(name='ti_main') / 3600, 2)) + ' hours', flush=True)

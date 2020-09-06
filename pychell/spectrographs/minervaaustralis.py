@@ -7,7 +7,13 @@ import pychell.rvs
 #############################
 
 spectrograph = 'MinervaAustralis'
-observatory = {"name" : 'Mt. Kent'}
+
+observatory = {
+    'name': 'Mt. Kent',
+    'lat': -27.7977,
+    'lon': 151.8554,
+    'alt': 682
+}
 
 ####################################################################
 ####### Reduction / Extraction #####################################
@@ -50,8 +56,8 @@ forward_model_blueprints = {
         'name': 'vis_tellurics',
         'class_name': 'TelluricsTAPAS',
         'vel': [-300, 0, 300],
-        'depth_water': [0.01, 1.5, 4.0],
-        'depth_airmass': [0.8, 1.2, 4.0],
+        'water_depth': [0.01, 1.5, 4.0],
+        'airmass_depth': [0.8, 1.2, 4.0],
         'min_range': 0.01,
         'input_files': {
             'water': 'telluric_water_tapas_whipple.npz',
@@ -83,7 +89,7 @@ forward_model_blueprints = {
         'class_name': 'HermiteLSF',
         'hermdeg': 0,
         'n_delay': 0,
-        'width': [0.050, 0.12, 0.2], # LSF width, in angstroms
+        'width': [0.023, 0.0234, 0.0235], # LSF width, in angstroms
         'ak': [-0.03, 0.001, 0.2] # Hermite polynomial coefficients
     },
     

@@ -46,6 +46,7 @@ from robustneldermead.neldermead import NelderMead
 
 
 # Stores all forward model objects useful wrapper to store all the forward model objects.
+
 class ForwardModels(list):
     """Contains individual forward models in a list, and other helpful attributes, primarily for RVs.
     """
@@ -69,15 +70,13 @@ class ForwardModels(list):
         self.order_num = order_num
         
         # The proper tag
-        self.tag = self.star_name + '_' + self.spectrograph.lower() + '_' + self.tag
+        self.tag = self.spectrograph.lower() + '_' + self.tag
         
         # Create output directories
         self.create_output_dirs()
 
         # Initiate the data, models, and outputs
         self.init(forward_model_settings, model_blueprints)
-
-        # Remaining instance members
 
         # The number of iterations for rvs and template fits
         self.n_iters_rvs = self.n_template_fits
@@ -98,7 +97,7 @@ class ForwardModels(list):
         if self.remove_continuum:
             for fwm in self:
                 wave = fwm.models_dict['wavelength_solution'].build(fwm.initial_parameters)
-                log_continuum = pcmodelcomponents.fit_continuum_wobble(wave, np.log(fwm.data.flux), fwm.data.badpix, order=4, nsigma=[0.25, 3.0], maxniter=50)
+                log_continuum = pcmodelcomponents.fit_continuum_wobble(wave, np.log(fwm.data.flux), fwm.data.mask, order=4, nsigma=[0.25, 3.0], maxniter=50)
                 fwm.data.flux = np.exp(np.log(fwm.data.flux) - log_continuum)
         
     def generate_nightly_rvs(self, iter_index):
@@ -108,15 +107,11 @@ class ForwardModels(list):
             iter_index (int): The iteration to generate RVs from.
         """
 
-        # The nightly RVs and error bars.
-        rvs_nightly = np.full(self.n_nights, fill_value=np.nan)
-        unc_nightly = np.full(self.n_nights, fill_value=np.nan)
-
         # The best fit stellar RVs, remove the barycenter velocity
-        rvs = np.array([self[ispec].best_fit_pars[-1][self[ispec].models_dict['star'].par_names[0]].value + self[ispec].data.bc_vel for ispec in range(self.n_spec)], dtype=np.float64)
+        rvs = np.array([self[ispec].opt_results[-1][0][self[ispec].models_dict['star'].par_names[0]].value + self[ispec].data.bc_vel for ispec in range(self.n_spec)], dtype=np.float64)
         
         # The RMS from the forward model fit
-        rms = np.array([self[ispec].opt[-1][0] for ispec in range(self.n_spec)], dtype=np.float64)
+        rms = np.array([self[ispec].opt_results[-1][1] for ispec in range(self.n_spec)], dtype=np.float64)
         weights = 1 / rms**2
         
         # The NM RVs
@@ -138,16 +133,11 @@ class ForwardModels(list):
         for ispec in range(self.n_spec):
 
             # Pass the previous iterations best pars as starting points
-            self[ispec].set_parameters(copy.deepcopy(self[ispec].best_fit_pars[-1]))
-            
-            # Ensure the same templates dict is shared amongst the models (just a pointer to a single instance)
-            for fwm in self:
-                fwm.templates_dict = self.templates_dict
+            self[ispec].set_parameters(copy.deepcopy(self[ispec].opt_results[-1][0]))
             
             # Update other models
             for model in self[ispec].models_dict.keys():
                 self[ispec].models_dict[model].update(self[ispec], iter_index)
-                
                 
     def init(self, forward_model_settings, model_blueprints):
         
@@ -185,10 +175,8 @@ class ForwardModels(list):
                 self[ispec].data.set_bc_info(self.BJDS[ispec], self.bc_vels[ispec])
         else:
             print('Computing barycentric corrections ...')
-            bc_computer = self[0].data.__class__.calculate_bc_info_all
-            self.BJDS, self.bc_vels = bc_computer(self, observatory=self.observatory, star_name=self.star_name)
+            self[0].data.calculate_bc_info_all(self)
             
-
         if self.compute_bc_only:
             np.savetxt(self.run_output_path + 'bary_corrs_' + self.star_name + '.txt', np.array([self.BJDS, self.bc_vels]).T, delimiter=',')
             sys.exit("Compute BC info only is set!")
@@ -218,6 +206,7 @@ class ForwardModels(list):
             
             # Initiate arrays for xcorr rvs.
             self.rvs_dict['rvs_xcorr'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['unc_xcorr'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
             self.rvs_dict['rvs_xcorr_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
             self.rvs_dict['unc_xcorr_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
             self.rvs_dict['xcorrs'] = np.full(shape=(self.xcorr_options['n_vels'], 2*self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
@@ -242,7 +231,7 @@ class ForwardModels(list):
         
         # Perform remaining optimizing steps in parallel
         for fwm in self:
-            fwm.init_optimize()
+            fwm.init_optimize(self.templates_dict)
     
     # Stores the forward model outputs in .npz files for all iterations
     # Stores the RVs in a single .npz
@@ -255,7 +244,10 @@ class ForwardModels(list):
         
         # For each spectrum, save the forward model results
         for ispec in range(self.n_spec):
-            self[ispec].save_results(self.run_output_path_opt_results, self.run_output_path_spectral_fits)
+            self[ispec].save_results()
+            
+        # Save the templates
+        np.savez(self.run_output_path + self.o_folder + 'Templates' + os.sep + 'templates_dict.npz', **self.templates_dict)
         
     # Wrapper to fit all spectra
     def fit_spectra(self, iter_index):
@@ -273,7 +265,7 @@ class ForwardModels(list):
             # Construct the arguments
             args_pass = []
             for spec_num in range(self.n_spec):
-                args_pass.append((self[spec_num], iter_index, self.n_spec))
+                args_pass.append((self[spec_num], self.templates_dict, iter_index, self.n_spec))
             
             # Call the parallel job via joblib.
             self[:] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].solver_wrapper)(*args_pass[ispec]) for ispec in range(self.n_spec))
@@ -282,7 +274,7 @@ class ForwardModels(list):
             # Fit one at a time
             for ispec in range(self.n_spec):
                 print('    Performing Nelder-Mead Fit For Spectrum '  + str(ispec+1) + ' of ' + str(self.n_spec), flush=True)
-                self[ispec] = self[0].solver_wrapper(self[ispec], iter_index, self.n_spec)
+                self[ispec] = self[0].solver_wrapper(self[ispec], self.templates_dict, iter_index, self.n_spec)
         
         # Cross correlate if set
         if self.do_xcorr and self.n_template_fits > 0 and self[0].models_dict['star'].enabled:
@@ -296,7 +288,7 @@ class ForwardModels(list):
         """Saves the forward model results and RVs.
         """
         # Full filename
-        fname = self.run_output_path_rvs + self.tag + '_rvs_ord' + str(self[0].order_num) + '.npz'
+        fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_rvs_ord' + str(self[0].order_num) + '.npz'
         
         # The bc velocities
         bc_vels = np.array([fwm.data.bc_vel for fwm in self], dtype=float)
@@ -311,8 +303,6 @@ class ForwardModels(list):
         """Load the initial templates and store in both.
         """
         self.templates_dict = self[0].load_templates()
-        for fwm in self:
-            fwm.templates_dict = self.templates_dict
             
 
     # Create output directories
@@ -321,22 +311,16 @@ class ForwardModels(list):
         """Creates output dirs and filenames for outputs.
         """
         # Order folder
-        o_folder = 'Order' + str(self.order_num) + os.sep
+        self.o_folder = 'Order' + str(self.order_num) + os.sep
         
         # Output path for this run
         self.run_output_path = self.output_path_root + self.tag + os.sep
         
-        # Output paths for this order
-        self.run_output_path_rvs = self.run_output_path + o_folder + 'RVs' + os.sep
-        self.run_output_path_spectral_fits = self.run_output_path + o_folder + 'Fits' + os.sep
-        self.run_output_path_opt_results = self.run_output_path + o_folder + 'Opt' + os.sep
-        self.run_output_path_stellar_templates = self.run_output_path + o_folder + 'Stellar_Templates' + os.sep
-        
         # Create directories for this order
-        os.makedirs(self.run_output_path_rvs, exist_ok=True)
-        os.makedirs(self.run_output_path_spectral_fits, exist_ok=True)
-        os.makedirs(self.run_output_path_opt_results, exist_ok=True)
-        os.makedirs(self.run_output_path_stellar_templates, exist_ok=True)
+        os.makedirs(self.run_output_path + self.o_folder + 'RVs', exist_ok=True)
+        os.makedirs(self.run_output_path + self.o_folder + 'Fits', exist_ok=True)
+        os.makedirs(self.run_output_path + self.o_folder + 'ForwardModels', exist_ok=True)
+        os.makedirs(self.run_output_path + self.o_folder + 'Templates', exist_ok=True)
 
 
     # Post init summary
@@ -375,13 +359,13 @@ class ForwardModels(list):
             # Construct the arguments
             iter_pass = []
             for ispec in range(self.n_spec):
-                iter_pass.append((self[ispec], iter_index))
+                iter_pass.append((self[ispec], self.templates_dict, iter_index))
 
             # Cross Correlate in Parallel
             ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
             
         else:
-            ccf_results = [ccf_method(self[ispec], iter_index) for ispec in tqdm.tqdm(range(self.n_spec))]
+            ccf_results = [ccf_method(self[ispec], self.templates_dict, iter_index) for ispec in tqdm.tqdm(range(self.n_spec))]
         
         # Pass to arrays
         if iter_index is None:
@@ -391,7 +375,8 @@ class ForwardModels(list):
             for ispec in range(self.n_spec):
                 self.rvs_dict['xcorrs'][:, 2*ispec:2*ispec+2, iter_index] = np.array([ccf_results[ispec][0], ccf_results[ispec][1]]).T
                 self.rvs_dict['rvs_xcorr'][ispec, iter_index] = ccf_results[ispec][2]
-                self.rvs_dict['bisector_spans'][ispec, iter_index] = ccf_results[ispec][3]
+                self.rvs_dict['unc_xcorr'][ispec, iter_index] = ccf_results[ispec][3]
+                self.rvs_dict['bisector_spans'][ispec, iter_index] = ccf_results[ispec][4]
                 
         print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
 
@@ -422,19 +407,20 @@ class ForwardModels(list):
 
         # Individual and nightly xcorr rvs
         if self.do_xcorr:
-            plt.plot(self.BJDS - self.BJDS_nightly[0],
+            plt.errorbar(self.BJDS - self.BJDS_nightly[0],
                         rvs['rvs_xcorr'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr_nightly'][:, iter_index]),
-                        marker='.', linewidth=0, color='black', alpha=0.6)
+                        yerr=rvs['unc_xcorr'][:, iter_index],
+                        marker='.', linewidth=0, color='black', alpha=0.6, elinewidth=0.8)
             plt.errorbar(self.BJDS_nightly - self.BJDS_nightly[0],
                             rvs['rvs_xcorr_nightly'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr_nightly'][:, iter_index]),
-                            yerr=rvs['unc_xcorr_nightly'][:, iter_index], marker='X', linewidth=0, alpha=0.8, label='X Corr', color='darkorange')
+                            yerr=rvs['unc_xcorr_nightly'][:, iter_index], marker='X', linewidth=0, alpha=0.8, label='X Corr', color='darkorange', elinewidth=1)
         
         plt.title(self[0].star_name + ' RVs Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
         plt.xlabel('BJD - BJD$_{0}$', fontweight='bold')
         plt.ylabel('RV [m/s]', fontweight='bold')
         plt.legend(loc='upper right')
         plt.tight_layout()
-        fname = self.run_output_path_rvs + self.tag + '_rvs_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
+        fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_rvs_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
         plt.savefig(fname)
         plt.close()
         
@@ -454,7 +440,7 @@ class ForwardModels(list):
             plt.ylabel('CCF (RMS surface)', fontweight='bold')
             plt.xlim(-10000, 10000)
             plt.tight_layout()
-            fname = self.run_output_path_rvs + self.tag + '_ccfs_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
+            fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_ccfs_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
             plt.savefig(fname)
             plt.close()
         
@@ -465,7 +451,7 @@ class ForwardModels(list):
             plt.xlabel('X Corr RV [m/s]', fontweight='bold')
             plt.ylabel('Bisector Span [m/s]', fontweight='bold')
             plt.tight_layout()
-            fname = self.run_output_path_rvs + self.tag + '_bisectorspans_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
+            fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_bisectorspans_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
             plt.savefig(fname)
             plt.close()
 
@@ -473,7 +459,7 @@ class ForwardModels(list):
         
 class ForwardModel:
     
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
+    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num):
         
         # The echelle order
         self.order_num = order_num
@@ -488,7 +474,13 @@ class ForwardModel:
                 setattr(self, key, copy.deepcopy(forward_model_settings[key]))
                 
         # The proper tag
-        self.tag = self.star_name + '_' + self.spectrograph.lower() + '_' + self.tag
+        self.tag = self.spectrograph.lower() + '_' + self.tag
+        
+        # Order folder
+        self.o_folder = 'Order' + str(self.order_num) + os.sep
+        
+        # Output path for this run
+        self.run_output_path = self.output_path_root + self.tag + os.sep
         
         # Overwrite the target function with the actual function to optimize the model
         self.target_function = getattr(pctargetfuns, self.target_function)
@@ -502,31 +494,10 @@ class ForwardModel:
         self.init_models(forward_model_settings, model_blueprints)
         
         # Storage arrays after each iteration
-        # Stores the final RMS [0] and target function calls [1]
-        self.opt = []
+        # Each entry is a tuple for each iteration: (best_fit_pars, RMS, FCALLS)
+        self.opt_results = []
         
-        # Stores the best fit parameters (Parameter objects)
-        self.best_fit_pars = []
-        
-        # Stores the wavelenth solutions (may just be copies if known a priori)
-        self.wavelength_solutions = []
-        
-        # Stores the residuals
-        self.residuals = []
-        
-        # Stores the best fit forward models (built from best_fit_pars)
-        self.models = []
-        
-        # Output path for this run
-        self.run_output_path = self.output_path_root + self.tag + os.sep
-        
-        # Output paths for this order
-        o_folder = 'Order' + str(self.order_num) + os.sep
-        self.run_output_path_rvs = self.run_output_path + o_folder + 'RVs' + os.sep
-        self.run_output_path_spectral_fits = self.run_output_path + o_folder + 'Fits' + os.sep
-        self.run_output_path_opt_results = self.run_output_path + o_folder + 'Opt' + os.sep
-        self.run_output_path_stellar_templates = self.run_output_path + o_folder + 'Stellar_Templates' + os.sep
-        
+        # Xcorr
         self.do_xcorr = True if self.xcorr_options['method'] is not None else False
         
         if self.do_xcorr:
@@ -536,7 +507,7 @@ class ForwardModel:
 
     # Must define a build_full method which returns wave, model_flux on the detector grid
     # Can also define other build methods that return modified forward models
-    def build_full(self, pars, *args, **kwargs):
+    def build_full(self, pars, templates_dict):
         raise NotImplementedError("Must implement a build_full function for this instrument")
         
         
@@ -594,17 +565,13 @@ class ForwardModel:
             self.models_dict[model].init_parameters(self)
         self.initial_parameters.sanity_lock()
 
-    def init_optimize(self):
+    def init_optimize(self, templates_dict):
         for model in self.models_dict:
-            self.models_dict[model].init_optimize(self)
+            self.models_dict[model].init_optimize(self, templates_dict)
 
-    # Save outputs after last iteration. This method can be implemented or not and super can be called or not.
-    def save_results(self, output_path_opt, output_path_datamodels):
-        
-        ord_spec = '_ord' + str(self.order_num) + '_spec' + str(self.spec_num)
-        
-        # Also save model as a pickle
-        self.save_to_pickle(output_path=output_path_datamodels)
+
+    def save_results(self):
+        self.save_to_pickle()
                 
     # Prints the models and corresponding parameters after each fit if verbose_print=True
     def pretty_print(self):
@@ -615,48 +582,51 @@ class ForwardModel:
             # Sub loop over per model parameters
             for pname in self.models_dict[mname].par_names:
                 print('    ', end='', flush=True)
-                if len(self.best_fit_pars) == 0:
+                if len(self.opt_results) == 0:
                     print(self.initial_parameters[pname], flush=True)
                 else:
-                    print(self.best_fit_pars[-1][pname], flush=True)
+                    print(self.opt_results[-1][0][pname], flush=True)
                 
     def set_parameters(self, pars):
         self.initial_parameters.update(pars)
     
     # Plots the forward model after each iteration with other template as well if verbose_plot = True
-    def plot_model(self, iter_index, save=True):
+    def plot_model(self, templates_dict, iter_index):
         
+        # Units
         wave_factors = {
             'microns': 1E-4,
             'nm' : 1E-1,
             'ang' : 1
         }
         
-        # Units for plotting wavelength
         wave_factor = wave_factors[self.plot_wave_unit]
         
-        # Extract the low res wave grid in proper units
-        wave = self.wavelength_solutions[-1] * wave_factor
+        # The best fit parameters
+        pars = self.opt_results[-1][0]
         
-        # The best fit forward model for this iteration
-        model = self.models[-1]
+        # Build the model
+        wave_data, model_lr = self.build_full(pars, templates_dict)
+        wave_data = wave_data * wave_factor
         
         # The residuals for this iteration
-        residuals = self.residuals[-1]
+        residuals = self.data.flux - model_lr
         
-        # The filename for the plot
+        # The filename
         if self.models_dict['star'].enabled:
-            fname = self.run_output_path_spectral_fits + self.tag + '_data_model_spec' + str(self.spec_num) + '_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
+            fname = self.run_output_path + self.o_folder + 'Fits' + os.sep + self.tag + '_data_model_spec' + str(self.spec_num) + '_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
         else:
-            fname = self.run_output_path_spectral_fits + self.tag + '_data_model_spec' + str(self.spec_num) + '_ord' + str(self.order_num) + '_iter0.png'
+            fname = self.run_output_path + self.o_folder + 'Fits' + os.sep + self.tag + '_data_model_spec' + str(self.spec_num) + '_ord' + str(self.order_num) + '_iter0.png'
 
         # Define some helpful indices
-        good = np.where(self.data.badpix == 1)[0]
+        good = np.where(self.data.mask == 1)[0]
+        bad = np.where(self.data.mask == 0)[0]
         f, l = good[0], good[-1]
-        bad = np.where(self.data.badpix == 0)[0]
         bad_data_locs = np.argsort(np.abs(residuals[good]))[-1*self.flag_n_worst_pixels:]
-        use_pix = np.arange(good[0], good[-1]).astype(int)
-        pad = 0.01 * (wave[use_pix[-1]] - wave[use_pix[0]])
+        use_pix = np.arange(f, l+1).astype(int)
+        
+        # Left and right padding
+        pad = 0.01 * (wave_data[use_pix[-1]] - wave_data[use_pix[0]])
         
         # Figure
         plot_width, plot_height = 2000, 720
@@ -664,82 +634,79 @@ class ForwardModel:
         fig, ax = plt.subplots(1, 1, figsize=(int(plot_width / dpi), int(plot_height / dpi)), dpi=dpi)
         
         # Data
-        ax.plot(wave[use_pix], self.data.flux[use_pix], color=(0, 114/255, 189/255), lw=0.8)
+        ax.plot(wave_data[use_pix], self.data.flux[use_pix], color=(0, 114/255, 189/255), lw=0.8)
         
         # Model
-        ax.plot(wave[use_pix], model[use_pix], color=(217/255, 83/255, 25/255), lw=0.8)
+        ax.plot(wave_data[use_pix], model_lr[use_pix], color=(217/255, 83/255, 25/255), lw=0.8)
         
-        # "Zero" line
-        ax.plot(wave[use_pix], np.zeros(use_pix.size), color=(89/255, 23/255, 130/255), lw=0.8, linestyle=':')
+        # Zero line
+        ax.plot(wave_data[use_pix], np.zeros(use_pix.size), color=(89/255, 23/255, 130/255), lw=0.8, linestyle=':')
         
-        # Residuals (all bad pixels will be zero here)
-        ax.plot(wave[good], residuals[good], color=(255/255, 169/255, 22/255), lw=0.8)
+        # Residuals
+        ax.plot(wave_data[good], residuals[good], color=(255/255, 169/255, 22/255), lw=0.8)
         
         # The worst N pixels that were flagged
-        ax.plot(wave[good][bad_data_locs], residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
+        ax.plot(wave_data[good][bad_data_locs], residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
         
         # Plot the convolved low res templates for debugging 
         # Plots the star and tellurics by default. Plots gas cell if present.
         if self.verbose_plot:
             
-            pars = self.best_fit_pars[-1]
             lsf = self.models_dict['lsf'].build(pars=pars)
             
             # Extra zero line
-            ax.plot(wave[use_pix], np.zeros(wave[use_pix].size) - 0.1, color=(89/255, 23/255, 130/255), lw=0.8, linestyle=':', alpha=0.8)
+            ax.plot(wave_data[use_pix], np.zeros(use_pix.size) - 0.1, color=(89/255, 23/255, 130/255), lw=0.8, linestyle=':', alpha=0.8)
             
             # Star
             if self.models_dict['star'].enabled:
-                star_flux_hr = self.models_dict['star'].build(pars, self.templates_dict['star'], self.templates_dict['star'][:, 0])
+                star_flux_hr = self.models_dict['star'].build(pars, templates_dict['star'], templates_dict['star'][:, 0])
                 star_convolved = self.models_dict['lsf'].convolve_flux(star_flux_hr, lsf=lsf)
-                star_flux_lr = np.interp(wave / wave_factor, self.templates_dict['star'][:, 0], star_convolved, left=np.nan, right=np.nan)
-                ax.plot(wave[use_pix], star_flux_lr[use_pix] - 1.1, label='Star', lw=0.8, color='deeppink', alpha=0.8)
+                star_flux_lr = np.interp(wave_data / wave_factor, templates_dict['star'][:, 0], star_convolved, left=np.nan, right=np.nan)
+                ax.plot(wave_data[use_pix], star_flux_lr[use_pix] - 1.1, label='Star', lw=0.8, color='deeppink', alpha=0.8)
             
             # Tellurics
             if 'tellurics' in self.models_dict and self.models_dict['tellurics'].enabled:
-                tellurics = self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], self.templates_dict['star'][:, 0])
+                tellurics = self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], templates_dict['star'][:, 0])
                 tellurics_convolved = self.models_dict['lsf'].convolve_flux(tellurics, lsf=lsf)
-                tell_flux_lr = np.interp(wave / wave_factor, self.templates_dict['star'][:, 0], tellurics_convolved, left=np.nan, right=np.nan)
-                ax.plot(wave[use_pix], tell_flux_lr[use_pix] - 1.1, label='Tellurics', lw=0.8, color='indigo', alpha=0.8)
+                tell_flux_lr = np.interp(wave_data / wave_factor, templates_dict['star'][:, 0], tellurics_convolved, left=np.nan, right=np.nan)
+                ax.plot(wave_data[use_pix], tell_flux_lr[use_pix] - 1.1, label='Tellurics', lw=0.8, color='indigo', alpha=0.8)
             
             # Gas Cell
             if 'gas_cell' in self.models_dict and self.models_dict['gas_cell'].enabled:
-                gas_flux_hr = self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], self.templates_dict['star'][:, 0])
+                gas_flux_hr = self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], templates_dict['star'][:, 0])
                 gas_cell_convolved = self.models_dict['lsf'].convolve_flux(gas_flux_hr, lsf=lsf)
-                gas_flux_lr = np.interp(wave / wave_factor, self.templates_dict['star'][:, 0], gas_cell_convolved, left=np.nan, right=np.nan)
-                ax.plot(wave[use_pix], gas_flux_lr[use_pix] - 1.1, label='Gas Cell', lw=0.8, color='green', alpha=0.8)
+                gas_flux_lr = np.interp(wave_data / wave_factor, templates_dict['star'][:, 0], gas_cell_convolved, left=np.nan, right=np.nan)
+                ax.plot(wave_data[use_pix], gas_flux_lr[use_pix] - 1.1, label='Gas Cell', lw=0.8, color='green', alpha=0.8)
             ax.set_ylim(-1.1, 1.1)
             ax.legend(loc='lower right')
             
             # Residual lab flux
-            if 'residual_lab' in self.templates_dict:
-                res_hr = self.templates_dict['residual_lab'][:, 1]
-                res_lr = np.interp(wave / wave_factor, self.templates_dict['star'][:, 0], res_hr, left=np.nan, right=np.nan)
-                ax.plot(wave[use_pix], res_lr[use_pix] - 0.1, label='Lab Frame Coherence', lw=0.8, color='darkred', alpha=0.8)
+            if 'residual_lab' in templates_dict:
+                res_hr = templates_dict['residual_lab'][:, 1]
+                res_lr = np.interp(wave_data / wave_factor, templates_dict['star'][:, 0], res_hr, left=np.nan, right=np.nan)
+                ax.plot(wave_data[use_pix], res_lr[use_pix] - 0.1, label='Lab Frame Coherence', lw=0.8, color='darkred', alpha=0.8)
         else:
             ax.set_ylim(-0.1, 1.1)
             
-        ax.set_xlim(wave[f] - pad, wave[l] + pad)
+        # Final settings
+        ax.set_xlim(wave_data[f] - pad, wave_data[l] + pad)
         ax.set_xlabel('Wavelength [' + self.plot_wave_unit + ']', fontsize=12)
         ax.set_ylabel('Data, Model, Residuals', fontsize=12)
         
-        if save:
-            plt.tight_layout()
-            plt.savefig(fname)
-            plt.close()
-        else:
-            return fig
+        # Save
+        plt.tight_layout()
+        plt.savefig(fname)
+        plt.close()
 
     # Save the forward model object to a pickle
-    def save_to_pickle(self, output_path):
-        fname = output_path + self.tag + '_forward_model_ord' + str(self.order_num) + '_spec' + str(self.spec_num) + '.pkl'
+    def save_to_pickle(self):
+        fname = self.run_output_path + self.o_folder + 'ForwardModels' + os.sep + self.tag + '_forward_model_ord' + str(self.order_num) + '_spec' + str(self.spec_num) + '.pkl'
         with open(fname, 'wb') as f:
             pickle.dump(self, f)
             
-    
     # Gets the night which corresponds to the spec index
     def get_thisnight_index(self, n_obs_nights):
-        return get_night_index(self.spec_index, n_obs_nights)
+        return self.get_night_index(self.spec_index, n_obs_nights)
     
     # Gets the night which corresponds to the spec index
     @staticmethod
@@ -756,7 +723,7 @@ class ForwardModel:
     # Gets the indices of spectra for a certain night. (zero based)
     def get_all_spec_indices_from_thisnight(self, n_obs_nights):
         night_index = self.get_thisnight_index(n_obs_nights)
-        return get_all_spec_indices_from_night(night_index, n_obs_nights)
+        return self.get_all_spec_indices_from_night(night_index, n_obs_nights)
     
     # Gets the indices of spectra for a certain night. (zero based)
     @staticmethod
@@ -785,7 +752,7 @@ class ForwardModel:
 
     # Wrapper for parallel processing. Solves and plots the forward model results. Also does xcorr if set.
     @staticmethod
-    def solver_wrapper(forward_model, iter_index, n_spec_tot):
+    def solver_wrapper(forward_model, templates_dict, iter_index, n_spec_tot):
         """A wrapper for forward modeling and cross-correlating a single spectrum.
 
         Args:
@@ -803,25 +770,14 @@ class ForwardModel:
         stopwatch = pcutils.StopWatch()
         
         # Construct the extra arguments to pass to the target function
-        args_to_pass = (forward_model, iter_index)
+        args_to_pass = (forward_model, templates_dict)
         
         # Construct the Nelder Mead Solver and run
         solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-6, xtol=1E-6)
         opt_result = solver.solve()
 
         # Pass best fit parameters and optimization result to forward model
-        forward_model.best_fit_pars.append(opt_result['xmin'])
-        forward_model.opt.append([opt_result['fmin'], opt_result['fcalls']])
-
-        # Build the best fit forward model
-        best_wave, best_model = forward_model.build_full(forward_model.best_fit_pars[-1], iter_index)
-
-        # Pass wavelength solution and best model to forward model
-        forward_model.wavelength_solutions.append(best_wave)
-        forward_model.models.append(best_model)
-
-        # Compute the residuals between the data and model, don't flag bad pixels here. Cropped may still be nan.
-        forward_model.residuals.append(forward_model.data.flux - best_model)
+        forward_model.opt_results.append((opt_result['xmin'], opt_result['fmin'], opt_result['fcalls']))
 
         # Print diagnostics if set
         if forward_model.verbose_print:
@@ -832,7 +788,7 @@ class ForwardModel:
         print('    Fit Spectrum ' + str(forward_model.spec_num) + ' of ' + str(n_spec_tot) + ' in ' + str(round((stopwatch.time_since())/60, 2)) + ' min', flush=True)
 
         # Output a plot
-        forward_model.plot_model(iter_index)
+        forward_model.plot_model(templates_dict, iter_index)
 
         # Return new forward model object since we possibly fit in parallel
         return forward_model
@@ -844,25 +800,25 @@ class iSHELLForwardModel(ForwardModel):
         
         super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
-    def build_full(self, pars, iter_index):
+    def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
 
         # Star
         if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
+            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
         
         # Gas Cell
         if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
+            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
             
         # All tellurics
         if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Fringing from who knows what
         if self.models_dict['fringing'].enabled:
@@ -873,8 +829,8 @@ class iSHELLForwardModel(ForwardModel):
             model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
         
         # Residual lab flux
-        if 'residual_lab' in self.templates_dict:
-            model += self.templates_dict['residual_lab'][:, 1]
+        if 'residual_lab' in templates_dict:
+            model += templates_dict['residual_lab'][:, 1]
 
         # Convolve Model with LSF
         model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
@@ -896,17 +852,17 @@ class iSHELLForwardModel(ForwardModel):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
         
         # Gas Cell
         if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
+            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
         
         # All tellurics
         if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Fringing from who knows what
         if self.models_dict['fringing'].enabled:
@@ -917,8 +873,8 @@ class iSHELLForwardModel(ForwardModel):
             model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
         
         # Residual lab flux
-        if 'residual_lab' in self.templates_dict:
-            model += self.templates_dict['residual_lab'][:, 1]
+        if 'residual_lab' in templates_dict:
+            model += templates_dict['residual_lab'][:, 1]
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -935,25 +891,25 @@ class CHIRONForwardModel(ForwardModel):
 
         super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
-    def build_full(self, pars, iter_index):
+    def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
 
         # Star
         if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
+            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
         
         # Gas Cell
         if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
+            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
         
         # All tellurics
         if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Blaze Model
         if self.models_dict['blaze'].enabled:
@@ -982,21 +938,21 @@ class PARVIForwardModel(ForwardModel):
 
         super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
-    def build_full(self, pars, iter_index):
+    def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
 
         # Star
         if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
+            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
         
         # All tellurics
         if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Blaze Model
         if self.models_dict['blaze'].enabled:
@@ -1025,21 +981,21 @@ class MinervaAustralisForwardModel(ForwardModel):
 
         super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
-    def build_full(self, pars, iter_index):
+    def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
 
         # Star
         if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
+            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
         
         # All tellurics
         if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Blaze Model
         if self.models_dict['blaze'].enabled:
@@ -1068,25 +1024,25 @@ class MinervaNorthForwardModel(ForwardModel):
 
         super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
-    def build_full(self, pars, iter_index):
+    def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
 
         # Star
         if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
+            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
         
         # Gas Cell
         if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
+            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
         
         # All tellurics
         if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Blaze Model
         if self.models_dict['blaze'].enabled:
@@ -1112,25 +1068,25 @@ class MinervaNorthForwardModel(ForwardModel):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
         
         # Gas Cell
         if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, self.templates_dict['gas_cell'], final_hr_wave_grid)
+            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
         
         # All tellurics
         if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Blaze Model
         if self.models_dict['blaze'].enabled:
             model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
         
         # Residual lab flux
-        if 'residual_lab' in self.templates_dict:
-            model += self.templates_dict['residual_lab'][:, 1]
+        if 'residual_lab' in templates_dict:
+            model += templates_dict['residual_lab'][:, 1]
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -1147,21 +1103,21 @@ class NIRSPECForwardModel(ForwardModel):
         
         super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
-    def build_full(self, pars, iter_index):
+    def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
 
         # Star
         if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
+            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
             
         # All tellurics
         if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Fringing
         if self.models_dict['fringing'].enabled:
@@ -1172,8 +1128,8 @@ class NIRSPECForwardModel(ForwardModel):
             model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
         
         # Residual lab flux
-        if 'residual_lab' in self.templates_dict:
-            model += self.templates_dict['residual_lab'][:, 1]
+        if 'residual_lab' in templates_dict:
+            model += templates_dict['residual_lab'][:, 1]
 
         # Convolve Model with LSF
         if self.models_dict['lsf'].enabled:
@@ -1198,20 +1154,20 @@ class SimulatedForwardModel(ForwardModel):
 
         super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
-    def build_full(self, pars, iter_index):
+    def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
         # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = self.templates_dict['star'][:, 0]
+        final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
 
         # Star
         if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, self.templates_dict['star'], final_hr_wave_grid)
+            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
             
         if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, self.templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
             
         if self.models_dict['blaze'].enabled:
             model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
