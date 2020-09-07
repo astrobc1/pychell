@@ -161,9 +161,9 @@ forward_model_blueprints = {
     'wavelength_solution': {
         
         'name': 'csplines_wavesol',
-        #'class_name': 'SplineWavelengthSolution',
+        'class_name': 'SplineWavelengthSolution',
         'name': 'leg_wavesol',
-        'class_name': 'LegPolyWavelengthSolution',
+        #'class_name': 'LegPolyWavelengthSolution',
         'poly_order': 4,
         
         # The three pixels to span the detector corresponding to the above wavelengths
