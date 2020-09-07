@@ -238,16 +238,23 @@ class ForwardModels(list):
     def save_results(self):
         """Saves the forward model results and RVs.
         """
-        
-        # Save the RVs
-        self.save_rvs()
-        
-        # For each spectrum, save the forward model results
-        for ispec in range(self.n_spec):
-            self[ispec].save_results()
             
-        # Save the templates
+        # Save the full forward models object 
+        self.save_to_pickle()
+        
+        # Unpack and output the RVs separately
+        self.save_rvs()
+            
+        # Save the current templates dictionary
         np.savez(self.run_output_path + self.o_folder + 'Templates' + os.sep + 'templates_dict.npz', **self.templates_dict)
+        
+        
+    # Save the forward model object to a pickle
+    def save_to_pickle(self):
+        fname = self.run_output_path + self.o_folder + self.tag + '_forward_models_ord' + str(self.order_num) + '.pkl'
+        with open(fname, 'wb') as f:
+            pickle.dump(self, f)
+        
         
     # Wrapper to fit all spectra
     def fit_spectra(self, iter_index):
@@ -319,7 +326,6 @@ class ForwardModels(list):
         # Create directories for this order
         os.makedirs(self.run_output_path + self.o_folder + 'RVs', exist_ok=True)
         os.makedirs(self.run_output_path + self.o_folder + 'Fits', exist_ok=True)
-        os.makedirs(self.run_output_path + self.o_folder + 'ForwardModels', exist_ok=True)
         os.makedirs(self.run_output_path + self.o_folder + 'Templates', exist_ok=True)
 
 
@@ -700,7 +706,7 @@ class ForwardModel:
 
     # Save the forward model object to a pickle
     def save_to_pickle(self):
-        fname = self.run_output_path + self.o_folder + 'ForwardModels' + os.sep + self.tag + '_forward_model_ord' + str(self.order_num) + '_spec' + str(self.spec_num) + '.pkl'
+        fname = self.run_output_path + self.o_folder + os.sep + self.tag + '_forward_model_ord' + str(self.order_num) + '_spec' + str(self.spec_num) + '.pkl'
         with open(fname, 'wb') as f:
             pickle.dump(self, f)
             
@@ -796,10 +802,6 @@ class ForwardModel:
   
 class iSHELLForwardModel(ForwardModel):
 
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-        
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
-
     def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
@@ -886,10 +888,6 @@ class iSHELLForwardModel(ForwardModel):
     
     
 class CHIRONForwardModel(ForwardModel):
-    
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
     def build_full(self, pars, templates_dict):
         
@@ -933,10 +931,6 @@ class CHIRONForwardModel(ForwardModel):
 
 
 class PARVIForwardModel(ForwardModel):
-    
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
     def build_full(self, pars, templates_dict):
         
@@ -977,10 +971,6 @@ class PARVIForwardModel(ForwardModel):
 
 class MinervaAustralisForwardModel(ForwardModel):
 
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
-
     def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
@@ -1019,10 +1009,6 @@ class MinervaAustralisForwardModel(ForwardModel):
     
     
 class MinervaNorthForwardModel(ForwardModel):
-    
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
     def build_full(self, pars, templates_dict):
         
@@ -1099,10 +1085,6 @@ class MinervaNorthForwardModel(ForwardModel):
     
 class NIRSPECForwardModel(ForwardModel):
 
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-        
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
-
     def build_full(self, pars, templates_dict):
         
         # The final high res wave grid for the model
@@ -1149,10 +1131,6 @@ class NIRSPECForwardModel(ForwardModel):
     
     
 class SimulatedForwardModel(ForwardModel):
-    
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num=None):
-
-        super().__init__(input_file, forward_model_settings, model_blueprints, order_num, spec_num=spec_num)
 
     def build_full(self, pars, templates_dict):
         

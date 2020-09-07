@@ -24,7 +24,6 @@ import pychell.maths as pcmath
 import pychell.rvs.template_augmenter as pcaugmenter
 import optimparameters.parameters as OptimParameters
 
-
 class SpectralComponent:
     """Base class for a general spectral component model.
 
@@ -57,7 +56,7 @@ class SpectralComponent:
         if not hasattr(self, 'n_delay'):
             self.n_delay = 0
         
-        # Whether or not to enable this model at the start    
+        # Whether or not to enable this model at the start
         self.enabled = not (self.n_delay > 0)
 
         # The order number for this model
@@ -86,11 +85,18 @@ class SpectralComponent:
             forward_model (ForwardModel): The forward model this model belongs to.
             iter_index (int): The iteration index.
         """
+        
+        # Iteration offset between rvs and general optimizations
         index_offset = 0 if forward_model.models_dict['star'].from_synthetic else 1
-        if iter_index + index_offset == self.n_delay and not self.enabled:
+        
+        # Update based on iteration index
+        if (iter_index + 1) == self.n_delay and not self.enabled:
             self.enabled = True
             for pname in self.par_names:
                 forward_model.initial_parameters[pname].vary = True
+                
+        # Lock any "accidentally" enabled parameters
+        forward_model.initial_parameters.sanity_lock()
 
     def __repr__(self):
         """Simple representation method
@@ -629,9 +635,6 @@ class TelluricsTAPAS(TemplateMult):
         
         # Remaining Components
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['airmass_depth'][1], minv=self.blueprint['airmass_depth'][0], maxv=self.blueprint['airmass_depth'][2], vary=self.enabled))
-
-    def update(self, forward_model, iter_index):
-        super().update(forward_model, iter_index)
 
     def load_template(self, forward_model):
         print('Loading in Telluric Templates', flush=True)

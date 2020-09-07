@@ -65,7 +65,7 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
             print('Iteration: 0 (flat stellar template, no RVs)', flush=True)
 
             # Check if any parameters are enabled
-            if not np.any([forward_models[0].initial_parameters[pname].vary for pname in forward_models[0].initial_parameters]):
+            if len(forward_models[0].initial_parameters.get_varied()) == 0:
                 print('No parameters to optimize, moving on', flush=True)
                 for fwm in forward_models:
                     fwm.opt_results.append((fwm.initial_parameters, np.nan, np.nan))

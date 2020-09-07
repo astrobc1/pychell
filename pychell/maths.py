@@ -24,6 +24,16 @@ import numba
 import numba.types as nt
 from llc import jit_filter_function
 
+def rms_loss_creator(func):
+    
+    def _rms_loss(pars, x, data):
+        model = func(x, *pars)
+        good = np.where(np.isfinite(model) & np.isfinite(data))[0]
+        rms = np.sqrt(np.nansum((data[good] - model[good])**2) / good.size)
+        return rms
+    
+    return _rms_loss
+
 def rmsloss(x, y, weights=None, flag_worst=None):
     
     # Compute squared diffs
@@ -111,13 +121,6 @@ def rolling_clip(x, y, weights=None, width=None, method='median', nsigma=3, perc
             
                 
     return mask
-            
-    
-    
-    
-    
-    
-    
 
 def doppler_shift(wave, vel, wave_out=None, flux=None, interp='linear'):
     if wave_out is None:
@@ -194,25 +197,6 @@ def gauss(x, amp, mu, sigma):
         np.ndarray: The Gaussian
     """
     return amp * np.exp(-0.5 * ((x - mu) / sigma)**2)
-
-
-# Compatible with Parameters objects
-def gauss_solver(pars, x, data):
-    """Wrapper to optimize a Gaussian.
-
-    Args:
-        pars (Parameters): The parameters object.
-        x ([type]): The independent variable.
-        data ([type]): The data to model.
-
-    Returns:
-        float: The RMS between the data and model. This is the value to minimize.
-        cons: Returns 1 since there are no additional constraints to this problem.
-    """
-    model = gauss(x, pars['amp'].value, pars['mu'].value, pars['sigma'].value)
-    good = np.where(np.isfinite(data))[0]
-    rms = np.sqrt(np.nansum((data - model)**2) / good.size)
-    return rms, 1
 
 
 def fix_nans(x, y):
@@ -365,7 +349,6 @@ def convolve_flux(wave, flux, R=None, width=None, compress=64, uniform=False):
     
     return fluxc
 
-
 @njit
 def width_from_R(R, ml):
     return ml / (2 * np.sqrt(2 * np.log(2)) * R)
@@ -393,8 +376,6 @@ def _convolve(x, k):
         xc[i] = s
     return xc
     
-
-
 # Returns the hermite polynomial of degree deg over the variable x
 def hermfun(x, deg):
     """Computes Hermite Gaussian Functions via the recursion relation.
@@ -406,7 +387,7 @@ def hermfun(x, deg):
     Returns:
         np.ndarray: The individual Hermite-Gaussian functions as column vectors.
     """
-    herm0 = np.pi**-0.25 * np.exp(-1.0 * x**2 / 2.0)
+    herm0 = np.pi**-0.25 * np.exp(-0.5 * x**2)
     herm1 = np.sqrt(2) * herm0 * x
     if deg == 0:
         herm = herm0
@@ -419,51 +400,6 @@ def hermfun(x, deg):
         for k in range(2, deg+1):
             herm[:, k] = np.sqrt(2 / k) * (x * herm[:, k-1] - np.sqrt((k - 1) / 2) * herm[:, k-2])
     return herm
-
-# Interpolation but fix nans
-def interpolate_fix_nans(x, y, xnew):
-
-    # Identify bad pixels and remove them before interpolation
-    bad_init = np.where(~np.isfinite(y) | ~np.isfinite(np.roll(y, 1, axis=0)) | ~np.isfinite(np.roll(y, -1, axis=0)))[0]
-    nbad_init = bad_init.size
-    xx = np.delete(x, bad_init)
-    yy = np.delete(y, bad_init)
-
-    if xx.size == 0:
-        return np.full(xnew.size, fill_value=np.nan)
-
-    eqs = scipy.interpolate.interp1d(xx, yy, kind='linear', fill_value=np.nan, assume_sorted=True, bounds_error=False)
-    ynew = eqs(xnew)
-    bad = np.where((xnew > np.nanmax(x)) | (xnew < np.nanmin(x)))[0]
-    nbad = bad.size
-
-    for i in range(nbad_init):
-        
-        # If bad array element is first input array position
-        if bad_init[i] == 0:
-            bad_i = np.where(xnew <= x[bad_init[i]])[0]
-            nbad_i = bad_i.size
-            if nbad_i != 0:
-                ynew[bad_i] = np.nan
-            continue
-        # If bad array element is last input array position
-        if bad_init[i] == x.size-1:
-            bad_i = np.where(xnew > x[bad_init[i]])[0]
-            nbad_i = bad_i.size
-            if nbad_i != 0:
-                ynew[bad_i] = np.nan
-            continue
-        # If bad array element is anywhere else
-        bad_i = np.where((xnew >= x[bad_init[i]-1]) & (xnew <= x[bad_init[i]+1]))[0]
-        nbad_i = bad_i.size
-        if nbad_i != 0:
-            ynew[bad_i] = np.nan
-    
-    if nbad != 0:
-        ynew[bad] = np.nan
-
-    return ynew
-
 
 # This calculates the median absolute deviation of array x
 def mad(x):
@@ -531,8 +467,6 @@ def weighted_stddev(x, w):
     bias_estimator = 1.0 - np.nansum(weights ** 2) / np.nansum(weights) ** 2
     var = np.nansum(dev ** 2 * weights) / bias_estimator
     return np.sqrt(var)
-
-
 
 def weighted_stddev_mumod(x, w, mu):
     """Computes the weighted standard deviation of a dataset with bias correction.
@@ -727,8 +661,6 @@ def intersection(x, y, yval, precision=None):
         
         return x[index], y[index]
     
-    
-
 # Calculates the reduced chi squared
 def reduced_chi_square(x, err):
     """Computes the reduced chi-square statistic
@@ -880,7 +812,7 @@ def outob(x, y, nx, ny):
 
 
 # Returns a modified gaussian
-def gauss_modified(x, amp, mu, sigma, d):
+def gauss_modified(x, amp, mu, sigma, p):
     """Constructs a modified Gaussian (variable exponent)
 
     Args:
@@ -893,26 +825,7 @@ def gauss_modified(x, amp, mu, sigma, d):
     Returns:
         np.ndarray: The modified Gaussian
     """
-    return amp * np.exp(-0.5 * (np.abs((x - mu) / sigma))**(2 * d))
-
-
-# Compatible with Parameters objects
-def gauss_modified_solver(pars, x, data):
-    """Wrapper to optimize a modified Gaussian.
-
-    Args:
-        pars (Parameters): The parameters object.
-        x ([type]): The independent variable.
-        data ([type]): The data to model.
-
-    Returns:
-        float: The RMS between the data and model. This is the value to minimize.
-        cons: Returns 1 since there are no additional constraints to this problem.
-    """
-    model = gauss_modified(x, pars['amp'].value, pars['mu'].value, pars['sigma'].value, pars['d'].value)
-    good = np.where(np.isfinite(data))[0]
-    rms = np.sqrt(np.nansum((data - model)**2) / good.size)
-    return rms, 1
+    return amp * np.exp(-0.5 * (np.abs((x - mu) / sigma))**p)
 
 if 'torch' in sys.modules:
     class LinearInterp1d(torch.autograd.Function):
@@ -1060,16 +973,7 @@ def shiftint1d(x, n, cval=np.nan):
         result[:] = x
     return result
 
-
 @njit
 def lorentz(x, amp, mu, fwhm):
     xx = (x - mu) / (fwhm / 2)
     return amp / (1 + xx**2)
-
-
-def lorentz_solver(pars, x, data):
-    model = lorentz(x, *pars)
-    good = np.where(np.isfinite(data) & np.isfinite(model))[0]
-    n_good = good.size
-    rms = np.sqrt(np.nansum((data - model)**2) / n_good)
-    return rms

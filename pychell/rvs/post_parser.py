@@ -1,162 +1,134 @@
-
-
 import numpy as np
 import pickle
 import glob
 import os
 from pdb import set_trace as stop
 
-def get_orders(output_path_root):
-    orders_found = glob.glob(output_path_root + "Order*" + os.sep)
-    do_orders = np.array([int(o[5:]) for o in orders_found])
-    return do_orders
-
-def parse_forward_models(output_path_root, do_orders=None):
+class PostParser:
     
-    if do_orders is None:
-        do_order = get_orders(output_path_root)
+    def __init__(output_path_root, do_orders=None):
         
-    n_orders = len(do_orders)
-    n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'ForwardModels' + os.sep + '*.pkl'))
-    forward_models = np.empty(shape=(n_orders, n_spec), dtype=object)
-    for o in range(n_orders):
-        for ispec in range(n_spec):
-            forward_models[o, ispec] = parse_forward_model(output_path_root, do_orders[o], ispec + 1)
-        
-    return forward_models
+        self.output_path_root
 
-def parse_rvs(output_path_root, do_orders=None):
+        if do_orders is None:
+            self.do_orders = self.get_orders(self.output_path_root)
+        else:
+            self.do_orders = do_orders
+            
+        self.do_orders = np.atleast_1d(self.do_orders)
+        self.n_orders = len(self.do_orders)
+            
+    def parse_forward_models(self):
+        self.forward_models = []
+        for o in range(n_orders):
+            try:
+                f = glob.glob(output_path_root + 'Orders' + str(do_orders[o]) + os.sep + '*forward_models*.pkl')[0]
+                with open(f, 'rb'):
+                    self.forward_models.append(pickle.load(f))
+                except:
+                    ValueError("Could not load forward model for order " + str(do_orders[o]))
+                    
+        self.n_spec = self.forward_models[0].n_spec
+        self.n_obs_nights = self.forward_models[0].n_obs_nights
+        self.n_nights = self.forward_models[0].n_nights
+        self.index_offset = int(not self.forward_models[0].models_dict['star'].from_synthetic)
+        self.n_iters_rvs = self.forward_models[0].n_template_fits
+        self.n_iters_opt = self.n_iters_rvs + self.index_offset
+
+    def parse_rms(self):
+        
+        if not hasattr(self, 'forward_models'):
+            self.parse_forward_models()
+            
+        rms = np.empty(shape=(self.n_orders, self.n_spec, self.n_iters_opt), dtype=float)
+        for o in range(self.n_orders):
+            for ispec in range(self.n_spec):
+                rms[o, ispec, :] = [self.forward_models[o][ispec][k][0] for k in range(self.n_iters_opt)]
+        
+        return rms
+
+    def parse_stellar_templates(self, iter_indices=None):
+        if iter_indices is None:
+            iter_indices = [self.n_iters_rvs - 1]*self.n_orders
+        stellar_templates = []
+        for o in range(self.n_orders):
+            f = glob.glob(output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'Templates' + os.sep + '*stellar_templates*.npz')[0]
+            template_temp = np.load(f)['stellar_templates']
+            template = np.array([template_temp[:, 0], template_temp[:, iter_indices[o] + 1]]).T
+            stellar_templates.append(template)
+        return stellar_templates
+
+    def parse_parameters(self):
     
-    if do_orders is None:
+        pars_numpy_vals = []
+        pars_numpy_minvs = []
+        pars_numpy_maxvs = []
+        pars_numpy_varies = []
+        pars_numpy_unc = []
+        for o in range(n_orders):
+            n_pars = len(forward_models[o].opt_results[0][0])
+            pars_numpy_vals.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
+            pars_numpy_minvs.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
+            pars_numpy_maxvs.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
+            pars_numpy_varies.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
+            pars_numpy_unc.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
+            for ispec in range(n_spec):
+                for j in range(n_iters_opt):
+                    pars_numpy_vals[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['value']
+                    pars_numpy_minvs[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['minv']
+                    pars_numpy_maxvs[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['maxv']
+                    pars_numpy_varies[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['vary']
+                    pars_numpy_unc[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['unc']
+                    
+        return pars_numpy_vals, pars_numpy_minvs, pars_numpy_maxvs, pars_numpy_varies, pars_numpy_unc
+
+    def parse_rvs(output_path_root, do_orders=None):
+    
+        rvs_dict = {}
+    
+        # Load in a single forward model object to determine if x corr is set
+        fname = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[0]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
+        rvs0 = np.load(fname)
+        rvs_dict['do_xcorr'] = True if 'rvs_xcorr' in rvs0 else False
+        self.n_spec = rvs0['rvs'].shape[0]
+        self.n_iters_rvs = rvs0['rvs'].shape[1]
+        self.n_nights = len(rvs0['n_obs_nights'])
+        rvs_dict['n_obs_nights'] = rvs0['n_obs_nights']
+        self.do_xcorr = rvs_dict['do_xcorr']
+        
+        # Create arrays
+        rvs_dict['rvs'] = np.full(shape=(self.n_orders, n_spec, n_iters), fill_value=np.nan)
+        rvs_dict['rvs_nightly'] = np.full(shape=(self.n_orders, n_nights, n_iters), fill_value=np.nan)
+        rvs_dict['unc_nightly'] = np.full(shape=(self.n_orders, n_nights, n_iters), fill_value=np.nan)
+        rvs_dict['BJDS'] = rvs0['BJDS']
+        rvs_dict['BJDS_nightly'] = rvs0['BJDS_nightly']
+        
+        if rvs_dict['do_xcorr']:
+            rvs_dict['rvsx'] = np.full(shape=(self.n_orders, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
+            rvs_dict['rvsx_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
+            rvs_dict['uncx_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
+            rvs_dict['BIS'] = np.full(shape=(self.n_orders, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
+
+        # Load in rvs for each order
+        for o in range(self.n_orders):
+            print('Loading in RVs for Order ' + str(self.do_orders[o]))
+            fname = glob.glob(output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
+            rvfile = np.load(fname)
+            rvs_dict['rvs'][o, :, :] = rvfile['rvs']
+            rvs_dict['rvs_nightly'][o, :, :] = rvfile['rvs_nightly']
+            rvs_dict['unc_nightly'][o, :, :] = rvfile['unc_nightly']
+            if rvs_dict['do_xcorr']:
+                rvs_dict['rvsx'][o, :, :] = rvfile['rvs_xcorr']
+                rvs_dict['rvsx_nightly'][o, :, :] = rvfile['rvs_xcorr_nightly']
+                rvs_dict['uncx_nightly'][o, :, :] = rvfile['unc_xcorr_nightly']
+                rvs_dict['BIS'][o, :, :] = rvfile['bisector_spans']
+                
+        self.rvs_dict = rvs_dict
+
+        return self.rvs_dict
+
+    @staticmethod
+    def get_orders(output_path_root):
         orders_found = glob.glob(output_path_root + "Order*" + os.sep)
         do_orders = np.array([int(o[5:]) for o in orders_found])
-        
-    n_orders = len(do_orders)
-        
-    # Load in the global parameters dictionary
-    with open(output_path_root + 'global_parameters_dictionary.pkl', 'rb') as f:
-        gpars = pickle.load(f)
-    
-    rvs_dict = {}
-    
-    # Load in a single forward model object to determine remaining things
-    fname = glob.glob(output_path_root + 'Order' + str(do_orders[0]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
-    rvs0 = np.load(fname)
-    n_spec, n_iters = rvs0['rvs'].shape
-    n_obs_nights = rvs0['n_obs_nights']
-    n_nights = len(n_obs_nights)
-    rvs_dict['do_xcorr'] = True if 'rvs_xcorr' in rvs0 else False
-        
-    rvs_dict['rvs'] = np.full(shape=(n_orders, n_spec, n_iters), fill_value=np.nan)
-    rvs_dict['rvs_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
-    rvs_dict['unc_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
-    rvs_dict['n_obs_nights'] = n_obs_nights
-    rvs_dict['BJDS'] = rvs0['BJDS']
-    rvs_dict['BJDS_nightly'] = rvs0['BJDS_nightly']
-    
-    if rvs_dict['do_xcorr']:
-        rvs_dict['rvsx'] = np.full(shape=(n_orders, n_spec, n_iters), fill_value=np.nan)
-        rvs_dict['rvsx_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
-        rvs_dict['uncx_nightly'] = np.full(shape=(n_orders, n_nights, n_iters), fill_value=np.nan)
-        rvs_dict['BIS'] = np.full(shape=(n_orders, n_spec, n_iters), fill_value=np.nan)
-
-    # Load in rvs for each order
-    for o in range(n_orders):
-        print('Loading in RVs for Order ' + str(do_orders[o]))
-        fname = glob.glob(output_path_root + 'Order' + str(do_orders[o]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
-        rvfile = np.load(fname)
-        rvs_dict['rvs'][o, :, :] = rvfile['rvs']
-        rvs_dict['rvs_nightly'][o, :, :] = rvfile['rvs_nightly']
-        rvs_dict['unc_nightly'][o, :, :] = rvfile['unc_nightly']
-        if rvs_dict['do_xcorr']:
-            rvs_dict['rvsx'][o, :, :] = rvfile['rvs_xcorr']
-            rvs_dict['rvsx_nightly'][o, :, :] = rvfile['rvs_xcorr_nightly']
-            rvs_dict['uncx_nightly'][o, :, :] = rvfile['unc_xcorr_nightly']
-            rvs_dict['BIS'][o, :, :] = rvfile['bisector_spans']
-
-    return rvs_dict
-
-
-def parse_forward_model(output_path_root, order_num, spec_num):
-    print('Parsing Forward Model For Order ' + str(order_num) + ', Observation ' + str(spec_num))
-    fname = glob.glob(output_path_root + 'Order' + str(order_num) + os.sep + 'ForwardModels' + os.sep + '*_forward_model_*_spec' + str(spec_num) + '.pkl')[0]
-    with open(fname, 'rb') as f:
-            fwm = pickle.load(f)
-    return fwm
-
-def parse_templates(output_path_root, do_orders=None):
-    
-    if do_orders is None:
-        do_order = get_orders(output_path_root)
-        
-    n_orders = len(do_orders)
-    templates = []
-    for o in range(n_orders):
-        templates.append(np.load(output_path_root + 'Order' + str(do_orders[o]) + os.sep + 'Templates' + os.sep + 'templates_dict.npz'))
-            
-    return templates
-
-def parse_stellar_templates(output_path_root, do_orders=None, iter_indexes=None):
-    
-    if do_orders is None:
-        do_order = get_orders(output_path_root)
-        
-    n_orders = len(do_orders)
-    stellar_templates = []
-    for o in range(n_orders):
-        stellar_templates.append(parse_stellar_template(output_path_root, do_orders[o], iter_index=iter_indexes[o]))
-            
-    return stellar_templates
-
-def parse_stellar_template(output_path_root, order_num, iter_index):
-    f = glob.glob(output_path_root + 'Order' + str(order_num) + os.sep + 'Templates' + os.sep + '*stellar_templates*.npz')[0]
-    template_temp = np.load(f)['stellar_templates']
-    template = np.array([template_temp[:, 0], template_temp[:, iter_index + 1]]).T
-    return template
-
-def parse_rms(output_path_root, do_orders=None):
-    
-    if do_orders is None:
-        do_order = get_orders(output_path_root)
-    
-    n_orders = len(do_orders)
-    fwm0 = parse_forward_model(output_path_root, do_orders[0], 1)
-    n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'ForwardModels' + os.sep + '*.pkl'))
-    n_iters = fwm0.n_template_fits + (not fwm0.models_dict['star'].from_synthetic)
-    rms = np.empty(shape=(n_orders, n_spec, n_iters), dtype=float)
-    for o in range(n_orders):
-        for ispec in range(n_spec):
-            fwm = parse_forward_model(output_path_root, do_orders[o], ispec + 1)
-            rms[o, ispec, :] = [fwm.opt[k][0] for k in range(n_iters)]
-        
-    return rms
-
-def parameter_unpack(pars, iter_indexes):
-    
-    n_orders, n_spec, n_iters = pars.shape
-    n_pars = len(pars[0, 0, 0].keys())
-    pars_unpacked = np.empty(shape=(n_orders, n_spec, n_pars), dtype=float)
-    varies_unpacked = np.empty(shape=(n_orders, n_spec, n_pars), dtype=bool)
-    for o in range(n_orders):
-        for ispec in range(n_spec):
-            pars_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['value']
-            varies_unpacked[o, ispec, :] = pars[o, ispec, iter_indexes[o]].unpack()['vary']
-                
-    return pars_unpacked, varies_unpacked
-
-def parse_parameters(output_path_root, do_orders=None):
-    
-    if do_orders is None:
-        do_order = get_orders(output_path_root)
-        
-    n_orders = len(do_orders)
-    fwm0 = parse_forward_model(output_path_root, do_orders[0], 1)
-    n_spec = len(glob.glob(output_path_root + 'Order' + str(do_orders[0]) +  os.sep + 'Fits' + os.sep + '*.pkl'))
-    n_iters_pars = fwm0.n_template_fits + (not fwm0.models_dict['star'].from_synthetic)
-    pars = np.empty(shape=(n_orders, n_spec, n_iters_pars), dtype=object)
-    for o in range(n_orders):
-        for ispec in range(n_spec):
-            fwm = parse_forward_model(output_path_root, do_orders[o], ispec + 1)
-            pars[o, ispec, :] = [fwm.best_fit_pars[k] for k in range(n_iters_pars)]
-            
-    return pars
+        return do_orders

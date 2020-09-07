@@ -1,4 +1,4 @@
-import pychell.rvs.post_parser as parser
+import pychell.rvs.post_parser as pcparser
 import pychell.rvs.rvcalc as pcrvcalc
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,6 +13,80 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 import datetime
 from pdb import set_trace as stop
 
+
+# Super Duper RV precision analysis
+def rvsprec(parsers, teffs, templates=None):
+    
+    # Number of targets
+    n_targets = len(parsers)
+    
+    if templates is None:
+        templates = ['star']
+    
+    # SNR for each target, for all orders, observations, and spectra
+    snrs = [1 / p.parse_rms() for p in parsers]
+    
+    # Parse RVs
+    rvs_dicts = [p.parse_rvs() for p in parsers]
+    
+    # Compute approx nightly snrs for all targets, orders, obs, all orders
+    print('Computing nightly S/N and RV prec')
+    nightly_snrs = []
+    nightly_snrs_all_orders = []
+    rvs_unc = []
+    rvs_unc_all_orders = []
+    for ip, p in enumerate(parsers):
+        nightly_snrs.append(np.zeros(shape=(p.n_orders, p.n_nights)))
+        nightly_snrs_all_orders.append(np.zeros(p.n_nights))
+        for o in range(p.n_orders):
+            f, l = 0, p.n_obs_nights[0]
+            for inight in range(p.n_nights):
+                rvs_unc
+                nightly_snrs[ip][inight] = np.sum(snrs[ip][o, f:l, -1]**2)**0.5
+                nightly_snrs_all_orders[ip][inight] = np.sum(snrs[ip][:, f:l, -1]**2)**0.5
+                
+                
+    # Fit S/N
+    snrmodels = []
+    for p in parsers:
+        init_pars = np.array([np.nanmean(rvprec * (snr - np.nanmin(rvprec))), np.nanmin(rvprec)])
+        solver = NelderMead(pcmath.rms_loss_creator(snrmodel), init_pars, args_to_pass=(snr, rvprec))
+        opt_result = solver.solve()
+        best_pars = opt_result[0]
+        plot_min, plot_max = np.max([np.nanmin(snr) - 10, 1]), np.nanmax(snr) + 10
+        snr_hrgrid = np.arange(opt_result.min() - 10, opt_result.max(), 0.1)
+        model = rvprecsnrmodel(snr_hrgrid, *best_pars)
+        
+        plt.plot(snr, rvprec, marker='.', lw=0, alpha=0.5)
+        plt.plot(snr_hrgrid, model, c='black')
+        plt.title('$S/N$')
+        plt.show()
+                
+    # Compute RV content of each order if set
+    print('Computing Effective Noise limit from S/N and Template(s) of fits')
+    rvcs = []
+    for ip, p in enumerate(parser):
+        rvcs.append(np.zeros(p.n_orders))
+        stellar_templates = p.parse_stellar_templates()
+        for o in range(p.n_orders):
+            bad = np.where(p.forward_models[o][0].data.mask == 0)[0]
+            wave = p.forward_models[o][0].models_dict['wavelength_solution'].build(forward_models[o][0].initial_parameters)
+            wave[bad] = np.nan
+            rvc = np.zeros(len(templates))
+            for i, t in enumerate(templates):
+                if t == 'star':
+                    _, rvc[i] = pcrvcalc.compute_rv_content(stellar_templates[o][:, 0], stellar_templates[o][:, 1], snr=nightly_snrs[ip][o], blaze=True, ron=0, width=forward_models[o].initial_parameters[forward_models[o][0].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
+                else:
+                    _, rvc[i] = pcrvcalc.compute_rv_content(p.forward_models[o].templates_dicts[o][t][:, 0], p.forward_models[o].templates_dicts[t][:, 1], snr=nightly_snrs[ip][o], blaze=True, ron=0,width=p.forward_models[o][0].initial_parameters[p.forward_models[o][0].models_dict['lsf'].par_names[0]].value, sampling=None, wave_to_sample=wave)
+                    
+            rvcs[ip][o] = np.nansum(rvc**2)**0.5
+        
+
+    
+def rvprecsnrmodel(x, A, B):
+    return A / x + B
+    
+    
 def combine_stellar_templates(output_path_root, do_orders=None, iter_index=None):
     
     if do_orders is None:
@@ -20,7 +94,7 @@ def combine_stellar_templates(output_path_root, do_orders=None, iter_index=None)
         
     n_orders = len(do_orders)
     
-    stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indexes=[iter_index]*n_orders)
+    stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indices=[iter_index]*n_orders)
     nxs = np.array([stellar_templates[o][:, 0].size for o in range(n_orders)])
     wave_min, wave_max = np.nanmin(stellar_templates[0][:, 0]), np.nanmax(stellar_templates[-1][:, 0])
     nx_master = int(np.average(nxs) * n_orders)
@@ -127,11 +201,11 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
             
     # Determine which iteration to use
     if iter_index is None:
-        iter_indexes = np.zeros(n_orders).astype(int) + n_iters - 1
+        iter_indices = np.zeros(n_orders).astype(int) + n_iters - 1
     elif iter_index == 'best':
-        _, iter_indexes = get_best_iterations(rvs_dict, xcorr)
+        _, iter_indices = get_best_iterations(rvs_dict, xcorr)
     else:
-        iter_indexes = np.zeros(n_orders).astype(int) + iter_index
+        iter_indices = np.zeros(n_orders).astype(int) + iter_index
     
     # Get for RVs for the desired iterations
     rvs = np.zeros((n_orders, n_spec))
@@ -139,21 +213,21 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     rvs_nightly = np.zeros((n_orders, n_nights))
     for o in range(n_orders):
         if xcorr:
-            rvs[o, :] = rvs_dict['rvsx'][o, :, iter_indexes[o]]
-            rvs_nightly[o, :] = rvs_dict['rvsx_nightly'][o, :, iter_indexes[o]]
-            unc_nightly[o, :] = rvs_dict['uncx_nightly'][o, :, iter_indexes[o]]
+            rvs[o, :] = rvs_dict['rvsx'][o, :, iter_indices[o]]
+            rvs_nightly[o, :] = rvs_dict['rvsx_nightly'][o, :, iter_indices[o]]
+            unc_nightly[o, :] = rvs_dict['uncx_nightly'][o, :, iter_indices[o]]
         else:
-            rvs[o, :] = rvs_dict['rvs'][o, :, iter_indexes[o]]
-            rvs_nightly[o, :] = rvs_dict['rvs_nightly'][o, :, iter_indexes[o]]
-            unc_nightly[o, :] = rvs_dict['unc_nightly'][o, :, iter_indexes[o]]
+            rvs[o, :] = rvs_dict['rvs'][o, :, iter_indices[o]]
+            rvs_nightly[o, :] = rvs_dict['rvs_nightly'][o, :, iter_indices[o]]
+            unc_nightly[o, :] = rvs_dict['unc_nightly'][o, :, iter_indices[o]]
         
     # Summary of rvs
-    print_rv_summary(rvs_dict, bad_rvs_dict, do_orders, iter_indexes, xcorr)
+    print_rv_summary(rvs_dict, bad_rvs_dict, do_orders, iter_indices, xcorr)
         
     # Get rms for all orders x spectra
     rms = np.zeros((n_orders, n_spec))
     for o in range(n_orders):
-        rms[o, :] = rms_all[o, :, iter_indexes[o] + index_offset]
+        rms[o, :] = rms_all[o, :, iter_indices[o] + index_offset]
         
     # S / N
     snrs = np.nanmedian(1 / rms, axis=1)
@@ -174,7 +248,7 @@ def combine_rvs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_index=
     # Compute RV content of each order if set
     if templates is not None and len(templates) > 0:
         rvcs = np.zeros(n_orders)
-        stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indexes=iter_indexes)
+        stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indices=iter_indices)
         for o in range(n_orders):
             bad = np.where(forward_models[o, 0].data.mask == 0)[0]
             wave = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].initial_parameters)
@@ -276,7 +350,7 @@ def gen_rv_mask_single_order(bad_rvs_dict, n_obs_nights):
     
     return mask
 
-def print_rv_summary(rvs_dict, bad_rvs_dict, do_orders, iter_indexes, xcorr):
+def print_rv_summary(rvs_dict, bad_rvs_dict, do_orders, iter_indices, xcorr):
     
     n_ord, _, n_iters = rvs_dict['rvs'].shape
     n_obs_nights = rvs_dict['n_obs_nights']
@@ -288,7 +362,7 @@ def print_rv_summary(rvs_dict, bad_rvs_dict, do_orders, iter_indexes, xcorr):
                 stddev = np.nanstd(rvs_dict['rvsx_nightly'][o, :, k])
             else:
                 stddev = np.nanstd(rvs_dict['rvs_nightly'][o, :, k])
-            if k == iter_indexes[o]:
+            if k == iter_indices[o]:
                 print(' ** Iteration ' +  str(k + 1) + ': ' + str(round(stddev, 4)) + ' m/s')
             else:
                 print('    Iteration ' +  str(k + 1) + ': ' + str(round(stddev, 4)) + ' m/s')
@@ -411,21 +485,21 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
     
     # Determine which iteration to use
     if iter_index is None:
-        iter_indexes = np.zeros(n_orders).astype(int) + n_iters_rvs - 1
+        iter_indices = np.zeros(n_orders).astype(int) + n_iters_rvs - 1
     elif iter_index == 'best':
-        _, iter_indexes = get_best_iterations(rvs_dict, xcorr)
+        _, iter_indices = get_best_iterations(rvs_dict, xcorr)
     else:
-        iter_indexes = np.zeros(n_orders).astype(int) + iter_index
+        iter_indices = np.zeros(n_orders).astype(int) + iter_index
     
     for o in range(n_orders):
         
-        vp = forward_models[o, 0].opt_results[iter_indexes[o] + index_offset][0].unpack(keys='vary')['vary']
+        vp = forward_models[o, 0].opt_results[iter_indices[o] + index_offset][0].unpack(keys='vary')['vary']
         vpi = np.where(vp)[0]
         nv = vpi.size
         
         pars = np.empty(shape=(n_spec, n_iters_pars, nv), dtype=object)
         par_vals = np.full(shape=(n_spec, n_iters_pars, nv), dtype=float, fill_value=np.nan)
-        par_names = list(forward_models[o, 0].opt_results[iter_indexes[o] + index_offset][0].keys())
+        par_names = list(forward_models[o, 0].opt_results[iter_indices[o] + index_offset][0].keys())
         par_names = [par_names[v] for v in vpi]
         for ispec in range(n_spec):
             for j in range(n_iters_pars):
@@ -451,7 +525,7 @@ def parameter_corrs(output_path_root, bad_rvs_dict=None, do_orders=None, iter_in
                 for ispec in range(n_spec):
                     axarr[row, col].plot(rvs_dict['rvs'][o, ispec, -n_iters_plot:], par_vals[ispec, -n_iters_plot:, k], alpha=0.7, c='powderblue', lw=0.7)
                 
-                axarr[row, col].plot(rvs_dict['rvs'][o, :, iter_indexes[o]], par_vals[:, iter_indexes[o] + index_offset, k], marker='.', lw=0, c='black', markersize=8)
+                axarr[row, col].plot(rvs_dict['rvs'][o, :, iter_indices[o]], par_vals[:, iter_indices[o] + index_offset, k], marker='.', lw=0, c='black', markersize=8)
                 axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
                 axarr[row, col].set_ylabel(par_names[k].replace('_', ' '), fontsize=4)
                 axarr[row, col].tick_params(axis='both', which='major', labelsize=4)
@@ -500,7 +574,7 @@ def plot_final_rvs(star_name, spectrograph, bjds, bjds_nightly, rvs_single, unc_
         if fname is not None:
             plt.savefig(fname)
             
-def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_templates, do_orders, iter_indexes, unit='Ang'):
+def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_templates, do_orders, iter_indices, unit='Ang'):
     
     if unit == 'microns':
         factor = 1E-4
@@ -516,7 +590,7 @@ def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_temp
     
     for o in range(n_orders):
         axarr[o].plot(stellar_templates[o][:, 0] * factor, stellar_templates[o][:, 1])
-        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indices[o] + 1), fontsize=8)
         axarr[o].tick_params(axis='both', labelsize=10)
     axarr[-1].set_xlabel('Wavelength [' + unit + ']')
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
@@ -527,13 +601,13 @@ def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_temp
     plt.close()
             
 
-def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, frame='star', templates=[], unit='Ang', debug=False, star_name=None, nsample=1):
+def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indices, frame='star', templates=[], unit='Ang', debug=False, star_name=None, nsample=1):
     
     n_orders = len(do_orders)
     
     forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
     
-    stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indexes=iter_indexes)
+    stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indices=iter_indices)
     
     templates_dicts = parser.parse_templates(output_path_root, do_orders=do_orders)
     
@@ -563,31 +637,31 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
             
             if frame == 'star':
                 
-                if iter_indexes[o] == 0 and not forward_models[o, i].models_dict['star'].from_synthetic:
+                if iter_indices[o] == 0 and not forward_models[o, i].models_dict['star'].from_synthetic:
                     vel = forward_models[o, i].data.bc_vel
                 else:
-                    vel = -1 * forward_models[o, i].opt_results[iter_indexes[o]][0][forward_models[o, i].models_dict['star'].par_names[0]].value
+                    vel = -1 * forward_models[o, i].opt_results[iter_indices[o]][0][forward_models[o, i].models_dict['star'].par_names[0]].value
                     
                 # Shift the residuals
-                wave_shifted = forward_models[o, i].wavelength_solutions[iter_indexes[o]] * np.exp(vel / cs.c)
+                wave_shifted = forward_models[o, i].wavelength_solutions[iter_indices[o]] * np.exp(vel / cs.c)
             
                 # Interpolate for sanity / consistency
-                good = np.where(np.isfinite(forward_models[o, i].residuals[iter_indexes[o]]) & np.isfinite(wave_shifted))[0]
-                residuals_shifted = scipy.interpolate.CubicSpline(wave_shifted[good], forward_models[o, i].residuals[iter_indexes[o]][good], extrapolate=False)(star_wave)
+                good = np.where(np.isfinite(forward_models[o, i].residuals[iter_indices[o]]) & np.isfinite(wave_shifted))[0]
+                residuals_shifted = scipy.interpolate.CubicSpline(wave_shifted[good], forward_models[o, i].residuals[iter_indices[o]][good], extrapolate=False)(star_wave)
                 res[i, :] = residuals_shifted
                 
                 # Plot
-                axarr[o].plot(wave_shifted * factor, forward_models[o, i].residuals[iter_indexes[o]], alpha=0.7)
+                axarr[o].plot(wave_shifted * factor, forward_models[o, i].residuals[iter_indices[o]], alpha=0.7)
                 
             else:
                 
-                good = np.where(np.isfinite(forward_models[o, i].residuals[iter_indexes[o]]) & np.isfinite(forward_models[o, i].wavelength_solutions[iter_indexes[o]]))[0]
-                residuals_interp = scipy.interpolate.CubicSpline(forward_models[o, i].wavelength_solutions[iter_indexes[o]][good], forward_models[o, i].residuals[iter_indexes[o]][good], extrapolate=False)(star_wave)
+                good = np.where(np.isfinite(forward_models[o, i].residuals[iter_indices[o]]) & np.isfinite(forward_models[o, i].wavelength_solutions[iter_indices[o]]))[0]
+                residuals_interp = scipy.interpolate.CubicSpline(forward_models[o, i].wavelength_solutions[iter_indices[o]][good], forward_models[o, i].residuals[iter_indices[o]][good], extrapolate=False)(star_wave)
                 
                 res[i, :] = residuals_interp
 
                 # Plot
-                axarr[o].plot(forward_models[o, i].wavelength_solutions[iter_indexes[o]] * factor, forward_models[o, i].residuals[iter_indexes[o]], alpha=0.7)
+                axarr[o].plot(forward_models[o, i].wavelength_solutions[iter_indices[o]] * factor, forward_models[o, i].residuals[iter_indices[o]], alpha=0.7)
         
         for t in templates:
             if type(templates_dicts[o][t]) is dict:
@@ -612,7 +686,7 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
                 
         axarr[o].plot(star_wave * factor, np.nanmedian(res, axis=0), c='black')
             
-        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indices[o] + 1), fontsize=8)
         axarr[o].tick_params(axis='both', labelsize=10)
         axarr[o].legend()
     axarr[-1].set_xlabel('Wavelength [' + unit + ']')
@@ -630,7 +704,7 @@ def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indexes, 
     
     
     
-def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indexes, debug=False, star_name=None, forward_models=None):
+def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indices, debug=False, star_name=None, forward_models=None):
     
     # Load forward models
     if forward_models is None:
@@ -656,7 +730,7 @@ def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indexes, debug=F
             
             # Build LSF
             x = forward_models[o, i].models_dict['lsf'].x
-            lsf = forward_models[o, i].models_dict['lsf'].build(pars=forward_models[o, i].opt_results[iter_indexes[o]][0])
+            lsf = forward_models[o, i].models_dict['lsf'].build(pars=forward_models[o, i].opt_results[iter_indices[o]][0])
             
             # Plot
             axarr[o].plot(x, lsf, alpha=0.7)
@@ -668,7 +742,7 @@ def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indexes, debug=F
         good = np.where(lsfs[:, 0] / np.nanmax(lsfs[:, 0]) > 1E-6)[0]
         f, l = x[good[0]], x[good[-1]]
             
-        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indices[o] + 1), fontsize=8)
         axarr[o].tick_params(axis='both', labelsize=10)
         axarr[o].set_xlabel('Wavelength [Ang], Mean $\lambda=$' + str(round(np.nanmean(templates_dicts[o]['star'][:, 0]), 3)))
         axarr[o].set_xlim(f, l)
@@ -686,7 +760,7 @@ def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indexes, debug=F
     return forward_models
     
     
-def inspect_wls(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_name=None, debug=False, forward_models=None):
+def inspect_wls(output_path_root, do_orders, bad_rvs_dict, iter_indices, star_name=None, debug=False, forward_models=None):
     
     # Load forward models
     if forward_models is None:
@@ -709,7 +783,7 @@ def inspect_wls(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_na
         for i in range(n_spec):
             
             # Build wls
-            wls = forward_models[o, i].models_dict['wavelength_solution'].build(forward_models[o, i].opt_results[iter_indexes[o]][0])
+            wls = forward_models[o, i].models_dict['wavelength_solution'].build(forward_models[o, i].opt_results[iter_indices[o]][0])
             wlss[:, i] = wls
             
         mwls = np.nanmedian(wlss, axis=1)
@@ -719,7 +793,7 @@ def inspect_wls(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_na
             # Plot
             axarr[o].plot(pix, mwls - wlss[:, i], alpha=0.7)
             
-        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indices[o] + 1), fontsize=8)
         axarr[o].tick_params(axis='both', labelsize=10)
     axarr[-1].set_xlabel('Detector Pixels')
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
@@ -735,7 +809,7 @@ def inspect_wls(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_na
     
     return forward_models
     
-def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_name=None, debug=False, forward_models=None):
+def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indices, star_name=None, debug=False, forward_models=None):
     
     # Load forward models
     if forward_models is None:
@@ -751,7 +825,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_
     
     for o in range(n_orders):
         
-        x = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].opt_results[iter_indexes[o]][0])
+        x = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].opt_results[iter_indices[o]][0])
         nx = x.size
         
         blazes = np.zeros((nx, n_spec))
@@ -759,7 +833,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_
         for i in range(n_spec):
             
             # Build blaze
-            blaze = forward_models[o, i].models_dict['blaze'].build(forward_models[o, i].opt_results[iter_indexes[o]][0], x)
+            blaze = forward_models[o, i].models_dict['blaze'].build(forward_models[o, i].opt_results[iter_indices[o]][0], x)
             
             # Plot
             axarr[o].plot(x, blaze, alpha=0.7)
@@ -768,7 +842,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_
             
         axarr[o].plot(x, np.nanmedian(blazes, axis=1), c='black')
             
-        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indexes[o] + 1), fontsize=8)
+        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indices[o] + 1), fontsize=8)
         axarr[o].tick_params(axis='both', labelsize=10)
     axarr[-1].set_xlabel('Wavelength [Ang]')
     plt.subplots_adjust(left=0.15, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
@@ -785,7 +859,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indexes, star_
 
 
             
-def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=False, flag=False, phase_to=None, debug=False, tc=None, thresh=5):
+def rvs_quicklook(parser, bad_rvs_dict, iter_index, xcorr=False, flag=False, phase_to=None, debug=False, tc=None, thresh=None):
     
     if phase_to is None:
         _phase_to = 1E20
@@ -798,7 +872,7 @@ def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=F
         alpha = tc - phase_to / 2
     
     # Parse RVs
-    rvs_dict = parser.parse_rvs(output_path_root, do_orders)
+    rvs_dict = parser.parse_rvs()
     
     # Numbers
     n_orders, n_spec, n_iters = rvs_dict['rvs'].shape
@@ -806,17 +880,18 @@ def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=F
     bjds, bjdsn = rvs_dict['BJDS'], rvs_dict['BJDS_nightly']
     n_nights = len(n_obs_nights)
     
-    iter_indexes = np.zeros(n_spec)
-    print_rv_summary(rvs_dict, {}, do_orders, iter_indexes, xcorr=xcorr)
+    # Print summary
+    print_rv_summary(rvs_dict, bad_rvs_dict, do_orders, [iter_index]*n_orders, xcorr=xcorr)
     
     # Generate mask
     rvs_dict, mask = gen_rv_mask(rvs_dict, bad_rvs_dict)
     
-    # Get RVs
+    # Get single order RVs, simple median offset
     rvs = np.zeros((n_orders, n_spec))
     rvsn = np.zeros((n_orders, n_nights))
     uncn = np.zeros((n_orders, n_nights))
     weights = np.zeros((n_orders, n_spec))
+    
     for o in range(n_orders):
         if xcorr:
             rvs[o, :] = rvs_dict['rvsx'][o, :, iter_index] - np.nanmedian(rvs_dict['rvsx'][o, :, iter_index])
@@ -826,7 +901,7 @@ def rvs_quicklook(output_path_root, do_orders, bad_rvs_dict, iter_index, xcorr=F
             rvs[o, :] = rvs_dict['rvs'][o, :, iter_index] - np.nanmedian(rvs_dict['rvs'][o, :, iter_index])
             rvsn[o, :] = rvs_dict['rvs_nightly'][o, :, iter_index] - np.nanmedian(rvs_dict['rvs_nightly'][o, :, iter_index])
             uncn[o, :] = rvs_dict['unc_nightly'][o, :, iter_index]
-        
+            
         f, l = 0, n_obs_nights[0]
         for inight in range(n_nights):
             weights[o, f:l] = mask[o, f:l] * 1 / uncn[o, inight]**2

@@ -160,10 +160,10 @@ forward_model_blueprints = {
     # Determined by splines
     'wavelength_solution': {
         
-        #'name': 'csplines_wavesol',
-        #'class_name': 'SplineWavelengthSolution',
-        'name': 'leg_wavesol',
-        'class_name': 'LegPolyWavelengthSolution',
+        'name': 'csplines_wavesol',
+        'class_name': 'SplineWavelengthSolution',
+        #'name': 'leg_wavesol',
+        #'class_name': 'LegPolyWavelengthSolution',
         'poly_order': 2,
         
         # The three pixels to span the detector corresponding to the above wavelengths
@@ -181,8 +181,8 @@ forward_model_blueprints = {
         'quad_set_point_3': [24705.72472863, 24590.91231465, 24476.99298677, 24364.12010878, 24252.31443701, 24141.55527091, 24031.82506843, 23923.12291214, 23815.40789995, 23708.70106907, 23602.95596074, 23498.18607941, 23394.35163611, 23291.44815827, 23189.49231662, 23088.42080084, 22988.26540094, 22888.97654584, 22790.57559244, 22693.02942496, 22596.33915038, 22500.49456757, 22405.49547495, 22311.25574559, 22217.91297633, 22125.33774808, 22033.50356525, 21942.41058186, 21852.24253555],
         
         'n_splines': 6, # Relevant for Spline Model
-        'poly_lagrange': [-0.35, -0.05, 0.2],
-        'spline': [-0.5, 0.01, 0.5]
+        'poly_lagrange': [-0.35, -0.05, 0.35],
+        'spline': [-0.35, 0.01, 0.35]
     },
     
     # Fabry Perot cavity with two parameters

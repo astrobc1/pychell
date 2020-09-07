@@ -88,8 +88,8 @@ forward_model_blueprints = {
         'name': 'lsf_hermite',
         'class_name': 'HermiteLSF',
         'hermdeg': 0,
-        'n_delay': 0,
-        'width': [0.023, 0.0234, 0.0235], # LSF width, in angstroms
+        'n_delay': 1,
+        'width': [0.0234, 0.0234, 0.0234], # LSF width, in angstroms
         'ak': [-0.03, 0.001, 0.2] # Hermite polynomial coefficients
     },
     
