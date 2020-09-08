@@ -6,7 +6,7 @@ from pdb import set_trace as stop
 
 class PostParser:
     
-    def __init__(output_path_root, do_orders=None):
+    def __init__(output_path_root, do_orders=None, bad_rvs_dict=None, star_name=None):
         
         self.output_path_root
 
@@ -17,6 +17,9 @@ class PostParser:
             
         self.do_orders = np.atleast_1d(self.do_orders)
         self.n_orders = len(self.do_orders)
+        
+        self.bad_rvs_dict = {} if bad_rvs_dict is None else bad_rvs_dict
+        self.star_name = star_name
             
     def parse_forward_models(self):
         self.forward_models = []
@@ -34,6 +37,9 @@ class PostParser:
         self.index_offset = int(not self.forward_models[0].models_dict['star'].from_synthetic)
         self.n_iters_rvs = self.forward_models[0].n_template_fits
         self.n_iters_opt = self.n_iters_rvs + self.index_offset
+        self.tag = self.forward_models[0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
+        self.index_offset = int(not self.forward_models.models_dict['star'].from_synthetic)
+        self.spectrograph = forward_models[0].spectrograph
 
     def parse_rms(self):
         
@@ -82,8 +88,13 @@ class PostParser:
                     
         return pars_numpy_vals, pars_numpy_minvs, pars_numpy_maxvs, pars_numpy_varies, pars_numpy_unc
 
-    def parse_rvs(output_path_root, do_orders=None):
+    def parse_rvs(self, xcorr):
     
+        # If exists, return
+        if hasattr(self, 'rvs_dict'):
+            return self.rvs_dict
+        
+        # Define new dictionary to only get rvs, not ccf info
         rvs_dict = {}
     
         # Load in a single forward model object to determine if x corr is set
@@ -126,9 +137,64 @@ class PostParser:
         self.rvs_dict = rvs_dict
 
         return self.rvs_dict
+    
+    
+    def get_rvs_from_iters(self, iter_indices='best', xcorr=False):
+        
+        # Get rvs if not set
+        if not hasattr(self, 'rvs_dict'):
+            self.parse_rvs()
+            
+        if iter_indices == 'best':
+            iter_indices = self.get_best_iters(xcorr=xcorr)
+        elif type(iter_indices) is int:
+            _, iter_indices = [iter_indices] * self.n_orders
+            
+        # Get for RVs for the desired iterations
+        rvs = np.zeros((self.n_orders, self.n_spec))
+        if xcorr:
+            rvs_unc = np.zeros((self.n_orders, self.n_spec))
+        unc_nightly = np.zeros((self.n_orders, self.n_nights))
+        rvs_nightly = np.zeros((self.n_orders, self.n_nights))
+        for o in range(self.n_orders):
+            if xcorr:
+                rvs[o, :] = rvs_dict['rvsx'][o, :, iter_indices[o]]
+                rvs_unc[o, :] = rvs_dict['rvsx_unc'][o, :, iter_indices[o]]
+                rvs_nightly[o, :] = rvs_dict['rvsx_nightly'][o, :, iter_indices[o]]
+                unc_nightly[o, :] = rvs_dict['uncx_nightly'][o, :, iter_indices[o]]
+            else:
+                rvs[o, :] = rvs_dict['rvs'][o, :, iter_indices[o]]
+                rvs_nightly[o, :] = rvs_dict['rvs_nightly'][o, :, iter_indices[o]]
+                unc_nightly[o, :] = rvs_dict['unc_nightly'][o, :, iter_indices[o]]
+                
+        if xcorr:
+            rvs_sub_dict = {'rvs': rvs, 'rvs_unc': rvs_unc, 'rvs_nightly': rvs_nightly, 'unc_nightly': unc_nightly}
+        else:
+            rvs_sub_dict = {'rvs': rvs, 'rvs_nightly': rvs_nightly, 'unc_nightly': unc_nightly}
+        
+        return rvs_sub_dict
+            
+    def get_best_iters(self, xcorr=False):
+        
+        best_iters = np.zeros(self.n_orders, dtype=int)
+        best_stddevs = np.zeros(self.n_orders, dtype=int)
+        
+        for o in range(self.n_orders):
+            stddevs = np.full(self.n_iters_rvs, fill_value=np.nan)
+            for k in range(self.n_iters_rvs):
+                if xcorr:
+                    stddevs[k] = np.nanstd(self.rvs_dict['rvsx_nightly'][o, :, k])
+                else:
+                    stddevs[k] = np.nanstd(self.rvs_dict['rvs_nightly'][o, :, k])
+            best_iters[o] = np.nanargmin(stddevs)
+            best_stddevs[o] = stddevs[best_iters[o]]
+        return stddevs, best_iters
+            
 
     @staticmethod
     def get_orders(output_path_root):
         orders_found = glob.glob(output_path_root + "Order*" + os.sep)
         do_orders = np.array([int(o[5:]) for o in orders_found])
         return do_orders
+    
+    

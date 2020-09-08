@@ -549,7 +549,7 @@ def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_o
                 rvlij[l, i, j] = rvs_nightly[l, i] - rvs_nightly[l, j]
                 unclij[l, i, j] = unc_nightly[l, i] * unc_nightly[l, j]
                 
-    
+                
     wlij = np.zeros((n_orders, n_nights, n_nights))
     for l in range(n_orders):
         for i in range(n_nights):
@@ -569,7 +569,7 @@ def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_o
     return np.copy(rvs[0, :]), np.zeros(n_spec) + 10, rvi, unci
 
 
-def compute_relative_rvs_from_all(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
+def combine_relative_rvs(rvs, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points
 
     Args:

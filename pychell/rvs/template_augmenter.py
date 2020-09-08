@@ -251,7 +251,7 @@ def weighted_median(forward_models, iter_index=None):
         tell_weights = tell_flux_hrc**2
         
         # HR Mask
-        mask_hr = np.interp(wave_star_rest, wave_data, fwm.data.mask, left=0, right=0)
+        mask_hr = np.interp(current_stellar_template[:, 0], wave_star_rest, fwm.data.mask, left=0, right=0)
         bad = np.where(mask_hr < 1)[0]
         if bad.size > 0:
             mask_hr[bad] = 0
