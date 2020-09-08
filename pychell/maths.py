@@ -350,8 +350,8 @@ def convolve_flux(wave, flux, R=None, width=None, interp=None, lsf=None, croplsf
         nlsf = goodlsf.size
         if nlsf % 2 == 0:
             nlsf += 1
-        xlsf = np.arange(np.floor(-nlsf / 2), np.floor(nlsf / 2) + 1) * dl
-        
+        xlsf = np.arange(-np.floor(nlsf / 2), np.floor(nlsf / 2) + 1) * dl
+
         # Construct and sum-normalize LSF
         lsf = np.exp(-0.5 * (xlsf / sig)**2)
         lsf /= np.nansum(lsf)

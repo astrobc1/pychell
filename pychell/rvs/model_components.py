@@ -775,7 +775,7 @@ class LSF(SpectralComponent):
             self.nx_lsf = goodlsf.size
             if self.nx_lsf % 2 == 0:
                 self.nx_lsf += 1
-            self.x = np.arange(np.floor(-self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1) * self.dl
+            self.x = np.arange(-np.floor(self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1) * self.dl
 
 
 class HermiteLSF(LSF):
