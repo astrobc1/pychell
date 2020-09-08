@@ -129,11 +129,14 @@ def weighted_brute_force(forward_model, templates_dict, iter_index):
     # Fit with a polynomial
     # Include 3 points on each side of min vel
     use = np.arange(M-3, M+3).astype(int)
-    pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
-    xcorr_rv = pfit[1] / (-2 * pfit[0])
+    try:
+        pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
+        xcorr_rv = pfit[1] / (-2 * pfit[0])
     
-    # Estimate uncertainty
-    xcorr_rv_unc = ccf_uncertainty(vels_for_rv, rmss, xcorr_rv_init, forward_model.data.mask.sum())
+        # Estimate uncertainty
+        xcorr_rv_unc = ccf_uncertainty(vels_for_rv, rmss, xcorr_rv_init, forward_model.data.mask.sum())
+    except:
+        return vels_for_rv, rmss, np.nan, np.nan, np.nan
     
     # Bisector span
     try:
@@ -277,7 +280,7 @@ def rv_solver_fast(pars, rvs, weights, n_obs_nights):
     return rms
  
 # Computes the RV content per pixel.
-def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=None, sampling=None, wave_to_sample=None):
+def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=None, sampling=None, wave_to_sample=None, lsf=None):
     """Computes the radial-velocity information content per pixel and for a whole swath.
 
     Args:
@@ -301,9 +304,13 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
     # Convert to PE
     fluxmod *= snr**2
     
-    if R is not None:
-        fluxmod = pcmath.convolve_flux(wavemod, fluxmod, R=R)
+    # Convolve
+    if R is not None or width is not None:
+        fluxmod = pcmath.convolve_flux(wavemod, fluxmod, R=R, width=width)
+    elif lsf is not None:
+        fluxmod = pcmath.convolve_flux(wavemod, fluxmod, lsf=lsf)
         
+    # Blaze modulation
     if blaze:
         good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
         ng = good.size
@@ -312,6 +319,7 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
         blz = np.polyval(pfit, wavemod)
         fluxmod *= blz
         
+    # Downsample to detector grid
     if sampling is not None:
         good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
         wave_new = np.arange(wavemod[0], wavemod[-1] + sampling, sampling)
@@ -326,6 +334,7 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
         fluxmod = fluxnew
         wavemod = wave_to_sample
         
+    # Compute rv content
     nx = wavemod.size
     rvc_per_pix = np.full(nx, dtype=np.float64, fill_value=np.nan)
     good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
@@ -333,7 +342,11 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
     flux_spline = scipy.interpolate.CubicSpline(wavemod[good], fluxmod[good], extrapolate=False)
     for i in range(nx):
         if i in good:
+            
+            # Derivative
             slope = flux_spline(wavemod[i], 1)
+            
+            # Compute rvc per pixel
             if not (not np.isfinite(slope) or slope == 0 or not np.isfinite(fluxmod[i])):
                 rvc_per_pix[i] = cs.c * np.sqrt(fluxmod[i] + ron**2) / (wavemod[i] * np.abs(slope))
 

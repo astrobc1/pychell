@@ -18,6 +18,9 @@ except:
 from astropy.coordinates import SkyCoord
 import astropy.units as units
 
+# Graphics for debugging
+import matplotlib.pyplot as plt
+
 # LLVM
 from numba import jit, njit, prange
 import numba
@@ -285,55 +288,96 @@ def median_filter2d(x, width, preserve_nans=True):
         
     return out
 
-def convolve_flux(wave, flux, R=None, width=None, compress=64, uniform=False):
-    """Convolves flux with a simple Gaussian.
+
+def convolve_flux(wave, flux, R=None, width=None, interp=None, lsf=None, croplsf=False):
+    """Convolves flux.
 
     Args:
-        wave (np.ndarray): [description]
-        flux (np.ndarray): [description]
+        wave (np.ndarray): The wavelength grid.
+        flux (np.ndarray): The corresponding flux to convolve.
         R (float, optional): The resolution to convolve down to. Defaults to None.
         width (float, optional): The LSF width in units of wave. Defaults to None.
         compress (int, optional): The number of LSF points is only int(nwave / compress). Defaults to 64.
         uniform (bool, optional): Whether or not the wave grid is already uniform, which is necessary for standard convolution. Defaults to False.
-
+        lsf (np.ndarray, optional): The LSF to convolve with.
     Returns:
         np.ndarray: The convolved flux
     """
     
-    good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
-    ng = good.size
-    
-    # Interpolate onto a linearly spaced grid
-    if not uniform:
-        lingrid = np.linspace(wave[good[0]], wave[good[-1]], num=ng)
-        fluxlin = scipy.interpolate.Akima1DInterpolator(wave[good], flux[good])(lingrid)
+    # Get good initial points
+    if wave is not None:
+        good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
+        wavegood, fluxgood = wave[good], flux[good]
     else:
-        lingrid, fluxlin = np.copy(wave), np.copy(flux)
+        good = np.where(np.isfinite(flux))[0]
+        wavegood, fluxgood = None, flux[good]
         
-    # The grid spacing
-    dl = lingrid[1] - lingrid[0]
+    # Whether or not to interpolate onto a uniform grid
+    if interp or interp is None and wavegood is not None:
+        interp = np.unique(np.diff(wavegood)).size > 1 or good.size < wave.size
+    else:
+        interp = False
     
-    # The mean wavelength
-    ml = np.nanmean(wave[good])
+    # Interpolate onto a uniform grid if set or values were masked
+    if interp:
+        wavelin = np.linspace(wavegood[0], wavegood[-1], num=good.size)
+        fluxlin = scipy.interpolate.CubicSpline(wavegood, fluxgood, extrapolate=False)(wavelin)
+    else:
+        wavelin, fluxlin = wavegood, fluxgood
     
-    # Number of starting points in lsf grid
-    nlsf = int(fluxlin.size / compress)
-    if nlsf % 2 != 0:
-        nlsf += 1
+    # Derive LSF from width or R
+    if lsf is None:
+        
+        # The grid spacing
+        dl = wavelin[1] - wavelin[0]
     
-    if (R is None and width is None) or (R is not None and width is not None):
-        raise ValueError("Only R or width can be set!")
+        # The mean wavelength
+        ml = np.nanmean(wavelin)
+        
+        # Sigma
+        sig = width_from_R(R, ml) if R is not None else width
     
-    # Set sigma
-    sig = width_from_R(R, ml) if R is not None else width
-    
-    # LSF grid
-    xlsf = np.arange(-nlsf / 2, nlsf / 2 + 1) * dl
+        # Initial LSF grid that's way too big
+        nlsf = int(0.1 * wavelin.size)
+        xlsf = np.arange(np.floor(-nlsf / 2), np.floor(nlsf / 2) + 1) * dl
 
-    # Construct and normalize LSF
-    lsf = np.exp(-0.5 * (xlsf / sig)**2)
-    lsf /= np.sum(lsf)
+        # Construct and max-normalize LSF
+        lsf = np.exp(-0.5 * (xlsf / sig)**2)
+        lsf /= np.nanmax(lsf)
+        
+        # Only consider > 1E-10
+        goodlsf = np.where(lsf > 1E-10)[0]
+        nlsf = goodlsf.size
+        if nlsf % 2 == 0:
+            nlsf += 1
+        xlsf = np.arange(np.floor(-nlsf / 2), np.floor(nlsf / 2) + 1) * dl
+        
+        # Construct and sum-normalize LSF
+        lsf = np.exp(-0.5 * (xlsf / sig)**2)
+        lsf /= np.nansum(lsf)
     
+    else:
+        
+        # Get the approx index of the max of the LSF
+        if croplsf:
+            lsf = lsf / np.nanmax(lsf)
+            max_ind = np.nanargmax(lsf)
+            goodlsf = np.where(lsf > 1E-10)[0]
+            nlsf = goodlsf.size
+            if nlsf % 2 == 0:
+                nlsf += 1
+            f, l = goodlsf[0], goodlsf[-1]
+            k = np.max([np.abs(f - max_loc), np.abs(l - max_loc)])
+            nlsf = 2 * k + 1
+            lsf = lsf[(max_loc - k):(max_loc + k + 1)]
+            
+        else:
+            
+            nlsf = lsf.size
+            
+    # Ensure the lsf size is odd
+    assert lsf.size % 2 == 1
+        
     # Pad
     fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2), int(nlsf / 2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
 
@@ -341,9 +385,12 @@ def convolve_flux(wave, flux, R=None, width=None, compress=64, uniform=False):
     fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
     
     # Interpolate back to the default grid
-    if not uniform:
+    if interp:
         goodlinc = np.where(np.isfinite(fluxlinc))[0]
-        fluxc = scipy.interpolate.CubicSpline(lingrid, fluxlinc, extrapolate=False)(wave)
+        fluxc = scipy.interpolate.CubicSpline(wavelin[goodlinc], fluxlinc[goodlinc], extrapolate=False)(wave)
+    elif flux.size > fluxlinc.size:
+        fluxc = np.full(flux.size, fill_value=np.nan)
+        fluxc[good] = fluxlinc
     else:
         fluxc = fluxlinc
     

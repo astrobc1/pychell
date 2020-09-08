@@ -1,17 +1,18 @@
 import numpy as np
 import pickle
 import glob
+import datetime
 import os
 from pdb import set_trace as stop
 
 class PostParser:
     
-    def __init__(output_path_root, do_orders=None, bad_rvs_dict=None, star_name=None):
+    def __init__(self, output_path_root, do_orders=None, bad_rvs_dict=None, star_name=None, xcorr=False):
         
-        self.output_path_root
+        self.output_path_root = output_path_root
 
         if do_orders is None:
-            self.do_orders = self.get_orders(self.output_path_root)
+            self.do_orders = self.get_orders()
         else:
             self.do_orders = do_orders
             
@@ -20,26 +21,27 @@ class PostParser:
         
         self.bad_rvs_dict = {} if bad_rvs_dict is None else bad_rvs_dict
         self.star_name = star_name
+        
+        self.xcorr = xcorr
             
     def parse_forward_models(self):
         self.forward_models = []
-        for o in range(n_orders):
+        for o in range(self.n_orders):
             try:
-                f = glob.glob(output_path_root + 'Orders' + str(do_orders[o]) + os.sep + '*forward_models*.pkl')[0]
-                with open(f, 'rb'):
-                    self.forward_models.append(pickle.load(f))
-                except:
-                    ValueError("Could not load forward model for order " + str(do_orders[o]))
-                    
+                f = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + '*forward_models*.pkl')[0]
+                with open(f, 'rb') as ff:
+                    self.forward_models.append(pickle.load(ff))
+            except:
+                raise ValueError("Could not load forward model for order " + str(self.do_orders[o]))
+        
         self.n_spec = self.forward_models[0].n_spec
         self.n_obs_nights = self.forward_models[0].n_obs_nights
         self.n_nights = self.forward_models[0].n_nights
-        self.index_offset = int(not self.forward_models[0].models_dict['star'].from_synthetic)
+        self.index_offset = int(not self.forward_models[0][0].models_dict['star'].from_synthetic)
         self.n_iters_rvs = self.forward_models[0].n_template_fits
         self.n_iters_opt = self.n_iters_rvs + self.index_offset
         self.tag = self.forward_models[0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
-        self.index_offset = int(not self.forward_models.models_dict['star'].from_synthetic)
-        self.spectrograph = forward_models[0].spectrograph
+        self.spectrograph = self.forward_models[0].spectrograph
 
     def parse_rms(self):
         
@@ -49,19 +51,15 @@ class PostParser:
         rms = np.empty(shape=(self.n_orders, self.n_spec, self.n_iters_opt), dtype=float)
         for o in range(self.n_orders):
             for ispec in range(self.n_spec):
-                rms[o, ispec, :] = [self.forward_models[o][ispec][k][0] for k in range(self.n_iters_opt)]
+                rms[o, ispec, :] = [self.forward_models[o][ispec].opt_results[k][1] for k in range(self.n_iters_opt)]
         
         return rms
 
-    def parse_stellar_templates(self, iter_indices=None):
-        if iter_indices is None:
-            iter_indices = [self.n_iters_rvs - 1]*self.n_orders
+    def parse_stellar_templates(self):
         stellar_templates = []
         for o in range(self.n_orders):
-            f = glob.glob(output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'Templates' + os.sep + '*stellar_templates*.npz')[0]
-            template_temp = np.load(f)['stellar_templates']
-            template = np.array([template_temp[:, 0], template_temp[:, iter_indices[o] + 1]]).T
-            stellar_templates.append(template)
+            f = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'Templates' + os.sep + '*stellar_templates*.npz')[0]
+            stellar_templates.append(np.load(f)['stellar_templates'])
         return stellar_templates
 
     def parse_parameters(self):
@@ -88,7 +86,7 @@ class PostParser:
                     
         return pars_numpy_vals, pars_numpy_minvs, pars_numpy_maxvs, pars_numpy_varies, pars_numpy_unc
 
-    def parse_rvs(self, xcorr):
+    def parse_rvs(self):
     
         # If exists, return
         if hasattr(self, 'rvs_dict'):
@@ -108,9 +106,9 @@ class PostParser:
         self.do_xcorr = rvs_dict['do_xcorr']
         
         # Create arrays
-        rvs_dict['rvs'] = np.full(shape=(self.n_orders, n_spec, n_iters), fill_value=np.nan)
-        rvs_dict['rvs_nightly'] = np.full(shape=(self.n_orders, n_nights, n_iters), fill_value=np.nan)
-        rvs_dict['unc_nightly'] = np.full(shape=(self.n_orders, n_nights, n_iters), fill_value=np.nan)
+        rvs_dict['rvs'] = np.full(shape=(self.n_orders, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
+        rvs_dict['rvs_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
+        rvs_dict['unc_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
         rvs_dict['BJDS'] = rvs0['BJDS']
         rvs_dict['BJDS_nightly'] = rvs0['BJDS_nightly']
         
@@ -123,7 +121,7 @@ class PostParser:
         # Load in rvs for each order
         for o in range(self.n_orders):
             print('Loading in RVs for Order ' + str(self.do_orders[o]))
-            fname = glob.glob(output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
+            fname = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
             rvfile = np.load(fname)
             rvs_dict['rvs'][o, :, :] = rvfile['rvs']
             rvs_dict['rvs_nightly'][o, :, :] = rvfile['rvs_nightly']
@@ -137,44 +135,8 @@ class PostParser:
         self.rvs_dict = rvs_dict
 
         return self.rvs_dict
-    
-    
-    def get_rvs_from_iters(self, iter_indices='best', xcorr=False):
-        
-        # Get rvs if not set
-        if not hasattr(self, 'rvs_dict'):
-            self.parse_rvs()
             
-        if iter_indices == 'best':
-            iter_indices = self.get_best_iters(xcorr=xcorr)
-        elif type(iter_indices) is int:
-            _, iter_indices = [iter_indices] * self.n_orders
-            
-        # Get for RVs for the desired iterations
-        rvs = np.zeros((self.n_orders, self.n_spec))
-        if xcorr:
-            rvs_unc = np.zeros((self.n_orders, self.n_spec))
-        unc_nightly = np.zeros((self.n_orders, self.n_nights))
-        rvs_nightly = np.zeros((self.n_orders, self.n_nights))
-        for o in range(self.n_orders):
-            if xcorr:
-                rvs[o, :] = rvs_dict['rvsx'][o, :, iter_indices[o]]
-                rvs_unc[o, :] = rvs_dict['rvsx_unc'][o, :, iter_indices[o]]
-                rvs_nightly[o, :] = rvs_dict['rvsx_nightly'][o, :, iter_indices[o]]
-                unc_nightly[o, :] = rvs_dict['uncx_nightly'][o, :, iter_indices[o]]
-            else:
-                rvs[o, :] = rvs_dict['rvs'][o, :, iter_indices[o]]
-                rvs_nightly[o, :] = rvs_dict['rvs_nightly'][o, :, iter_indices[o]]
-                unc_nightly[o, :] = rvs_dict['unc_nightly'][o, :, iter_indices[o]]
-                
-        if xcorr:
-            rvs_sub_dict = {'rvs': rvs, 'rvs_unc': rvs_unc, 'rvs_nightly': rvs_nightly, 'unc_nightly': unc_nightly}
-        else:
-            rvs_sub_dict = {'rvs': rvs, 'rvs_nightly': rvs_nightly, 'unc_nightly': unc_nightly}
-        
-        return rvs_sub_dict
-            
-    def get_best_iters(self, xcorr=False):
+    def get_best_iters(self):
         
         best_iters = np.zeros(self.n_orders, dtype=int)
         best_stddevs = np.zeros(self.n_orders, dtype=int)
@@ -182,19 +144,19 @@ class PostParser:
         for o in range(self.n_orders):
             stddevs = np.full(self.n_iters_rvs, fill_value=np.nan)
             for k in range(self.n_iters_rvs):
-                if xcorr:
+                if self.xcorr:
                     stddevs[k] = np.nanstd(self.rvs_dict['rvsx_nightly'][o, :, k])
                 else:
                     stddevs[k] = np.nanstd(self.rvs_dict['rvs_nightly'][o, :, k])
             best_iters[o] = np.nanargmin(stddevs)
             best_stddevs[o] = stddevs[best_iters[o]]
         return stddevs, best_iters
-            
 
-    @staticmethod
-    def get_orders(output_path_root):
-        orders_found = glob.glob(output_path_root + "Order*" + os.sep)
-        do_orders = np.array([int(o[5:]) for o in orders_found])
+
+    def get_orders(self):
+        orders_found = glob.glob(self.output_path_root + "Order*" + os.sep)
+        do_orders = np.array([int(o.split(os.sep)[-2][5:]) for o in orders_found])
+        do_orders = np.sort(do_orders)
         return do_orders
     
     

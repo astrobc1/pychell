@@ -723,11 +723,6 @@ class LSF(SpectralComponent):
 
         # The resolution of the model grid (dl = grid spacing)
         self.dl = forward_model.dl
-        
-        if 'compress' in blueprint:
-            self.compress = blueprint['compress']
-        else:
-            self.compress = 64
 
         # The number of model pixels
         self.nx_model = forward_model.n_model_pix
@@ -766,28 +761,21 @@ class LSF(SpectralComponent):
             return raw_flux
         if lsf is None:
             lsf = self.build(pars)
-        padded_flux = np.pad(raw_flux, pad_width=(self.n_pad_model, self.n_pad_model), mode='constant', constant_values=(raw_flux[0], raw_flux[-1]))
-        convolved_flux = np.convolve(padded_flux, lsf, 'valid')
+        convolved_flux = pcmath.convolve_flux(None, raw_flux, R=None, width=None, interp=False, lsf=lsf, croplsf=False)
         return convolved_flux
     
     def update(self, forward_model, iter_index):
         super().update(forward_model, iter_index)
         
     def init_optimize(self, forward_model, templates_dict):
-        lsf_estim = self.build(pars=forward_model.initial_parameters)
+        lsf_estim = pcmath.hermfun(self.x / forward_model.initial_parameters[self.par_names[0]].value, deg=0)
+        lsf_estim = lsf_estim / np.nanmax(lsf_estim)
         good = np.where(lsf_estim > 1E-10)[0]
-        if good.size < lsf_estim.size - 2:
-            return
-        else:
-            f, l = np.min(good), np.max(good)
-            nx = l - f + 1
-            if nx % 2 == 0:
-                nx += 1
-                
-            self.nx_lsf = nx
-            self.compress = int(np.round(self.nx_model * self.nx_lsf))
-            self.n_pad_model = int(np.floor(self.nx_lsf / 2))
-            self.x = np.arange(-np.floor(self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1, 1) * self.dl
+        if good.size < lsf_estim.size - 10:
+            self.nx_lsf = goodlsf.size
+            if self.nx_lsf % 2 == 0:
+                self.nx_lsf += 1
+            self.x = np.arange(np.floor(-self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1) * self.dl
 
 
 class HermiteLSF(LSF):
