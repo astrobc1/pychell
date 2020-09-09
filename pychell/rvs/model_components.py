@@ -772,7 +772,7 @@ class LSF(SpectralComponent):
         lsf_estim = lsf_estim / np.nanmax(lsf_estim)
         good = np.where(lsf_estim > 1E-10)[0]
         if good.size < lsf_estim.size - 10:
-            self.nx_lsf = goodlsf.size
+            self.nx_lsf = good.size
             if self.nx_lsf % 2 == 0:
                 self.nx_lsf += 1
             self.x = np.arange(-np.floor(self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1) * self.dl

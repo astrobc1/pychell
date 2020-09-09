@@ -7,7 +7,7 @@ from pdb import set_trace as stop
 
 class PostParser:
     
-    def __init__(self, output_path_root, do_orders=None, bad_rvs_dict=None, star_name=None, xcorr=False):
+    def __init__(self, output_path_root, do_orders=None, bad_rvs_dict=None, star_name=None, xcorr=False, **kwargs):
         
         self.output_path_root = output_path_root
 
@@ -23,44 +23,57 @@ class PostParser:
         self.star_name = star_name
         
         self.xcorr = xcorr
+        
+        # Auto populate
+        for key in kwargs:
+            setattr(self, key, kwargs[key])
             
     def parse_forward_models(self):
-        self.forward_models = []
-        for o in range(self.n_orders):
-            try:
-                f = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + '*forward_models*.pkl')[0]
-                with open(f, 'rb') as ff:
-                    self.forward_models.append(pickle.load(ff))
-            except:
-                raise ValueError("Could not load forward model for order " + str(self.do_orders[o]))
-        
-        self.n_spec = self.forward_models[0].n_spec
-        self.n_obs_nights = self.forward_models[0].n_obs_nights
-        self.n_nights = self.forward_models[0].n_nights
-        self.index_offset = int(not self.forward_models[0][0].models_dict['star'].from_synthetic)
-        self.n_iters_rvs = self.forward_models[0].n_template_fits
-        self.n_iters_opt = self.n_iters_rvs + self.index_offset
-        self.tag = self.forward_models[0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
-        self.spectrograph = self.forward_models[0].spectrograph
+        if not hasattr(self, 'forward_models'):
+            self.forward_models = []
+            for o in range(self.n_orders):
+                print('Loading in forward model for ' + os.path.basename(self.output_path_root[0:-1]) + ' , Order ' + str(self.do_orders[o]))
+                try:
+                    f = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + '*forward_models*.pkl')[0]
+                    with open(f, 'rb') as ff:
+                        self.forward_models.append(pickle.load(ff))
+                except:
+                    raise ValueError("Could not load forward model for order " + str(self.do_orders[o]))
+            
+            self.n_spec = self.forward_models[0].n_spec
+            self.n_obs_nights = self.forward_models[0].n_obs_nights
+            self.n_nights = self.forward_models[0].n_nights
+            self.index_offset = int(not self.forward_models[0][0].models_dict['star'].from_synthetic)
+            self.n_iters_rvs = self.forward_models[0].n_template_fits
+            self.n_iters_opt = self.n_iters_rvs + self.index_offset
+            self.tag = self.forward_models[0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
+            self.spectrograph = self.forward_models[0].spectrograph
 
     def parse_rms(self):
         
-        if not hasattr(self, 'forward_models'):
-            self.parse_forward_models()
+        if hasattr(self, 'rms'):
+            return self.rms
+        
+        # Parse the fwms
+        self.parse_forward_models()
             
         rms = np.empty(shape=(self.n_orders, self.n_spec, self.n_iters_opt), dtype=float)
         for o in range(self.n_orders):
             for ispec in range(self.n_spec):
                 rms[o, ispec, :] = [self.forward_models[o][ispec].opt_results[k][1] for k in range(self.n_iters_opt)]
-        
-        return rms
+        self.rms = rms
+        return self.rms
 
     def parse_stellar_templates(self):
-        stellar_templates = []
+        if hasattr(self, 'stellar_templates'):
+            return self.stellar_templates
+        
+        self.stellar_templates = []
         for o in range(self.n_orders):
             f = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'Templates' + os.sep + '*stellar_templates*.npz')[0]
-            stellar_templates.append(np.load(f)['stellar_templates'])
-        return stellar_templates
+            self.stellar_templates.append(np.load(f)['stellar_templates'])
+        return self.stellar_templates
+            
 
     def parse_parameters(self):
     
@@ -120,7 +133,7 @@ class PostParser:
 
         # Load in rvs for each order
         for o in range(self.n_orders):
-            print('Loading in RVs for Order ' + str(self.do_orders[o]))
+            print('Loading in RVs for ' + os.path.basename(self.output_path_root[0:-1]) + ' , Order ' + str(self.do_orders[o]))
             fname = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
             rvfile = np.load(fname)
             rvs_dict['rvs'][o, :, :] = rvfile['rvs']
@@ -150,7 +163,8 @@ class PostParser:
                     stddevs[k] = np.nanstd(self.rvs_dict['rvs_nightly'][o, :, k])
             best_iters[o] = np.nanargmin(stddevs)
             best_stddevs[o] = stddevs[best_iters[o]]
-        return stddevs, best_iters
+
+        return best_stddevs, best_iters
 
 
     def get_orders(self):

@@ -2,9 +2,12 @@ import pychell.rvs.post_parser as pcparser
 import pychell.rvs.rvcalc as pcrvcalc
 import numpy as np
 import matplotlib.pyplot as plt
+plt.rcParams["font.weight"] = "bold"
+plt.rcParams["axes.labelweight"] = "bold"
 import pychell
 import pychell.rvs.forward_models as pcfoward_models
 import pychell.maths as pcmath
+from robustneldermead.neldermead import NelderMead
 import os
 import scipy.constants as cs
 import copy
@@ -14,94 +17,167 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 import datetime
 from pdb import set_trace as stop
 
-
-# Super Duper RV precision analysis
-def rv_precision(parsers, targets, templates=None):
+# Multi Target rv precision as a function of S/N per spectral pixel, cumulative over a night
+def rv_precision_snr(parsers, iter_indices=None):
     
-    # Number of targets
+    # Number of targets to consider
     n_targets = len(parsers)
     
-    # Which templates to consider to determine the effective photon limit
-    if templates is None:
-        templates = ['star']
+    # Iter indices
+    _iter_indices = [np.zeros(p.n_orders).astype(int) for p in parsers]
+    if iter_indices is None:
+        for ip, p in enumerate(parsers):
+            _iter_indices[ip][:] = p.n_iters_rvs
+    else:
+        for ip, p in enumerate(parsers):
+            _iter_indices[ip][:] = iter_indices
+            
+    iter_indices = _iter_indices
     
-    # SNR for each target, for all orders, observations, and spectra
-    snrs = [1 / p.parse_rms() for p in parsers]
-    
-    # Parse RVs
+    # Parse RVs and forward models
     for p in parsers:
         p.parse_rvs()
+        p.parse_forward_models()
+        
+    # Compute nightly S/N for each target, averaged over orders
+    snrs = []
+    nightly_snrs = []
+    for ip, p in enumerate(parsers):
+        _rms = p.parse_rms()
+        _snrs = 1 / _rms
+        snrs.append(np.nanmedian(_snrs[:, :, iter_indices[ip][0] + p.index_offset], axis=0).tolist())
+        _nightly_snrs = compute_nightly_snrs(p)
+        nightly_snrs.append(np.nanmedian(_nightly_snrs[:, :, iter_indices[ip][0]], axis=0).tolist())
+        
+    # Compute co-added RVs
+    for ip, p in enumerate(parsers):
+        combine_rvs(p, iter_indices=iter_indices[ip])
+        
+    # Get rv precisions from output rvs
+    rvprecs = []
+    nightly_rvprecs = []
+    for ip, p in enumerate(parsers):
+        rvprecs.append(np.nanmedian(p.rvs_dict['unc_nightly'][:, :, iter_indices[ip][0]], axis=0).tolist())
+        nightly_rvprecs.append(p.rvs_dict['unc_nightly_out'].tolist())
+        
+    # Effectively flatten
+    rvprecs_flat = []
+    nightly_rvprecs_flat = []
+    snrs_flat = []
+    nightly_snrs_flat = []
+    for ip, p in enumerate(parsers):
+        rvprecs_flat += rvprecs[ip]
+        nightly_rvprecs_flat += nightly_rvprecs[ip]
+        snrs_flat += snrs[ip]
+        nightly_snrs_flat += nightly_snrs[ip]
+        
+    # Convert to arrays and sort
+    rvprecs_flat = np.array(rvprecs_flat)
+    nightly_rvprecs_flat = np.array(nightly_rvprecs_flat)
+    snrs_flat = np.array(snrs_flat)
+    nightly_snrs_flat = np.array(nightly_snrs_flat)
+    inds = np.argsort(nightly_snrs_flat)
+    rvprecs_flat = rvprecs_flat[inds]
+    nightly_snrs_flat = nightly_snrs_flat[inds]
+    
+    # Model individual spectra
+    B_guess = pcmath.weighted_median(rvprecs_flat, percentile=0.05)
+    A_guess = np.nanmedian((rvprecs_flat - B_guess) * nightly_snrs_flat)
+    init_pars = np.array([A_guess, B_guess])
+    solver = NelderMead(pcmath.rms_loss_creator(rvprecmodel), init_pars, args_to_pass=(nightly_snrs_flat, rvprecs_flat))
+    opt_result = solver.solve()
+    best_pars = opt_result['xmin']
+    snr_grid_hr = np.linspace(np.nanmax([np.nanmin(nightly_snrs_flat) - 10, 1]), np.nanmax(nightly_snrs_flat) + 10, num=1000)
+    best_model = rvprecmodel(snr_grid_hr, *best_pars)
+    
+    # Model co-added rvs
+    B_guess = pcmath.weighted_median(rvprecs_flat, percentile=0.05)
+    A_guess = np.nanmedian((rvprecs_flat - B_guess) * nightly_snrs_flat)
+    init_pars = np.array([A_guess, B_guess])
+    solver = NelderMead(pcmath.rms_loss_creator(rvprecmodel), init_pars, args_to_pass=(nightly_snrs_flat, rvprecs_flat))
+    opt_result = solver.solve()
+    best_pars = opt_result['xmin']
+    snr_grid_hr = np.linspace(np.nanmax([np.nanmin(nightly_snrs_flat) - 10, 1]), np.nanmax(nightly_snrs_flat) + 10, num=1000)
+    best_model = rvprecmodel(snr_grid_hr, *best_pars)
+    
+    
+    # Plot
+    plt.plot(nightly_snrs_flat, rvprecs_flat, marker='o', lw=0, markersize=8)
+    plt.plot(snr_grid_hr, best_model, c='black', lw=2)
+    plt.xlabel('Nightly $S/N$ per spectral pixel')
+    plt.ylabel('$\sigma_{RV}$ per night')
+    plt.show()
+    
+def rvprecmodel(SNR, A, B):
+    return A / SNR + B
+        
+
+# Single Target rv precision as a function of wavelength (order)
+def rv_precision_wavelength(parser, iter_indices=None):
+    
+    # Parse RVs and forward models
+    parser.parse_rvs()
+    parser.parse_forward_models()
+    
+    # Determine indices
+    if iter_indices == 'best':
+        _, iter_indices = parser.get_best_iters()
+    elif iter_indices is None:
+        iter_indices = np.zeros(parser.n_orders).astype(int) + parser.n_iters_rvs - 1
+    elif type(iter_indices) is int:
+        iter_indices = np.zeros(parser.n_orders).astype(int) + iter_indices
+        
+    # SNR for each target, for all orders, observations, and spectra
+    snrs = 1 / parser.parse_rms()
+    
+    # Parse RVs
+    parser.parse_rvs()
     
     # Mean wavelengths of each order.
-    mean_waves = []
-    for ip, p in enumerate(parsers):
-        mean_waves.append([np.nanmean(p.forward_models[o][0].models_dict['wavelength_solution'].build(p.forward_models[o][0].opt_results[-1][0])) / 10 for o in range(p.n_orders)])
+    mean_waves = np.array([np.nanmean(parser.forward_models[o][0].models_dict['wavelength_solution'].build(parser.forward_models[o][0].opt_results[-1][0])) for o in range(parser.n_orders)])
     
     # Compute approx nightly snrs for all targets, orders, obs, all orders
     print('Computing nightly S/N')
-    nightly_snrs = []
-    for ip, p in enumerate(parsers):
-        nightly_snrs.append(np.zeros(p.n_nights))
-        for o in range(p.n_orders):
-            f, l = 0, p.n_obs_nights[0]
-            for inight in range(p.n_nights):
-                nightly_snrs[ip][inight] = np.sum(snrs[ip][o, f:l, -1]**2)**0.5
-                if inight < p.n_nights - 1:
-                    f += p.n_obs_nights[inight]
-                    l += p.n_obs_nights[inight+1]
-                    
+    nights_snrs = compute_nightly_snrs(parser)
                     
     print('Computing Nightly RVs')
-    for p in parsers:
-        combine_rvs(p)
+    combine_rvs(parser, iter_indices=iter_indices)
         
-                
     # Compute RV content of each order if set
     print('Computing Effective Noise limit from S/N and Template(s)')
-    rvcontents = []
-    rvprecs = []
-    rvprecs_onesigma = []
-    for ip, p in enumerate(parsers):
-        rvprecs.append(np.zeros(p.n_orders))
-        rvprecs_onesigma.append(np.zeros(p.n_orders))
-        for o in range(p.n_orders):
-            rvprecs[ip][o] = np.nanmean(p.rvs_dict['unc_nightly'][o, :, -1])
-            rvprecs_onesigma[ip][o] = np.std(p.rvs_dict['unc_nightly'][o, :, -1])
-        rvcontents.append(compute_rv_contents(p)[:, -1])
-
-    # Fit order co-added precision vs per-pixel s/n
-    #snrmodels = []
-    #for o in range(p[0].n_orders):
-        #_rvcs, _snrs = rvprecs_perwavelength[ip][o], nightly_snrs_perwavelength[ip][o]
-        #init_pars = np.array([np.nanmean(_rvcs * (_snrs - np.nanmin(_rvcs))), np.nanmin(_rvcs)])
-        #solver = NelderMead(pcmath.rms_loss_creator(rvprecsnrmodel), init_pars, args_to_pass=(_snrs, _rvcs))
-        #opt_result = solver.solve()
-        #best_pars = opt_result[0]
-        #snrmodels_perwavelength[ip][o].append(best_pars)
-        #snr_hrgrid = np.arange(_snrs.min()-10, _snrs.max() + 10, 0.1)
-        #_snrmodel = rvprecsnrmodel(snr_hrgrid, *best_pars)
-        #snrmodels_perwavelength[ip].append(_snrmodel)
+    rvcontents = np.zeros(parser.n_orders)
+    rvprecs = np.zeros(parser.n_orders)
+    rvprecs_onesigma = np.zeros(parser.n_orders)
+    _rvcontents = compute_rv_contents(parser)
+    for o in range(parser.n_orders):
+        rvcontents[o] = _rvcontents[o, iter_indices[o]]
+        rvprecs[o] = np.nanmedian(parser.rvs_dict['unc_nightly'][o, :, iter_indices[o]])
+        rvprecs_onesigma[o] = np.nanstd(parser.rvs_dict['unc_nightly'][o, :, iter_indices[o]])
         
     # RV prec and noise limit vs snr for each target
     plt.figure(1, figsize=(12, 8), dpi=200)
-    for ip, p in enumerate(parsers):
-        
-        # Plot rv unc
-        plt.errorbar(mean_waves[0], rvprecs[ip], yerr=rvprecs_onesigma[ip], marker='o', lw=0, elinewidth=1)
-        
-        # Annotate
-        #plt.annotate(targets[ip]['stype'], (mean_waves[0], rvcontents[ip][1]))
-        
-        # Plot noise limit
-        plt.plot(mean_waves[0], rvcontents[ip], marker='X', lw=1)
-        
-    plt.title(parsers[0].spectrograph + ' PRV Performance')
-    plt.xlabel('Wavelength [nm]')
-    plt.ylabel('$\sigma_{RV}$')
-    #plt.tight_layout()
-    fname = 'rv_precisions_' + parsers[0].spectrograph.lower() + '.png'
+
+    # Plot rv unc in nm
+    plt.errorbar(mean_waves / 10, rvprecs, yerr=rvprecs_onesigma, marker='o', elinewidth=2, lw=0, markersize=14, label='Reported Unc.')
+
+    # Plot noise limit in nm
+    plt.plot(mean_waves / 10, rvcontents, marker='X', lw=2.5, c='black', mfc='deeppink', markersize=14, label='Empirical Noise Limit')
+
+    # Plot attrs
+    plt.tick_params(which='both', labelsize=20)
+    plt.title(parser.star_name + ' / ' + parser.spectrograph + ' PRV Precision')
+    plt.xlabel('Wavelength [nm]', fontsize=20)
+    plt.ylabel('$\sigma_{RV}$', fontsize=20)
+    plt.tick_params(axis='both', labelsize=20)
+    plt.legend(loc='upper right')
+    plt.tight_layout()
+
+    # Save
+    fname = parser.output_path_root + 'rv_precisions_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '.png'
     plt.savefig(fname)
     plt.close()
+    
+    return mean_waves, rvcontents, rvprecs, rvprecs_onesigma
     
 def combine_stellar_templates(output_path_root, do_orders=None, iter_index=None):
     
@@ -293,19 +369,17 @@ def print_rv_summary(parser, iter_indices):
         print('Order ' + str(parser.do_orders[o]))
         for k in range(parser.n_iters_rvs):
             stddev = np.nanstd(rvs_dict['rvs_nightly'][o, :, k])
+            
             if rvs_dict['do_xcorr']:
                 stddevxc = np.nanstd(rvs_dict['rvsx_nightly'][o, :, k])
                 
             if k == iter_indices[o]:
                 print(' ** Iteration ' +  str(k + 1) + ': ' + str(round(stddev, 4)) + ' m/s')
-            else:
-                print('    Iteration ' +  str(k + 1) + ': ' + str(round(stddev, 4)) + ' m/s')
-                
-            if k == iter_indices[o]:
                 print(' ** Iteration ' +  str(k + 1) + ': ' + str(round(stddevxc, 4)) + ' m/s')
             else:
+                print('    Iteration ' +  str(k + 1) + ': ' + str(round(stddev, 4)) + ' m/s')
                 print('    Iteration ' +  str(k + 1) + ': ' + str(round(stddevxc, 4)) + ' m/s')
-            
+                
 def gen_rv_weights(parser):
     
     # Generate mask
@@ -487,7 +561,7 @@ def plot_final_rvs(parser, phase_to=None, tc=None, kamp=None):
         plt.xlabel('Phase [days, P = ' +  str(round(_phase_to, 3)) + ']')
     plt.ylabel('RV [m/s]')
     
-    plt.savefig(parser.output_path_root + 'rvs_final_' + parser.spectrograph.lower() + parser.star_name + '.png')
+    plt.savefig(parser.output_path_root + 'rvs_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '.png')
     plt.show()
             
             
