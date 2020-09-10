@@ -293,8 +293,8 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
         width (int, optional): The LSF width to convolve the templates if R is not set. R=80000
         sampling (float, optional): The desired sampling to compute the rv content on. Ideally, the input grid is sampled much higher than the detector grid for proper convolution, and sampling corresponds approximately to the detector grid.
     Returns:
-        np.ndarray: The "rv information content" at each pixel, or precisely the uncertainty of measuring the rv of an individual "pixel".
-        np.ndarray: The rv content for the whole swath ("uncertainty").
+        np.ndarray: The "rv information content" at each pixel.
+        np.ndarray: The rv content for the whole swath.
     """
     
     nx_in = wave.size
@@ -314,7 +314,7 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
     if blaze:
         good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
         ng = good.size
-        x, y = np.array([wavemod[good[0]], wavemod[good[int(ng/2)]], wavemod[good[-1]]]), np.array([0.5, 1, 0.5])
+        x, y = np.array([wavemod[good[0]], wavemod[good[int(ng/2)]], wavemod[good[-1]]]), np.array([0.2, 1, 0.2])
         pfit = pcmath.poly_coeffs(x, y)
         blz = np.polyval(pfit, wavemod)
         fluxmod *= blz

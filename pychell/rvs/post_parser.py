@@ -7,7 +7,7 @@ from pdb import set_trace as stop
 
 class PostParser:
     
-    def __init__(self, output_path_root, do_orders=None, bad_rvs_dict=None, star_name=None, xcorr=False, **kwargs):
+    def __init__(self, output_path_root, do_orders=None, bad_rvs_dict=None, star_name='', xcorr=False, **kwargs):
         
         self.output_path_root = output_path_root
 
@@ -24,9 +24,20 @@ class PostParser:
         
         self.xcorr = xcorr
         
+        self.star_name = star_name
+        
         # Auto populate
         for key in kwargs:
             setattr(self, key, kwargs[key])
+            
+    def resolve_iter_indices(self, iter_indices):
+        if iter_indices == 'best':
+            _, iter_indices = self.get_best_iters()
+        elif iter_indices is None:
+            iter_indices = np.zeros(self.n_orders).astype(int) + self.n_iters_rvs - 1
+        elif type(iter_indices) is int:
+            iter_indices = np.zeros(self.n_orders).astype(int) + iter_indices
+        return iter_indices
             
     def parse_forward_models(self):
         if not hasattr(self, 'forward_models'):

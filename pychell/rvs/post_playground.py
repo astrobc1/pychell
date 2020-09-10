@@ -18,20 +18,14 @@ import datetime
 from pdb import set_trace as stop
 
 # Multi Target rv precision as a function of S/N per spectral pixel, cumulative over a night
-def rv_precision_snr(parsers, iter_indices=None):
+def rv_precision_snr(parsers, iter_indices=None, thresh=np.inf):
     
     # Number of targets to consider
     n_targets = len(parsers)
-    
-    # Iter indices
-    _iter_indices = [np.zeros(p.n_orders).astype(int) for p in parsers]
-    if iter_indices is None:
-        for ip, p in enumerate(parsers):
-            _iter_indices[ip][:] = p.n_iters_rvs
-    else:
-        for ip, p in enumerate(parsers):
-            _iter_indices[ip][:] = iter_indices
             
+    _iter_indices = []
+    for p in parsers:
+        _iter_indices.append(p.resolve_iter_indices(iter_indices))
     iter_indices = _iter_indices
     
     # Parse RVs and forward models
@@ -39,15 +33,16 @@ def rv_precision_snr(parsers, iter_indices=None):
         p.parse_rvs()
         p.parse_forward_models()
         
-    # Compute nightly S/N for each target, averaged over orders
+    # Compute nightly S/N for each target, per spectral pixel, averaged over orders
+    # Compute single spectrum S/N for each target, per spectral pixel, averaged over orders
     snrs = []
     nightly_snrs = []
     for ip, p in enumerate(parsers):
         _rms = p.parse_rms()
         _snrs = 1 / _rms
-        snrs.append(np.nanmedian(_snrs[:, :, iter_indices[ip][0] + p.index_offset], axis=0).tolist())
+        snrs.append(np.nanmedian(_snrs[:, :, iter_indices[ip][0] + p.index_offset], axis=0).tolist()) # shape = (n_spec,)
         _nightly_snrs = compute_nightly_snrs(p)
-        nightly_snrs.append(np.nanmedian(_nightly_snrs[:, :, iter_indices[ip][0]], axis=0).tolist())
+        nightly_snrs.append(np.nanmedian(_nightly_snrs[:, :, iter_indices[ip][0]], axis=0).tolist()) # shape = (n_nights,)
         
     # Compute co-added RVs
     for ip, p in enumerate(parsers):
@@ -57,8 +52,8 @@ def rv_precision_snr(parsers, iter_indices=None):
     rvprecs = []
     nightly_rvprecs = []
     for ip, p in enumerate(parsers):
-        rvprecs.append(np.nanmedian(p.rvs_dict['unc_nightly'][:, :, iter_indices[ip][0]], axis=0).tolist())
-        nightly_rvprecs.append(p.rvs_dict['unc_nightly_out'].tolist())
+        rvprecs.append((p.rvs_dict['unc_out']).tolist()) # shape = (n_spec,)
+        nightly_rvprecs.append(p.rvs_dict['unc_nightly_out'].tolist()) # shape = (n_nights,)
         
     # Effectively flatten
     rvprecs_flat = []
@@ -72,44 +67,46 @@ def rv_precision_snr(parsers, iter_indices=None):
         nightly_snrs_flat += nightly_snrs[ip]
         
     # Convert to arrays and sort
-    rvprecs_flat = np.array(rvprecs_flat)
-    nightly_rvprecs_flat = np.array(nightly_rvprecs_flat)
-    snrs_flat = np.array(snrs_flat)
-    nightly_snrs_flat = np.array(nightly_snrs_flat)
-    inds = np.argsort(nightly_snrs_flat)
-    rvprecs_flat = rvprecs_flat[inds]
-    nightly_snrs_flat = nightly_snrs_flat[inds]
+    snrs_all_flat = np.array(nightly_snrs_flat + snrs_flat)
+    rvprecs_all_flat = np.array(nightly_rvprecs_flat + rvprecs_flat)
+    inds = np.argsort(snrs_all_flat)
+    rvprecs_all_flat = rvprecs_all_flat[inds]
+    snrs_all_flat = snrs_all_flat[inds]
     
-    # Model individual spectra
-    B_guess = pcmath.weighted_median(rvprecs_flat, percentile=0.05)
-    A_guess = np.nanmedian((rvprecs_flat - B_guess) * nightly_snrs_flat)
-    init_pars = np.array([A_guess, B_guess])
-    solver = NelderMead(pcmath.rms_loss_creator(rvprecmodel), init_pars, args_to_pass=(nightly_snrs_flat, rvprecs_flat))
+    # Remove outliers
+    bad = np.where(rvprecs_all_flat > thresh)[0]
+    if bad.size > 0:
+        snrs_all_flat[bad] = np.nan
+        rvprecs_all_flat[bad] = np.nan
+    
+    # Model
+    A_guess = np.nanmedian(rvprecs_all_flat * snrs_all_flat)
+    init_pars = np.array([A_guess])
+    solver = NelderMead(pcmath.rms_loss_creator(rvprecmodel), init_pars, args_to_pass=(snrs_all_flat, rvprecs_all_flat))
     opt_result = solver.solve()
     best_pars = opt_result['xmin']
-    snr_grid_hr = np.linspace(np.nanmax([np.nanmin(nightly_snrs_flat) - 10, 1]), np.nanmax(nightly_snrs_flat) + 10, num=1000)
+    snr_grid_hr = np.linspace(np.nanmax([np.nanmin(snrs_all_flat) - 10, 1]), np.nanmax(snrs_all_flat) + 10, num=1000)
     best_model = rvprecmodel(snr_grid_hr, *best_pars)
-    
-    # Model co-added rvs
-    B_guess = pcmath.weighted_median(rvprecs_flat, percentile=0.05)
-    A_guess = np.nanmedian((rvprecs_flat - B_guess) * nightly_snrs_flat)
-    init_pars = np.array([A_guess, B_guess])
-    solver = NelderMead(pcmath.rms_loss_creator(rvprecmodel), init_pars, args_to_pass=(nightly_snrs_flat, rvprecs_flat))
-    opt_result = solver.solve()
-    best_pars = opt_result['xmin']
-    snr_grid_hr = np.linspace(np.nanmax([np.nanmin(nightly_snrs_flat) - 10, 1]), np.nanmax(nightly_snrs_flat) + 10, num=1000)
-    best_model = rvprecmodel(snr_grid_hr, *best_pars)
-    
     
     # Plot
-    plt.plot(nightly_snrs_flat, rvprecs_flat, marker='o', lw=0, markersize=8)
-    plt.plot(snr_grid_hr, best_model, c='black', lw=2)
-    plt.xlabel('Nightly $S/N$ per spectral pixel')
-    plt.ylabel('$\sigma_{RV}$ per night')
-    plt.show()
+    plt.figure(1, figsize=(14, 8), dpi=200)
+    plt.semilogy(snrs_all_flat, rvprecs_all_flat, marker='.', lw=0, markersize=8, markeredgewidth=0)
+    plt.semilogy(snr_grid_hr, best_model, c='black', lw=3, ls=':')
+    plt.axhline(y=5, c='lightgreen', ls=':')
+    plt.axhline(y=50, c='lightgreen', ls=':')
+    plt.xlabel('$S/N$ per spectral pixel', fontsize=20)
+    plt.ylabel('$\sigma_{RV}$', fontsize=24)
+    plt.tick_params(which='both', labelsize=20)
+    plt.title(parsers[0].spectrograph + ' PRV Precision', fontsize=24)
+    plt.tight_layout()
     
-def rvprecmodel(SNR, A, B):
-    return A / SNR + B
+    # Save
+    fname = 'rv_precisions_multitarget_' + datetime.date.today().strftime("%d%m%Y") + '.png'
+    plt.savefig(fname)
+    plt.close()
+    
+def rvprecmodel(SNR, A):
+    return A / SNR
         
 
 # Single Target rv precision as a function of wavelength (order)
@@ -119,13 +116,8 @@ def rv_precision_wavelength(parser, iter_indices=None):
     parser.parse_rvs()
     parser.parse_forward_models()
     
-    # Determine indices
-    if iter_indices == 'best':
-        _, iter_indices = parser.get_best_iters()
-    elif iter_indices is None:
-        iter_indices = np.zeros(parser.n_orders).astype(int) + parser.n_iters_rvs - 1
-    elif type(iter_indices) is int:
-        iter_indices = np.zeros(parser.n_orders).astype(int) + iter_indices
+    # Resolveiter indices
+    iter_indices = parser.resolve_iter_indices(iter_indices)
         
     # SNR for each target, for all orders, observations, and spectra
     snrs = 1 / parser.parse_rms()
@@ -267,6 +259,20 @@ def combine_rvs(parser, iter_indices=None):
     parser.rvs_dict['uncx_out'] = result_xc[1]
     parser.rvs_dict['rvsx_nightly_out'] = result_xc[2]
     parser.rvs_dict['uncx_nightly_out'] = result_xc[3]
+    
+    # Write to files for radvel
+    fname = parser.output_path_root + 'rvs_nightly_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '_' + datetime.date.today().strftime("%d%m%Y") + '.txt'
+    telvec = np.array([parser.spectrograph.replace(' ', '_')] * parser.n_nights, dtype='<U20')
+    if parser.xcorr:
+        good = np.where(np.isfinite(parser.rvs_dict['rvs_nightly_out']))[0]
+        t, rvs, unc, telvec = parser.rvs_dict['BJDS_nightly'][good], parser.rvs_dict['rvs_nightly_out'][good], parser.rvs_dict['unc_nightly_out'][good], telvec[good]
+    else:
+        good = np.where(np.isfinite(parser.rvs_dict['rvsx_nightly_out']))[0]
+        t, rvs, unc, telvec = parser.rvs_dict['BJDS_nightly'][good], parser.rvs_dict['rvsx_nightly_out'][good], parser.rvs_dict['uncx_nightly_out'][good], telvec[good]
+        
+    with open(fname, 'w+') as f:
+        f.write("time,mnvel,errvel,tel\n")
+        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
     
 # Detrend RVs if applicable
 def detrend_rvs(parser, var='BIS', thresh=0.5):
@@ -444,10 +450,10 @@ def compute_nightly_snrs(parser):
         f, l = 0, parser.n_obs_nights[0]
         for i in range(parser.n_nights):
             for j in range(parser.n_iters_rvs):
-                nightly_snrs[o, i] = np.nansum((1 / rms[o, f:l, j + parser.index_offset])**2)**0.5
-        if i < parser.n_nights - 1:
-            f += parser.n_obs_nights[i]
-            l += parser.n_obs_nights[i+1]
+                nightly_snrs[o, i, j] = np.nansum((1 / rms[o, f:l, j + parser.index_offset])**2)**0.5
+            if i < parser.n_nights - 1:
+                f += parser.n_obs_nights[i]
+                l += parser.n_obs_nights[i+1]
                 
     return nightly_snrs
 
