@@ -211,7 +211,7 @@ class ForwardModels(list):
             self.rvs_dict['unc_xcorr_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
             self.rvs_dict['xcorrs'] = np.full(shape=(self.xcorr_options['n_vels'], 2*self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
             self.rvs_dict['line_bisectors'] = np.full(shape=(self.xcorr_options['n_bs'], self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
-            self.rvs_dict['bisector_spans'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['bis'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
             
         else:
             self.do_xcorr = False
@@ -382,7 +382,7 @@ class ForwardModels(list):
                 self.rvs_dict['xcorrs'][:, 2*ispec:2*ispec+2, iter_index] = np.array([ccf_results[ispec][0], ccf_results[ispec][1]]).T
                 self.rvs_dict['rvs_xcorr'][ispec, iter_index] = ccf_results[ispec][2]
                 self.rvs_dict['unc_xcorr'][ispec, iter_index] = ccf_results[ispec][3]
-                self.rvs_dict['bisector_spans'][ispec, iter_index] = ccf_results[ispec][4]
+                self.rvs_dict['bis'][ispec, iter_index] = ccf_results[ispec][4]
                 
         print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
 
@@ -452,7 +452,7 @@ class ForwardModels(list):
         
             # Plot the Bisector stuff
             plt.figure(1, figsize=(12, 7), dpi=200)
-            plt.plot(rvs['rvs_xcorr'][:, iter_index], rvs['bisector_spans'][:, iter_index], marker='o', linewidth=0)
+            plt.plot(rvs['rvs_xcorr'][:, iter_index], rvs['bis'][:, iter_index], marker='o', linewidth=0)
             plt.title(self[0].star_name + ' CCF Bisector Spans Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
             plt.xlabel('X Corr RV [m/s]', fontweight='bold')
             plt.ylabel('Bisector Span [m/s]', fontweight='bold')
@@ -479,6 +479,11 @@ class ForwardModel:
             if not hasattr(self, key):
                 setattr(self, key, copy.deepcopy(forward_model_settings[key]))
                 
+        # N_Chunks
+        #if not hasattr(self, 'n_chunks'):
+        #    self.n_chunks = 0
+        #elif hasattr(self, 'n)
+
         # The proper tag
         self.tag = self.spectrograph.lower() + '_' + self.tag
         
@@ -570,6 +575,7 @@ class ForwardModel:
         for model in self.models_dict:
             self.models_dict[model].init_parameters(self)
         self.initial_parameters.sanity_lock()
+
 
     def init_optimize(self, templates_dict):
         for model in self.models_dict:
@@ -960,8 +966,7 @@ class PARVIForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        good = np.where(np.isfinite(model))[0]
-        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
         
         if self.debug:
             stop()

@@ -90,10 +90,10 @@ def rv_precision_snr(parsers, iter_indices=None, thresh=np.inf):
     
     # Plot
     plt.figure(1, figsize=(14, 8), dpi=200)
-    plt.semilogy(snrs_all_flat, rvprecs_all_flat, marker='.', lw=0, markersize=8, markeredgewidth=0)
+    plt.semilogy(snrs_all_flat, rvprecs_all_flat, marker='.', lw=0, markersize=10, markeredgewidth=0)
     plt.semilogy(snr_grid_hr, best_model, c='black', lw=3, ls=':')
-    plt.axhline(y=5, c='lightgreen', ls=':')
-    plt.axhline(y=50, c='lightgreen', ls=':')
+    plt.axhline(y=5, c='green', ls=':', lw=2)
+    plt.axhline(y=50, c='green', ls=':', lw=2)
     plt.xlabel('$S/N$ per spectral pixel', fontsize=20)
     plt.ylabel('$\sigma_{RV}$', fontsize=24)
     plt.tick_params(which='both', labelsize=20)
@@ -121,9 +121,6 @@ def rv_precision_wavelength(parser, iter_indices=None):
         
     # SNR for each target, for all orders, observations, and spectra
     snrs = 1 / parser.parse_rms()
-    
-    # Parse RVs
-    parser.parse_rvs()
     
     # Mean wavelengths of each order.
     mean_waves = np.array([np.nanmean(parser.forward_models[o][0].models_dict['wavelength_solution'].build(parser.forward_models[o][0].opt_results[-1][0])) for o in range(parser.n_orders)])
@@ -226,12 +223,7 @@ def combine_rvs(parser, iter_indices=None):
                 rvs_dict['rvsx_nightly'][o, :, j], rvs_dict['uncx_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvs, weights, parser.n_obs_nights, flag_outliers=True)
                 
     # Determine indices
-    if iter_indices == 'best':
-        _, iter_indices = parser.get_best_iters()
-    elif iter_indices is None:
-        iter_indices = np.zeros(parser.n_orders).astype(int) + parser.n_iters_rvs - 1
-    elif type(iter_indices) is int:
-        iter_indices = np.zeros(parser.n_orders).astype(int) + iter_indices
+    iter_indices = parser.resolve_iter_indices(iter_indices)
         
     # Summary of rvs
     print_rv_summary(parser, iter_indices)
@@ -244,7 +236,7 @@ def combine_rvs(parser, iter_indices=None):
     rvs_unpacked = np.array([rvs_dict['rvs'][o, :, iter_indices[o]] for o in range(parser.n_orders)])
     weights_unpacked = np.array([weights[o, :, iter_indices[o]] for o in range(parser.n_orders)])
     result_nm = pcrvcalc.combine_relative_rvs(rvs_unpacked, weights_unpacked, parser.n_obs_nights)
-    
+
     # Combine RVs for XC
     rvs_unpacked = np.array([rvs_dict['rvsx'][o, :, iter_indices[o]] for o in range(parser.n_orders)])
     weights_unpacked = np.array([weights[o, :, iter_indices[o]] for o in range(parser.n_orders)])
@@ -304,7 +296,7 @@ def gen_rv_mask(parser):
         return parser.rvs_dict, mask
     
     rvs_dict = parser.rvs_dict
-    bad_rvs_dict = parser.rvs_dict
+    bad_rvs_dict = parser.bad_rvs_dict
     
     # Initialize a mask
     mask = np.ones(shape=(parser.n_orders, parser.n_spec, parser.n_iters_rvs), dtype=float)
@@ -421,6 +413,8 @@ def compute_rv_contents(parser, templates=None):
                 templates.append('star')
             elif t == 'gas_cell':
                 templates.append('gas_cell')
+    elif type(templates) is str:
+        templates = [templates]
             
     rvcs = np.zeros((parser.n_orders, parser.n_iters_rvs))
     

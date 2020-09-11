@@ -45,9 +45,9 @@ forward_model_blueprints = {
     'tellurics': {
         'name': 'nir_tellurics',
         'class_name': 'TelluricsTAPAS',
-        'vel': [-300, 1, 300],
-        'water_depth': [0.01, 1.5, 4.0],
-        'airmass_depth': [0.8, 1.2, 4.0],
+        'vel': [0, 0, 0],
+        'water_depth': [1, 1, 1],
+        'airmass_depth': [1, 1, 1],
         'min_range': 0.01,
         'input_files': {
             'water': 'telluric_water_tapas_palomar.npz',

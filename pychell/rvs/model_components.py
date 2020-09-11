@@ -512,7 +512,6 @@ class GasCellCHIRON(TemplateMult):
 
 
 #### Star ####
-
 class Star(TemplateMult):
     """ A star model which may or may not have started from a synthetic template.
     
@@ -544,9 +543,6 @@ class Star(TemplateMult):
             return pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=None, flux=flux)
         else:
             return self.build_fake(wave_final.size)
-
-    def update(self, forward_model, iter_index):
-        super().update(forward_model, iter_index)
 
     def init_parameters(self, forward_model):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=-1*forward_model.data.bc_vel, minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], vary=self.enabled))
@@ -708,7 +704,6 @@ class LSF(SpectralComponent):
     """ A base class for an LSF (line spread function) model.
 
     Attributes:
-        compress (int): The number of lsf points is equal to the number of model pix / compress.
         dl (float): The step size of the high resolution fidicual wavelength grid the model is convolved on. Must be evenly spaced.
         nx_model (float): The number of model pixels in the high resolution fidicual wavelength grid.
         nx (int): The number of points in the lsf grid.
@@ -727,24 +722,16 @@ class LSF(SpectralComponent):
         # The number of model pixels
         self.nx_model = forward_model.n_model_pix
         
-        # The number of points in the grid
-        self.nx_lsf = int(self.nx_model / self.compress)
-
-        # The actual LSF x grid, force to be odd
-        if self.nx_lsf % 2 != 1:
-            self.nx_lsf += 1
-        
-        # Padding both left and right
-        self.n_pad_model = int(np.floor(self.nx_lsf / 2))
-        
-        # Grid for LSF
-        self.x = np.arange(-np.floor(self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1, 1) * self.dl
-        
         # Set the default LSF if provided
         if hasattr(forward_model.data, 'default_lsf') and forward_model.data.default_lsf is not None:
             self.default_lsf_raw = forward_model.data.default_lsf
             self.default_lsf = scipy.interpolate.CubicSpline(self.default_lsf_raw[:, 0], self.default_lsf_raw[:, 1])(self.x)
         else:
+            self.nx_lsf = int(forward_model.n_model_pix / 2)
+            if self.nx_lsf % 2 != 0:
+                self.nx_lsf += 1
+            self.n_pad_model = int(np.floor(self.nx_lsf / 2))
+            self.x = np.arange(-np.floor(self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1, 1) * self.dl
             self.default_lsf = None
 
     # Returns a delta function
@@ -763,9 +750,6 @@ class LSF(SpectralComponent):
             lsf = self.build(pars)
         convolved_flux = pcmath.convolve_flux(None, raw_flux, R=None, width=None, interp=False, lsf=lsf, croplsf=False)
         return convolved_flux
-    
-    def update(self, forward_model, iter_index):
-        super().update(forward_model, iter_index)
         
     def init_optimize(self, forward_model, templates_dict):
         lsf_estim = pcmath.hermfun(self.x / forward_model.initial_parameters[self.par_names[0]].value, deg=0)
@@ -776,6 +760,7 @@ class LSF(SpectralComponent):
             if self.nx_lsf % 2 == 0:
                 self.nx_lsf += 1
             self.x = np.arange(-np.floor(self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1) * self.dl
+            self.n_pad_model = int(np.floor(self.nx_lsf / 2))
 
 
 class HermiteLSF(LSF):

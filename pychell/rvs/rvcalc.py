@@ -359,7 +359,7 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
         
 
 def compute_bisector_span(cc_vels, ccf, v0, n_bs=1000):
-    """Computes the bisector span of a given cross-correlation (RMS brute force) function.
+    """Computes the Bisector inverse slope of a given cross-correlation (RMS brute force) function.
 
     Args:
         cc_vels (np.ndarray): The velocities used for cross-correlation.
@@ -414,16 +414,14 @@ def compute_bisector_span(cc_vels, ccf, v0, n_bs=1000):
         vr, _ = pcmath.intersection(cc_vels_hr[use_right_hr], ccf_hr[use_right_hr], depths[idepth], precision=None)
         line_bisectors[idepth] = (vl + vr) / 2
 
-    # Compute the bisector span
+    # Compute the BIS
     top_inds = np.where((depths > depth_range_top[0]) & (depths < depth_range_top[1]))[0]
     bottom_inds = np.where((depths > depth_range_bottom[0]) & (depths < depth_range_bottom[1]))[0]
     avg_top = np.nanmean(line_bisectors[top_inds])
     avg_bottom = np.nanmean(line_bisectors[bottom_inds])
+    bis = avg_top - avg_bottom
     
-    # Store the bisector span
-    bisector_span = avg_top - avg_bottom
-    
-    return line_bisectors, bisector_span
+    return line_bisectors, bis
 
 def detrend_rvs(order_num, rvs, vec, thresh=None):
     
