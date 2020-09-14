@@ -857,6 +857,36 @@ def outob(x, y, nx, ny):
     """
     return x + 1 > nx or x + 1 < 1 or y + 1 > ny or y + 1 < 1
 
+def chen_kipping(m):
+    
+	MJ = 317.828133 # in earth masses
+	RJ = 11.209 # in earth radii
+
+	if m <= 2.04:
+		return 1.008 * m**0.279
+	elif m > 2.04 and m <= 0.414*MJ:
+		return 0.80811 * m**0.589
+	else:
+		return 17.739 * m ** -0.044
+
+# def chen_kipping_inv(rad):
+    
+# 	MJ = 317.828133 # in earth masses	RJ = 11.209 # in earth radii
+
+# 	if m <= 2.04:
+# 		return 1.008 * m**0.279
+# 	elif m > 2.04 and m <= 0.414*MJ:
+# 		return 0.80811 * m**0.589
+# 	else:
+# 		return 17.739 * m ** -0.044
+
+
+def rvsemiamplitude(mstar, mplanet=None, ecc=0, sini=None, rplanet=None):
+    if sini is None:
+        sini = 1
+    MJ_TO_MSUN = 1 / 1047.7
+    k = (28.4329  / np.sqrt(1 - ecc**2)) * mplanet*sini * (mplanet * MJ_TO_MSUN + mstar)**(-2/3) * per**(-1/3)
+    return k
 
 # Returns a modified gaussian
 def gauss_modified(x, amp, mu, sigma, p):

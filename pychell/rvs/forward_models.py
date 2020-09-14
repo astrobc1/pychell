@@ -80,7 +80,7 @@ class ForwardModels(list):
 
         # The number of iterations for rvs and template fits
         self.n_iters_rvs = self.n_template_fits
-        self.n_iters_fits = self.n_iters_rvs + int(not self[0].models_dict['star'].from_synthetic)
+        self.n_iters_opt = self.n_iters_rvs + int(not self[0].models_dict['star'].from_synthetic)
         
         # Save the global parameters dictionary to the output directory
         with open(self.run_output_path + os.sep + 'global_parameters_dictionary.pkl', 'wb') as f:
@@ -478,11 +478,6 @@ class ForwardModel:
         for key in forward_model_settings:
             if not hasattr(self, key):
                 setattr(self, key, copy.deepcopy(forward_model_settings[key]))
-                
-        # N_Chunks
-        #if not hasattr(self, 'n_chunks'):
-        #    self.n_chunks = 0
-        #elif hasattr(self, 'n)
 
         # The proper tag
         self.tag = self.spectrograph.lower() + '_' + self.tag
@@ -601,6 +596,15 @@ class ForwardModel:
                 
     def set_parameters(self, pars):
         self.initial_parameters.update(pars)
+    
+    def init_chunks(self):
+        
+        good = np.where(self.data.mask == 1)[0]
+        f, l = good[0], good[-1]
+        _chunk_points = np.linspace(f, l, num=self.n_chunks + 1).astype(int)
+        self.chunk_points = []
+        for ichunk in range(self.n_chunks):
+            self.chunk_points.append((_chunk_points[ichunk], _chunk_points[ichunk + 1]))
     
     # Plots the forward model after each iteration with other template as well if verbose_plot = True
     def plot_model(self, templates_dict, iter_index):
@@ -783,7 +787,7 @@ class ForwardModel:
         
         # Construct the extra arguments to pass to the target function
         args_to_pass = (forward_model, templates_dict)
-        
+    
         # Construct the Nelder Mead Solver and run
         solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-6, xtol=1E-6)
         opt_result = solver.solve()

@@ -38,6 +38,21 @@ class PostParser:
         elif type(iter_indices) is int:
             iter_indices = np.zeros(self.n_orders).astype(int) + iter_indices
         return iter_indices
+    
+    def resolve_rvprec_templates(self, templates=None):
+        
+        if type(templates) is list:
+            return templates
+        elif type(templates) is str:
+            return [templates]
+        elif templates is None:
+            _templates = []
+            if 'gas_cell' in self.forward_models[0].templates_dict:
+                _templates += ['gas_cell']
+            if 'star' in self.forward_models[0].templates_dict:
+                _templates += ['star']
+            return _templates
+        
             
     def parse_forward_models(self):
         if not hasattr(self, 'forward_models'):
@@ -154,7 +169,7 @@ class PostParser:
                 rvs_dict['rvsx'][o, :, :] = rvfile['rvs_xcorr']
                 rvs_dict['rvsx_nightly'][o, :, :] = rvfile['rvs_xcorr_nightly']
                 rvs_dict['uncx_nightly'][o, :, :] = rvfile['unc_xcorr_nightly']
-                rvs_dict['BIS'][o, :, :] = rvfile['bisector_spans']
+                rvs_dict['BIS'][o, :, :] = rvfile['bis']
                 
         self.rvs_dict = rvs_dict
 

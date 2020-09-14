@@ -295,6 +295,8 @@ def gen_rv_mask(parser):
     if not hasattr(parser, 'bad_rvs_dict'):
         return parser.rvs_dict, mask
     
+    parser.parse_forward_models()
+    
     rvs_dict = parser.rvs_dict
     bad_rvs_dict = parser.bad_rvs_dict
     
@@ -386,6 +388,9 @@ def gen_rv_weights(parser):
     # RMS weights
     rms = parser.parse_rms()
     weights_rms = 1 / rms**2
+    bad = np.where(rms > 0.1)
+    if bad[0].size > 0:
+        weights_rms[bad] = 0
         
     # RV content weights
     rvconts = compute_rv_contents(parser)
@@ -406,20 +411,16 @@ def gen_rv_weights(parser):
 
 def compute_rv_contents(parser, templates=None):
     
-    if templates is None:
-        templates = []
-        for t in parser.forward_models[0].templates_dict.keys():
-            if t == 'star':
-                templates.append('star')
-            elif t == 'gas_cell':
-                templates.append('gas_cell')
-    elif type(templates) is str:
-        templates = [templates]
+    # Resolve templates to use
+    templates = parser.resolve_rvprec_templates(templates)
             
+    # The RV contents, for each iteration
     rvcs = np.zeros((parser.n_orders, parser.n_iters_rvs))
     
+    # The nightly S/N, for each iteration
     nightly_snrs = compute_nightly_snrs(parser)
     
+    # Compute RVC
     for o in range(parser.n_orders):
         pars = parser.forward_models[o][0].opt_results[-1][0]
         wave_data = parser.forward_models[o][0].models_dict['wavelength_solution'].build(pars)
@@ -593,105 +594,104 @@ def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_temp
     plt.close()
             
 
-def residual_coherence(output_path_root, do_orders, bad_rvs_dict, iter_indices, frame='star', templates=[], unit='Ang', debug=False, star_name=None, nsample=1):
+def residual_coherence(parser, iter_indices=None, frame='star', nsample=1, templates=None):
     
-    n_orders = len(do_orders)
+    # Parse forward models
+    parser.parse_forward_models()
     
-    forward_models = parser.parse_forward_models(output_path_root, do_orders=do_orders)
+    # Resolve the iterations to use
+    iter_indices = parser.resolve_iter_indices(iter_indices)
     
-    stellar_templates = parser.parse_stellar_templates(output_path_root, do_orders=do_orders, iter_indices=iter_indices)
+    # Resolve templates to use
+    templates = parser.resolve_rvprec_templates(templates)
     
-    templates_dicts = parser.parse_templates(output_path_root, do_orders=do_orders)
+    # To coadd
+    res = np.full(shape=(parser.forward_models[0][0].n_model_pix, parser.n_spec), fill_value=np.nan)
     
-    if star_name is None:
-        star_name = forward_models[0, 0].star_name
-    
-    if unit == 'microns':
-        factor = 1E-4
-    elif unit == 'Ang':
-        factor = 1
-    else:
-        factor = 1E-1
-    
-    n_orders, n_spec = forward_models.shape
-    nxhr = templates_dicts[o]['star'][:, 0].size
+    # Create a figure
     plot_height_single = 4
-    fig, axarr = plt.subplots(nrows=n_orders, ncols=1, figsize=(10, int(plot_height_single*n_orders)), dpi=250)
+    fig, axarr = plt.subplots(nrows=parser.n_orders, ncols=1, figsize=(10, int(plot_height_single*parser.n_orders)), dpi=250)
     axarr = np.atleast_1d(axarr)
     
-    for o in range(n_orders):
+    # Loop over orders
+    for o in range(parser.n_orders):
         
-        star_wave = templates_dicts[o]['star'][:, 0]
-        res = np.full(shape=(n_spec, nxhr), fill_value=np.nan)
-        
-        # Residuals
-        for i in range(0, n_spec, nsample):
+        # Plot residuals for each observation
+        for i in range(0, parser.n_spec, nsample):
             
+            # Get the best fit parameters
+            pars = parser.forward_models[o][i].opt_results[iter_indices[o] + parser.index_offset][0]
+            
+            # Build the model
+            wave_data, model_lr = parser.forward_models[o][i].build_full(pars, parser.forward_models[o].templates_dict)
+            
+            # Stellar rest frame
             if frame == 'star':
                 
-                if iter_indices[o] == 0 and not forward_models[o, i].models_dict['star'].from_synthetic:
-                    vel = forward_models[o, i].data.bc_vel
+                # Determine the relative shift
+                if iter_indices[o] == 0 and not parser.forward_models[o][i].models_dict['star'].from_synthetic:
+                    vel = parser.forward_models[o][i].data.bc_vel
                 else:
-                    vel = -1 * forward_models[o, i].opt_results[iter_indices[o]][0][forward_models[o, i].models_dict['star'].par_names[0]].value
-                    
-                # Shift the residuals
-                wave_shifted = forward_models[o, i].wavelength_solutions[iter_indices[o]] * np.exp(vel / cs.c)
+                    vel = -1 * pars[parser.forward_models[o][i].models_dict['star'].par_names[0]].value
+                
+                # Shift the wavelength solution
+                wave_shifted = pcmath.doppler_shift(wave_data, vel=vel, flux=None, interp=None)
+        
+                # The residuals for this iteration
+                residuals = parser.forward_models[o][i].data.flux - model_lr
             
-                # Interpolate for sanity / consistency
-                good = np.where(np.isfinite(forward_models[o, i].residuals[iter_indices[o]]) & np.isfinite(wave_shifted))[0]
-                residuals_shifted = scipy.interpolate.CubicSpline(wave_shifted[good], forward_models[o, i].residuals[iter_indices[o]][good], extrapolate=False)(star_wave)
-                res[i, :] = residuals_shifted
+                # Interpolate so we don't store the unique wavelength grids
+                good = np.where(np.isfinite(residuals) & np.isfinite(wave_shifted))[0]
+                res[:, i] = scipy.interpolate.CubicSpline(wave_shifted[good], residuals[good], extrapolate=False)(parser.forward_models[o].templates_dict['star'][:, 0])
                 
-                # Plot
-                axarr[o].plot(wave_shifted * factor, forward_models[o, i].residuals[iter_indices[o]], alpha=0.7)
+                # Plot the lr version
+                axarr[o].plot(wave_shifted, residuals, alpha=0.7)
                 
+            # Lab rest frame
             else:
                 
-                good = np.where(np.isfinite(forward_models[o, i].residuals[iter_indices[o]]) & np.isfinite(forward_models[o, i].wavelength_solutions[iter_indices[o]]))[0]
-                residuals_interp = scipy.interpolate.CubicSpline(forward_models[o, i].wavelength_solutions[iter_indices[o]][good], forward_models[o, i].residuals[iter_indices[o]][good], extrapolate=False)(star_wave)
+                # The residuals for this iteration
+                residuals = parser.forward_models[o][i].data.flux - model_lr
                 
-                res[i, :] = residuals_interp
+                # Interpolate
+                good = np.where(np.isfinite(residuals))
+                res[:, i] = scipy.interpolate.CubicSpline(wave_data[good], residuals[good], extrapolate=False)(parser.forward_models[o].templates_dict['star'][:, 0])
 
-                # Plot
-                axarr[o].plot(forward_models[o, i].wavelength_solutions[iter_indices[o]] * factor, forward_models[o, i].residuals[iter_indices[o]], alpha=0.7)
+                # Plot the lr version
+                axarr[o].plot(wave_data, residuals, alpha=0.7)
         
+        # Plot the template to visually determine any correlations
         for t in templates:
-            if type(templates_dicts[o][t]) is dict:
-                for tt in templates_dicts[o][t]:
-                    w, f = templates_dicts[o][tt][:, 0], templates_dicts[o][t][tt][:, 1]
+            if type(parser.forward_models[o].templates_dict[t]) is dict:
+                for tt in parser.forward_models[o].templates_dict[t]:
+                    w, f = parser.forward_models[o].templates_dict[t][tt][:, 0], parser.forward_models[o].templates_dict[t][tt][:, 1]
                     ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
                     ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
-                    fc = forward_models[o, 0].models_dict['lsf'].convolve_flux(ff, pars=forward_models[o, i].initial_parameters)
-                    axarr[o].plot(ww, fc - np.nanmin(fc) + 0.2, alpha=0.8, label=tt)
+                    fc = parser.forward_models[o][0].models_dict['lsf'].convolve_flux(ff, pars=pars)
+                    axarr[o].plot(ww, fc, alpha=0.8, label=tt)
             else:
-                w, f = templates_dicts[o][t][:, 0], templates_dicts[o][t][:, 1]
+                w, f = parser.forward_models[o].templates_dict[t][:, 0], parser.forward_models[o].templates_dict[t][:, 1]
                 ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
                 ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
-                fc = forward_models[o, 0].models_dict['lsf'].convolve_flux(ff, pars=forward_models[o, 0].initial_parameters)
-                axarr[o].plot(ww, fc - np.nanmin(fc) + 0.2, alpha=0.8, label=t)
+                fc = parser.forward_models[o][0].models_dict['lsf'].convolve_flux(ff, pars=pars)
+                axarr[o].plot(ww, fc, alpha=0.8, label=t)
                 
             if frame == 'star' and t == 'star':
-                w, f = templates_dicts[o][t][:, 0], templates_dicts[o][t][:, 1]
-                fc = forward_models[o, 0].models_dict['lsf'].convolve_flux(f, pars=forward_models[o, 0].initial_parameters)
-                axarr[o].plot(ww, fc - np.nanmin(fc) + 0.2, alpha=0.8, label=t)
+                w, f = parser.forward_models[o].templates_dict[t][:, 0], parser.forward_models[o].templates_dict[t][:, 1]
+                fc = parser.forward_models[o][0].models_dict['lsf'].convolve_flux(f, pars=parser.forward_models[o][0].initial_parameters)
+                axarr[o].plot(ww, fc, alpha=0.8, label=t)
                 
                 
-        axarr[o].plot(star_wave * factor, np.nanmedian(res, axis=0), c='black')
-            
-        axarr[o].set_title('Order ' + str(do_orders[o]) + ' iter ' + str(iter_indices[o] + 1), fontsize=8)
+        axarr[o].plot(parser.forward_models[o].templates_dict['star'][:, 0], np.nanmedian(res, axis=1), c='black')
+        axarr[o].set_title('Order ' + str(parser.do_orders[o]) + ' iter ' + str(iter_indices[o] + 1), fontsize=8)
         axarr[o].tick_params(axis='both', labelsize=10)
         axarr[o].legend()
-    axarr[-1].set_xlabel('Wavelength [' + unit + ']')
+    axarr[-1].set_xlabel('Wavelength [Ang]')
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
     plt.tight_layout()
     fig.text(0.03, 0.5, 'Norm. flux', rotation=90, verticalalignment='center', horizontalalignment='center', fontsize=10)
-    fig.text(0.5, 0.97, star_name, fontsize=10, verticalalignment='center', horizontalalignment='center')
-    plt.savefig(output_path_root + 'residuals.png')
-    
-    if debug:
-        plt.show()
-        stop()
-    
+    fig.text(0.5, 0.97, parser.star_name, fontsize=10, verticalalignment='center', horizontalalignment='center')
+    plt.savefig(parser.output_path_root + 'residuals.png')
     plt.close()
     
     
