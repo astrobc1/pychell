@@ -376,6 +376,10 @@ class ForwardModels(list):
         # Pass to arrays
         if iter_index is None:
             for ispec in range(self.n_spec):
+                if ccf_results[ispec] == 0:
+                    v = ccf_results[ispec] + 1
+                else:
+                    v = ccf_results[ispec]
                 self[ispec].initial_parameters[self[ispec].models_dict['star'].par_names[0]].setv(value=ccf_results[ispec], minv=ccf_results[ispec] - 5E3, maxv=ccf_results[ispec] + 5E3)
         else:
             for ispec in range(self.n_spec):
@@ -852,7 +856,7 @@ class iSHELLForwardModel(ForwardModel):
 
         # Interpolate high res model onto data grid
         good = np.where(np.isfinite(model))[0]
-        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
         
         if self.debug:
             stop()
