@@ -380,7 +380,7 @@ class ForwardModels(list):
                     v = ccf_results[ispec] + 1
                 else:
                     v = ccf_results[ispec]
-                self[ispec].initial_parameters[self[ispec].models_dict['star'].par_names[0]].setv(value=ccf_results[ispec], minv=ccf_results[ispec] - 5E3, maxv=ccf_results[ispec] + 5E3)
+                self[ispec].initial_parameters[self[ispec].models_dict['star'].par_names[0]].setv(value=v, minv=v - 5E3, maxv=v + 5E3)
         else:
             for ispec in range(self.n_spec):
                 self.rvs_dict['xcorrs'][:, 2*ispec:2*ispec+2, iter_index] = np.array([ccf_results[ispec][0], ccf_results[ispec][1]]).T
