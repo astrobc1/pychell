@@ -445,4 +445,7 @@ class Simulated(SpecData1d):
         for i in range(forward_models.n_spec):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
             
+        forward_models.BJDS = bjds
+        forward_models.bc_vels = bc_vels
+            
         return bjds, bc_vels

@@ -341,15 +341,19 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
     ng = good.size
     flux_spline = scipy.interpolate.CubicSpline(wavemod[good], fluxmod[good], extrapolate=False)
     for i in range(nx):
-        if i in good:
-            
-            # Derivative
-            slope = flux_spline(wavemod[i], 1)
-            
-            # Compute rvc per pixel
-            if not (not np.isfinite(slope) or slope == 0 or not np.isfinite(fluxmod[i])):
-                rvc_per_pix[i] = cs.c * np.sqrt(fluxmod[i] + ron**2) / (wavemod[i] * np.abs(slope))
-
+        
+        if i not in good:
+            continue
+        
+        # Derivative
+        slope = flux_spline(wavemod[i], 1)
+        
+        # Compute rvc per pixel
+        if not np.isfinite(slope) or slope == 0:
+            continue
+        
+        rvc_per_pix[i] = cs.c * np.sqrt(fluxmod[i] + ron**2) / (wavemod[i] * np.abs(slope))
+    
     good = np.where(np.isfinite(rvc_per_pix))[0]
     if good.size == 0:
         return np.nan, np.nan
@@ -423,17 +427,15 @@ def compute_bisector_span(cc_vels, ccf, v0, n_bs=1000):
     
     return line_bisectors, bis
 
-def detrend_rvs(order_num, rvs, vec, thresh=None):
+def detrend_rvs(rvs, vec, thresh=None):
     
     if thresh is None:
-        thresh = 0
+        thresh = 0.5
         
     pcc, _ = scipy.stats.pearsonr(vec, rvs)
     if np.abs(pcc) < thresh:
-        print('Did not detrend order ' + str(order_num) + ', pcc = ' + str(round(pcc, 4)))
         return rvs
     else:
-        print('Detrending order ' + str(order_num) + ', pcc = ' + str(round(pcc, 4)))
         pfit = np.polyfit(vec, rvs, 1)
         rvs_out = rvs - np.polyval(pfit, vec)
         return rvs_out

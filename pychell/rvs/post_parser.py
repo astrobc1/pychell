@@ -7,7 +7,7 @@ from pdb import set_trace as stop
 
 class PostParser:
     
-    def __init__(self, output_path_root, do_orders=None, bad_rvs_dict=None, star_name='', xcorr=False, **kwargs):
+    def __init__(self, output_path_root, do_orders=None, bad_rvs_dict=None, star_name='', rvs_out='NM', **kwargs):
         
         self.output_path_root = output_path_root
 
@@ -22,7 +22,7 @@ class PostParser:
         self.bad_rvs_dict = {} if bad_rvs_dict is None else bad_rvs_dict
         self.star_name = star_name
         
-        self.xcorr = xcorr
+        self.rvs_out = rvs_out
         
         self.star_name = star_name
         
@@ -143,6 +143,7 @@ class PostParser:
         self.n_nights = len(rvs0['n_obs_nights'])
         rvs_dict['n_obs_nights'] = rvs0['n_obs_nights']
         self.do_xcorr = rvs_dict['do_xcorr']
+        self.n_obs_nights = rvs_dict['n_obs_nights']
         
         # Create arrays
         rvs_dict['rvs'] = np.full(shape=(self.n_orders, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
@@ -183,7 +184,7 @@ class PostParser:
         for o in range(self.n_orders):
             stddevs = np.full(self.n_iters_rvs, fill_value=np.nan)
             for k in range(self.n_iters_rvs):
-                if self.xcorr:
+                if self.rvs_out == 'XC':
                     stddevs[k] = np.nanstd(self.rvs_dict['rvsx_nightly'][o, :, k])
                 else:
                     stddevs[k] = np.nanstd(self.rvs_dict['rvs_nightly'][o, :, k])
@@ -191,7 +192,28 @@ class PostParser:
             best_stddevs[o] = stddevs[best_iters[o]]
 
         return best_stddevs, best_iters
-
+    
+    def parse_residuals(self):
+        
+        res = []
+        for o in range(self.n_orders):
+            
+            res.append(np.zeros())
+            
+            for ispec in range(self.n_spec):
+                
+                for ispec in range(self.n_iters_opt):
+            
+                    # Get the best fit parameters
+                    pars = self.forward_models[o][i].opt_results[j + parser.index_offset][0]
+            
+                    # Build the model
+                    wave_data, model_lr = parser.forward_models[o][i].build_full(pars, parser.forward_models[o].templates_dict)
+                    _res = self.forward_models[o][ispec].data.flux - model_lr
+                    res[-1][:, i, j] = _res
+        
+        self.residuals = res
+        return res
 
     def get_orders(self):
         orders_found = glob.glob(self.output_path_root + "Order*" + os.sep)

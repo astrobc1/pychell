@@ -55,34 +55,19 @@ forward_model_blueprints = {
     
     # Tellurics (from TAPAS)
     'tellurics': {
-        'name': 'sim_tellurics',
+        'name': 'kband_tellurics',
         'class_name': 'TelluricsTAPAS',
-        'vel': [-500, -100, 500],
-        'species': {
-            'water': {
-                'input_file': 'telluric_water_tapas_palomar.npz',
-                'depth':[0.01, 1.5, 4.0]
-            },
-            'methane': {
-                'input_file': 'telluric_methane_tapas_palomar.npz',
-                'depth': [0.1, 1.0, 3.0]
-            },
-            'nitrous_oxide': {
-                'input_file': 'telluric_nitrous_oxide_tapas_palomar.npz',
-                'depth': [0.05, 0.65, 3.0]
-            },
-            'carbon_dioxide': {
-                'input_file': 'telluric_carbon_dioxide_tapas_palomar.npz',
-                'depth': [0.05, 0.65, 3.0]
-            },
-            'oxygen': {
-                'input_file': 'telluric_oxygen_tapas_palomar.npz',
-                'depth': [0.05, 0.65, 3.0]
-            },
-            'ozone': {
-                'input_file': 'telluric_ozone_tapas_palomar.npz',
-                'depth': [0.05, 0.65, 3.0]
-            }
+        'vel': [0, 0, 0],
+        'water_depth': [1, 1, 1],
+        'airmass_depth': [1, 1, 1],
+        'min_range': 0.01,
+        'input_files': {
+            'water': 'telluric_water_tapas_maunakea.npz',
+            'methane': 'telluric_methane_tapas_maunakea.npz',
+            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_maunakea.npz',
+            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_maunakea.npz',
+            'oxygen' : 'telluric_oxygen_tapas_maunakea.npz',
+            'ozone': 'telluric_ozone_tapas_maunakea.npz'
         }
     },
     
@@ -90,6 +75,7 @@ forward_model_blueprints = {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
         'class_name': 'PolyBlaze',
         'n_splines': 0,
+        'poly_order': 2,
         'poly_2': [0, 0, 0],
         'poly_1': [-0.0001, 1E-5, 0.0001],
         'poly_0': [0.99, 1.0, 1.01],
@@ -101,9 +87,8 @@ forward_model_blueprints = {
     'lsf': {
         'name': 'lsf_hermite',
         'class_name': 'HermiteLSF',
-        'hermdeg': 6,
+        'hermdeg': 0,
         'n_delay': 0,
-        'compress': 64,
         'width': [0.055, 0.12, 0.2], # LSF width, in angstroms
         'ak': [-0.03, 0.001, 0.2] # Hermite polynomial coefficients
     },
