@@ -641,23 +641,27 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
             rvs_single_out[i] = pcmath.weighted_mean(rvli[:, i], wli[:, i])
             unc_single_out[i] = pcmath.weighted_stddev(rvli[:, i], wli[:, i]) / np.sqrt(ng)
         
-    w = 1 / unc_single_out**2
-    bad = np.where(~np.isfinite(w))[0]
-    if bad.size > 0:
-        w[bad] = 0
-        
     f, l = 0, n_obs_nights[0]
+
     for i in range(n_nights):
-        ng = np.where(w[f:l] > 0)[0].size
-        if ng == 0:
-            rvs_nightly_out[i] = np.nan
-            unc_nightly_out[i] = np.nan
-        elif ng == 1:
-            rvs_nightly_out[i] = rvs_single_out[f + good[0]]
-            unc_nightly_out[i] = unc_single_out[f + good[0]]
+        if n_obs_nights[i] == 1 and np.isfinite(rvs_single_out[f]):
+            rvs_nightly_out[i] = rvs_single_out[f]
+            unc_nightly_out[i] = unc_single_out[f]
         else:
-            rvs_nightly_out[i] = pcmath.weighted_mean(rvs_single_out[f:l], w[f:l])
-            unc_nightly_out[i] = pcmath.weighted_stddev(rvs_single_out[f:l], w[f:l]) / np.sqrt(ng)
+            ww = 1 / unc_single_out[f:l]**2
+            rr = rvs_single_out[f:l]
+            unc_all = unc_single_out[f:l]
+            good = np.where(ww > 0)[0]
+            ng = good.size
+            if ng == 0:
+                rvs_nightly_out[i] = np.nan
+                unc_nightly_out[i] = np.nan
+            elif ng == 1:
+                rvs_nightly_out[i] = rr[good[0]]
+                unc_nightly_out[i] = unc_all[good[0]]
+            else:
+                rvs_nightly_out[i] = pcmath.weighted_mean(rr[good], ww[good])
+                unc_nightly_out[i] = pcmath.weighted_stddev(rr[good], ww[good]) / np.sqrt(ng)
             
         if i < n_nights - 1:
             f += n_obs_nights[i]

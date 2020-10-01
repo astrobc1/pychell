@@ -286,7 +286,6 @@ def combine_rvs(parser, iter_indices=None):
         good = np.where(np.isfinite(parser.rvs_dict['rvs_nightly_out']))[0]
         t, rvs, unc, telvec = parser.rvs_dict['BJDS_nightly'][good], parser.rvs_dict['rvs_nightly_out'][good], parser.rvs_dict['unc_nightly_out'][good], telvec[good]
         
-    breakpoint()
     with open(fname, 'w+') as f:
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
@@ -311,7 +310,7 @@ def detrend_rvs(parser: pcparser.PostParser, vec='BIS', thresh=0.5):
     rvs_dict['rvsx_nightly_detrended'] = np.zeros((parser.n_orders,  parser.n_nights, parser.n_iters_rvs))
     rvs_dict['uncx_nightly_detrended'] = np.zeros((parser.n_orders,  parser.n_nights, parser.n_iters_rvs))
     
-def gen_rv_mask(parser):
+def gen_rv_mask(parser : pcparser.PostParser):
     
     # Return if no dictionary exists
     if not hasattr(parser, 'bad_rvs_dict'):
@@ -319,6 +318,8 @@ def gen_rv_mask(parser):
     
     rvs_dict = parser.rvs_dict
     bad_rvs_dict = parser.bad_rvs_dict
+    
+    parser.parse_forward_models()
     
     # Initialize a mask
     mask = np.ones(shape=(parser.n_orders, parser.n_spec, parser.n_iters_rvs), dtype=float)
@@ -411,8 +412,8 @@ def gen_rv_weights(parser):
     
     # RMS weights
     rms = parser.parse_rms()
-    weights_rms = 1 / rms**2
-    bad = np.where(rms > 0.1)
+    weights_rms = 1 / rms[:, :, parser.index_offset:]**2
+    bad = np.where(weights_rms < 100)
     if bad[0].size > 0:
         weights_rms[bad] = 0
         
@@ -425,7 +426,7 @@ def gen_rv_weights(parser):
     for o in range(parser.n_orders):
         for j in range(parser.n_iters_rvs):
             weights_rv_cont_expanded[o, :, j] = weights_rvcont[o, j]
-
+    
     weights = weights_rv_cont_expanded * weights_rms * mask
     
     # Normalize
