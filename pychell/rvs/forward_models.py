@@ -197,7 +197,7 @@ class ForwardModels(list):
         self.BJDS_nightly, self.n_obs_nights = pcrvcalc.get_nightly_jds(self.BJDS)
         
         # The number of nights
-        self.n_nights = len(self.BJDS_nightly)s
+        self.n_nights = len(self.BJDS_nightly)
             
         # Storage array for RVs
         self.rvs_dict = {}
