@@ -1062,3 +1062,108 @@ class CHIRONParser(Parser):
         data.time_of_obs = modified_header['time_of_obs']
         
         data.header = modified_header
+        
+        
+        
+        
+        
+        
+class MinervaNorthParser(Parser):
+    
+    header_keys = {
+        'target': ['OBJECT', ValueError],
+        'RA': ['RA', ValueError],
+        'DEC': ['DEC', ValueError],
+        'slit': ['SLIT', NotImplemented],
+        'wavelength_range': ['_NOKEY_', 'Fixed, VIS'],
+        'gas_cell': ['I2POSAS', None],
+        'exp_time': ['EXPTIME', ValueError],
+        'time_of_obs': ['DATE-OBS', ValueError],
+        'NDR': ['NDR', 1],
+        'BZERO': ['BZERO', 0],
+        'BSCALE': ['BSCALE', 1]
+    }
+        
+    def categorize(self, redux_settings):
+        
+        # Stores the data as above objects
+        data = {}
+        
+        # n20190326.HR2209.0023.fits
+        all_fits_files = glob.glob(redux_settings['input_path'] + '*.fits')
+        all_dark_files = glob.glob(redux_settings['input_path'] + '*Dark*.fits')
+        all_slit_flat_files = glob.glob(redux_settings['input_path'] + '*slitFlat*.fits')
+        sci_files = list(set(all_fits_files) - set(all_dark_files + all_slit_flat_files))
+        sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
+        
+        data['science'] = [ScienceImage(input_file=sci_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(sci_files))]
+            
+        # Darks assumed to contain dark in filename
+        if redux_settings['dark_subtraction']:
+            data['darks'] = [DarkImage(input_file=all_dark_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(dark_files))]
+            data['master_darks'] = MasterDarkImage.from_all_darks(data['darks'])
+            
+            for sci in data['science']:
+                self.pair_master_dark(sci, data['master_darks'])
+                
+            for flat in data['flats']:
+                self.pair_master_dark(flat, data['master_darks'])
+        
+        # iSHELL flats must contain flat in the filename
+        if redux_settings['flat_division']:
+            data['flats'] = [FlatImage(input_file=flat_files[f], output_path=redux_settings['run_output_path'], parser=self) for f in range(len(flat_files))]
+            data['master_flats'] = self.group_flats(data['flats'])
+            for sci in data['science']:
+                self.pair_master_flat(sci, data['master_flats'])
+            
+        # iSHELL ThAr images must contain arc (not implemented yet)
+        if redux_settings['wavelength_calibration']:
+            thar_files = glob.glob(redux_settings['input_path'] + '*arc*.fits')
+            data['wavecals'] = [ThArImage(input_file=thar_files[f], output_path=redux_settings['run_output_path'] + 'calib' + os.sep, parser=self) for f in range(len(thar_files))]
+            data['master_wavecals'] = self.group_wavecals(data['wavecals'])
+            for sci in data['science']:
+                self.pair_master_wavecal(sci, data['master_wavecals'])
+                
+        
+        self.print_summary(data)
+
+        return data
+
+    # icm.2019A076.190627.flat.00019.a.fits
+    def parse_image_num(self, data):
+        string_list = data.base_input_file.split('.')
+        data.image_num = string_list[4]
+        
+    def parse_image(self, data):
+        """Parses the input file for the image only. It's assumed the header has already been parsed.
+
+        Args:
+            hdu_num (int): Which header data unit the desired image is in, default to 0.
+        Returns:
+            data_image (np.ndarray): The data image, with shape=(ny, nx)
+        """
+        # Parse the image
+        data_image = super().parse_image(data.input_file)
+        
+        # Correct readmath (checks if present)
+        self.correct_readmath(data, data_image)
+        return data_image
+        
+    # icm.2019A076.190627.flat.00019.a.fits
+    def parse_date(self, data):
+        string_list = data.base_input_file.split('.')
+        data.date_obs = string_list[1][0:4] + string_list[2][2:]
+    
+    def parse_header(self, data):
+        
+        modified_header = super().parse_header(data)
+                
+        # Store the sky coordinate
+        modified_header['coord'] = SkyCoord(ra=modified_header['RA'], dec=modified_header['DEC'], unit=(units.hourangle, units.deg))
+        data.coord = modified_header['coord']
+
+        # Overwrite the time of observation
+        modified_header['time_of_obs'] = Time(float(modified_header['time_of_obs']) + 2400000.5, scale='utc', format='jd')
+        data.time_of_obs = modified_header['time_of_obs']
+        
+        data.header = modified_header

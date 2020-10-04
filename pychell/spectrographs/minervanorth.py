@@ -19,7 +19,46 @@ observatory = {
 ####### Reduction / Extraction #####################################
 ####################################################################
 
-redux_settings = NotImplemented
+redux_settings = {
+    
+    # Detector properties
+    'detector_props' : [{'gain': 1.0, 'dark_current': 0.0, 'read_noise': 0}],
+    
+    # Calibration
+    'dark_subtraction': False,
+    'flat_division': True,
+    'bias_subtraction': False,
+    'wavelength_calibration': False,
+    'flatfield_percentile': 0.75,
+    
+    # Pixels to mask on the top, bottom, left, and right edges
+    'mask_left_edge': 200,
+    'mask_right_edge': 200,
+    'mask_top_edge': 20,
+    'mask_bottom_edge': 20,
+    
+    # The height of an order is defined as where the flat is located.
+    # This masks additional pixels on each side of the initial trace profile before moving forward.
+    # The profile is further flagged after thes sky background is estimated.
+    'mask_trace_edges':  1,
+    
+    # The degree of the polynomial to fit the individual order locations
+    'trace_pos_polyorder' : 2,
+    
+    # Whether or not to perform a sky subtraction
+    # The number of rows used to estimate the sky background (lowest n_sky_rows in the trace profile are used).
+    'sky_subtraction': False,
+    'n_sky_rows': 8,
+    
+    # The trace profile is constructed using oversampled data.
+    # This is the oversample factor.
+    'oversample': 4,
+    
+    # The optimal extraction algorithm
+    'optx_alg': 'pmassey_wrapper',
+    'order_map': {'source': "empirical_unique", 'method': 'trace_minerva_north'}
+    
+}
 
 ####################################################################
 ####### RADIAL VELOCITIES ##########################################

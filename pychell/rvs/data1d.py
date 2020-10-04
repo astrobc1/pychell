@@ -88,6 +88,15 @@ class SpecData1d:
             self.flux_unc[bad] = np.nan
             self.mask[bad] = 0
             
+        # More sanity
+        if self.default_wave_grid is not None:
+            bad = np.where(~np.isfinite(self.default_wave_grid))[0]
+            if bad.size > 0:
+                self.mask[bad] = 0
+                self.default_wave_grid[bad] = np.nan
+                self.flux[bad] = np.nan
+                self.flux_unc[bad] = np.nan
+            
         # Further flag any clearly deviant pixels
         flux_smooth = pcmath.median_filter1d(self.flux, width=7)
         bad = np.where(np.abs(flux_smooth - self.flux) > 0.3)[0]
@@ -95,6 +104,7 @@ class SpecData1d:
             self.flux[bad] = np.nan
             self.flux_unc[bad] = np.nan
             self.mask[bad] = 0
+            
     
     def set_bc_info(self, bjd=None, bc_vel=None):
         """ Basic setter method for the BJD and barycenter velocity.
@@ -171,7 +181,7 @@ class SpecData1d:
         
         # bc vels
         bc_vels = get_BC_vel(JDUTC=jds, starname=forward_models.star_name.replace('_', ' '), obsname=forward_models.observatory['name'], leap_update=False)[0]
-        
+
         for i in range(forward_models.n_spec):
             forward_models[i].data.set_bc_info(bjd=bjds[i], bc_vel=bc_vels[i])
             

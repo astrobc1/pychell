@@ -143,6 +143,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index):
         bspan_result = compute_bisector_span(vels_for_rv, rmss, xcorr_rv, n_bs=forward_model.xcorr_options['n_bs'])
     except:
         bspan_result = (np.nan, np.nan)
+        
     
     return vels_for_rv, rmss, xcorr_rv, xcorr_rv_unc, bspan_result[1]
 

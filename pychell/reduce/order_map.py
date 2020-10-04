@@ -266,6 +266,102 @@ def trace_orders_empirical(data, redux_settings):
     return order_image, orders_list
             
 
-@njit
-def biased_metric(x, y):
-    return (10 * (x[0] - y[0])**2 + (x[1] - y[1])**2)**0.5
+def biased_metric(x, y, bias=10):
+    return (bias * (x[0] - y[0])**2 + (x[1] - y[1])**2)**0.5
+
+# Data is a flat (~B) star
+def trace_minerva_north(data, redux_settings):
+    
+    # Load the data image
+    data_image = data.parse_image()
+    
+    # Image dimensions
+    data_image = data_image
+    ny, nx = data_image.shape
+    
+    data_image[0:redux_settings['mask_bottom_edge'], :] = np.nan
+    data_image[ny-redux_settings['mask_top_edge']:, :] = np.nan
+    data_image[:, 0:redux_settings['mask_left_edge']] = np.nan
+    data_image[:, nx-redux_settings['mask_right_edge']:] = np.nan
+
+    # Smooth the image.
+    data_smooth = pcmath.median_filter2d(data_image, width=3, preserve_nans=True)
+    
+    # Do a horizontal normalization of the smoothed flat image to remove the blaze
+    first_x = redux_settings['mask_left_edge']
+    last_x = nx - redux_settings['mask_right_edge'] - 1
+    for x in range(nx):
+        data_smooth[:, x] = data_smooth[:, x] / pcmath.weighted_median(data_smooth[:, x], percentile=0.99)
+
+    # Only consider regions where the flux is greater than 50%
+    order_locations_all = np.zeros(shape=(ny, nx), dtype=float)
+    good = np.where(data_smooth > 0.96)
+    order_locations_all[good] = 1
+    
+    x = np.arange(ny).astype(int)
+    y = np.arange(ny).astype(int)
+    
+    # Get the low res order locations and store them in a way to be read into DBSCAN
+    good_points = np.empty(shape=(good[0].size, 2), dtype=float)
+    good_points[:, 0], good_points[:, 1] = good[1], good[0]
+    
+    # Create the Density clustering object and run
+    density_cluster = sklearn.cluster.DBSCAN(eps=70, min_samples=1000, metric=biased_metric, algorithm='auto', p=None, n_jobs=1)
+    db = density_cluster.fit(good_points)
+    
+    # Extract the labels
+    labels = db.labels_
+    good_labels = np.where(labels >= 0)[0]
+    if good_labels.size == 0:
+        raise NameError('Error! The order mapping algorithm failed. No usable labels found.')
+    good_labels_init = labels[good_labels]
+    labels_unique_init = np.unique(good_labels_init)
+    
+    # Do a naive set from all labels
+    order_locs_labeled = np.full(shape=(ny_lr, nx_lr), fill_value=np.nan)
+    for l in range(good_points[:, 0].size):
+        order_locs_labeled[good[0][l], good[1][l]] = labels[l]
+        
+    # Flag all bad labels
+    bad = np.where(order_locs_labeled == -1)
+    if bad[0].size > 0:
+        order_locs_labeled[bad] = np.nan
+
+    # Further flag labels that don't span at least half the detector
+    # If not bad, then fit.
+    pcoeffs = []
+    orders_list = []
+    for l in range(labels_unique_init.size):
+        label_locs = np.where(order_locs_lr_labeled == labels_unique_init[l])
+        if label_locs[0].size < 100:
+            order_locs_labeled[label_locs] = np.nan
+            continue
+        rx_lr_max = np.max(label_locs[1]) - np.min(label_locs[1])
+        if rx_lr_max < 0.8 * (last_x - first_x):
+            order_locs_labeled[label_locs] = np.nan
+        else:
+            pfit = np.polyfit(label_locs[1], label_locs[0], 2)
+            pcoeffs.append(pfit)
+            height = 10
+            orders_list.append([{'label': len(orders_list) + 1, 'pcoeffs': pfit, 'height': height}])
+    
+    # Now fill in a full frame image
+    n_orders = len(orders_list)
+    order_image = np.full(shape=(ny, nx), dtype=np.float64, fill_value=np.nan)
+
+    for o in range(n_orders):
+        for x in range(first_x, last_x):
+            pmodel = np.polyval(orders_list[o][0]['pcoeffs'], x)
+            ymax = int(pmodel + height / 2)
+            ymin = int(pmodel - height / 2)
+            if ymin > ny - 1 or ymax < 0:
+                continue
+            if ymax > ny - 1 - redux_settings['mask_top_edge']:
+                continue
+            if ymin < 0 + redux_settings['mask_bottom_edge']:
+                continue
+            order_image[ymin:ymax, x] = int(orders_list[o][0]['label'])
+
+    return order_image, orders_list
+    
+    

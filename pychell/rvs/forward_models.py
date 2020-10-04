@@ -145,6 +145,7 @@ class ForwardModels(list):
         
         # The input files
         input_files = [self.input_path + f for f in np.atleast_1d(np.genfromtxt(self.input_path + self.flist_file, dtype='<U100', comments='#').tolist())]
+        
         self.n_spec = len(input_files)
         
         # The inidividual forward model object init
@@ -152,7 +153,21 @@ class ForwardModels(list):
 
         # Init inidividual forward models
         for ispec in range(self.n_spec):
-            self.append(fwm_class_init(input_files[ispec], forward_model_settings, model_blueprints, self.order_num, spec_num=ispec + 1))
+            self.append(fwm_class_init(input_files[ispec], forward_model_settings, model_blueprints, self.order_num, spec_num=len(self) + 1))
+            
+            # Remove observation if it can't pass a simple continuum fit
+            try:
+                _wave = np.linspace(-1, 1, num=self[-1].data.flux.size)
+                _wave -= np.nanmean(_wave)
+                pcmodelcomponents.fit_continuum_wobble(_wave, np.log(self[-1].data.flux), self[-1].data.mask, order=4, nsigma=[0.25, 3.0], maxniter=50)
+            except:
+                del self[-1]
+                
+        # The number of spectra (may overwrite)
+        self.n_spec = len(self)
+        
+        if len(self) == 0:
+            raise ValueError("No spectra left to model!")
             
         # Load templates
         self.load_templates()
@@ -162,9 +177,6 @@ class ForwardModels(list):
         
         # Init the parameters
         self.init_parameters()
-        
-        # The number of spectra (may overwrite)
-        self.n_spec = len(input_files)
             
     def init_rvs(self):
         
@@ -185,7 +197,7 @@ class ForwardModels(list):
         self.BJDS_nightly, self.n_obs_nights = pcrvcalc.get_nightly_jds(self.BJDS)
         
         # The number of nights
-        self.n_nights = len(self.BJDS_nightly)
+        self.n_nights = len(self.BJDS_nightly)s
             
         # Storage array for RVs
         self.rvs_dict = {}
@@ -196,7 +208,7 @@ class ForwardModels(list):
         self.rvs_dict['unc_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
         
         # X Corr RVs
-        if self.xcorr_options['method'] is not None:
+        if self.xcorr_options['method'] is not None: 
             
             # Do x corr
             self.do_xcorr = True
@@ -502,14 +514,14 @@ class ForwardModel:
         
         # Init the models
         self.init_models(forward_model_settings, model_blueprints)
-        
+    
         # Storage arrays after each iteration
         # Each entry is a tuple for each iteration: (best_fit_pars, RMS, FCALLS)
         self.opt_results = []
-        
+    
         # Xcorr
         self.do_xcorr = True if self.xcorr_options['method'] is not None else False
-        
+    
         if self.do_xcorr:
             # Number of velocities to try in the brute force or ccf
             self.xcorr_options['n_vels'] = int(2 * self.xcorr_options['range'] / self.xcorr_options['step'])
@@ -786,6 +798,7 @@ class ForwardModel:
         Returns:
             forward_model (ForwardModel): The updated forward model since we possibly fit in parallel.
         """
+        
         # Start the timer
         stopwatch = pcutils.StopWatch()
         
@@ -801,8 +814,8 @@ class ForwardModel:
 
         # Print diagnostics if set
         if forward_model.verbose_print:
-            print('RMS = %' + str(round(100*opt_result['fmin'], 5)))
-            print('Function Calls = ' + str(opt_result['fcalls']))
+            print('RMS = %' + str(round(100*opt_result['fmin'], 5)), flush=True)
+            print('Function Calls = ' + str(opt_result['fcalls']), flush=True)
             forward_model.pretty_print()
         
         print('    Fit Spectrum ' + str(forward_model.spec_num) + ' of ' + str(n_spec_tot) + ' in ' + str(round((stopwatch.time_since())/60, 2)) + ' min', flush=True)
@@ -1042,14 +1055,17 @@ class MinervaNorthForwardModel(ForwardModel):
         # All tellurics
         if self.models_dict['tellurics'].enabled:
             model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Convolve Model with LSF
         if self.models_dict['lsf'].enabled:
             model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+            
+        # Renormalize model to remove degeneracy between blaze and lsf
+        #model /= pcmath.weighted_median(model, percentile=0.999)
+            
+        # Blaze Model
+        if self.models_dict['blaze'].enabled:
+            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -1058,7 +1074,7 @@ class MinervaNorthForwardModel(ForwardModel):
         model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
         
         if self.debug:
-            stop()
+            breakpoint()
         
         return wavelength_solution, model_lr
     
