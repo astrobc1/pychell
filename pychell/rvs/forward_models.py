@@ -852,7 +852,13 @@ class iSHELLForwardModel(ForwardModel):
         # Fringing from who knows what
         if self.models_dict['fringing'].enabled:
             model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
-        
+            
+        if self.models_dict['lsf'].enabled:
+            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+            
+        # Renormalize model to remove degeneracy between blaze and lsf
+        model /= pcmath.weighted_median(model, percentile=0.999)
+            
         # Blaze Model
         if self.models_dict['blaze'].enabled:
             model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
@@ -860,9 +866,6 @@ class iSHELLForwardModel(ForwardModel):
         # Residual lab flux
         if 'residual_lab' in templates_dict:
             model += templates_dict['residual_lab'][:, 1]
-
-        # Convolve Model with LSF
-        model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -896,10 +899,6 @@ class iSHELLForwardModel(ForwardModel):
         # Fringing from who knows what
         if self.models_dict['fringing'].enabled:
             model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
-        
-        # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
         
         # Residual lab flux
         if 'residual_lab' in templates_dict:
@@ -935,14 +934,17 @@ class CHIRONForwardModel(ForwardModel):
         # All tellurics
         if self.models_dict['tellurics'].enabled:
             model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Convolve Model with LSF
         if self.models_dict['lsf'].enabled:
             model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+            
+        # Renormalize model to remove degeneracy between blaze and lsf
+        model /= pcmath.weighted_median(model, percentile=0.999)
+            
+        # Blaze Model
+        if self.models_dict['blaze'].enabled:
+            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -974,14 +976,17 @@ class PARVIForwardModel(ForwardModel):
         # All tellurics
         if self.models_dict['tellurics'].enabled:
             model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Convolve Model with LSF
         if self.models_dict['lsf'].enabled:
             model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+            
+        # Renormalize model to remove degeneracy between blaze and lsf
+        model /= pcmath.weighted_median(model, percentile=0.999)
+            
+        # Blaze Model
+        if self.models_dict['blaze'].enabled:
+            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -1012,14 +1017,17 @@ class MinervaAustralisForwardModel(ForwardModel):
         # All tellurics
         if self.models_dict['tellurics'].enabled:
             model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Convolve Model with LSF
         if self.models_dict['lsf'].enabled:
             model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+            
+        # Renormalize model to remove degeneracy between blaze and lsf
+        model /= pcmath.weighted_median(model, percentile=0.999)
+        
+        # Blaze Model
+        if self.models_dict['blaze'].enabled:
+            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -1061,7 +1069,7 @@ class MinervaNorthForwardModel(ForwardModel):
             model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
             
         # Renormalize model to remove degeneracy between blaze and lsf
-        #model /= pcmath.weighted_median(model, percentile=0.999)
+        model /= pcmath.weighted_median(model, percentile=0.999)
             
         # Blaze Model
         if self.models_dict['blaze'].enabled:
