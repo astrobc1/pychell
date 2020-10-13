@@ -6,8 +6,9 @@ import importlib.util # importing other modules from files
 import warnings # ignore warnings
 import time # Time the code
 import pickle
+import dill
 import inspect
-import multiprocessing as mp # parallelization on a single node
+import multiprocessing # parallelization on a single node
 import sys # sys utils
 from sys import platform # plotting backend
 from pdb import set_trace as stop # debugging
@@ -34,8 +35,8 @@ from numba import njit, jit, prange
 # User defined
 import pychell.maths as pcmath
 import pychell.rvs.template_augmenter as pcaugmenter
-import pychell.rvs.model_components as pcmodelcomponents
-import pychell.rvs.data1d as pcdata
+import pychell.rvs.model_components as pcmodels
+import pychell.data as pcdata
 import pychell.rvs.target_functions as pctargetfuns
 import pychell.utils as pcutils
 import pychell.rvs.rvcalc as pcrvcalc
@@ -44,231 +45,157 @@ import pychell.rvs.rvcalc as pcrvcalc
 import optimparameters.parameters as OptimParameters
 from robustneldermead.neldermead import NelderMead
 
-
-# Stores all forward model objects useful wrapper to store all the forward model objects.
-
 class ForwardModels(list):
-    """Contains individual forward models in a list, and other helpful attributes, primarily for RVs.
-    """
+    
+    def __init__(self, config, model_blueprints, parser, order_num):
         
-    def __init__(self, forward_model_settings, model_blueprints, order_num):
-        
-        # Initiate the actual list
+        # Init the list
         super().__init__()
         
-        # Auto-populate
-        for key in forward_model_settings:
-            setattr(self, key, copy.deepcopy(forward_model_settings[key]))
-            
-        # Overwrite the target function with the actual function to optimize the model
-        self.target_function = getattr(pctargetfuns, self.target_function)
-        
-        # Overwrite the template augment function with the actual function to augment the template
-        self.template_augmenter = getattr(pcaugmenter, self.template_augmenter)
-
-        # The order number
+        # Order number
         self.order_num = order_num
         
+        # The parser
+        self.parser = parser
+        
+        # Set config
+        for key in config:
+            setattr(self, key, copy.deepcopy(config[key]))
+            
         # The proper tag
         self.tag = self.spectrograph.lower() + '_' + self.tag
         
-        # Create output directories
-        self.create_output_dirs()
-
-        # Initiate the data, models, and outputs
-        self.init(forward_model_settings, model_blueprints)
-
-        # The number of iterations for rvs and template fits
-        self.n_iters_rvs = self.n_template_fits
-        self.n_iters_opt = self.n_iters_rvs + int(not self[0].models_dict['star'].from_synthetic)
-        
-        # Save the global parameters dictionary to the output directory
-        with open(self.run_output_path + os.sep + 'global_parameters_dictionary.pkl', 'wb') as f:
-            pickle.dump(forward_model_settings, f)
-
-        # Print summary
-        self.print_init_summary()
-        
-        # Crude tweaks for init optimization (CCF for star, estimate blaze, blah blah)
-        self.init_optimize()
-        
-        # Post init things
-        # Remove continuum or not
-        if self.remove_continuum:
-            for fwm in self:
-                wave = fwm.models_dict['wavelength_solution'].build(fwm.initial_parameters)
-                log_continuum = pcmodelcomponents.fit_continuum_wobble(wave, np.log(fwm.data.flux), fwm.data.mask, order=4, nsigma=[0.25, 3.0], maxniter=50)
-                fwm.data.flux = np.exp(np.log(fwm.data.flux) - log_continuum)
-        
-    def generate_nightly_rvs(self, iter_index):
-        """Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed.
-
-        Args:
-            iter_index (int): The iteration to generate RVs from.
-        """
-
-        # The best fit stellar RVs, remove the barycenter velocity
-        rvs = np.array([self[ispec].opt_results[-1][0][self[ispec].models_dict['star'].par_names[0]].value + self[ispec].data.bc_vel for ispec in range(self.n_spec)], dtype=np.float64)
-        
-        # The RMS from the forward model fit
-        rms = np.array([self[ispec].opt_results[-1][1] for ispec in range(self.n_spec)], dtype=np.float64)
-        weights = 1 / rms**2
-        
-        # The NM RVs
-        rvs_nightly, unc_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvs, weights, self.n_obs_nights, flag_outliers=True)
-        self.rvs_dict['rvs'][:, iter_index] = rvs
-        self.rvs_dict['rvs_nightly'][:, iter_index] = rvs_nightly
-        self.rvs_dict['unc_nightly'][:, iter_index] = unc_nightly
-        
-        # The xcorr RVs
-        if self.do_xcorr:
-            rvsx = self.rvs_dict['rvs_xcorr'][:, iter_index]
-            rvsx_nightly, uncx_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvsx, weights, self.n_obs_nights, flag_outliers=True)
-            self.rvs_dict['rvs_xcorr_nightly'][:, iter_index] = rvsx_nightly
-            self.rvs_dict['unc_xcorr_nightly'][:, iter_index] = uncx_nightly
-        
-    # Updates spectral models according to best fit parameters, and run the update method for each iteration.
-    def update_models(self, iter_index):
-
-        for ispec in range(self.n_spec):
-
-            # Pass the previous iterations best pars as starting points
-            self[ispec].set_parameters(copy.deepcopy(self[ispec].opt_results[-1][0]))
+        self.template_augmenter = getattr(pcaugmenter, self.template_augmenter)
             
-            # Update other models
-            for model in self[ispec].models_dict.keys():
-                self[ispec].models_dict[model].update(self[ispec], iter_index)
-                
-    def init(self, forward_model_settings, model_blueprints):
+        # The output directories
+        self.create_output_path()
+            
+        # grab the input files
+        input_files = self.load_filelist()
         
-        print('Loading in data and constructing forward model objects for order ' + str(self.order_num) + ' ...')
-        
-        # The input files
-        input_files = [self.input_path + f for f in np.atleast_1d(np.genfromtxt(self.input_path + self.flist_file, dtype='<U100', comments='#').tolist())]
-        
+        # Number of observations
         self.n_spec = len(input_files)
         
-        # The inidividual forward model object init
-        fwm_class_init = eval(self.spectrograph + 'ForwardModel')
-
-        # Init inidividual forward models
+        # The sub class
+        fwm_class = eval(self.spectrograph + 'ForwardModel')
+        
+        # Init the sub classes for each chunk
         for ispec in range(self.n_spec):
-            self.append(fwm_class_init(input_files[ispec], forward_model_settings, model_blueprints, self.order_num, spec_num=len(self) + 1))
+            self.append(fwm_class(input_files[ispec], config, model_blueprints, parser, order_num, ispec + 1))
             
-            # Remove observation if it can't pass a simple continuum fit
-            try:
-                _wave = np.linspace(-1, 1, num=self[-1].data.flux.size)
-                _wave -= np.nanmean(_wave)
-                pcmodelcomponents.fit_continuum_wobble(_wave, np.log(self[-1].data.flux), self[-1].data.mask, order=4, nsigma=[0.25, 3.0], maxniter=50)
-            except:
-                del self[-1]
-                
-        # The number of spectra (may overwrite)
-        self.n_spec = len(self)
-        
-        if len(self) == 0:
-            raise ValueError("No spectra left to model!")
-            
-        # Load templates
-        self.load_templates()
-        
-        # Initiate the RV dicts
+        # Init RVs dictionary
         self.init_rvs()
         
-        # Init the parameters
-        self.init_parameters()
+        # Init parameters
+        for fwm in self:
+            fwm.init_parameters()
+        
+        # Load templates
+        self.load_templates()
             
+        print_init_summary(self)
+        
+        # Initial optimization to guess some parameters
+        self.init_optimize()
+        
+    def load_filelist(self):
+        return self.parser.load_filelist(self)
+    
+    @property
+    def n_nights(self):
+        return self.rvs_dict['n_nights']
+    
+    @property
+    def n_obs_nights(self):
+        return self.rvs_dict['n_obs_nights']
+    
+    @property
+    def bjds(self):
+        return self.rvs_dict['bjds']
+    
+    @property
+    def bc_vels(self):
+        return self.rvs_dict['bc_vels']
+    
+    def update_models(self, iter_index):
+        for ispec in range(self.n_spec):
+            for model in self[ispec].models_dict.keys():
+                self[ispec].models_dict[model].update(self[ispec], iter_index)
+    
+    
     def init_rvs(self):
         
-        # The bary-center information
-        if hasattr(self, 'bary_corr_file') and self.bary_corr_file is not None:
-            self.BJDS, self.bc_vels = np.loadtxt(self.input_path + self.bary_corr_file, delimiter=',', unpack=True)
-            for ispec in range(self.n_spec):
-                self[ispec].data.set_bc_info(self.BJDS[ispec], self.bc_vels[ispec])
-        else:
-            print('Computing barycentric corrections ...')
-            self[0].data.calculate_bc_info_all(self)
-            
-        if self.compute_bc_only:
-            np.savetxt(self.run_output_path + 'bary_corrs_' + self.star_name + '.txt', np.array([self.BJDS, self.bc_vels]).T, delimiter=',')
-            sys.exit("Compute BC info only is set!")
-        
-        # Compute the nightly BJDs and n obs per night
-        self.BJDS_nightly, self.n_obs_nights = pcrvcalc.get_nightly_jds(self.BJDS)
-        
-        # The number of nights
-        self.n_nights = len(self.BJDS_nightly)
-            
-        # Storage array for RVs
+        # Init the shared rv dictionary
         self.rvs_dict = {}
         
+        # Bc info
+        self.parser.load_barycenter_corrections(self)
+        
+        self.rvs_dict['bjds'] = [fwm.data.bjd for fwm in self]
+        self.rvs_dict['bc_vels'] = [fwm.data.bc_vel for fwm in self]
+        
+        # Compute the nightly BJDs and n obs per night
+        self.rvs_dict['bjds_nightly'], self.rvs_dict['n_obs_nights'] = pcrvcalc.get_nightly_jds(self.rvs_dict['bjds'])
+        
+        # The number of nights
+        self.rvs_dict['n_nights'] = len(self.rvs_dict['bjds_nightly'])
+        
         # Nelder-Mead RVs
-        self.rvs_dict['rvs'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
-        self.rvs_dict['rvs_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
-        self.rvs_dict['unc_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+        self.rvs_dict['rvsfwm'] = np.full(shape=(self.n_spec, self.n_chunks, self.n_template_fits), fill_value=np.nan)
+        self.rvs_dict['rvsfwm_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), fill_value=np.nan)
+        self.rvs_dict['uncfwm_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), fill_value=np.nan)
         
         # X Corr RVs
-        if self.xcorr_options['method'] is not None: 
+        self.rvs_dict["xcorr_options"] = self.xcorr_options
+        if self.rvs_dict['xcorr_options']['method'] is not None:
             
-            # Do x corr
-            self.do_xcorr = True
+            # Do x corr or not
+            self.rvs_dict['do_xcorr'] = True
             
             # Number of velocities to try in the brute force or ccf
-            self.xcorr_options['n_vels'] = int(2 * self.xcorr_options['range'] / self.xcorr_options['step'])
+            self.rvs_dict["xcorr_options"]['n_vels'] = int(2 * self.xcorr_options['range'] / self.xcorr_options['step'])
             
             # Initiate arrays for xcorr rvs.
-            self.rvs_dict['rvs_xcorr'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
-            self.rvs_dict['unc_xcorr'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
-            self.rvs_dict['rvs_xcorr_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
-            self.rvs_dict['unc_xcorr_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
-            self.rvs_dict['xcorrs'] = np.full(shape=(self.xcorr_options['n_vels'], 2*self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
-            self.rvs_dict['line_bisectors'] = np.full(shape=(self.xcorr_options['n_bs'], self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
-            self.rvs_dict['bis'] = np.full(shape=(self.n_spec, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['rvsxc'] = np.full(shape=(self.n_spec, self.n_chunks, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['uncxc'] = np.full(shape=(self.n_spec, self.n_chunks, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['rvsxc_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['uncxc_nightly'] = np.full(shape=(self.n_nights, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['xcorrs'] = np.full(shape=(self.rvs_dict['xcorr_options']['n_vels'], self.n_spec, self.n_chunks, self.n_template_fits, 2), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['line_bisectors'] = np.full(shape=(self.xcorr_options['n_bs'], self.n_spec, self.n_chunks, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
+            self.rvs_dict['bis'] = np.full(shape=(self.n_spec, self.n_chunks, self.n_template_fits), dtype=np.float64, fill_value=np.nan)
             
         else:
-            self.do_xcorr = False
+            self.rvs_dict['do_xcorr'] = False
+            
+    def load_templates(self):
+        self.templates_dict = {}
+        for model in self[0].models_dict:
+            if hasattr(self[0].models_dict[model], 'load_template'):
+                self.templates_dict[model] = self[0].models_dict[model].load_template(self[0])
+            
+    def create_output_path(self):
+        self.run_output_path = self.output_path + self.tag + os.sep
+        self.o_folder = 'Order' + str(self.order_num) + os.sep
+        os.makedirs(self.run_output_path, exist_ok=True)
+        os.makedirs(self.run_output_path + self.o_folder, exist_ok=True)
+        os.makedirs(self.run_output_path + self.o_folder + 'ForwardModels', exist_ok=True)
+        os.makedirs(self.run_output_path + self.o_folder + 'RVs', exist_ok=True)
+        os.makedirs(self.run_output_path + self.o_folder + 'Templates', exist_ok=True)
     
-    
-    def init_parameters(self):
-        """Initializes the parameters for each forward model
-        """
-        for ispec in range(self.n_spec):
-            self[ispec].init_parameters()
-
     def init_optimize(self):
-        
-        # cross correlate star in parallel
         if self[0].models_dict['star'].from_synthetic:
-            self.cross_correlate_spectra(iter_index=None)
-        
-        # Perform remaining optimizing steps in parallel
+            self.get_init_stellar_vel_ccf()
         for fwm in self:
             fwm.init_optimize(self.templates_dict)
-    
-    # Stores the forward model outputs in .npz files for all iterations
-    # Stores the RVs in a single .npz
-    def save_results(self):
-        """Saves the forward model results and RVs.
-        """
-            
-        # Save the full forward models object 
-        self.save_to_pickle()
-        
-        # Unpack and output the RVs separately
-        self.save_rvs()
-            
-        # Save the current templates dictionary
-        np.savez(self.run_output_path + self.o_folder + 'Templates' + os.sep + 'templates_dict.npz', **self.templates_dict)
-        
-        
-    # Save the forward model object to a pickle
+
     def save_to_pickle(self):
         fname = self.run_output_path + self.o_folder + self.tag + '_forward_models_ord' + str(self.order_num) + '.pkl'
         with open(fname, 'wb') as f:
-            pickle.dump(self, f)
+            dill.dump(self, f)
+            
+    def save_results(self):
+        self.save_to_pickle()
         
-        
-    # Wrapper to fit all spectra
     def fit_spectra(self, iter_index):
         """Forward models all spectra and performs xcorr if set.
         
@@ -283,93 +210,38 @@ class ForwardModels(list):
 
             # Construct the arguments
             args_pass = []
-            for spec_num in range(self.n_spec):
-                args_pass.append((self[spec_num], self.templates_dict, iter_index, self.n_spec))
+            for ispec in range(self.n_spec):
+                args_pass.append((self[ispec], self.templates_dict, iter_index))
             
             # Call the parallel job via joblib.
-            self[:] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].solver_wrapper)(*args_pass[ispec]) for ispec in range(self.n_spec))
+            self[:] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].fit_all_regions_wrapper)(*args_pass[ispec]) for ispec in range(self.n_spec))
 
         else:
             # Fit one at a time
             for ispec in range(self.n_spec):
                 print('    Performing Nelder-Mead Fit For Spectrum '  + str(ispec+1) + ' of ' + str(self.n_spec), flush=True)
-                self[ispec] = self[0].solver_wrapper(self[ispec], self.templates_dict, iter_index, self.n_spec)
+                self[ispec] = self[0].fit_all_regions_wrapper(self[ispec], self.templates_dict, iter_index)
         
         # Cross correlate if set
-        if self.do_xcorr and self.n_template_fits > 0 and self[0].models_dict['star'].enabled:
+        if self.rvs_dict['do_xcorr'] and self.n_template_fits > 0 and self[0].models_dict['star'].enabled:
             self.cross_correlate_spectra(iter_index)
             
         # Fit in Parallel
         print('Fitting Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
-    
-    # Outputs RVs and cross corr analyses for all iterations for a given order.
-    def save_rvs(self):
-        """Saves the forward model results and RVs.
-        """
-        # Full filename
-        fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_rvs_ord' + str(self[0].order_num) + '.npz'
         
-        # The bc velocities
-        bc_vels = np.array([fwm.data.bc_vel for fwm in self], dtype=float)
-        
-        # Save in a .npz file for easy access later
-        np.savez(fname, BJDS=self.BJDS, BJDS_nightly=self.BJDS_nightly, bc_vels=bc_vels, n_obs_nights=self.n_obs_nights, **self.rvs_dict)
-
-    # Loads the templates dictionary and stores in a dictionary.
-    # A pointer to the templates dictionary is stored in each forward model class
-    # It can be accessed via forward_models.templates_dict or forward_models[ispec].
-    def load_templates(self):
-        """Load the initial templates and store in both.
-        """
-        self.templates_dict = self[0].load_templates()
-            
-
-    # Create output directories
-    # output_dir_root is the root output directory.
-    def create_output_dirs(self):
-        """Creates output dirs and filenames for outputs.
-        """
-        # Order folder
-        self.o_folder = 'Order' + str(self.order_num) + os.sep
-        
-        # Output path for this run
-        self.run_output_path = self.output_path_root + self.tag + os.sep
-        
-        # Create directories for this order
-        os.makedirs(self.run_output_path + self.o_folder + 'RVs', exist_ok=True)
-        os.makedirs(self.run_output_path + self.o_folder + 'Fits', exist_ok=True)
-        os.makedirs(self.run_output_path + self.o_folder + 'Templates', exist_ok=True)
-
-
-    # Post init summary
-    def print_init_summary(self):
-        """Print a summary for this run.
-        """
-        # Print summary
-        print('***************************************', flush=True)
-        print('** Target: ' + self.star_name, flush=True)
-        print('** Spectrograph: ' + self.observatory['name'] + ' / ' + self.spectrograph, flush=True)
-        print('** Observations: ' + str(self.n_spec) + ' spectra, ' + str(self.n_nights) + ' nights', flush=True)
-        print('** Echelle Order: ' + str(self.order_num), flush=True)
-        print('** TAG: ' + self.tag, flush=True)
-        print('** N Iterations: ' + str(self.n_template_fits), flush=True)
-        print('***************************************', flush=True)
-
-
-    def cross_correlate_spectra(self, iter_index=None):
+    def cross_correlate_spectra(self, iter_index):
         """Cross correlation wrapper for all spectra.
 
         Args:
-            iter_index (int or None): The iteration to use. If None, then it's assumed to be a crude first guess.
+            iter_index (int or None): The iteration to use.
         """
-        # Fit in Parallel
+        
         stopwatch = pcutils.StopWatch()
+        
         print('Cross Correlating Spectra ... ', flush=True)
         
-        if iter_index is None:
-            ccf_method = getattr(pcrvcalc, 'crude_brute_force')
-        else:
-            ccf_method = getattr(pcrvcalc, self.xcorr_options['method'])
+        # The method
+        ccf_method = getattr(pcrvcalc, self.xcorr_options['method'])
 
         # Perform xcorr in series or parallel
         if self.n_cores > 1:
@@ -377,31 +249,65 @@ class ForwardModels(list):
             # Construct the arguments
             iter_pass = []
             for ispec in range(self.n_spec):
-                iter_pass.append((self[ispec], self.templates_dict, iter_index))
+                iter_pass.append((self[ispec], self.templates_dict, iter_index, self.rvs_dict['xcorr_options']))
 
             # Cross Correlate in Parallel
-            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
+            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].cross_correlate_all_regions_wrapper)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
             
         else:
-            ccf_results = [ccf_method(self[ispec], self.templates_dict, iter_index) for ispec in tqdm.tqdm(range(self.n_spec))]
-        
-        # Pass to arrays
-        if iter_index is None:
-            for ispec in range(self.n_spec):
-                if ccf_results[ispec] == 0:
-                    v = ccf_results[ispec] + 1
-                else:
-                    v = ccf_results[ispec]
-                self[ispec].initial_parameters[self[ispec].models_dict['star'].par_names[0]].setv(value=v, minv=v - 5E3, maxv=v + 5E3)
-        else:
-            for ispec in range(self.n_spec):
-                self.rvs_dict['xcorrs'][:, 2*ispec:2*ispec+2, iter_index] = np.array([ccf_results[ispec][0], ccf_results[ispec][1]]).T
-                self.rvs_dict['rvs_xcorr'][ispec, iter_index] = ccf_results[ispec][2]
-                self.rvs_dict['unc_xcorr'][ispec, iter_index] = ccf_results[ispec][3]
-                self.rvs_dict['bis'][ispec, iter_index] = ccf_results[ispec][4]
+            ccf_results = [self[0].cross_correlate_all_regions_wrapper(self[ispec], self.templates_dict, iter_index, self.rvs_dict['xcorr_options']) for ispec in range(self.n_spec)]
+            
+        for ispec in range(self.n_spec):
+            for ichunk in range(self.n_chunks):
+                self.rvs_dict['rvsxc'][ispec, ichunk, iter_index] = ccf_results[ispec][ichunk]['rv']
+                self.rvs_dict['uncxc'][ispec, ichunk, iter_index] = ccf_results[ispec][ichunk]['rv_unc']
+                self.rvs_dict['bis'][ispec, ichunk, iter_index] = ccf_results[ispec][ichunk]['bis']
+                self.rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 0] = ccf_results[ispec][ichunk]['vels']
+                self.rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 1] = ccf_results[ispec][ichunk]['ccf']
                 
         print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
+        
+    def generate_nightly_rvs(self, iter_index):
+        """Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed.
 
+        Args:
+            iter_index (int): The iteration to generate RVs from.
+        """
+
+        # The best fit stellar RVs, remove the barycenter velocity
+        rvsfwm = np.full((self.n_spec, self.n_chunks), np.nan)
+        for ispec in range(self.n_spec):
+            for ichunk in range(self.n_chunks):
+                rvsfwm[ispec, ichunk] = self[ispec].opt_results[-1][ichunk]['xbest'][self[ispec].models_dict['star'].par_names[0]].value + self[ispec].data.bc_vel
+        
+        # The RMS from the forward model fit
+        fit_metric = np.full((self.n_spec, self.n_chunks), np.nan)
+        for ispec in range(self.n_spec):
+            for ichunk in range(self.n_chunks):
+                fit_metric[ispec, ichunk] = self[ispec].opt_results[-1][ichunk]['fbest']
+        weights = 1 / fit_metric**2
+        
+        # The NM RVs
+        rvsfwm_nightly, uncfwm_nightly = pcrvcalc.compute_nightly_rvs_single_order(rvsfwm, weights, self.rvs_dict['n_obs_nights'], flag_outliers=True)
+        self.rvs_dict['rvsfwm'][:, :, iter_index] = rvsfwm
+        self.rvs_dict['rvsfwm_nightly'][:, iter_index] = rvsfwm_nightly
+        self.rvs_dict['uncfwm_nightly'][:, iter_index] = uncfwm_nightly
+        
+        # The xcorr RVs
+        if self.rvs_dict['do_xcorr']:
+            rvsx_nightly, uncx_nightly = pcrvcalc.compute_nightly_rvs_single_order(self.rvs_dict['rvsxc'][:, :, iter_index], weights, self.rvs_dict['n_obs_nights'], flag_outliers=True)
+            self.rvs_dict['rvsxc_nightly'][:, iter_index] = rvsx_nightly
+            self.rvs_dict['uncxc_nightly'][:, iter_index] = uncx_nightly
+        
+    def save_rvs(self):
+        """Saves the forward model results and RVs.
+        """
+        fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_rvs_ord' + str(self[0].order_num) + '.npz'
+        #bc_vels = np.array([fwm.data.bc_vel for fwm in self], dtype=float)
+        
+        # Save in a .npz file for easy access later
+        np.savez(fname, **self.rvs_dict)
+    
     def plot_rvs(self, iter_index):
         """Plots all RVs and cross-correlation analysis after forward modeling all spectra.
 
@@ -415,27 +321,32 @@ class ForwardModels(list):
         plt.figure(num=1, figsize=(int(plot_width/dpi), int(plot_height/dpi)), dpi=200)
         
         # Alias
-        rvs = self.rvs_dict
+        rvs_dict = self.rvs_dict
         
-        # Individual rvs from nelder mead fitting
-        plt.plot(self.BJDS - self.BJDS_nightly[0],
-                rvs['rvs'][:, iter_index] - np.nanmedian(rvs['rvs_nightly'][:, iter_index]),
-                marker='.', linewidth=0, alpha=0.7, color=(0.1, 0.8, 0.1))
+        for ichunk in range(self.n_chunks):
         
-        # Nightly rvs from nelder mead fitting
-        plt.errorbar(self.BJDS_nightly - self.BJDS_nightly[0],
-                        rvs['rvs_nightly'][:, iter_index] - np.nanmedian(rvs['rvs_nightly'][:, iter_index]),
-                        yerr=rvs['unc_nightly'][:, iter_index], marker='o', linewidth=0, elinewidth=1, label='Nelder Mead', color=(0, 114/255, 189/255))
+            # Individual rvs from nelder mead fitting
+            plt.plot(rvs_dict['bjds'] - rvs_dict['bjds_nightly'][0],
+                    rvs_dict['rvsfwm'][:, ichunk, iter_index] - np.nanmedian(rvs_dict['rvsfwm'][:, ichunk, iter_index]),
+                    marker='.', linewidth=0, alpha=0.7, color=(0.1, 0.8, 0.1))
 
-        # Individual and nightly xcorr rvs
-        if self.do_xcorr:
-            plt.errorbar(self.BJDS - self.BJDS_nightly[0],
-                        rvs['rvs_xcorr'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr_nightly'][:, iter_index]),
-                        yerr=rvs['unc_xcorr'][:, iter_index],
-                        marker='.', linewidth=0, color='black', alpha=0.6, elinewidth=0.8)
-            plt.errorbar(self.BJDS_nightly - self.BJDS_nightly[0],
-                            rvs['rvs_xcorr_nightly'][:, iter_index] - np.nanmedian(rvs['rvs_xcorr_nightly'][:, iter_index]),
-                            yerr=rvs['unc_xcorr_nightly'][:, iter_index], marker='X', linewidth=0, alpha=0.8, label='X Corr', color='darkorange', elinewidth=1)
+            # Individual and nightly xcorr rvs
+            if rvs_dict['do_xcorr']:
+                plt.errorbar(rvs_dict['bjds'] - rvs_dict['bjds_nightly'][0],
+                            rvs_dict['rvsxc'][:, ichunk, iter_index] - np.nanmedian(rvs_dict['rvsxc'][:, ichunk, iter_index]),
+                            yerr=rvs_dict['uncxc'][:, ichunk, iter_index],
+                            marker='.', linewidth=0, color='black', alpha=0.6, elinewidth=0.8)
+        
+        
+        # Nightly RVs from nelder mead fitting
+        plt.errorbar(rvs_dict['bjds_nightly'] - rvs_dict['bjds_nightly'][0],
+                        rvs_dict['rvsfwm_nightly'][:, iter_index] - np.nanmedian(rvs_dict['rvsfwm_nightly'][:, iter_index]),
+                        yerr=rvs_dict['uncfwm_nightly'][:, iter_index], marker='o', linewidth=0, elinewidth=1, label='Nelder Mead', color=(0, 114/255, 189/255))
+        
+        # Nightly RVs from xc
+        plt.errorbar(rvs_dict['bjds_nightly'] - rvs_dict['bjds_nightly'][0],
+                                rvs_dict['rvsxc_nightly'][:, iter_index] - np.nanmedian(rvs_dict['rvsxc_nightly'][:, iter_index]),
+                                yerr=rvs_dict['uncxc_nightly'][:, iter_index], marker='X', linewidth=0, alpha=0.8, label='X Corr', color='darkorange', elinewidth=1)
         
         plt.title(self[0].star_name + ' RVs Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
         plt.xlabel('BJD - BJD$_{0}$', fontweight='bold')
@@ -446,16 +357,16 @@ class ForwardModels(list):
         plt.savefig(fname)
         plt.close()
         
-        if self.do_xcorr:
-            # Plot the Bisector stuff
+        if rvs_dict['do_xcorr']:
             plt.figure(1, figsize=(12, 7), dpi=200)
-            for ispec in range(self.n_spec):
-                v0 = rvs['rvs_xcorr'][ispec, iter_index]
-                depths = np.linspace(0, 1, num=self.xcorr_options['n_bs'])
-                ccf_ = rvs['xcorrs'][:, 2*ispec+1, iter_index] - np.nanmin(rvs['xcorrs'][:, 2*ispec+1, iter_index])
-                ccf_ = ccf_ / np.nanmax(ccf_)
-                plt.plot(rvs['xcorrs'][:, 2*ispec, iter_index] - v0, ccf_)
-                plt.plot(rvs['line_bisectors'][:, ispec, iter_index], depths)
+            for ichunk in range(self.n_chunks):
+                for ispec in range(self.n_spec):
+                    v0 = rvs_dict['rvsxc'][ispec, ichunk, iter_index]
+                    depths = np.linspace(0, 1, num=rvs_dict['xcorr_options']['n_bs'])
+                    ccf_ = rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 1] - np.nanmin(rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 1])
+                    ccf_ = ccf_ / np.nanmax(ccf_)
+                    plt.plot(rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 0] - v0, ccf_)
+                    #plt.plot(rvs_dict['line_bisectors'][:, ispec, iter_index], depths)
             
             plt.title(self.star_name + ' CCFs Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
             plt.xlabel('RV$_{\star}$ [m/s]', fontweight='bold')
@@ -466,96 +377,123 @@ class ForwardModels(list):
             plt.savefig(fname)
             plt.close()
         
-            # Plot the Bisector stuff
+            # Plot the bis
             plt.figure(1, figsize=(12, 7), dpi=200)
-            plt.plot(rvs['rvs_xcorr'][:, iter_index], rvs['bis'][:, iter_index], marker='o', linewidth=0)
-            plt.title(self[0].star_name + ' CCF Bisector Spans Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
-            plt.xlabel('X Corr RV [m/s]', fontweight='bold')
-            plt.ylabel('Bisector Span [m/s]', fontweight='bold')
-            plt.tight_layout()
+            for ichunk in range(self.n_chunks):
+                plt.plot(rvs_dict['rvsxc'][:, ichunk, iter_index], rvs_dict['bis'][:, ichunk, iter_index], marker='o', linewidth=0)
+                plt.title(self[0].star_name + ' CCF Bisector Spans Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
+                plt.xlabel('X Corr RV [m/s]', fontweight='bold')
+                plt.ylabel('Bisector Span [m/s]', fontweight='bold')
+                plt.tight_layout()
             fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_bisectorspans_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
             plt.savefig(fname)
             plt.close()
-
-     
+    
         
+    def get_init_stellar_vel_ccf(self):
+        """Cross correlation wrapper for all spectra.
+
+        Args:
+            iter_index (int or None): The iteration to use. If None, then it's assumed to be a crude first guess.
+        """
+        stopwatch = pcutils.StopWatch()
+        
+        print('Cross Correlating Spectra To Determine Crude RV ... ', flush=True)
+        
+        # The method
+        ccf_method = pcrvcalc.crude_brute_force
+
+        # Perform xcorr in series or parallel
+        if self.n_cores > 1:
+
+            # Construct the arguments
+            iter_pass = []
+            for ispec in range(self.n_spec):
+                iter_pass.append((self[ispec], self.templates_dict, self[ispec].sregion_order))
+
+            # Cross Correlate in Parallel
+            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
+        else:
+            ccf_results = [ccf_method(self[ispec], self.templates_dict, self[ispec].sregion_order) for ispec in tqdm.tqdm(range(self.n_spec))]
+            
+        for ispec in range(self.n_spec):
+            self[ispec].initial_parameters[self[ispec].models_dict['star'].par_names[0]].value = ccf_results[ispec]
+                
+        print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
+
 class ForwardModel:
     
-    def __init__(self, input_file, forward_model_settings, model_blueprints, order_num, spec_num):
+    def __init__(self, input_file, config, model_blueprints, parser, order_num, spec_num):
         
         # The echelle order
         self.order_num = order_num
+        
+        # The parser
+        self.parser = parser
         
         # The spectral number and index
         self.spec_num = spec_num
         self.spec_index = self.spec_num - 1
         
         # Auto-populate
-        for key in forward_model_settings:
-            if not hasattr(self, key):
-                setattr(self, key, copy.deepcopy(forward_model_settings[key]))
+        for key in config:
+            setattr(self, key, copy.deepcopy(config[key]))
 
         # The proper tag
         self.tag = self.spectrograph.lower() + '_' + self.tag
-        
-        # Order folder
+        self.run_output_path = self.output_path + self.tag + os.sep
         self.o_folder = 'Order' + str(self.order_num) + os.sep
-        
-        # Output path for this run
-        self.run_output_path = self.output_path_root + self.tag + os.sep
         
         # Overwrite the target function with the actual function to optimize the model
         self.target_function = getattr(pctargetfuns, self.target_function)
         
         # Initialize the data
-        data_class_init = getattr(pcdata, forward_model_settings['spectrograph'])
-        self.data = data_class_init(input_file, self)
-        self.n_data_pix = self.data.flux.size
+        self.data = pcdata.SpecData1d.from_forward_model(input_file, self)
         
         # Init the models
-        self.init_models(forward_model_settings, model_blueprints)
+        self.init_models(config, model_blueprints)
     
         # Storage arrays after each iteration
         # Each entry is a tuple for each iteration: (best_fit_pars, RMS, FCALLS)
         self.opt_results = []
-    
-        # Xcorr
-        self.do_xcorr = True if self.xcorr_options['method'] is not None else False
-    
-        if self.do_xcorr:
-            # Number of velocities to try in the brute force or ccf
-            self.xcorr_options['n_vels'] = int(2 * self.xcorr_options['range'] / self.xcorr_options['step'])
             
-
     # Must define a build_full method which returns wave, model_flux on the detector grid
     # Can also define other build methods that return modified forward models
     def build_full(self, pars, templates_dict):
         raise NotImplementedError("Must implement a build_full function for this instrument")
+    
+    def init_chunks(self, model_blueprints):
+        good = np.where(self.data.mask)[0]
+        order_pixmin, order_pixmax = good[0], good[-1]
+        wave_class = getattr(pcmodels, model_blueprints['wavelength_solution']['class_name'])
+        self.chunk_regions = []
+        stitch_points_pix = np.linspace(order_pixmin, order_pixmax, num=self.n_chunks + 1).astype(int)
+        wave_estimate = wave_class.estimate_order_wave(self, model_blueprints["wavelength_solution"])
+        self.sregion_order = pcutils.SpectralRegion(order_pixmin, order_pixmax, wave_estimate[order_pixmin], wave_estimate[order_pixmax], label="order")
+        for ichunk in range(self.n_chunks):
+            pixmin, pixmax = stitch_points_pix[ichunk], stitch_points_pix[ichunk + 1]
+            wavemin, wavemax = wave_estimate[pixmin], wave_estimate[pixmax]
+            self.chunk_regions.append(pcutils.SpectralRegion(pixmin, pixmax, wavemin, wavemax, label=ichunk))
         
+    def init_models(self, config, model_blueprints):
         
-    def init_models(self, forward_model_settings, model_blueprints):
-        
-        # Stores the models
+        # A dictionary to store model components
         self.models_dict = {}
         
-        # Data pixels
-        self.n_use_data_pix = int(self.n_data_pix - self.crop_data_pix[0] - self.crop_data_pix[1])
-        
-        # The left and right pixels. This should roughly match the bad pix arrays
-        self.pix_bounds = [self.crop_data_pix[0], self.n_data_pix - self.crop_data_pix[1] - 1]
-        self.n_model_pix = int(self.model_resolution * self.n_data_pix)
+        # The number of model pixels for this order
+        self.n_model_pix_order = int(self.model_resolution * self.data.flux.size)
 
         # First generate the wavelength solution model
-        model_class = getattr(pcmodelcomponents, model_blueprints['wavelength_solution']['class_name'])
-        self.wave_bounds = model_class.estimate_bounds(self, model_blueprints['wavelength_solution'])
-        self.models_dict['wavelength_solution'] = model_class(self, model_blueprints['wavelength_solution'])
+        model_class = getattr(pcmodels, model_blueprints['wavelength_solution']['class_name'])
         
-        # The spacing of the high res fiducial wave grid
-        self.dl = ((self.wave_bounds[1] +  15) - (self.wave_bounds[0] - 15)) / self.n_model_pix
+        # Init the chunks
+        self.init_chunks(model_blueprints)
+        
+        self.models_dict['wavelength_solution'] = model_class(self, model_blueprints['wavelength_solution'])
         
         # Define the LSF model if present
         if 'lsf' in model_blueprints:
-            model_class_init = getattr(pcmodelcomponents, model_blueprints['lsf']['class_name'])
+            model_class_init = getattr(pcmodels, model_blueprints['lsf']['class_name'])
             self.models_dict['lsf'] = model_class_init(self, model_blueprints['lsf'])
         
         # Generate the remaining model components from their blueprints and load any input templates
@@ -566,40 +504,27 @@ class ForwardModel:
                 continue
             
             # Construct the model
-            model_class = getattr(pcmodelcomponents, model_blueprints[blueprint]['class_name'])
+            model_class = getattr(pcmodels, model_blueprints[blueprint]['class_name'])
             self.models_dict[blueprint] = model_class(self, model_blueprints[blueprint])
 
 
-    def load_templates(self):
-        
-        templates_dict = {}
-        
-        for model in self.models_dict:
-            if hasattr(self.models_dict[model], 'load_template'):
-                templates_dict[model] = self.models_dict[model].load_template(self)
-                
-        return templates_dict
-
-
-    def init_parameters(self):
+    def init_parameters(self, sregion=None):
         self.initial_parameters = OptimParameters.Parameters()
         for model in self.models_dict:
             self.models_dict[model].init_parameters(self)
         self.initial_parameters.sanity_lock()
-
+ 
 
     def init_optimize(self, templates_dict):
         for model in self.models_dict:
             self.models_dict[model].init_optimize(self, templates_dict)
-
-
-    def save_results(self):
-        self.save_to_pickle()
                 
     # Prints the models and corresponding parameters after each fit if verbose_print=True
     def pretty_print(self):
         # Loop over models
         for mname in self.models_dict.keys():
+            if not self.models_dict[mname].enabled:
+                continue
             # Print the model string
             print(self.models_dict[mname])
             # Sub loop over per model parameters
@@ -608,131 +533,140 @@ class ForwardModel:
                 if len(self.opt_results) == 0:
                     print(self.initial_parameters[pname], flush=True)
                 else:
-                    print(self.opt_results[-1][0][pname], flush=True)
+                    print(self.opt_results[-1][-1]['xbest'][pname], flush=True)
                 
     def set_parameters(self, pars):
         self.initial_parameters.update(pars)
     
-    def init_chunks(self):
-        
-        good = np.where(self.data.mask == 1)[0]
-        f, l = good[0], good[-1]
-        _chunk_points = np.linspace(f, l, num=self.n_chunks + 1).astype(int)
-        self.chunk_points = []
-        for ichunk in range(self.n_chunks):
-            self.chunk_points.append((_chunk_points[ichunk], _chunk_points[ichunk + 1]))
-    
     # Plots the forward model after each iteration with other template as well if verbose_plot = True
-    def plot_model(self, templates_dict, iter_index):
-        
-        # Units
-        wave_factors = {
-            'microns': 1E-4,
-            'nm' : 1E-1,
-            'ang' : 1
-        }
-        
-        wave_factor = wave_factors[self.plot_wave_unit]
-        
-        # The best fit parameters
-        pars = self.opt_results[-1][0]
-        
-        # Build the model
-        wave_data, model_lr = self.build_full(pars, templates_dict)
-        wave_data = wave_data * wave_factor
-        
-        # The residuals for this iteration
-        residuals = self.data.flux - model_lr
+    def plot_order(self, templates_dict, iter_index):
         
         # The filename
         if self.models_dict['star'].enabled:
-            fname = self.run_output_path + self.o_folder + 'Fits' + os.sep + self.tag + '_data_model_spec' + str(self.spec_num) + '_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
+            fname = self.run_output_path + self.o_folder + 'ForwardModels' + os.sep + self.tag + '_data_model_spec' + str(self.spec_num) + '_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
         else:
-            fname = self.run_output_path + self.o_folder + 'Fits' + os.sep + self.tag + '_data_model_spec' + str(self.spec_num) + '_ord' + str(self.order_num) + '_iter0.png'
-
-        # Define some helpful indices
-        good = np.where(self.data.mask == 1)[0]
-        bad = np.where(self.data.mask == 0)[0]
-        f, l = good[0], good[-1]
-        bad_data_locs = np.argsort(np.abs(residuals[good]))[-1*self.flag_n_worst_pixels:]
-        use_pix = np.arange(f, l+1).astype(int)
-        
-        # Left and right padding
-        pad = 0.01 * (wave_data[use_pix[-1]] - wave_data[use_pix[0]])
-        
+            fname = self.run_output_path + self.o_folder + 'ForwardModels' + os.sep + self.tag + '_data_model_spec' + str(self.spec_num) + '_ord' + str(self.order_num) + '_iter0.png'
+            
         # Figure
-        plot_width, plot_height = 2000, 720
+        plot_width, plot_height = 1600, 800
         dpi = 200
-        fig, ax = plt.subplots(1, 1, figsize=(int(plot_width / dpi), int(plot_height / dpi)), dpi=dpi)
+        fig, axarr = plt.subplots(self.n_chunks, 1, figsize=(int(plot_width / dpi), int(self.n_chunks * plot_height / dpi)), dpi=dpi)
+        axarr = np.atleast_1d(axarr)
+            
+        for ichunk, sregion in enumerate(self.chunk_regions):
+            
+            # The best fit parameters
+            pars = self.opt_results[-1][sregion.label]['xbest']
+            
+            # Init chunk
+            templates_dict_chunked = self.init_chunk(templates_dict, sregion)
         
-        # Data
-        ax.plot(wave_data[use_pix], self.data.flux[use_pix], color=(0, 114/255, 189/255), lw=0.8)
+            # Build the model
+            wave_data, model_lr = self.build_full(pars, templates_dict)
         
-        # Model
-        ax.plot(wave_data[use_pix], model_lr[use_pix], color=(217/255, 83/255, 25/255), lw=0.8)
+            # The residuals for this iteration
+            residuals = self.data.flux_chunk  - model_lr
+
+            # Define some helpful indices
+            good = np.where(self.data.mask_chunk == 1)[0]
+            bad = np.where(self.data.mask_chunk == 0)[0]
+            bad_data_locs = np.argsort(np.abs(residuals[good]))[-1*self.flag_n_worst_pixels:]
         
-        # Zero line
-        ax.plot(wave_data[use_pix], np.zeros(use_pix.size), color=(89/255, 23/255, 130/255), lw=0.8, linestyle=':')
-        
-        # Residuals
-        ax.plot(wave_data[good], residuals[good], color=(255/255, 169/255, 22/255), lw=0.8)
-        
-        # The worst N pixels that were flagged
-        ax.plot(wave_data[good][bad_data_locs], residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
-        
-        # Plot the convolved low res templates for debugging 
-        # Plots the star and tellurics by default. Plots gas cell if present.
-        if self.verbose_plot:
+            # Left and right padding
+            pad = 0.01 * sregion.wave_len()
             
-            lsf = self.models_dict['lsf'].build(pars=pars)
+            # Data
+            axarr[ichunk].plot(wave_data / 10, self.data.flux_chunk, color=(0, 114/255, 189/255), lw=0.8)
             
-            # Extra zero line
-            ax.plot(wave_data[use_pix], np.zeros(use_pix.size) - 0.1, color=(89/255, 23/255, 130/255), lw=0.8, linestyle=':', alpha=0.8)
+            # Model
+            axarr[ichunk].plot(wave_data / 10, model_lr, color=(217/255, 83/255, 25/255), lw=0.8)
             
-            # Star
-            if self.models_dict['star'].enabled:
-                star_flux_hr = self.models_dict['star'].build(pars, templates_dict['star'], templates_dict['star'][:, 0])
-                star_convolved = self.models_dict['lsf'].convolve_flux(star_flux_hr, lsf=lsf)
-                star_flux_lr = np.interp(wave_data / wave_factor, templates_dict['star'][:, 0], star_convolved, left=np.nan, right=np.nan)
-                ax.plot(wave_data[use_pix], star_flux_lr[use_pix] - 1.1, label='Star', lw=0.8, color='deeppink', alpha=0.8)
+            # Zero line
+            axarr[ichunk].plot(wave_data / 10, np.zeros(sregion.pix_len()), color=(89/255, 23/255, 130/255), lw=0.8, linestyle=':')
             
-            # Tellurics
-            if 'tellurics' in self.models_dict and self.models_dict['tellurics'].enabled:
-                tellurics = self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], templates_dict['star'][:, 0])
-                tellurics_convolved = self.models_dict['lsf'].convolve_flux(tellurics, lsf=lsf)
-                tell_flux_lr = np.interp(wave_data / wave_factor, templates_dict['star'][:, 0], tellurics_convolved, left=np.nan, right=np.nan)
-                ax.plot(wave_data[use_pix], tell_flux_lr[use_pix] - 1.1, label='Tellurics', lw=0.8, color='indigo', alpha=0.8)
+            # Residuals
+            axarr[ichunk].plot(wave_data[good] / 10, residuals[good], color=(255/255, 169/255, 22/255), lw=0.8)
             
-            # Gas Cell
-            if 'gas_cell' in self.models_dict and self.models_dict['gas_cell'].enabled:
-                gas_flux_hr = self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], templates_dict['star'][:, 0])
-                gas_cell_convolved = self.models_dict['lsf'].convolve_flux(gas_flux_hr, lsf=lsf)
-                gas_flux_lr = np.interp(wave_data / wave_factor, templates_dict['star'][:, 0], gas_cell_convolved, left=np.nan, right=np.nan)
-                ax.plot(wave_data[use_pix], gas_flux_lr[use_pix] - 1.1, label='Gas Cell', lw=0.8, color='green', alpha=0.8)
-            ax.set_ylim(-1.1, 1.1)
-            ax.legend(loc='lower right')
+            # The worst N pixels that were flagged
+            axarr[ichunk].plot(wave_data[good][bad_data_locs] / 10, residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
             
-            # Residual lab flux
-            if 'residual_lab' in templates_dict:
-                res_hr = templates_dict['residual_lab'][:, 1]
-                res_lr = np.interp(wave_data / wave_factor, templates_dict['star'][:, 0], res_hr, left=np.nan, right=np.nan)
-                ax.plot(wave_data[use_pix], res_lr[use_pix] - 0.1, label='Lab Frame Coherence', lw=0.8, color='darkred', alpha=0.8)
-        else:
-            ax.set_ylim(-0.1, 1.1)
-            
-        # Final settings
-        ax.set_xlim(wave_data[f] - pad, wave_data[l] + pad)
-        ax.set_xlabel('Wavelength [' + self.plot_wave_unit + ']', fontsize=12)
-        ax.set_ylabel('Data, Model, Residuals', fontsize=12)
+            # Plot the convolved low res templates for debugging 
+            # Plots the star and tellurics by default. Plots gas cell if present.
+            if self.verbose_plot:
+                
+                lsf = self.models_dict['lsf'].build(pars=pars)
+                
+                # Extra zero line
+                axarr[ichunk].plot(wave_data / 10, np.zeros(sregion.pix_len()) - 0.1, color=(89/255, 23/255, 130/255), lw=0.8, linestyle=':', alpha=0.8)
+                
+                # Star
+                if self.models_dict['star'].enabled:
+                    star_flux_hr = self.models_dict['star'].build(pars, templates_dict_chunked['star'], templates_dict_chunked['star'][:, 0])
+                    star_convolved = self.models_dict['lsf'].convolve_flux(star_flux_hr, lsf=lsf)
+                    star_flux_lr = np.interp(wave_data, templates_dict_chunked['star'][:, 0], star_convolved, left=np.nan, right=np.nan)
+                    axarr[ichunk].plot(wave_data / 10, star_flux_lr - 1.1, label='Star', lw=0.8, color='deeppink', alpha=0.8)
+                
+                # Tellurics
+                if 'tellurics' in self.models_dict and self.models_dict['tellurics'].enabled:
+                    tellurics = self.models_dict['tellurics'].build(pars, templates_dict_chunked['tellurics'], templates_dict_chunked['star'][:, 0])
+                    tellurics_convolved = self.models_dict['lsf'].convolve_flux(tellurics, lsf=lsf)
+                    tell_flux_lr = np.interp(wave_data, templates_dict_chunked['star'][:, 0], tellurics_convolved, left=np.nan, right=np.nan)
+                    axarr[ichunk].plot(wave_data / 10, tell_flux_lr - 1.1, label='Tellurics', lw=0.8, color='indigo', alpha=0.8)
+                
+                # Gas Cell
+                if 'gas_cell' in self.models_dict and self.models_dict['gas_cell'].enabled:
+                    gas_flux_hr = self.models_dict['gas_cell'].build(pars, templates_dict_chunked['gas_cell'], templates_dict_chunked['star'][:, 0])
+                    gas_cell_convolved = self.models_dict['lsf'].convolve_flux(gas_flux_hr, lsf=lsf)
+                    gas_flux_lr = np.interp(wave_data, templates_dict_chunked['star'][:, 0], gas_cell_convolved, left=np.nan, right=np.nan)
+                    axarr[ichunk].plot(wave_data / 10, gas_flux_lr - 1.1, label='Gas Cell', lw=0.8, color='green', alpha=0.8)
+                axarr[ichunk].set_ylim(-1.1, 1.1)
+                
+                # Residual lab flux
+                if 'residual_lab' in templates_dict:
+                    res_hr = templates_dict['residual_lab'][:, 1]
+                    res_lr = np.interp(wave_data, templates_dict_chunked['star'][:, 0], res_hr, left=np.nan, right=np.nan)
+                    ax.plot(wave_data / 10, res_lr - 0.1, label='Lab Frame Coherence', lw=0.8, color='darkred', alpha=0.8)
+                    
+                axarr[ichunk].legend(prop={'size': 8}, loc='lower right')
+            else:
+                axarr[ichunk].set_ylim(-0.1, 1.1)
+                
+            axarr[ichunk].tick_params(axis='both', labelsize=6)
+            axarr[ichunk].set_xlim((sregion.wavemin - pad) / 10, (sregion.wavemax + pad) / 10)
+            fig.text(0.5, 0.015, 'Wavelength [nm]', fontsize=6, horizontalalignment='center', verticalalignment='center')
+            fig.text(0.015, 0.5, 'Data, Model, Residuals', fontsize=6, rotation=90, verticalalignment='center', horizontalalignment='center')
         
         # Save
-        plt.tight_layout()
+        plt.subplots_adjust(left=0.1, bottom=0.03, right=0.9, top=0.98, wspace=None, hspace=0.04)
         plt.savefig(fname)
         plt.close()
+        
+    def init_chunk(self, templates_dict, sregion=None):
+        
+        if sregion is None:
+            sregion = self.sregion_order
+            
+        templates_dict_chunked = copy.deepcopy(templates_dict)
+        
+        # Init the models
+        for model in self.models_dict:
+            self.models_dict[model].init_chunk(self, templates_dict_chunked, sregion)
+            
+        # Init params
+        try:
+            self.initial_parameters = self.opt_results[-2][sregion.label]['xbest']
+        except:
+            pass
+        
+        self.data.flux_chunk = self.data.flux[sregion.data_inds] / pcmath.weighted_median(self.data.flux[sregion.data_inds], percentile=0.98)
+        self.data.flux_unc_chunk = self.data.flux_unc[sregion.data_inds]
+        self.data.mask_chunk = self.data.mask[sregion.data_inds]
+            
+        return templates_dict_chunked
 
     # Save the forward model object to a pickle
     def save_to_pickle(self):
-        fname = self.run_output_path + self.o_folder + os.sep + self.tag + '_forward_model_ord' + str(self.order_num) + '_spec' + str(self.spec_num) + '.pkl'
+        fname = self.run_output_path + self.o_folder + 'ForwardModels' + os.sep + self.tag + '_forward_model_ord' + str(self.order_num) + '_spec' + str(self.spec_num) + '.pkl'
         with open(fname, 'wb') as f:
             pickle.dump(self, f)
             
@@ -784,13 +718,44 @@ class ForwardModel:
 
     # Wrapper for parallel processing. Solves and plots the forward model results. Also does xcorr if set.
     @staticmethod
-    def solver_wrapper(forward_model, templates_dict, iter_index, n_spec_tot):
+    def fit_region_wrapper(forward_model, templates_dict, iter_index, sregion):
         """A wrapper for forward modeling and cross-correlating a single spectrum.
 
         Args:
             forward_model (ForwardModel): The forward model object
             iter_index (int): The iteration index.
-            n_spec_tot (int): The total number of spectra for printing purposes.
+            output_path_plot (str, optional): output path for plots. Defaults to None and uses object default.
+            verbose_print (bool, optional): Whether or not to print optimization results. Defaults to False.
+            verbose_plot (bool, optional): Whether or not to plot templates with the forward model. Defaults to False.
+
+        Returns:
+            forward_model (ForwardModel): The updated forward model since we possibly fit in parallel.
+        """
+        
+        # Init this region
+        templates_dict_chunked = forward_model.init_chunk(templates_dict, sregion)
+        
+        # Construct the extra arguments to pass to the target function
+        args_to_pass = (forward_model, templates_dict_chunked, sregion)
+    
+        # Construct the Nelder Mead Solver and run
+        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-6, xtol=1E-6)
+        opt_result = solver.solve()
+        
+        # Pass best fit parameters and optimization result to forward model
+        forward_model.opt_results[-1].append({'xbest': opt_result['xmin'], 'fbest': opt_result['fmin'], 'fcalls': opt_result['fcalls']})
+
+        # Return new forward model object since we possibly fit in parallel
+        return forward_model
+    
+    # Wrapper for parallel processing. Solves and plots the forward model results. Also does xcorr if set.
+    @staticmethod
+    def fit_all_regions_wrapper(forward_model, templates_dict, iter_index):
+        """A wrapper for forward modeling and cross-correlating a single spectrum.
+
+        Args:
+            forward_model (ForwardModel): The forward model object
+            iter_index (int): The iteration index.
             output_path_plot (str, optional): output path for plots. Defaults to None and uses object default.
             verbose_print (bool, optional): Whether or not to print optimization results. Defaults to False.
             verbose_plot (bool, optional): Whether or not to plot templates with the forward model. Defaults to False.
@@ -802,37 +767,90 @@ class ForwardModel:
         # Start the timer
         stopwatch = pcutils.StopWatch()
         
-        # Construct the extra arguments to pass to the target function
-        args_to_pass = (forward_model, templates_dict)
-    
-        # Construct the Nelder Mead Solver and run
-        solver = NelderMead(forward_model.target_function, forward_model.initial_parameters, no_improve_break=3, args_to_pass=args_to_pass, ftol=1E-6, xtol=1E-6)
-        opt_result = solver.solve()
-
-        # Pass best fit parameters and optimization result to forward model
-        forward_model.opt_results.append((opt_result['xmin'], opt_result['fmin'], opt_result['fcalls']))
-
-        # Print diagnostics if set
-        if forward_model.verbose_print:
-            print('RMS = %' + str(round(100*opt_result['fmin'], 5)), flush=True)
-            print('Function Calls = ' + str(opt_result['fcalls']), flush=True)
-            forward_model.pretty_print()
+        # Add an iteration to the opt_results list
+        forward_model.opt_results.append([])
         
-        print('    Fit Spectrum ' + str(forward_model.spec_num) + ' of ' + str(n_spec_tot) + ' in ' + str(round((stopwatch.time_since())/60, 2)) + ' min', flush=True)
+        for ichunk, sregion in enumerate(forward_model.chunk_regions):
+            
+            # Fit chunk
+            forward_model = forward_model.fit_region_wrapper(forward_model, templates_dict, iter_index, sregion)
+
+            # Print diagnostics if set
+            if forward_model.verbose_print:
+                print('Function Val = ' + str(round(forward_model.opt_results[-1][-1]['fbest'], 5)), flush=True)
+                print('Function Calls = ' + str(forward_model.opt_results[-1][-1]['fcalls']), flush=True)
+                forward_model.pretty_print()
+        
+        print('Fit Spectrum ' + str(forward_model.spec_num) + ' in ' + str(round((stopwatch.time_since())/60, 2)) + ' min', flush=True)
 
         # Output a plot
-        forward_model.plot_model(templates_dict, iter_index)
+        forward_model.plot_order(templates_dict, iter_index)
 
         # Return new forward model object since we possibly fit in parallel
         return forward_model
+
+  
+       # Wrapper for parallel processing. Solves and plots the forward model results. Also does xcorr if set.
+    
+    @staticmethod
+    def cross_correlate_region_wrapper(forward_model, templates_dict, iter_index, sregion, xcorr_options):
+        """A wrapper for forward modeling and cross-correlating a single spectrum.
+
+        Args:
+            forward_model (ForwardModel): The forward model object
+            iter_index (int): The iteration index.
+            output_path_plot (str, optional): output path for plots. Defaults to None and uses object default.
+            verbose_print (bool, optional): Whether or not to print optimization results. Defaults to False.
+            verbose_plot (bool, optional): Whether or not to plot templates with the forward model. Defaults to False.
+
+        Returns:
+            forward_model (ForwardModel): The updated forward model since we possibly fit in parallel.
+        """
+        
+        # Init this region
+        templates_dict_chunked = forward_model.init_chunk(templates_dict, sregion)
+        
+        ccf_method = getattr(pcrvcalc, xcorr_options["method"])
+        
+        # Run the CCF
+        ccf_result = ccf_method(forward_model, templates_dict_chunked, iter_index, sregion, xcorr_options)
+
+        # Return new forward model object since we possibly fit in parallel
+        return ccf_result
+    
+    # Wrapper for parallel processing. Solves and plots the forward model results. Also does xcorr if set.
+    @staticmethod
+    def cross_correlate_all_regions_wrapper(forward_model, templates_dict, iter_index, xcorr_options):
+        """A wrapper for forward modeling and cross-correlating a single spectrum.
+
+        Args:
+            forward_model (ForwardModel): The forward model object
+            iter_index (int): The iteration index.
+            output_path_plot (str, optional): output path for plots. Defaults to None and uses object default.
+            verbose_print (bool, optional): Whether or not to print optimization results. Defaults to False.
+            verbose_plot (bool, optional): Whether or not to plot templates with the forward model. Defaults to False.
+
+        Returns:
+            forward_model (ForwardModel): The updated forward model since we possibly fit in parallel.
+        """
+        
+        # Start the timer
+        stopwatch = pcutils.StopWatch()
+        
+        ccf_results = []
+        
+        for ichunk, sregion in enumerate(forward_model.chunk_regions):
+            
+            # CCF chunk
+             ccf_results.append(forward_model.cross_correlate_region_wrapper(forward_model, templates_dict, iter_index, sregion, xcorr_options))
+
+        return ccf_results
   
   
 class iSHELLForwardModel(ForwardModel):
 
     def build_full(self, pars, templates_dict):
         
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
         final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
@@ -853,8 +871,9 @@ class iSHELLForwardModel(ForwardModel):
         if self.models_dict['fringing'].enabled:
             model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
             
+        # Convolve
         if self.models_dict['lsf'].enabled:
-            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+            model[:] = self.models_dict['lsf'].convolve_flux(model, pars)
             
         # Renormalize model to remove degeneracy between blaze and lsf
         model /= pcmath.weighted_median(model, percentile=0.999)
@@ -1202,3 +1221,19 @@ class SimulatedForwardModel(ForwardModel):
             stop()
         
         return wavelength_solution, model_lr
+    
+    
+    
+# Post init summary
+def print_init_summary(forward_model):
+    """Print a summary for this run.
+    """
+    # Print summary
+    print('***************************************', flush=True)
+    print('** Target: ' + forward_model.star_name, flush=True)
+    print('** Spectrograph: ' + forward_model.observatory['name'] + ' / ' + forward_model.spectrograph, flush=True)
+    print('** Observations: ' + str(forward_model.n_spec) + ' spectra, ' + str(forward_model.n_nights) + ' nights', flush=True)
+    print('** Echelle Order: ' + str(forward_model.order_num), flush=True)
+    print('** TAG: ' + forward_model.tag, flush=True)
+    print('** N Iterations: ' + str(forward_model.n_template_fits), flush=True)
+    print('***************************************', flush=True)

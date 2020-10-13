@@ -24,35 +24,35 @@ import matplotlib.pyplot as plt
 
 # Pychell modules
 import pychell.maths as pcmath
-import pychell.reduce.data2d as pcdata
+import pychell.data as pcdata
 
 # Traces orders through density clustering
-# Flat image is a median flat
-def trace_orders_from_flat_field(master_flat, redux_settings):
+def trace_orders_from_flat_field(order_map, config):
     """Determines the locations of echelle orders on a flat field image.
 
         Args:
             flat_input : The full path + filename of the corresponding file.
-            redux_settings (dict): The reduction settings.
+            config (dict): The reduction settings.
         """
         
-    flat_input = master_flat.parse_image()
+    # Load flat field image
+    flat_input = order_map.source.parse_image()
     
     # Image dimensions
     ny, nx = flat_input.shape
     
-    flat_input[0:redux_settings['mask_bottom_edge'], :] = np.nan
-    flat_input[ny-redux_settings['mask_top_edge']:, :] = np.nan
-    flat_input[:, 0:redux_settings['mask_left_edge']] = np.nan
-    flat_input[:, nx-redux_settings['mask_right_edge']:] = np.nan
+    flat_input[0:config['mask_bottom'], :] = np.nan
+    flat_input[ny-config['mask_top']:, :] = np.nan
+    flat_input[:, 0:config['mask_left']] = np.nan
+    flat_input[:, nx-config['mask_right']:] = np.nan
 
     # Smooth the flat.
     flat_smooth = pcmath.median_filter2d(flat_input, width=5, preserve_nans=False)
     
     # Do a horizontal normalization of the smoothed flat image to remove the blaze
     y_ranges = np.linspace(0, ny, num=10).astype(int)
-    first_x = redux_settings['mask_left_edge']
-    last_x = nx - redux_settings['mask_right_edge']
+    first_x = config['mask_left']
+    last_x = nx - config['mask_right']
     for i in range(len(y_ranges)-1):
         y_low = y_ranges[i]
         y_top = y_ranges[i+1]
@@ -144,17 +144,19 @@ def trace_orders_from_flat_field(master_flat, redux_settings):
             ymin = int(pmodel - height / 2)
             if ymin > ny - 1 or ymax < 0:
                 continue
-            if ymax > ny - 1 - redux_settings['mask_top_edge']:
+            if ymax > ny - 1 - config['mask_top']:
                 continue
-            if ymin < 0 + redux_settings['mask_bottom_edge']:
+            if ymin < 0 + config['mask_bottom']:
                 continue
             order_image[ymin:ymax, x] = int(orders_list[o][0]['label'])
-    return order_image, orders_list
+            
+    order_map.orders_list = orders_list
+    order_map.save(order_image)
 
 
 # It's like the above with extra steps
 # This will fail if a majority of the trace is not used.
-def trace_orders_empirical(data, redux_settings):
+def trace_orders_empirical(data, config):
     
     # Load the data image
     data_image = data.parse_image()
@@ -163,18 +165,18 @@ def trace_orders_empirical(data, redux_settings):
     data_image = data_image
     ny, nx = data_image.shape
     
-    data_image[0:redux_settings['mask_bottom_edge'], :] = np.nan
-    data_image[ny-redux_settings['mask_top_edge']:, :] = np.nan
-    data_image[:, 0:redux_settings['mask_left_edge']] = np.nan
-    data_image[:, nx-redux_settings['mask_right_edge']:] = np.nan
+    data_image[0:config['mask_bottom'], :] = np.nan
+    data_image[ny-config['mask_top']:, :] = np.nan
+    data_image[:, 0:config['mask_left']] = np.nan
+    data_image[:, nx-config['mask_right']:] = np.nan
 
-    # Smooth the image.
+    # Smooth the image
     data_smooth = pcmath.median_filter2d(data_image, width=5, preserve_nans=True)
     
     # Do a horizontal normalization of the smoothed flat image to remove the blaze
     y_ranges = np.linspace(0, ny, num=10).astype(int)
-    first_x = redux_settings['mask_left_edge']
-    last_x = nx - redux_settings['mask_right_edge'] - 1
+    first_x = config['mask_left']
+    last_x = nx - config['mask_right'] - 1
     #for i in range(len(y_ranges)-1):
         #y_low = y_ranges[i]
         #y_top = y_ranges[i+1]
@@ -257,20 +259,20 @@ def trace_orders_empirical(data, redux_settings):
             ymin = int(pmodel - height / 2)
             if ymin > ny - 1 or ymax < 0:
                 continue
-            if ymax > ny - 1 - redux_settings['mask_top_edge']:
+            if ymax > ny - 1 - config['mask_top']:
                 continue
-            if ymin < 0 + redux_settings['mask_bottom_edge']:
+            if ymin < 0 + config['mask_bottom']:
                 continue
             order_image[ymin:ymax, x] = int(orders_list[o][0]['label'])
 
     return order_image, orders_list
             
+            
+def biased_metric(p1, p2, bias=2):
+    return (bias * (p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)**0.5
 
-def biased_metric(x, y, bias=10):
-    return (bias * (x[0] - y[0])**2 + (x[1] - y[1])**2)**0.5
 
-# Data is a flat (~B) star
-def trace_minerva_north(data, redux_settings):
+def trace_minerva_north(data, config):
     
     # Load the data image
     data_image = data.parse_image()
@@ -279,17 +281,17 @@ def trace_minerva_north(data, redux_settings):
     data_image = data_image
     ny, nx = data_image.shape
     
-    data_image[0:redux_settings['mask_bottom_edge'], :] = np.nan
-    data_image[ny-redux_settings['mask_top_edge']:, :] = np.nan
-    data_image[:, 0:redux_settings['mask_left_edge']] = np.nan
-    data_image[:, nx-redux_settings['mask_right_edge']:] = np.nan
+    data_image[0:config['mask_bottom_edge'], :] = np.nan
+    data_image[ny-config['mask_top_edge']:, :] = np.nan
+    data_image[:, 0:config['mask_left_edge']] = np.nan
+    data_image[:, nx-config['mask_right_edge']:] = np.nan
 
     # Smooth the image.
     data_smooth = pcmath.median_filter2d(data_image, width=3, preserve_nans=True)
     
     # Do a horizontal normalization of the smoothed flat image to remove the blaze
-    first_x = redux_settings['mask_left_edge']
-    last_x = nx - redux_settings['mask_right_edge'] - 1
+    first_x = config['mask_left_edge']
+    last_x = nx - config['mask_right_edge'] - 1
     for x in range(nx):
         data_smooth[:, x] = data_smooth[:, x] / pcmath.weighted_median(data_smooth[:, x], percentile=0.99)
 
@@ -356,9 +358,9 @@ def trace_minerva_north(data, redux_settings):
             ymin = int(pmodel - height / 2)
             if ymin > ny - 1 or ymax < 0:
                 continue
-            if ymax > ny - 1 - redux_settings['mask_top_edge']:
+            if ymax > ny - 1 - config['mask_top_edge']:
                 continue
-            if ymin < 0 + redux_settings['mask_bottom_edge']:
+            if ymin < 0 + config['mask_bottom_edge']:
                 continue
             order_image[ymin:ymax, x] = int(orders_list[o][0]['label'])
 

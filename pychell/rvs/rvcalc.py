@@ -66,7 +66,7 @@ def get_nightly_jds(jds, sep=0.5):
     return jds_nightly, n_obs_nights
 
 
-def weighted_brute_force(forward_model, templates_dict, iter_index):
+def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xcorr_options):
     """Performs a pseudo weighted cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.
 
     Args:
@@ -79,15 +79,15 @@ def weighted_brute_force(forward_model, templates_dict, iter_index):
         (float): The BIS.
     """
     
-    pars = copy.deepcopy(forward_model.opt_results[-1][0])
+    pars = copy.deepcopy(forward_model.opt_results[-1][sregion.label]['xbest'])
     v0 = pars[forward_model.models_dict['star'].par_names[0]].value
-    vels = np.linspace(v0 - forward_model.xcorr_options['range'], v0 + forward_model.xcorr_options['range'], num=forward_model.xcorr_options['n_vels'])
+    vels = np.linspace(v0 - xcorr_options['range'], v0 + xcorr_options['range'], num=xcorr_options['n_vels'])
 
     # Stores the rms as a function of velocity
     rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     
     # Starting weights are flux uncertainties and bad pixels. If flux unc are uniform, they have no effect.
-    weights_init = np.copy(forward_model.data.mask * forward_model.data.flux_unc)
+    weights_init = np.copy(forward_model.data.mask_chunk * forward_model.data.flux_unc_chunk)
     
     # Flag regions of heavy tellurics
     if 'tellurics' in forward_model.models_dict and forward_model.models_dict['tellurics'].enabled:
@@ -101,7 +101,6 @@ def weighted_brute_force(forward_model, templates_dict, iter_index):
     # Star weights depend on the information content.
     rvc, _ = compute_rv_content(templates_dict['star'][:, 0], templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, width=pars[forward_model.models_dict['lsf'].par_names[0]].value)
     star_weights = 1 / rvc**2
-    
     
     for i in range(vels.size):
         
@@ -119,7 +118,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index):
         weights *= star_weights_shifted
         
         # Construct the RMS
-        rmss[i] = pcmath.rmsloss(forward_model.data.flux, model_lr, weights=weights)
+        rmss[i] = pcmath.rmsloss(forward_model.data.flux_chunk, model_lr, weights=weights)
 
     # Extract the best rv
     M = np.nanargmin(rmss)
@@ -134,9 +133,11 @@ def weighted_brute_force(forward_model, templates_dict, iter_index):
         xcorr_rv = pfit[1] / (-2 * pfit[0])
     
         # Estimate uncertainty
-        xcorr_rv_unc = ccf_uncertainty(vels_for_rv, rmss, xcorr_rv_init, forward_model.data.mask.sum())
+        xcorr_rv_unc = ccf_uncertainty(vels_for_rv, rmss, xcorr_rv_init, forward_model.data.mask_chunk.sum())
     except:
-        return vels_for_rv, rmss, np.nan, np.nan, np.nan
+        xcorr_rv = np.nan
+        xcorr_rv_unc = np.nan
+        bspan_result = (np.nan, np.nan)
     
     # Bisector span
     try:
@@ -144,8 +145,8 @@ def weighted_brute_force(forward_model, templates_dict, iter_index):
     except:
         bspan_result = (np.nan, np.nan)
         
-    
-    return vels_for_rv, rmss, xcorr_rv, xcorr_rv_unc, bspan_result[1]
+    ccf_result = {'rv': xcorr_rv, 'rv_unc': xcorr_rv_unc, 'bis': bspan_result[1], 'vels': vels_for_rv, 'ccf': rmss}
+    return ccf_result
 
 # Super silly and crude but moderately sensible.
 def ccf_uncertainty(cc_vels, ccf, v0, n):
@@ -164,7 +165,7 @@ def ccf_uncertainty(cc_vels, ccf, v0, n):
     return unc
     
 
-def crude_brute_force(forward_model, templates_dict, iter_index=None):
+def crude_brute_force(forward_model, templates_dict, sregion):
     """Performs a pseudo cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.
 
     Args:
@@ -174,8 +175,14 @@ def crude_brute_force(forward_model, templates_dict, iter_index=None):
     Returns:
         forward_model (ForwardModel): The forward model object with cross-correlation results stored in place.
     """
+
+    # Init the whole order
+    templates_dict_chunked = forward_model.init_chunk(templates_dict, forward_model.sregion_order)
     
+    # Copy the parameters
     pars = copy.deepcopy(forward_model.initial_parameters)
+    
+    # Velocity grid
     vels = np.arange(-250000, 250000, 500)
 
     # Stores the rms as a function of velocity
@@ -192,11 +199,10 @@ def crude_brute_force(forward_model, templates_dict, iter_index=None):
         pars[forward_model.models_dict['star'].par_names[0]].setv(value=vels[i])
         
         # Build the model
-        _, model_lr = forward_model.build_full(pars, templates_dict)
+        _, model_lr = forward_model.build_full(pars, templates_dict_chunked)
         
         # Compute the RMS
-        rmss[i] = pcmath.rmsloss(forward_model.data.flux, model_lr, weights=weights)
-        
+        rmss[i] = pcmath.rmsloss(forward_model.data.flux_chunk, model_lr, weights=weights[sregion.data_inds])
 
     # Extract the best rv
     xcorr_star_vel = vels[np.nanargmin(rmss)]
@@ -445,8 +451,8 @@ def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights, flag_outliers=F
     """Computes nightly RVs for a single order.
 
     Args:
-        rvs (np.ndarray): The individual rvs array of length n_spec.
-        weights (np.ndarray): The weights, also of length n_spec.
+        rvs (np.ndarray): The individual rvs array of shape (n_spec, n_chunks).
+        weights (np.ndarray): The weights, also of shape (n_spec, n_chunks).
     """
     
     # The number of spectra and nights
@@ -457,12 +463,12 @@ def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights, flag_outliers=F
     f, l = 0, n_obs_nights[0]
     
     # Initialize the nightly rvs and uncertainties
-    rvs_nightly = np.zeros(n_nights)
-    unc_nightly = np.zeros(n_nights)
+    rvs_nightly = np.full(n_nights, np.nan)
+    unc_nightly = np.full(n_nights, np.nan)
     
     for inight in range(n_nights):
-        r = rvs[f:l]
-        w = weights[f:l]
+        r = rvs[f:l, :].flatten()
+        w = weights[f:l, :].flatten()
         good = np.where(w > 0)[0]
         ng = good.size
         if ng == 0:

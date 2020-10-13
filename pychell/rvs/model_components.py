@@ -65,9 +65,6 @@ class SpectralComponent:
         # No parameter names, probably overwritten with each instance
         self.base_par_names = []
         self.par_names = []
-        
-        # The wavelength bounds for this model in the lab frame with small padding
-        self.wave_bounds = forward_model.wave_bounds
 
     # Must implement a build method
     def build(self, pars, *args, **kwargs):
@@ -196,11 +193,16 @@ class TemplateMult(MultModelComponent):
         
         return flux
     
-    def template_range(self, forward_model, wave, flux):
-        good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
+    def template_yrange(self, forward_model, wave, flux, sregion):
+        good = sregion.wave_within(wave)
         max_range = np.max(flux[good]) - np.min(flux[good])
         return max_range
-
+    
+    def init_chunk(self, forward_model, templates_dict, sregion, key):
+        pad = 15
+        good = sregion.wave_within(templates_dict[key], pad=pad)
+        templates_dict[key] = templates_dict[key][good, :]
+        templates_dict[key][:, 1] = self.normalize_template(forward_model, templates_dict[key][:, 0], templates_dict[key][:, 1], uniform=False)
 
 #### Blaze Models ####
 
@@ -226,12 +228,6 @@ class PolyBlaze(EmpiricalMult):
         # The polynomial order
         self.poly_order = blueprint['poly_order']
         self.n_poly_pars = self.poly_order + 1
-
-        # The estimate of the blaze wavelength
-        if 'blaze_wavelengths' in blueprint:
-            self.blaze_wave_estimate = blueprint['blaze_wavelengths'][self.order_num - 1]
-        else:
-            self.blaze_wave_estimate = None
             
         # Parameter names
         self.base_par_names = []
@@ -246,14 +242,11 @@ class PolyBlaze(EmpiricalMult):
         if not self.enabled:
             return self.build_fake(wave_final.size)
         
-        # Blaze wavelength or average
-        blaze_wavelength = self.blaze_wave_estimate if self.blaze_wave_estimate is not None else np.nanmean(wave_final)
-        
         # The polynomial coeffs
         poly_pars = np.array([pars[self.par_names[i]].value for i in range(self.poly_order + 1)])
         
         # Build polynomial
-        poly_blaze = np.polyval(poly_pars[::-1], wave_final - blaze_wavelength)
+        poly_blaze = np.polyval(poly_pars[::-1], wave_final - self.wave_mid)
         
         return poly_blaze
 
@@ -270,6 +263,9 @@ class PolyBlaze(EmpiricalMult):
 
     def __repr__(self):
         return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
+    
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        self.wave_mid = sregion.midwave()
     
     
 class SplineBlaze(EmpiricalMult):
@@ -339,84 +335,9 @@ class SplineBlaze(EmpiricalMult):
                 
     def __repr__(self):
         return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
-
-
-class SincBlaze(EmpiricalMult):
-    """ A full blaze transmission model.
     
-    .. math:
-        B(\\lambda) = (\\sum_{k=0}^{N} a_{i} \\lambda^{k} ) sinc(b (\\lambda - \\lambda_{B} + c))^{2d}
-
-    Attributes:
-        poly_order (int): The polynomial order.
-        blaze_wave_estimate (bool): The estimate of the blaze wavelegnth. If not provided, defaults to the average of the wavelength grid provided in the build method. For this model, this is likely insufficient and robust estimates should be provided.
-    """
-
-    def __init__(self, forward_model, blueprint):
-
-        # Super
-        super().__init__(forward_model, blueprint)
-
-        # The base parameter names
-        self.base_par_names = ['_b', '_c', '_d']
-
-        # The estimate of the blaze wavelength
-        if 'blaze_wavelengths' in blueprint:
-            self.blaze_wave_estimate = blueprint['blaze_wavelengths'][self.order_num - 1]
-        else:
-            self.blaze_wave_estimate = None
-            
-        # The echelle order number
-        self.echelle_order_num = forward_model.echelle_order_num
-            
-        # Polynomial
-        self.poly_order = blueprint['poly_order']
-        self.n_poly_pars = self.poly_order + 1
-
-        # Set the polynomial parameter names
-        if self.n_poly_pars > 0:
-            for i in range(self.n_poly_pars):
-                self.base_par_names.append('_a_' + str(i))
-
-        self.par_names = [self.name + s for s in self.base_par_names]
-    
-    def build(self, pars, wave_final):
-
-        # Sinc pars
-        b = pars[self.par_names[0]].value
-        c = pars[self.par_names[1]].value
-        d = pars[self.par_names[2]].value
-        
-        # Polynomial pars
-        poly_pars = np.array([pars[self.par_names[i + 3]] for i in range(self.n_poly_pars)])
-        
-        # Blaze wavelength or average
-        blaze_wavelength = self.blaze_wave_estimate if self.blaze_wave_estimate is not None else np.nanmean(wave_final)
-        
-        wave_min, wave_max = np.nanmin(wave_final), np.nanmax(wave_final)
-        x = (wave_final - wave_min) / wave_max
-        blaze_wavelength = (blaze_wavelength - wave_min) / wave_max
-        
-        # Construct sinc model
-        blw = blaze_wavelength + c
-        x = self.echelle_order_num * (1 - blw) / x
-        x *= np.pi * alpha
-        sinc_blaze = np.abs(np.sin(x))**(2 * d) / x**(2 * d)
-        
-        # Construct polynomial
-        poly_blaze = np.polyval(wave_final - blaze_wavelength) # intentionally use constant blaze wavelength here, no reason to use blw.
-        
-        # Return product
-        return blaze_base * blaze_spline
-
-    def init_parameters(self, forward_model):
-        
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['base_b'][1], minv=self.blueprint['base_b'][0], maxv=self.blueprint['b'][2], vary=self.enabled))
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[2], value=self.blueprint['base_c'][1], minv=self.blueprint['base_c'][0], maxv=self.blueprint['c'][2], vary=self.enabled))
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[3], value=self.blueprint['base_d'][1], minv=self.blueprint['base_d'][0], maxv=self.blueprint['d'][2], vary=self.enabled))
-        
-        for i in range(self.n_poly_pars):
-            forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+3], value=self.blueprint['poly_' + str(i)][1], minv=self.blueprint['poly_' + str(i)][0], maxv=self.blueprint['poly_' + str(i)][2], vary=self.enabled))
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        self.wavemid = sregion.midwave()
 
 
 #### Gas Cell ####
@@ -448,7 +369,7 @@ class GasCell(TemplateMult):
         pad = 5
         template = np.load(self.input_file)
         wave, flux = template['wave'], template['flux']
-        good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
+        good = np.where((wave > forward_model.sregion_order.wavemin - pad) & (wave < forward_model.sregion_order.wavemax + pad))[0]
         wave, flux = wave[good], flux[good]
         flux /= pcmath.weighted_median(flux, percentile=0.999)
         template = np.array([wave, flux]).T
@@ -461,55 +382,10 @@ class GasCell(TemplateMult):
         
     def init_optimize(self, forward_model, templates_dict):
         wave, flux = templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1]
-        flux_interp = scipy.interpolate.CubicSpline(wave, flux, extrapolate=False)(templates_dict['star'][:, 0])
-        flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_interp, pars=forward_model.initial_parameters)
-        templates_dict['gas_cell'][:, 1] /= pcmath.weighted_median(flux_conv, percentile=0.99)
-
-
-class GasCellCHIRON(TemplateMult):
-    """ A gas cell model for CHIRON.
-    """
-
-    def __init__(self, forward_model, blueprint):
-
-        # Call super method
-        super().__init__(forward_model, blueprint)
-
-        self.base_par_names = ['_shift', '_depth']
-
-        self.par_names = [self.name + s for s in self.base_par_names]
-
-    def build(self, pars, template, wave_final):
-        wave, flux = template[:, 0], template[:, 1]
-        if self.enabled:
-            wave = wave + pars[self.par_names[0]].value
-            flux = flux ** pars[self.par_names[1]].value
-            return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
-        else:
-            return self.build_fake(wave_final.size)
-
-    def load_template(self, forward_model):
-        print('Loading in Gas Cell Template ...', flush=True)
-        pad = 5
-        template = np.load(self.input_file)
-        wave, flux = template['wave'], template['flux']
-        good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
-        wave, flux = wave[good], flux[good]
-        flux /= pcmath.weighted_median(flux, percentile=0.999)
-        template = np.array([wave, flux]).T
-        return template
-
-    def init_parameters(self, forward_model):
-        
-        shift = self.blueprint['shifts'][self.order_num - 1]
-        depth = self.blueprint['depth']
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=shift, minv=shift - self.blueprint['shift_range'][0], maxv=shift + self.blueprint['shift_range'][1], vary=True))
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=depth[1], minv=depth[0], maxv=depth[2], vary=self.enabled))
-        
-    def init_optimize(self, forward_model, templates_dict):
-        wave, flux = templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1]
         templates_dict['gas_cell'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
-
+        
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        super().init_chunk(forward_model, templates_dict, sregion, "gas_cell")
 
 #### Star ####
 class Star(TemplateMult):
@@ -549,7 +425,7 @@ class Star(TemplateMult):
 
     def load_template(self, forward_model):
         pad = 15
-        wave_even = np.linspace(self.wave_bounds[0] - pad, self.wave_bounds[1] + pad, num=forward_model.n_model_pix)
+        wave_even = np.linspace(forward_model.sregion_order.wavemin - pad, forward_model.sregion_order.wavemax + pad, num=forward_model.n_model_pix_order)
         if self.from_synthetic:
             print('Loading in Synthetic Stellar Template', flush=True)
             template_raw = np.loadtxt(self.input_file, delimiter=',')
@@ -566,10 +442,12 @@ class Star(TemplateMult):
     def init_optimize(self, forward_model, templates_dict):
         wave, flux = templates_dict['star'][:, 0], templates_dict['star'][:, 1]
         templates_dict['star'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
+        
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        super().init_chunk(forward_model, templates_dict, sregion, "star")
 
 
 #### Tellurics ####
-
 class TelluricsTAPAS(TemplateMult):
     """ A telluric model based on Templates obtained from TAPAS. These templates should be pre-fetched from TAPAS and specific to the observatory. Only water has a unique depth, with all others being identical. The model uses a common Doppler shift.
 
@@ -640,7 +518,7 @@ class TelluricsTAPAS(TemplateMult):
         # Water
         water = np.load(forward_model.templates_path + self.species_input_files['water'])
         wave, flux = water['wave'], water['flux']
-        good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
+        good = np.where((wave > forward_model.sregion_order.wavemin - pad) & (wave < forward_model.sregion_order.wavemax + pad))[0]
         wave, flux = wave[good], flux[good]
         templates['water'] = np.array([wave, flux]).T
         
@@ -652,7 +530,7 @@ class TelluricsTAPAS(TemplateMult):
                 continue
             tell = np.load(forward_model.templates_path + self.species_input_files[species])
             wave, _flux = tell['wave'], tell['flux']
-            good = np.where((wave > self.wave_bounds[0] - pad) & (wave < self.wave_bounds[1] + pad))[0]
+            good = np.where((wave > forward_model.sregion_order.wavemin - pad) & (wave < forward_model.sregion_order.wavemax + pad))[0]
             wave, _flux = wave[good], _flux[good]
             good = np.where(np.isfinite(wave) & np.isfinite(_flux))[0]
             flux *= scipy.interpolate.CubicSpline(wave[good], _flux[good], extrapolate=False)(wave_water)
@@ -660,6 +538,22 @@ class TelluricsTAPAS(TemplateMult):
         templates['airmass'] = np.array([wave_water, flux]).T
             
         return templates
+    
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        pad = 2
+        for t in templates_dict["tellurics"]:
+            super().init_chunk(forward_model, templates_dict["tellurics"], sregion, t)
+
+        yrange_water = self.template_yrange(forward_model, templates_dict["tellurics"]["water"][:, 0], templates_dict["tellurics"]["water"][:, 1], sregion)
+        yrange_airmass = self.template_yrange(forward_model, templates_dict["tellurics"]["airmass"][:, 0], templates_dict["tellurics"]["airmass"][:, 1],  sregion)
+        if yrange_water > self.min_range:
+            self.water_enabled = True
+        else:
+            self.water_enabled = False
+        if yrange_airmass > self.min_range:
+            self.airmass_enabled = True
+        else:
+            self.airmass_enabled = False
 
     def __repr__(self):
         ss = ' Model Name: ' + self.name
@@ -670,7 +564,7 @@ class TelluricsTAPAS(TemplateMult):
         # Normalize the water flux
         templates_dict['tellurics']['water'][:, 1] = self.normalize_template(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['water'][:, 1], uniform=False)
         
-        water_range = self.template_range(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['water'][:, 1])
+        water_range = self.template_yrange(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['water'][:, 1], forward_model.sregion_order)
         
         if water_range > self.min_range:
             self.water_enabled = True
@@ -682,7 +576,7 @@ class TelluricsTAPAS(TemplateMult):
         # Normalize the other components
         templates_dict['tellurics']['airmass'][:, 1] = self.normalize_template(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['airmass'][:, 1], uniform=False)
         
-        airmass_range = self.template_range(forward_model, templates_dict['tellurics']['airmass'][:, 0], templates_dict['tellurics']['airmass'][:, 1])
+        airmass_range = self.template_yrange(forward_model, templates_dict['tellurics']['airmass'][:, 0], templates_dict['tellurics']['airmass'][:, 1], forward_model.sregion_order)
         if airmass_range > self.min_range:
             self.airmass_enabled = True
         else:
@@ -699,7 +593,6 @@ class TelluricsTAPAS(TemplateMult):
 
 
 #### LSF ####
-
 class LSF(SpectralComponent):
     """ A base class for an LSF (line spread function) model.
 
@@ -715,24 +608,16 @@ class LSF(SpectralComponent):
 
         # Call super method
         super().__init__(forward_model, blueprint)
-
-        # The resolution of the model grid (dl = grid spacing)
-        self.dl = forward_model.dl
-
-        # The number of model pixels
-        self.nx_model = forward_model.n_model_pix
         
         # Set the default LSF if provided
         if hasattr(forward_model.data, 'default_lsf') and forward_model.data.default_lsf is not None:
-            self.default_lsf_raw = forward_model.data.default_lsf
-            self.default_lsf = scipy.interpolate.CubicSpline(self.default_lsf_raw[:, 0], self.default_lsf_raw[:, 1])(self.x)
+            self.default_lsf = forward_model.data.default_lsf
         else:
-            self.nx_lsf = int(forward_model.n_model_pix / 2)
-            if self.nx_lsf % 2 != 0:
-                self.nx_lsf += 1
-            self.n_pad_model = int(np.floor(self.nx_lsf / 2))
-            self.x = np.arange(-np.floor(self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1, 1) * self.dl
             self.default_lsf = None
+            self.n_model_pix_order = forward_model.n_model_pix_order
+            self.nx = np.min([self.n_model_pix_order, 513])
+            self.dl = (1 / forward_model.sregion_order.pix_per_wave()) / self.n_model_pix_order
+            self.x = np.arange(int(-self.nx / 2), int(self.nx / 2) + 1) * self.dl
 
     # Returns a delta function
     def build_fake(self):
@@ -752,16 +637,21 @@ class LSF(SpectralComponent):
         return convolved_flux
         
     def init_optimize(self, forward_model, templates_dict):
-        lsf_estim = pcmath.hermfun(self.x / forward_model.initial_parameters[self.par_names[0]].value, deg=0)
-        lsf_estim = lsf_estim / np.nanmax(lsf_estim)
-        good = np.where(lsf_estim > 1E-10)[0]
-        if good.size < lsf_estim.size - 10:
-            self.nx_lsf = good.size
-            if self.nx_lsf % 2 == 0:
-                self.nx_lsf += 1
-            self.x = np.arange(-np.floor(self.nx_lsf / 2), np.floor(self.nx_lsf / 2) + 1) * self.dl
-            self.n_pad_model = int(np.floor(self.nx_lsf / 2))
-
+        pass
+            
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        nx = int((sregion.pix_len() - 1) * forward_model.model_resolution)
+        self.dl = (1 / sregion.pix_per_wave()) / forward_model.model_resolution
+        x_init = np.arange(int(-nx / 2), int(nx / 2) + 1) * self.dl
+        lsf_bad_estim = pcmath.hermfun(x_init / (0.5 * forward_model.initial_parameters[self.par_names[0]].value), deg=0)
+        lsf_bad_estim /= np.nanmax(lsf_bad_estim)
+        good = np.where(lsf_bad_estim > 1E-10)[0]
+        if good.size < lsf_bad_estim.size:
+            self.nx = good.size
+            if self.nx % 2 == 0:
+                self.nx += 1
+        self.x = np.arange(int(-self.nx / 2), int(self.nx / 2) + 1) * self.dl
+        self.n_pad_model = int(np.floor(self.nx / 2))
 
 class HermiteLSF(LSF):
     """ A Hermite Gaussian LSF model. The model is a sum of Gaussians of constant width and Hermite Polynomial coefficients.
@@ -801,8 +691,7 @@ class HermiteLSF(LSF):
 
     def init_parameters(self, forward_model):
         
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(
-            name=self.par_names[0], value=self.blueprint['width'][1], minv=self.blueprint['width'][0], maxv=self.blueprint['width'][2], vary=self.enabled))
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['width'][1], minv=self.blueprint['width'][0], maxv=self.blueprint['width'][2], vary=self.enabled))
         for i in range(self.hermdeg):
             forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+1], value=self.blueprint['ak'][1], minv=self.blueprint['ak'][0], maxv=self.blueprint['ak'][2], vary=True))
             
@@ -871,12 +760,6 @@ class WavelengthSolution(SpectralComponent):
 
         # Call super method
         super().__init__(forward_model, blueprint)
-
-        # The pixel bounds which roughly correspond to wave_bounds
-        self.pix_bounds = forward_model.pix_bounds
-
-        # The number of total data pixels present in the data
-        self.nx = forward_model.n_data_pix
         
         # The default wavelength grid if provided
         if hasattr(forward_model.data, 'default_wave_grid'):
@@ -890,11 +773,16 @@ class WavelengthSolution(SpectralComponent):
 
     # Estimates the endpoints of the wavelength grid for each order
     @staticmethod
-    def estimate_bounds(forward_model, blueprint):
+    def estimate_order_bounds(forward_model, blueprint):
+        wave_estimate = WavelengthSolution.estimate_order_wave(forward_model, blueprint)
+        wave_bounds = [wave_estimate[forward_model.crop_data_pix[0]], wave_estimate[forward_model.crop_data_pix[1]]]
+        return wave_bounds
+    
+    @staticmethod
+    def estimate_order_wave(forward_model, blueprint):
 
         if hasattr(forward_model.data, 'default_wave_grid') and forward_model.data.default_wave_grid is not None:
             wave_estimate = np.copy(forward_model.data.default_wave_grid)
-            wave_bounds = [wave_estimate[forward_model.pix_bounds[0]], wave_estimate[forward_model.pix_bounds[1]]]
         else:
             # Make an array for the base wavelengths
             quad_wave_set_points = np.array([blueprint['quad_set_point_1'][forward_model.order_num - 1],
@@ -905,13 +793,12 @@ class WavelengthSolution(SpectralComponent):
             wave_estimate_coeffs = pcmath.poly_coeffs(np.array(blueprint['quad_pixel_set_points']), quad_wave_set_points)
 
             # The estimated wavelength grid
-            wave_estimate = np.polyval(wave_estimate_coeffs, np.arange(forward_model.n_data_pix))
-
-            # Wavelength end points are larger to account for changes in the wavelength solution
-            # The stellar template is further padded to account for barycenter sampling
-            wave_bounds = [wave_estimate[forward_model.pix_bounds[0]], wave_estimate[forward_model.pix_bounds[1]]]
-
-        return wave_bounds
+            wave_estimate = np.polyval(wave_estimate_coeffs, np.arange(forward_model.data.flux.size))
+            
+        return wave_estimate
+    
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        pass
 
 
 class PolyWavelengthSolution(WavelengthSolution):
@@ -945,11 +832,11 @@ class PolyWavelengthSolution(WavelengthSolution):
         
         # Estimate the wave grid
         coeffs = pcmath.poly_coeffs(self.quad_pixel_set_points, self.quad_wave_zero_points)
-        wave_estimate = np.polyval(coeffs, np.arange(self.nx))
+        wave_estimate = np.polyval(coeffs, np.arange(forward_model.data.flux.size))
         
         # Polynomial lagrange points
-        self.poly_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_poly_pars).astype(int)
-        self.poly_wave_zero_points = wave_estimate[self.poly_pixel_set_points]
+        self.order_poly_pixel_set_points = np.linspace(forward_model.sregion_order.pixmin, forward_model.sregion_order.pixmax, num=self.n_poly_pars).astype(int)
+        self.order_poly_wave_zero_points = wave_estimate[self.order_poly_pixel_set_points]
         for i in range(self.n_poly_pars):
             self.base_par_names.append('_poly_lagrange_' + str(i + 1))
                 
@@ -958,7 +845,7 @@ class PolyWavelengthSolution(WavelengthSolution):
     def build(self, pars):
         
         # The detector grid
-        pixel_grid = np.arange(self.nx)
+        pixel_grid = np.arange(self.sregion.pixmin, self.sregion.pixmax + 1)
             
         # Lagrange points
         poly_lagrange_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars)])
@@ -966,7 +853,7 @@ class PolyWavelengthSolution(WavelengthSolution):
         # Get the coefficients
         V = np.vander(self.poly_pixel_set_points, N=self.n_poly_pars)
         Vinv = np.linalg.inv(V)
-        coeffs = np.dot(Vinv, self.poly_wave_zero_points + poly_lagrange_pars)
+        coeffs = np.dot(Vinv, self.poly_wave_set_points + poly_lagrange_pars)
     
         # Build full polynomial
         poly_wave = np.polyval(coeffs, pixel_grid)
@@ -981,6 +868,15 @@ class PolyWavelengthSolution(WavelengthSolution):
 
     def update(self, forward_model, iter_index):
         pass
+    
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        wave_estimate = self.estimate_order_wave(forward_model, self.blueprint)
+        good = sregion.wave_within(wave_estimate)
+        self.sregion = sregion
+        self.nx = sregion.pix_len()
+        self.poly_pixel_set_points = np.linspace(good[0], good[-1], num=self.poly_order + 1).astype(int)
+        self.poly_wave_set_points = wave_estimate[self.poly_pixel_set_points]
+        
 
 
 class SplineWavelengthSolution(WavelengthSolution):
@@ -1017,8 +913,8 @@ class SplineWavelengthSolution(WavelengthSolution):
         wave_estimate = np.polyval(coeffs, np.arange(self.nx))
 
         # Set the spline parameter names and knots
-        self.spline_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_spline_pars).astype(int)
-        self.spline_wave_zero_points = wave_estimate[self.spline_pixel_set_points]
+        self.spline_pixel_set_points_order = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_spline_pars).astype(int)
+        self.spline_wave_zero_points_order = wave_estimate[self.spline_pixel_set_points]
         for i in range(self.n_spline_pars):
             self.base_par_names.append('_spline_' + str(i + 1))
                 
@@ -1045,6 +941,12 @@ class SplineWavelengthSolution(WavelengthSolution):
 
     def update(self, forward_model, iter_index):
         pass
+    
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        wave_estimate = self.estimate_order_wave(forward_model, self.blueprint)
+        good = sregion.wave_within(wave_estimate)
+        self.spline_pixel_set_points = np.linspace(good[0], good[-1], num=self.n_splines + 1)
+        self.spline_wave_set_points = wave_estimate[self.spline_pixel_set_points]
 
 
 class HybridWavelengthSolution(WavelengthSolution):
@@ -1101,51 +1003,13 @@ class HybridWavelengthSolution(WavelengthSolution):
             for i in range(self.n_splines + 1):
                 forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], vary=self.splines_enabled))
 
-    #def model_thar_fiber(self, forward_model):
-        
-    def model_gas_cell_fiber(self, forward_model):
-        
-        # Gas cell observation
-        gas_data = forward_model.data.gas_cell_cal
-        
-        # Wavelength Parameters
-        np.array([])
-        scipy.interpolate.CubicSpline()
-        
-        
-        
-    #def model_lfc_fiber(self, forward_model):
-    
-    #def load_template(self, forward_model):
-    #    wave_template = np.load(forward_model.templates_path + forward_model.data.wave_cal_template_file)
-    #    good = np.where(np.isfinite(wave_template[:, 0]) & np.isfinite(wave_template[:, 1]))[0]
-    #    wave_template = wave_template[good, :]
-    #    if forward_model.wave_cal == 'gas_cell':
-    #        wave_template[:, 1] = self.normalize_template(forward_model, wave_template[:, 0], wave_template[:, 1], uniform=False)
-    #    return wave_template
-    
-    
-    def normalize_template(self, forward_model, wave, flux, uniform=False):
-        
-        if not uniform:
-            good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
-            dl = np.nanmedian(np.diff(wave))
-            wave_min, wave_max = np.nanmin(wave), np.nanmax(wave)
-            wave_lin = np.arange(wave_min, wave_max, dl)
-            flux_lin = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=False)(wave_lin)
-        else:
-            flux_lin = flux
-        
-        if 'lsf' in forward_model.models_dict:
-            flux_conv = forward_model.models_dict['lsf'].convolve_flux(flux_lin, pars=forward_model.initial_parameters)
-        else:
-            flux_conv = flux_lin
 
-        data_continuum = pcmath.weighted_median(flux_conv, percentile=0.999)
-        flux /= data_continuum
-        
-        return flux
-
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        if self.n_splines > 0:
+            wave_estimate = self.estimate_order_wave(forward_model, self.blueprint)
+            good = sregion.wave_within(wave_estimate)
+            self.spline_pixel_set_points = np.linspace(good[0], good[-1], num=self.n_splines + 1)
+            self.spline_wave_set_points = wave_estimate[self.spline_pixel_set_points]
 
 class LegPolyWavelengthSolution(WavelengthSolution):
     """ Class for a full wavelength solution defined through cubic splines.
@@ -1178,11 +1042,11 @@ class LegPolyWavelengthSolution(WavelengthSolution):
         
         # Estimate the wave grid
         coeffs = pcmath.poly_coeffs(self.quad_pixel_set_points, self.quad_wave_zero_points)
-        wave_estimate = np.polyval(coeffs, np.arange(self.nx))
+        wave_estimate = np.polyval(coeffs, np.arange(forward_model.data.flux.size))
         
         # Polynomial lagrange points
-        self.poly_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_poly_pars).astype(int)
-        self.poly_wave_zero_points = wave_estimate[self.poly_pixel_set_points]
+        self.order_poly_pixel_set_points = np.linspace(forward_model.sregion_order.pixmin, forward_model.sregion_order.pixmax, num=self.n_poly_pars).astype(int)
+        self.order_poly_wave_zero_points = wave_estimate[self.order_poly_pixel_set_points]
         for i in range(self.n_poly_pars):
             self.base_par_names.append('_poly_lagrange_' + str(i + 1))
                 
@@ -1191,13 +1055,13 @@ class LegPolyWavelengthSolution(WavelengthSolution):
     def build(self, pars):
         
         # The detector grid
-        pixel_grid = np.arange(self.nx)
+        pixel_grid = np.arange(self.sregion.pixmin, self.sregion.pixmax + 1)
             
         # Lagrange points
         poly_lagrange_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_poly_pars)])
         
         # Get the coefficients
-        coeffs = pcmath.leg_coeffs(self.poly_pixel_set_points, self.poly_wave_zero_points + poly_lagrange_pars)
+        coeffs = pcmath.leg_coeffs(self.poly_pixel_set_points, self.poly_wave_set_points + poly_lagrange_pars)
     
         # Build full polynomial
         wave_sol = np.zeros(self.nx)
@@ -1212,8 +1076,13 @@ class LegPolyWavelengthSolution(WavelengthSolution):
         for i in range(self.n_poly_pars):
             forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['poly_lagrange'][1], minv=self.blueprint['poly_lagrange'][0], maxv=self.blueprint['poly_lagrange'][2], vary=True))
 
-    def update(self, forward_model, iter_index):
-        pass
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        wave_estimate = self.estimate_order_wave(forward_model, self.blueprint)
+        good = sregion.wave_within(wave_estimate)
+        self.sregion = sregion
+        self.nx = sregion.pix_len()
+        self.poly_pixel_set_points = np.linspace(good[0], good[-1], num=self.poly_order + 1).astype(int)
+        self.poly_wave_set_points = wave_estimate[self.poly_pixel_set_points]
 
 # Misc. models
 
@@ -1233,17 +1102,21 @@ class FPCavityFringing(EmpiricalMult):
 
     def build(self, pars, wave_final):
         if self.enabled:
+            wave_final
             d = pars[self.par_names[0]].value
             fin = pars[self.par_names[1]].value
             theta = (2 * np.pi / wave_final) * d
             fringing = 1 / (1 + fin * np.sin(theta / 2)**2)
             return fringing
         else:
-            return self.build_fake(wave_final.size)
+            return self.build_fake(nx)
 
     def init_parameters(self, forward_model):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['d'][1], minv=self.blueprint['d'][0], maxv=self.blueprint['d'][2], vary=self.enabled))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['fin'][1], minv=self.blueprint['fin'][0], maxv=self.blueprint['fin'][2], vary=self.enabled))
+        
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        pass
         
 
 # Misc Methods

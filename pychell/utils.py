@@ -109,3 +109,46 @@ def get_size(obj, seen=None):
     elif hasattr(obj, '__iter__') and not isinstance(obj, (str, bytes, bytearray)):
         size += sum([get_size(i, seen) for i in obj])
     return size
+
+
+class SpectralRegion:
+    
+    __slots__ = ['pixmin', 'pixmax', 'wavemin', 'wavemax', 'label', 'data_inds']
+    
+    def __init__(self, pixmin, pixmax, wavemin, wavemax, label=None):
+        self.pixmin = pixmin
+        self.pixmax = pixmax
+        self.wavemin = wavemin
+        self.wavemax = wavemax
+        self.label = label
+        self.data_inds = np.arange(self.pixmin, self.pixmax + 1).astype(int)
+        
+    def __len__(self):
+        return self.wavemax - self.wavemin
+    
+    def wave_len(self):
+        return self.wavemax - self.wavemin
+    
+    def pix_len(self):
+        return self.pixmax - self.pixmin + 1
+        
+    def pix_within(self, pixels, pad=0):
+        good = np.where((pixels >= self.pixmin - pad) & (pixels <= self.pixmax + pad))[0]
+        return good
+        
+    def wave_within(self, waves, pad=0):
+        good = np.where((waves >= self.wavemin - pad) & (waves <= self.wavemax + pad))[0]
+        return good
+    
+    def midwave(self):
+        return self.wavemin + self.wave_len() / 2
+    
+    def midpix(self):
+        return self.pixmin + self.pix_len() / 2
+        
+    def pix_per_wave(self):
+        return (self.pixmax - self.pixmin) / (self.wavemax - self.wavemin)
+    
+    def __repr__(self):
+        s = "Pix: (" + str(self.pixmin) + ", " + str(self.pixmax) + ") Wave: (" + str(self.wavemin) + ", " + str(self.wavemax) + ")"
+        return s

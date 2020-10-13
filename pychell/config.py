@@ -94,6 +94,9 @@ forward_model_settings = {
     # Barycenter file
     'bary_corr_file': None,
     
+    # The number of chunks
+    "n_chunks": 1,
+    
     # Stellar template augmentation
     'target_function': 'simple_rms',
     
@@ -101,7 +104,7 @@ forward_model_settings = {
     'flag_n_worst_pixels': 20,
     
     # Stellar template augmentation
-    'template_augmenter': 'cubic_spline_lsq',
+    'template_augmenter': 'weighted_median',
     'nights_for_template': [],
     'templates_to_optimize': [],
     

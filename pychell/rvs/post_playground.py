@@ -123,7 +123,7 @@ def rv_precision_wavelength(parser, iter_indices=None):
     snrs = 1 / parser.parse_rms()
     
     # Mean wavelengths of each order.
-    mean_waves = np.array([np.nanmean(parser.forward_models[o][0].models_dict['wavelength_solution'].build(parser.forward_models[o][0].opt_results[-1][0])) for o in range(parser.n_orders)])
+    mean_waves = np.array([np.nanmean(parser.forward_models[o][0].models_dict['wavelength_solution'].build(parser.forward_models[o][0].opt_results[-1]['xbest'])) for o in range(parser.n_orders)])
     
     # Compute approx nightly snrs for all targets, orders, obs, all orders
     print('Computing nightly S/N')
@@ -447,7 +447,7 @@ def compute_rv_contents(parser, templates=None):
     
     # Compute RVC
     for o in range(parser.n_orders):
-        pars = parser.forward_models[o][0].opt_results[-1][0]
+        pars = parser.forward_models[o][0].opt_results[-1]['xbest']
         wave_data = parser.forward_models[o][0].models_dict['wavelength_solution'].build(pars)
         lsf = parser.forward_models[o][0].models_dict['lsf'].build(pars)
         _rvcs = np.zeros(len(templates))
@@ -501,18 +501,18 @@ def parameter_corrs(parser, iter_indices=None, debug=False, rvvec=False):
     
     for o in range(n_orders):
         
-        vp = forward_models[o, 0].opt_results[iter_indices[o] + index_offset][0].unpack(keys='vary')['vary']
+        vp = forward_models[o, 0].opt_results[iter_indices[o] + index_offset]['xbest'].unpack(keys='vary')['vary']
         vpi = np.where(vp)[0]
         nv = vpi.size
         
         pars = np.empty(shape=(n_spec, n_iters_pars, nv), dtype=object)
         par_vals = np.full(shape=(n_spec, n_iters_pars, nv), dtype=float, fill_value=np.nan)
-        par_names = list(forward_models[o, 0].opt_results[iter_indices[o] + index_offset][0].keys())
+        par_names = list(forward_models[o, 0].opt_results[iter_indices[o] + index_offset]['xbest'].keys())
         par_names = [par_names[v] for v in vpi]
         for ispec in range(n_spec):
             for j in range(n_iters_pars):
                 for k in range(nv):
-                    pars[ispec, j, k] = forward_models[o, ispec].opt_results[j][0][par_names[k]]
+                    pars[ispec, j, k] = forward_models[o, ispec].opt_results[j]['xbest'][par_names[k]]
                     par_vals[ispec, j, k] = pars[ispec, j, k].value
         
         n_cols = 5
@@ -573,7 +573,7 @@ def plot_final_rvs(parser, phase_to=None, tc=None, kamp=None):
         rvs_single, unc_single, rvs_nightly, unc_nightly = parser.rvs_dict['rvs_out'], parser.rvs_dict['unc_out'], parser.rvs_dict['rvs_nightly_out'], parser.rvs_dict['unc_nightly_out']
     
     # Single rvs
-    plt.errorbar((bjds - alpha)%_phase_to, rvs_single-np.nanmedian(rvs_single), yerr=unc_single, linewidth=0, elinewidth=1, marker='.', markersize=10, markerfacecolor='pink', color='green', alpha=0.8)
+    plt.errorbar((bjds - alpha)%_phase_to, rvs_single-np.nanmedian(rvs_nightly), yerr=unc_single, linewidth=0, elinewidth=1, marker='.', markersize=10, markerfacecolor='pink', color='green', alpha=0.8)
 
     # Nightly RVs
     plt.errorbar((bjds_nightly - alpha)%_phase_to, rvs_nightly-np.nanmedian(rvs_nightly), yerr=unc_nightly, linewidth=0, elinewidth=2, marker='o', markersize=10, markerfacecolor='blue', color='grey', alpha=0.9)
@@ -658,7 +658,7 @@ def residual_coherence(parser, iter_indices=None, frame='star', nsample=1, templ
         for i in range(0, parser.n_spec, nsample):
             
             # Get the best fit parameters
-            pars = parser.forward_models[o][i].opt_results[iter_indices[o] + parser.index_offset][0]
+            pars = parser.forward_models[o][i].opt_results[iter_indices[o] + parser.index_offset]['xbest']
             
             # Build the model
             wave_data, model_lr = parser.forward_models[o][i].build_full(pars, parser.forward_models[o].templates_dict)
@@ -760,7 +760,7 @@ def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indices, debug=F
             
             # Build LSF
             x = forward_models[o, i].models_dict['lsf'].x
-            lsf = forward_models[o, i].models_dict['lsf'].build(pars=forward_models[o, i].opt_results[iter_indices[o]][0])
+            lsf = forward_models[o, i].models_dict['lsf'].build(pars=forward_models[o, i].opt_results[iter_indices[o]]['xbest'])
             
             # Plot
             axarr[o].plot(x, lsf, alpha=0.7)
@@ -813,7 +813,7 @@ def inspect_wls(output_path_root, do_orders, bad_rvs_dict, iter_indices, star_na
         for i in range(n_spec):
             
             # Build wls
-            wls = forward_models[o, i].models_dict['wavelength_solution'].build(forward_models[o, i].opt_results[iter_indices[o]][0])
+            wls = forward_models[o, i].models_dict['wavelength_solution'].build(forward_models[o, i].opt_results[iter_indices[o]]['xbest'])
             wlss[:, i] = wls
             
         mwls = np.nanmedian(wlss, axis=1)
@@ -855,7 +855,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indices, star_
     
     for o in range(n_orders):
         
-        x = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].opt_results[iter_indices[o]][0])
+        x = forward_models[o, 0].models_dict['wavelength_solution'].build(forward_models[o, 0].opt_results[iter_indices[o]]['xbest'])
         nx = x.size
         
         blazes = np.zeros((nx, n_spec))
@@ -863,7 +863,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indices, star_
         for i in range(n_spec):
             
             # Build blaze
-            blaze = forward_models[o, i].models_dict['blaze'].build(forward_models[o, i].opt_results[iter_indices[o]][0], x)
+            blaze = forward_models[o, i].models_dict['blaze'].build(forward_models[o, i].opt_results[iter_indices[o]]['xbest'], x)
             
             # Plot
             axarr[o].plot(x, blaze, alpha=0.7)

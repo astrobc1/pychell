@@ -6,8 +6,8 @@ import importlib.util # importing other modules from files
 import warnings # ignore warnings
 import sys # sys utils
 import pickle
+import dill
 from sys import platform # plotting backend
-from pdb import set_trace as stop # debugging
 
 # Graphics
 import matplotlib # to set the backend
@@ -31,32 +31,39 @@ import pychell.config as pcconfig
 import pychell.rvs.template_augmenter as pcaugmenter
 import pychell.maths as pcmath # mathy equations
 import pychell.rvs.forward_models as pcforwardmodels # the various forward model implementations
-import pychell.rvs.data1d as pcdata # the data objects
+import pychell.data as pcdata # the data objects
+import pychell.data.parsers as pcparsers
 import pychell.rvs.model_components as pcmodelcomponents # the data objects
 import pychell.utils as pcutils # random helpful functions
 import pychell.rvs.rvcalc as pcrvcalc
 
 # Main function
-def fit_target(user_forward_model_settings, user_model_blueprints):
+def compute_rvs(user_forward_model_settings, user_model_blueprints):
 
     # Start the main clock!
     stopwatch = pcutils.StopWatch()
     stopwatch.lap(name='ti_main')
 
     # Set things up and create a dictionary forward_model_settings used throughout the code
-    forward_model_settings, model_blueprints = init(user_forward_model_settings, user_model_blueprints)
+    config, model_blueprints = init(user_forward_model_settings, user_model_blueprints)
+    
+    # The data parser
+    if hasattr(pcparsers, config['spectrograph'] + 'Parser'):
+        data_parser_class = getattr(pcparsers, config['spectrograph'] + 'Parser')
+        parser = data_parser_class(config)
+    else:
+        raise NotImplementedError("Must use a supported instrument for now, or implement a new instrument.")
     
     # Main loop over orders
     # order_num = 0, ..., n_orders-1
-    for order_num in forward_model_settings['do_orders']:
+    for order_num in config['do_orders']:
         
         # Construct the forward models object
         # This will construct the individual forward model objects (single spectrum)
-        forward_models = pcforwardmodels.ForwardModels(forward_model_settings, model_blueprints, order_num) # basically a fancy list
+        forward_models = pcforwardmodels.ForwardModels(config, model_blueprints, parser=parser, order_num=order_num) # basically a fancy list
         
         # Stores the stellar templates over iterations.
-        stellar_templates = np.empty(shape=(forward_models[0].n_model_pix, forward_models.n_template_fits + 1), dtype=np.float64)
-        stellar_templates[:, 0] = forward_models.templates_dict['star'][:, 0]
+        stellar_templates = []
         
         # Zeroth Iteration - No doppler shift if using a flat template.
         # We could also flag the stellar lines, but this has minimal impact on the RVs
@@ -68,7 +75,7 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
             if len(forward_models[0].initial_parameters.get_varied()) == 0:
                 print('No parameters to optimize, moving on', flush=True)
                 for fwm in forward_models:
-                    fwm.opt_results.append((fwm.initial_parameters, np.nan, np.nan))
+                    fwm.opt_results.append({'xbest': fwm.initial_parameters, 'fbest': np.nan, 'fcalls': np.nan})
                 forward_models.template_augmenter(forward_models, iter_index=0)
                 forward_models.update_models(0)
             else:
@@ -82,10 +89,10 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
                     forward_models.template_augmenter(forward_models, iter_index=0)
                     forward_models.update_models(0)
                 
-        stellar_templates[:, 1] = np.copy(forward_models.templates_dict['star'][:, 1])
+        stellar_templates.append(np.copy(forward_models.templates_dict['star'][:, 1]))
 
         # Iterate over remaining stellar template generations
-        for iter_index in range(forward_model_settings['n_template_fits']):
+        for iter_index in range(config['n_template_fits']):
 
             print('Starting Iteration: ' + str(iter_index+1) + ' of ' + str(forward_models.n_template_fits), flush=True)
             stopwatch.lap(name='ti_iter')
@@ -102,10 +109,10 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
 
             # Print RV Diagnostics
             if forward_models.n_nights > 1:
-                rvscd_std = np.nanstd(forward_models.rvs_dict['rvs_nightly'][:, iter_index])
+                rvscd_std = np.nanstd(forward_models.rvs_dict['rvsfwm_nightly'][:, iter_index])
                 print('  Stddev of all nightly RVs: ' + str(round(rvscd_std, 4)) + ' m/s', flush=True)
             elif forward_models.n_spec >= 1:
-                rvs_std = np.nanstd(forward_models.rvs_dict['rvs'][:, iter_index])
+                rvs_std = np.nanstd(forward_models.rvs_dict['rvsfwm'][:, :, iter_index])
                 print('  Stddev of all RVs: ' + str(round(rvs_std, 4)) + ' m/s', flush=True)
 
             # Compute the new stellar template, update parameters.
@@ -121,7 +128,7 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
                 forward_models.update_models(iter_index)
                 
                 # Pass to stellar template array
-                stellar_templates[:, iter_index+2] = np.copy(forward_models.templates_dict['star'][:, 1])
+                stellar_templates.append(np.copy(forward_models.templates_dict['star'][:, 1]))
                 
 
         # Save forward model outputs
@@ -138,79 +145,80 @@ def fit_target(user_forward_model_settings, user_model_blueprints):
 # Initialize the pipeline based on input_options file
 def init(user_forward_model_settings, user_model_blueprints):
 
-    # Dictionaries to store settings (and later forward model blueprints)
-    forward_model_settings = {}
+    # Dictionaries
+    config = {}
+    model_blueprints = {}
 
     # Pipeline Defaults
-    init_defaults(forward_model_settings)
+    init_config(config, user_forward_model_settings)
     
-    # Instrument
-    init_spectrograph(forward_model_settings, user_forward_model_settings['spectrograph'])
-    
-    # Init user
-    init_user(forward_model_settings, user_forward_model_settings)
+    # Create output dirs
+    create_output_dirs(config)
     
     # The model blueprints
-    model_blueprints = init_blueprints(forward_model_settings, user_model_blueprints=user_model_blueprints)
+    init_blueprints(config, model_blueprints, user_model_blueprints=user_model_blueprints)
     
     # Download templates if need be
-    init_templates(forward_model_settings)
+    init_templates(config)
     
     # Matplotlib backend
-    if forward_model_settings['n_cores'] > 1 or platform != 'darwin':
+    if config['n_cores'] > 1 or platform != 'darwin':
         matplotlib.use("AGG")
     else:
         matplotlib.use("MacOSX")
 
-    return forward_model_settings, model_blueprints
-
-
-def init_spectrograph(forward_model_settings, spectrograph=None):
-    
-    if spectrograph is None:
-        spectrograph = forward_model_settings['spectrograph']
+    return config, model_blueprints
         
-    # Load in the default instrument settings and add to dict.
-    spec_module = importlib.import_module('pychell.spectrographs.' + spectrograph.lower())
-    forward_model_settings.update(spec_module.forward_model_settings)
-        
-def init_defaults(forward_model_settings):
+def init_config(config, user_forward_model_settings):
     
     # Load the config file and add to dict.
-    forward_model_settings.update(pcconfig.general_settings)
-    forward_model_settings.update(pcconfig.forward_model_settings)
-    
-def init_user(forward_model_settings, user_forward_model_settings):
-    
-    # Add to dictionary
-    forward_model_settings.update(user_forward_model_settings)
+    config.update(pcconfig.general_settings)
+    config.update(pcconfig.forward_model_settings)
     
     # Ensure the number of echelle orders is 1-d
-    forward_model_settings['do_orders'] = np.atleast_1d(forward_model_settings['do_orders'])
+    user_forward_model_settings['do_orders'] = np.atleast_1d(user_forward_model_settings['do_orders'])
     
-def init_blueprints(forward_model_settings, user_model_blueprints=None, spectrograph=None):
+    # Load in the default instrument settings and add to dict.
+    spec_module = importlib.import_module('pychell.data.' + user_forward_model_settings["spectrograph"].lower())
+    config.update(spec_module.forward_model_settings)
     
-    if spectrograph is None:
-       spectrograph = forward_model_settings['spectrograph']
+    # Add user settings to dictionary
+    config.update(user_forward_model_settings)
     
-    model_blueprints = {}
     
-    spec_mod = importlib.import_module('pychell.spectrographs.' + spectrograph.lower())
-    model_blueprints = spec_mod.forward_model_blueprints
+def init_blueprints(config, model_blueprints, user_model_blueprints=None):
+    
+    # Default no user blueprints, use defaults
+    if user_model_blueprints is None:
+        user_model_blueprints = {}
+    
+    spec_mod = importlib.import_module('pychell.data.' + config["spectrograph"].lower())
+    model_blueprints.update(spec_mod.forward_model_blueprints)
 
     for user_key in user_model_blueprints:
         if user_key in model_blueprints: # Key is common, update sub keys only
             model_blueprints[user_key].update(user_model_blueprints[user_key])
         else: # Key is new, just add
             model_blueprints[user_key] = user_model_blueprints[user_key]
-            
-    return model_blueprints
 
-
-def init_templates(forward_model_settings):
+def create_output_dirs(config):
     
-    if forward_model_settings['force_download_templates']:
-        pcutils.download_templates(forward_model_settings['templates_path'])
+    # Output path for this run
+    config["run_output_path"] = config["output_path"] + config["spectrograph"].lower() + "_" + config["tag"] + os.sep
+    
+    # Create the output dir for this run
+    os.makedirs(config["run_output_path"], exist_ok=True)
+    
+    for order_num in config["do_orders"]:
+        o_folder = 'Order' + str(order_num) + os.sep
+        os.makedirs(config["run_output_path"] + o_folder + 'RVs', exist_ok=True)
+        os.makedirs(config["run_output_path"] + o_folder + 'ForwardModels', exist_ok=True)
+        os.makedirs(config["run_output_path"] + o_folder + 'Templates', exist_ok=True)
+
+def init_templates(config):
+    
+    if config['force_download_templates']:
+        pcutils.download_templates(config['templates_path'])
 
 
 ################################################################################################################

@@ -28,19 +28,19 @@ import pychell.utils as pcutils
 import pychell.maths as pcmath
 import pychell.reduce.calib as pccalib
 import pychell.reduce.order_map as pcomap
-import pychell.reduce.data2d as pcdata
+import pychell.data as pcdata
 
 import optimparameters.parameters as OptimParams
 from robustneldermead.neldermead import NelderMead
 
 
-def extract_full_image_wrapper(data_all, index, redux_settings):
+def extract_full_image_wrapper(data_all, index, config):
     """A wrapper to extract a full frame image for printing purposes.
 
     Args:
         data_all (list): A list of SpecDataImage objects.
         index (int): The index of the image in data_all to extract.
-        redux_settings (dict): The reduction settings dictionary.
+        config (dict): The reduction settings dictionary.
     """
     
     # Initialize a timer
@@ -52,16 +52,16 @@ def extract_full_image_wrapper(data_all, index, redux_settings):
     data = data_all[index]
     
     # Extract the full frame image
-    extract_full_image(data, redux_settings)
+    extract_full_image(data, config)
     
     print(' Extracted Spectrum ' + str(index+1) + ' of ' + str(len(data_all)) + ' in ' + str(round(stopwatch.time_since()/60, 3)) + ' min', flush=True)
 
-def extract_full_image(data, redux_settings):
+def extract_full_image(data, config):
     """ Performs calibration and extracts a full frame image.
 
     Args:
         data (SpecDataImage): The data to reduce and extract.
-        redux_settings (dict): The reduction settings dictionary.
+        config (dict): The reduction settings dictionary.
     """
     
     # A stopwatch for timing
@@ -71,10 +71,10 @@ def extract_full_image(data, redux_settings):
     data_image = data.parse_image()
 
     # Load the order map
-    trace_map_image, orders_list = data.order_map.load()
+    trace_map_image, orders_list = data.order_map.load_map_image(), data.order_map.orders_list
     
     # Standard dark, bias, flat calibration.
-    data_image = pccalib.standard_calibration(data, data_image, bias_subtraction=redux_settings['bias_subtraction'], dark_subtraction=redux_settings['dark_subtraction'], flat_division=redux_settings['flat_division'])
+    data_image = pccalib.standard_calibration(data, data_image, bias_subtraction=config['bias_subtraction'], dark_subtraction=config['dark_subtraction'], flat_division=config['flat_division'])
     
     # The imenage dimensions
     ny, nx = data_image.shape
@@ -84,7 +84,7 @@ def extract_full_image(data, redux_settings):
     n_traces = len(orders_list[0])
     
     # Mask edge pixels as nan (not an actual crop)
-    data_image = crop_image(data_image, redux_settings)
+    data_image = crop_image(data_image, config)
     
     # Also flag regions in between orders
     bad = np.where(~np.isfinite(trace_map_image))
@@ -109,6 +109,9 @@ def extract_full_image(data, redux_settings):
         stopwatch.lap(order_index)
         print('  Extracting Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' ...')
         
+        if order_index != 10:
+            continue
+        
         # Orders are composed of multiple traces
         if len(single_order_list) > 1:
             
@@ -117,28 +120,29 @@ def extract_full_image(data, redux_settings):
                 stopwatch.lap(sub_trace_index)
                 print('    Extracting Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(len(single_order_list)) + ' ...')
                 
-                reduced_orders[order_index, sub_trace_index, :, :], boxcar_spectra[order_index, sub_trace_index, :], trace_profile_csplines[order_index, sub_trace_index], y_positions[order_index, sub_trace_index, :] = extract_single_trace(data, data_image, trace_map_image, single_trace_dict, redux_settings)
+                reduced_orders[order_index, sub_trace_index, :, :], boxcar_spectra[order_index, sub_trace_index, :], trace_profile_csplines[order_index, sub_trace_index], y_positions[order_index, sub_trace_index, :] = extract_single_trace(data, data_image, trace_map_image, single_trace_dict, config)
                 
                 print('    Extracted Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(len(single_order_list)) + ' in ' + str(round(stopwatch.time_since(sub_trace_index), 3)) + ' min ')
                 
         # Orders are composed of single trace
         else:
-            reduced_orders[order_index, 0, :, :], boxcar_spectra[order_index, 0, :], trace_profile_csplines[order_index, 0], y_positions[order_index, 0, :] = extract_single_trace(data, data_image, trace_map_image, single_order_list[0], redux_settings)
+            reduced_orders[order_index, 0, :, :], boxcar_spectra[order_index, 0, :], trace_profile_csplines[order_index, 0], y_positions[order_index, 0, :] = extract_single_trace(data, data_image, trace_map_image, single_order_list[0], config)
             
         print('  Extracted Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' in ' + str(round(stopwatch.time_since(order_index) / 60, 3)) + ' min ')
 
     # Plot and write to fits file
     plot_trace_profiles(data, trace_profile_csplines)
     plot_extracted_spectra(data, reduced_orders, boxcar_spectra)
-    data.save_reduced_orders(reduced_orders)
+    
+    data.parser.save_reduced_orders(data, reduced_orders)
     
     # Save Trace profiles and refined trace positions
-    fname = data.output_path + 'trace' + os.sep + data.base_input_file_noext + '_traces.npz'
+    fname = data.parser.run_output_path + 'trace' + os.sep + data.base_input_file_noext + '_traces.npz'
     np.savez(fname, trace_profiles=trace_profile_csplines, y_positions=y_positions)
 
 
 # Performs standard extraction
-def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_settings, refine_trace_pos=True):
+def extract_single_trace(data, data_image, trace_map_image, trace_dict, config, refine_trace_pos=True):
     """Extract a single trace.
 
     Args:
@@ -146,7 +150,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
         data_image (np.ndarray): The corresponding image.
         trace_map_image (np.ndarray): The image trace map image containing labels of each individual trace.
         trace_dict (dict): The dictionary containing location information for this trace
-        redux_settings (dict): The reduction settings dictionary.
+        config (dict): The reduction settings dictionary.
         refine_trace_pos (bool, optional): Whether or not to refine the trace position. Defaults to True.
 
     Returns:
@@ -165,7 +169,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
     xarr, yarr = np.arange(nx), np.arange(ny)
     
     # Extract the oversample factor
-    M = redux_settings['oversample']
+    M = config['oversample']
     
     #################################
     ##### Trace Profile & Y Pos #####
@@ -197,12 +201,12 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
         badpix_mask[bad] = 0
         
     # The image in units of PE
-    trace_image = convert_image_to_pe(trace_image, redux_settings['detector_props'])
+    trace_image = convert_image_to_pe(trace_image, config['detector_props'])
     
     print('    Estimating Trace Profile ...', flush=True)
     
     # Estimate the trace profile from the current y positions
-    trace_profile_cspline_estimate = estimate_trace_profile(trace_image, y_positions_estimate, height, M=M, mask_edges=[redux_settings['mask_trace_edges'], redux_settings['mask_trace_edges']])
+    trace_profile_cspline_estimate = estimate_trace_profile(trace_image, y_positions_estimate, height, M=M, mask_edges=[config['mask_trace_edges'], config['mask_trace_edges']])
     
     if refine_trace_pos:
         
@@ -215,10 +219,10 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
         for iteration in range(n_iters):
     
             # Refine trace position with cross correlation
-            y_positions_refined = refine_trace_position(data, trace_image, y_positions_refined, trace_profile_cspline, badpix_mask, height, redux_settings, trace_pos_polyorder=redux_settings['trace_pos_polyorder'], M=M)
+            y_positions_refined = refine_trace_position(data, trace_image, y_positions_refined, trace_profile_cspline, badpix_mask, height, config, trace_pos_polyorder=config['trace_pos_polyorder'], M=M)
         
             # Now with a possibly better y positions array, re-estimate the trace profile.
-            trace_profile_cspline = estimate_trace_profile(trace_image, y_positions_refined, height, M=M, mask_edges=[redux_settings['mask_trace_edges'], redux_settings['mask_trace_edges']])
+            trace_profile_cspline = estimate_trace_profile(trace_image, y_positions_refined, height, M=M, mask_edges=[config['mask_trace_edges'], config['mask_trace_edges']])
         
     else:
         
@@ -232,9 +236,9 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
     ###########################
     
     # Estimate sky and remove from profile
-    if redux_settings['sky_subtraction']:
+    if config['sky_subtraction']:
         print('    Estimating Background Sky ...', flush=True)
-        sky = estimate_sky(trace_image, y_positions_refined, trace_profile_cspline, height, n_sky_rows=redux_settings['n_sky_rows'], M=M)
+        sky = estimate_sky(trace_image, y_positions_refined, trace_profile_cspline, height, n_sky_rows=config['n_sky_rows'], M=M)
         tp = trace_profile_cspline(trace_profile_cspline.x)
         _, trace_max = estimate_trace_max(trace_profile_cspline)
         tp -= pcmath.weighted_median(tp, percentile=0.05)
@@ -247,23 +251,23 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
         sky = None
         
     # Determine the fractions of the pixels used
-    pixel_fractions = generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions_refined, badpix_mask, height, min_profile_flux=redux_settings['min_profile_flux'])
+    pixel_fractions = generate_pixel_fractions(trace_image, trace_profile_cspline, y_positions_refined, badpix_mask, height, min_profile_flux=config['min_profile_flux'])
         
     ############################
     #### Optimal Extraction ####
     ############################
 
-    #spec1d, unc1d = slit_decomposition_wrapper(data, trace_image, y_positions_refined, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, redux_settings['detector_props'], sky=sky, M=M, n_iters=100)
+    #spec1d, unc1d = slit_decomposition_wrapper(data, trace_image, y_positions_refined, trace_profile_cspline, badpix_mask, pixel_fractions, height, config, config['detector_props'], sky=sky, M=M, n_iters=100)
     
     # The extraction algorithm
-    spec_extractor = eval(redux_settings['optx_alg'])
+    spec_extractor = eval(config['optx_alg'])
     
     print('    Optimally Extracting Trace ...', flush=True)
 
-    spec1d, unc1d, badpix_mask = spec_extractor(data, trace_image, y_positions_refined, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, sky=sky)
+    spec1d, unc1d, badpix_mask = spec_extractor(data, trace_image, y_positions_refined, trace_profile_cspline, pixel_fractions, badpix_mask, height, config, sky=sky)
 
     # Also generate a final boxcar spectrum
-    boxcar_spectrum1d, _ = boxcar_extraction(trace_image, y_positions_refined, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, redux_settings['detector_props'], exp_time=data.exp_time, sky=sky, n_sky_rows=redux_settings['n_sky_rows'])
+    boxcar_spectrum1d, _ = boxcar_extraction(trace_image, y_positions_refined, trace_profile_cspline, pixel_fractions, badpix_mask, height, config, config['detector_props'], exp_time=data.itime, sky=sky, n_sky_rows=config['n_sky_rows'])
     
     # Generate a final badpix array and flag obvious bad pixels
     badpix1d = np.ones(nx, dtype=int)
@@ -290,7 +294,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, redux_se
     
     return reduced_spectrum, boxcar_spectrum1d, trace_profile_cspline, y_positions_refined
     
-def boxcar_extraction(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, detector_props, exp_time, sky=None, n_sky_rows=None):
+def boxcar_extraction(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, config, detector_props, exp_time, sky=None, n_sky_rows=None):
     """Performs a boxcar extraction on the nonrectified data.
 
     Args:
@@ -299,7 +303,7 @@ def boxcar_extraction(trace_image, y_positions, trace_profile_cspline, pixel_fra
         trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
         pixel_fractions (np.ndarray): The fractions of each pixel to use.
         height (int): The height of the trace.
-        redux_settings (dict): The reduction settings dictionary.
+        config (dict): The reduction settings dictionary.
         detector_props (list): List of detector properties to properly calculate read noise.
         exp_time (float): The exposure time.
         badpix_mask (np.ndarray): The bad pixel image mask (1=good, 0=bad).
@@ -357,7 +361,7 @@ def boxcar_extraction(trace_image, y_positions, trace_profile_cspline, pixel_fra
             continue
         
         # Effective read noise
-        eff_read_noise = compute_read_noise(detector_props, x, y_positions[x], exp_time, dark_subtraction=redux_settings['dark_subtraction'])
+        eff_read_noise = compute_read_noise(detector_props, x, y_positions[x], exp_time, dark_subtraction=config['dark_subtraction'])
         
         # Determine the full and fractional pixels to use
         good_full_pixels = np.where(pixel_fractions[:, x] == 1)[0]
@@ -572,7 +576,7 @@ def estimate_sky(trace_image, y_positions, trace_profile_cspline, height, n_sky_
     return sky_out
 
 
-def pmassey_wrapper(data, trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, sky=None):
+def pmassey_wrapper(data, trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, config, sky=None):
     """A wrapper for Philip Massey extraction.
 
     Args:
@@ -583,26 +587,26 @@ def pmassey_wrapper(data, trace_image, y_positions, trace_profile_cspline, pixel
         pixel_fractions (np.ndarray): The fractions of each pixel to use.
         badpix_mask ([type]): [description]
         height ([type]): [description]
-        redux_settings (dict): The reduction settings dictionary.
+        config (dict): The reduction settings dictionary.
         sky (np.ndarray): The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).
     Returns:
         np.ndarray: The 1d flux in units of PE
         np.ndarray: The 1d flux uncertainty in units of PE
     """
 
-    n_iters = len(redux_settings['pmassey_settings']['bad_thresh']) + 1
+    n_iters = len(config['pmassey_settings']['bad_thresh']) + 1
 
     for iteration in range(n_iters):
         # Do the optimal extraction then flag bad pixels
-        spec1d, unc1d = optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, redux_settings['detector_props'], exp_time=data.exp_time, sky=sky, n_sky_rows=redux_settings['n_sky_rows'])
+        spec1d, unc1d = optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, config, config['detector_props'], exp_time=data.itime, sky=sky, n_sky_rows=config['n_sky_rows'])
         
         if iteration + 1 < n_iters:
-            badpix_mask = flag_bad_pixels(trace_image, spec1d, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, sky=sky, nsig=redux_settings['pmassey_settings']['bad_thresh'][iteration])
+            badpix_mask = flag_bad_pixels(trace_image, spec1d, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, sky=sky, nsig=config['pmassey_settings']['bad_thresh'][iteration])
 
     return spec1d, unc1d, badpix_mask
 
 
-def optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, detector_props, exp_time, sky=None, n_sky_rows=None):
+def optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, config, detector_props, exp_time, sky=None, n_sky_rows=None):
     """Performs optimal extraction on the nonrectified data.
 
     Args:
@@ -612,7 +616,7 @@ def optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, 
         pixel_fractions (np.ndarray): The fractions of each pixel to use.
         badpix_mask (np.ndarray): The bad pixel image mask (1=good, 0=bad).
         height (int): The height of the order.
-        redux_settings (dict): The reduction settings dictionary.
+        config (dict): The reduction settings dictionary.
         detector_props (list): List of detector properties to properly calculate read noise.
         exp_time (float): The exposure time.
         sky (np.ndarray): The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).
@@ -667,7 +671,7 @@ def optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, 
             continue
         
         # Effective read noise
-        eff_read_noise = compute_read_noise(detector_props, x, y_positions[x], exp_time, dark_subtraction=redux_settings['dark_subtraction'])
+        eff_read_noise = compute_read_noise(detector_props, x, y_positions[x], exp_time, dark_subtraction=config['dark_subtraction'])
         
         # Determine the full and fractional pixels to use
         good_full_pixels = np.where(pixel_fractions[:, x] == 1)[0]
@@ -705,7 +709,7 @@ def optimal_extraction_pmassey(trace_image, y_positions, trace_profile_cspline, 
     return spec, spec_unc
 
 
-def fit_2d_wrapper(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, redux_settings, detector_props, exp_time, sky=None, M=16, n_iters=100, n_chunks=5):
+def fit_2d_wrapper(trace_image, y_positions, trace_profile_cspline, pixel_fractions, badpix_mask, height, config, detector_props, exp_time, sky=None, M=16, n_iters=100, n_chunks=5):
     
     ny, nx = trace_image.shape
     
@@ -728,13 +732,13 @@ def fit_2d_wrapper(trace_image, y_positions, trace_profile_cspline, pixel_fracti
         y_positions_chunk = y_positions[chunk_x_start:chunk_x_end] - chunk_y_start
         pixel_fractions_chunk = pixel_fractions[chunk_y_start:chunk_y_end, chunk_x_start:chunk_x_end]
         sky_chunk = sky[chunk_x_start:chunk_x_end]
-        fit_result = fit_2d_chunk_modgauss(trace_image_chunk, y_positions_chunk, trace_profile_cspline, badpix_mask_chunk, pixel_fractions_chunk, height, redux_settings, detector_props, sky=sky_chunk, fit_profile=True, fit_sky=False, fit_ypos=True)
+        fit_result = fit_2d_chunk_modgauss(trace_image_chunk, y_positions_chunk, trace_profile_cspline, badpix_mask_chunk, pixel_fractions_chunk, height, config, detector_props, sky=sky_chunk, fit_profile=True, fit_sky=False, fit_ypos=True)
         
         ypos = optimal_extraction_pmassey()
     
     
 
-def fit_2d_chunk_modgauss(trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, detector_props, sky=None, fit_profile=True, fit_sky=False, fit_ypos=True):
+def fit_2d_chunk_modgauss(trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, config, detector_props, sky=None, fit_profile=True, fit_sky=False, fit_ypos=True):
     
     # The chunk shape
     ny, nx = trace_image.shape
@@ -1096,7 +1100,7 @@ def plot_trace_profiles(data, trace_profile_csplines):
     plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.1, hspace=0.4)
     
     # Create a filename
-    fname = data.output_path + 'trace' + os.sep + data.base_input_file_noext + '_trace_profiles.png'
+    fname = data.parser.run_output_path + 'trace' + os.sep + data.base_input_file_noext + '_trace_profiles.png'
     
     # Save
     plt.savefig(fname)
@@ -1179,14 +1183,15 @@ def plot_extracted_spectra(data, reduced_orders, boxcar_spectra):
     plt.subplots_adjust(left=0.05, right=0.95, bottom=0.05, top=0.95, wspace=0.1, hspace=0.4)
     
     # Create a filename
-    fname = data.output_path + 'spectra' + os.sep + data.base_input_file_noext + data.target.replace(' ', '_') + '_preview.png'
+    fname = data.parser.run_output_path + 'spectra' + os.sep + data.base_input_file_noext + '_' + data.target.replace(' ', '_') + '_preview.png'
     
     # Save
+    breakpoint()
     plt.savefig(fname)
     plt.close()
     
     
-def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, height, redux_settings, trace_pos_polyorder=2, M=1):
+def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, height, config, trace_pos_polyorder=2, M=1):
     """Refines the trace positions via cross-correlating the current trace profile with the data.
 
     Args:
@@ -1196,7 +1201,7 @@ def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline,
         trace_profile_cspline (CubicSpline): The trace profile defined by a CubicSpline object.
         badpix_mask (np.ndarray): The bad pixel image mask (1=good, 0=bad).
         height (int): The height of the trace.
-        redux_settings (dict): The reduction settings dictionary.
+        config (dict): The reduction settings dictionary.
         trace_pos_polyorder (int, optional): The polynomial to model the trace positions. Defaults to 2.
         M (int, optional): The desired oversample factor. Defaults to 1.
 
@@ -1221,8 +1226,8 @@ def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline,
     lags = np.arange(-height/2, height/2).astype(int)
     
     # Estimate the sky from the current profile
-    if redux_settings['sky_subtraction']:
-        sky = estimate_sky(trace_image_smooth, y_positions, trace_profile_cspline, height, n_sky_rows=redux_settings['n_sky_rows'], M=redux_settings['oversample'])
+    if config['sky_subtraction']:
+        sky = estimate_sky(trace_image_smooth, y_positions, trace_profile_cspline, height, n_sky_rows=config['n_sky_rows'], M=config['oversample'])
         tp = trace_profile_cspline(trace_profile_cspline.x)
         tp -= pcmath.weighted_median(tp, percentile=0.05)
         
@@ -1236,14 +1241,14 @@ def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline,
         trace_profile_cspline_nosky = copy.deepcopy(trace_profile_cspline)
         
     # Fractions of each pixel
-    pixel_fractions = generate_pixel_fractions(trace_image_smooth, trace_profile_cspline_nosky, y_positions, badpix_mask, height, min_profile_flux=redux_settings['min_profile_flux'])
+    pixel_fractions = generate_pixel_fractions(trace_image_smooth, trace_profile_cspline_nosky, y_positions, badpix_mask, height, min_profile_flux=config['min_profile_flux'])
         
     trace_profile_fiducial_grid, trace_profile = trace_profile_cspline_nosky.x, trace_profile_cspline_nosky(trace_profile_cspline_nosky.x)
     
     good_trace = np.where(np.isfinite(trace_profile))[0]
     
     # Estimate the initial spectrum to know which values correspond to large absorption features.
-    spectrum_1d_estimate, _ = boxcar_extraction(trace_image_smooth, y_positions, trace_profile_cspline_nosky, pixel_fractions, badpix_mask, height, redux_settings, redux_settings['detector_props'], data.exp_time, sky=sky, n_sky_rows=redux_settings['n_sky_rows'])
+    spectrum_1d_estimate, _ = boxcar_extraction(trace_image_smooth, y_positions, trace_profile_cspline_nosky, pixel_fractions, badpix_mask, height, config, config['detector_props'], data.itime, sky=sky, n_sky_rows=config['n_sky_rows'])
     
     # Smooth this initial spectrum
     spectrum_1d_estimate_smooth = pcmath.median_filter1d(spectrum_1d_estimate, width=5)
@@ -1316,12 +1321,12 @@ def estimate_trace_max(trace_profile_cspline):
     
     return trace_max_pos, np.nanmax(tphr)
 
-def crop_image(data_image, redux_settings, cval=np.nan):
+def crop_image(data_image, config, cval=np.nan):
     """ Masks the image according to left right, top, and bottom values.
 
     Args:
         data_image (np.ndarray): [description]
-        redux_settings (dict): The reduction settings dictionary.
+        config (dict): The reduction settings dictionary.
         cval (float, optional): The value to mask with. Defaults to np.nan.
 
     Returns:
@@ -1331,10 +1336,10 @@ def crop_image(data_image, redux_settings, cval=np.nan):
     # The data shape
     ny, nx = data_image.shape
     
-    data_image[0:redux_settings['mask_bottom_edge'], :] = cval
-    data_image[ny-redux_settings['mask_top_edge']:, :] = cval
-    data_image[:, 0:redux_settings['mask_left_edge']] = cval
-    data_image[:, nx-redux_settings['mask_right_edge']:] = cval
+    data_image[0:config['mask_bottom'], :] = cval
+    data_image[ny-config['mask_top']:, :] = cval
+    data_image[:, 0:config['mask_left']] = cval
+    data_image[:, nx-config['mask_right']:] = cval
     return data_image
             
 
@@ -1391,7 +1396,7 @@ def estimate_trace_profile(trace_image, y_positions, height, M=16, mask_edges=No
 
 ########################
 
-def slit_decomposition_wrapper(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, detector_props, sky=None, M=16, n_iters=100, n_chunks=5):
+def slit_decomposition_wrapper(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, config, detector_props, sky=None, M=16, n_iters=100, n_chunks=5):
     
     goody, goodx = np.where(badpix_mask == 1)
     x_start, x_end = goodx[0], goodx[-1]
@@ -1409,10 +1414,10 @@ def slit_decomposition_wrapper(data, trace_image, y_positions, trace_profile_csp
         y_positions_chunk = y_positions[chunk_x_start:chunk_x_end] - chunk_y_start
         pixel_fractions_chunk = pixel_fractions[chunk_y_start:chunk_y_end, chunk_x_start:chunk_x_end]
         sky_chunk = sky[chunk_x_start:chunk_x_end]
-        slit_decomposition_extraction(data, trace_image_chunk, y_positions_chunk, trace_profile_cspline, badpix_mask_chunk, pixel_fractions_chunk, height, redux_settings, detector_props, sky=sky_chunk, M=M, n_iters=100)
+        slit_decomposition_extraction(data, trace_image_chunk, y_positions_chunk, trace_profile_cspline, badpix_mask_chunk, pixel_fractions_chunk, height, config, detector_props, sky=sky_chunk, M=M, n_iters=100)
         
 
-def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, detector_props, sky=None, M=16, n_iters=100):
+def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, config, detector_props, sky=None, M=16, n_iters=100):
     
     print('Decomposing the slit function !')
     
@@ -1434,8 +1439,8 @@ def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_
     right_trace_profile = trace_profile[right_trace_profile_inds]
     
     # Find where it intersections at some minimum flux value
-    left_ycut, _ = pcmath.intersection(left_trace_profile_ypos, left_trace_profile, redux_settings['min_profile_flux'], precision=1000)
-    right_ycut, _ = pcmath.intersection(right_trace_profile_ypos, right_trace_profile, redux_settings['min_profile_flux'], precision=1000)
+    left_ycut, _ = pcmath.intersection(left_trace_profile_ypos, left_trace_profile, config['min_profile_flux'], precision=1000)
+    right_ycut, _ = pcmath.intersection(right_trace_profile_ypos, right_trace_profile, config['min_profile_flux'], precision=1000)
     
     # Find the aperture size at inf resolution
     # Find the aperture at finite resolution
@@ -1448,7 +1453,7 @@ def slit_decomposition_extraction(data, trace_image, y_positions, trace_profile_
     
 
     # Generate the current spectrum from standard optimal extraction
-    current_spectrum, _, _ = pmassey_wrapper(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, redux_settings, sky=sky)
+    current_spectrum, _, _ = pmassey_wrapper(data, trace_image, y_positions, trace_profile_cspline, badpix_mask, pixel_fractions, height, config, sky=sky)
     
     #S = np.zeros((ny, nx), dtype=float)
     #S = trace_image - np.outer(np.ones(ny), sky)

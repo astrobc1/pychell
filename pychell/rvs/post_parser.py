@@ -75,7 +75,7 @@ class PostParser:
             self.tag = self.forward_models[0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
             self.spectrograph = self.forward_models[0].spectrograph
 
-    def parse_rms(self):
+    def parse_fit_metric(self):
         
         if hasattr(self, 'rms'):
             return self.rms
@@ -83,12 +83,12 @@ class PostParser:
         # Parse the fwms
         self.parse_forward_models()
             
-        rms = np.empty(shape=(self.n_orders, self.n_spec, self.n_iters_opt), dtype=float)
+        fit_metric = np.empty(shape=(self.n_orders, self.n_spec, self.n_iters_opt), dtype=float)
         for o in range(self.n_orders):
             for ispec in range(self.n_spec):
-                rms[o, ispec, :] = [self.forward_models[o][ispec].opt_results[k][1] for k in range(self.n_iters_opt)]
-        self.rms = rms
-        return self.rms
+                fit_metric[o, ispec, :] = [self.forward_models[o][ispec].opt_results[k]['fbest'] for k in range(self.n_iters_opt)]
+        self.fit_metric = fit_metric
+        return self.fit_metric
 
     def parse_stellar_templates(self):
         if hasattr(self, 'stellar_templates'):
@@ -109,7 +109,7 @@ class PostParser:
         pars_numpy_varies = []
         pars_numpy_unc = []
         for o in range(n_orders):
-            n_pars = len(forward_models[o].opt_results[0][0])
+            n_pars = len(forward_models[o].opt_results[0]['xbest'])
             pars_numpy_vals.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
             pars_numpy_minvs.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
             pars_numpy_maxvs.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
@@ -117,11 +117,11 @@ class PostParser:
             pars_numpy_unc.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
             for ispec in range(n_spec):
                 for j in range(n_iters_opt):
-                    pars_numpy_vals[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['value']
-                    pars_numpy_minvs[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['minv']
-                    pars_numpy_maxvs[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['maxv']
-                    pars_numpy_varies[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['vary']
-                    pars_numpy_unc[o][ispec, j, :] = forward_models.opt_results[j][0].unpack()['unc']
+                    pars_numpy_vals[o][ispec, j, :] = forward_models.opt_results[j]['xbest'].unpack()['value']
+                    pars_numpy_minvs[o][ispec, j, :] = forward_models.opt_results[j]['xbest'].unpack()['minv']
+                    pars_numpy_maxvs[o][ispec, j, :] = forward_models.opt_results[j]['xbest'].unpack()['maxv']
+                    pars_numpy_varies[o][ispec, j, :] = forward_models.opt_results[j]['xbest'].unpack()['vary']
+                    pars_numpy_unc[o][ispec, j, :] = forward_models.opt_results[j]['xbest'].unpack()['unc']
                     
         return pars_numpy_vals, pars_numpy_minvs, pars_numpy_maxvs, pars_numpy_varies, pars_numpy_unc
 
@@ -205,7 +205,7 @@ class PostParser:
                 for ispec in range(self.n_iters_opt):
             
                     # Get the best fit parameters
-                    pars = self.forward_models[o][i].opt_results[j + parser.index_offset][0]
+                    pars = self.forward_models[o][i].opt_results[j + parser.index_offset]['xbest']
             
                     # Build the model
                     wave_data, model_lr = parser.forward_models[o][i].build_full(pars, parser.forward_models[o].templates_dict)

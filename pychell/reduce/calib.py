@@ -24,7 +24,7 @@ from numba import jit, njit, prange
 # Pychell modules
 import pychell.utils as pcutils
 import pychell.maths as pcmath
-import pychell.reduce.data2d as pcdata
+import pychell.data as pcdata
 from robustneldermead.neldermead import NelderMead
 
 # Generate a master flat from a flat cube
@@ -41,7 +41,7 @@ def generate_master_flat(individuals, bias_subtraction=False, dark_subtraction=F
     
     # Generate a data cube
     n_flats = len(individuals)
-    flats_cube = pcdata.SpecDataImage.generate_data_cube(individuals)
+    flats_cube = pcdata.Image.generate_cube(individuals)
     
     # For each flat, subtract master dark and bias
     # Also normalize each image and remove obvious bad pixels
@@ -75,7 +75,7 @@ def generate_master_dark(individuals, bias_subtraction=False):
         Returns:
             master_dark (np.ndarray): The median combined master dark image
         """
-    darks_cube = pcdata.SpecDataImage.generate_data_cube(individuals)
+    darks_cube = pcdata.SpecDataImage.generate_cube(individuals)
     if bias_subtraction:
         for i in darks_cube.shape[0]:
             master_bias = individuals[i].master_bias.parse_image()
@@ -92,7 +92,7 @@ def generate_master_bias(individuals):
     Returns:
         master_bias (np.ndarray): The master bias image.
     """
-    bias_cube = pcdata.SpecDataImage.generate_data_cube(individuals)
+    bias_cube = pcdata.SpecDataImage.generate_cube(individuals)
     master_bias = np.nanmedian(bias_cube, axis=0)
     return master_bias
 
