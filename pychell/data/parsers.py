@@ -130,6 +130,10 @@ class DataParser:
         if forward_models.compute_bc_only:
             np.savetxt(forward_models.run_output_path + 'bary_corrs_' + forward_models.star_name + '.txt', np.array([bjds, bc_vels]).T, delimiter=',')
             sys.exit("Compute BC info only is set!")
+            
+        for ispec in forward_models:
+            forward_models[ispec].data.bjd = bjds[ispec]
+            forward_models[ispec].data.bc_vel = bc_vels[ispec]
     
     def compute_midpoint(self, data):
         return self.parse_time(data) + self.parse_itime(data) / (2 * 86400)
