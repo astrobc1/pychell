@@ -131,7 +131,7 @@ class DataParser:
             np.savetxt(forward_models.run_output_path + 'bary_corrs_' + forward_models.star_name + '.txt', np.array([bjds, bc_vels]).T, delimiter=',')
             sys.exit("Compute BC info only is set!")
             
-        for ispec in forward_models:
+        for ispec in range(forward_models.n_spec):
             forward_models[ispec].data.bjd = bjds[ispec]
             forward_models[ispec].data.bc_vel = bc_vels[ispec]
     
