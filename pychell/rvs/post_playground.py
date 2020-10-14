@@ -322,26 +322,26 @@ def gen_rv_mask(parser : pcparser.PostParser):
     parser.parse_forward_models()
     
     # Initialize a mask
-    mask = np.ones(shape=(parser.n_orders, parser.n_spec, parser.n_iters_rvs), dtype=float)
+    mask = np.ones(shape=(parser.n_orders, parser.n_chunks, parser.n_spec, parser.n_iters_rvs), dtype=float)
     
     # Mask all spectra for a given night
     if 'bad_nights' in bad_rvs_dict:
-        for i in bad_rvs_dict['bad_nights']:
-            inds = parser.forward_models[0][0].get_all_spec_indices_from_night(i, parser.n_obs_nights)
-            mask[:, inds, :] = 0
-            rvs_dict['rvs'][:, inds, :] = np.nan
+        for inight in bad_rvs_dict['bad_nights']:
+            inds = parser.forward_models[0][0].get_all_spec_indices_from_night(inight, parser.n_obs_nights)
+            mask[:, :, inds, :] = 0
+            rvs_dict['rvsfwm'][:, :, inds, :] = np.nan
             if rvs_dict['do_xcorr']:
-                rvs_dict['rvsx'][:, inds, :] = np.nan
-                rvs_dict['BIS'][:, inds, :] = np.nan
+                rvs_dict['rvsxc'][:, inds, :] = np.nan
+                rvs_dict['bis'][:, inds, :] = np.nan
     
     # Mask individual spectra
     if 'bad_spec' in bad_rvs_dict:
         for i in bad_rvs_dict['bad_spec']:
             mask[:, i, :] = 0
-            rvs_dict['rvs'][:, i, :] = np.nan
+            rvs_dict['rvsfwm'][:, i, :] = np.nan
             if rvs_dict['do_xcorr']:
-                rvs_dict['rvsx'][:, i, :] = np.nan
-                rvs_dict['BIS'][:, i, :] = np.nan
+                rvs_dict['rvsxc'][:, i, :] = np.nan
+                rvs_dict['bis'][:, i, :] = np.nan
         
     return mask
     
@@ -393,10 +393,10 @@ def print_rv_summary(parser, iter_indices):
     for o in range(parser.n_orders):
         print('Order ' + str(parser.do_orders[o]))
         for k in range(parser.n_iters_rvs):
-            stddev = np.nanstd(rvs_dict['rvs_nightly'][o, :, k])
+            stddev = np.nanstd(rvs_dict['rvsfwm_nightly'][o, :, k])
             
             if rvs_dict['do_xcorr']:
-                stddevxc = np.nanstd(rvs_dict['rvsx_nightly'][o, :, k])
+                stddevxc = np.nanstd(rvs_dict['rvsxc_nightly'][o, :, k])
                 
             if k == iter_indices[o]:
                 print(' ** Iteration ' +  str(k + 1) + ': ' + str(round(stddev, 4)) + ' m/s')
@@ -411,9 +411,9 @@ def gen_rv_weights(parser):
     mask = gen_rv_mask(parser)
     
     # RMS weights
-    rms = parser.parse_rms()
-    weights_rms = 1 / rms[:, :, parser.index_offset:]**2
-    bad = np.where(weights_rms < 100)
+    fit_metrics = parser.parse_fit_metric()
+    weights_fit = 1 / fit_metrics[:, :, :, parser.index_offset:]**2
+    bad = np.where(weights_fit < 100)
     if bad[0].size > 0:
         weights_rms[bad] = 0
         
@@ -422,10 +422,11 @@ def gen_rv_weights(parser):
     weights_rvcont = 1 / rvconts**2
     
     # Combine weights, multiplicatively
-    weights_rv_cont_expanded = np.zeros((parser.n_orders, parser.n_spec, parser.n_iters_rvs))
+    weights_rv_cont_expanded = np.zeros((parser.n_orders, parser.n_chunks, parser.n_spec, parser.n_iters_rvs))
     for o in range(parser.n_orders):
         for j in range(parser.n_iters_rvs):
-            weights_rv_cont_expanded[o, :, j] = weights_rvcont[o, j]
+            for ichunk in range(parser.n_iters_rvs):
+                weights_rv_cont_expanded[o, ichunk, :, j] = weights_rvcont[o, j]
     
     weights = weights_rv_cont_expanded * weights_rms * mask
     
@@ -440,7 +441,7 @@ def compute_rv_contents(parser, templates=None):
     templates = parser.resolve_rvprec_templates(templates)
             
     # The RV contents, for each iteration
-    rvcs = np.zeros((parser.n_orders, parser.n_iters_rvs))
+    rvcs = np.zeros((parser.n_orders, parser.n_chunks, parser.n_spec, parser.n_iters_rvs))
     
     # The nightly S/N, for each iteration
     nightly_snrs = compute_nightly_snrs(parser)

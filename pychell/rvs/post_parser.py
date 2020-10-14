@@ -47,12 +47,11 @@ class PostParser:
             return [templates]
         elif templates is None:
             _templates = []
-            if 'gas_cell' in self.forward_models[0].templates_dict:
+            if 'gas_cell' in self.forward_models.templates_dict:
                 _templates += ['gas_cell']
-            if 'star' in self.forward_models[0].templates_dict:
+            if 'star' in self.forward_models.templates_dict:
                 _templates += ['star']
             return _templates
-        
             
     def parse_forward_models(self):
         if not hasattr(self, 'forward_models'):
@@ -73,21 +72,23 @@ class PostParser:
             self.n_iters_rvs = self.forward_models[0].n_template_fits
             self.n_iters_opt = self.n_iters_rvs + self.index_offset
             self.tag = self.forward_models[0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
+            self.n_chunks = self.forward_models.n_chunks
             self.spectrograph = self.forward_models[0].spectrograph
 
     def parse_fit_metric(self):
         
-        if hasattr(self, 'rms'):
-            return self.rms
+        if hasattr(self, 'fit_metrics'):
+            return self.fit_metrics
         
         # Parse the fwms
         self.parse_forward_models()
             
-        fit_metric = np.empty(shape=(self.n_orders, self.n_spec, self.n_iters_opt), dtype=float)
+        fit_metrics = np.empty(shape=(self.n_orders, self.n_chunks, self.n_spec, self.n_iters_opt), dtype=float)
         for o in range(self.n_orders):
             for ispec in range(self.n_spec):
-                fit_metric[o, ispec, :] = [self.forward_models[o][ispec].opt_results[k]['fbest'] for k in range(self.n_iters_opt)]
-        self.fit_metric = fit_metric
+                for ichunk in range(self.n_chunks):
+                    fit_metric[o, ichunk, ispec, :] = [self.forward_models[o][ispec].opt_results[k][ichunk]['fbest'] for k in range(self.n_iters_opt)]
+        self.fit_metrics = fit_metrics
         return self.fit_metric
 
     def parse_stellar_templates(self):
@@ -100,7 +101,6 @@ class PostParser:
             self.stellar_templates.append(np.load(f)['stellar_templates'])
         return self.stellar_templates
             
-
     def parse_parameters(self):
     
         pars_numpy_vals = []
@@ -108,13 +108,13 @@ class PostParser:
         pars_numpy_maxvs = []
         pars_numpy_varies = []
         pars_numpy_unc = []
-        for o in range(n_orders):
-            n_pars = len(forward_models[o].opt_results[0]['xbest'])
-            pars_numpy_vals.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
-            pars_numpy_minvs.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
-            pars_numpy_maxvs.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
-            pars_numpy_varies.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
-            pars_numpy_unc.append(np.zeros(shape=(n_spec, n_iters_opt, n_pars), dtype=bool))
+        for o in range(self.n_orders):
+            n_pars = len(forward_models[o].opt_results[0][0]['xbest'])
+            pars_numpy_vals.append(np.zeros(shape=(n_spec, n_chunks, n_iters_opt, n_pars), dtype=bool))
+            pars_numpy_minvs.append(np.zeros(shape=(n_spec, n_chunks, n_iters_opt, n_pars), dtype=bool))
+            pars_numpy_maxvs.append(np.zeros(shape=(n_spec, n_chunks, n_iters_opt, n_pars), dtype=bool))
+            pars_numpy_varies.append(np.zeros(shape=(n_spec, n_chunks, n_iters_opt, n_pars), dtype=bool))
+            pars_numpy_unc.append(np.zeros(shape=(n_spec, n_chunks, n_iters_opt, n_pars), dtype=bool))
             for ispec in range(n_spec):
                 for j in range(n_iters_opt):
                     pars_numpy_vals[o][ispec, j, :] = forward_models.opt_results[j]['xbest'].unpack()['value']
@@ -138,39 +138,40 @@ class PostParser:
         fname = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[0]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
         rvs0 = np.load(fname)
         rvs_dict['do_xcorr'] = True if 'rvs_xcorr' in rvs0 else False
-        self.n_spec = rvs0['rvs'].shape[0]
-        self.n_iters_rvs = rvs0['rvs'].shape[1]
+        self.n_spec = rvs0['rvsfwm'].shape[0]
+        self.n_chunks = rvs0['rvsfwm'].shape[1]
+        self.n_iters_rvs = rvs0['rvs'].shape[2]
         self.n_nights = len(rvs0['n_obs_nights'])
         rvs_dict['n_obs_nights'] = rvs0['n_obs_nights']
         self.do_xcorr = rvs_dict['do_xcorr']
         self.n_obs_nights = rvs_dict['n_obs_nights']
         
         # Create arrays
-        rvs_dict['rvs'] = np.full(shape=(self.n_orders, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
-        rvs_dict['rvs_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
-        rvs_dict['unc_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
-        rvs_dict['BJDS'] = rvs0['BJDS']
-        rvs_dict['BJDS_nightly'] = rvs0['BJDS_nightly']
+        rvs_dict['rvsfwm'] = np.full(shape=(self.n_orders, self.n_chunks, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
+        rvs_dict['rvsfwm_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
+        rvs_dict['uncfwm_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
+        rvs_dict['bjds'] = rvs0['bjds']
+        rvs_dict['bjds_nightly'] = rvs0['bjds_nightly']
         
         if rvs_dict['do_xcorr']:
-            rvs_dict['rvsx'] = np.full(shape=(self.n_orders, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
-            rvs_dict['rvsx_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
-            rvs_dict['uncx_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
-            rvs_dict['BIS'] = np.full(shape=(self.n_orders, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
+            rvs_dict['rvsxc'] = np.full(shape=(self.n_orders, self.n_chunks, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
+            rvs_dict['rvsxc_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
+            rvs_dict['uncxc_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
+            rvs_dict['bis'] = np.full(shape=(self.n_orders, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
 
         # Load in rvs for each order
         for o in range(self.n_orders):
             print('Loading in RVs for ' + os.path.basename(self.output_path_root[0:-1]) + ' , Order ' + str(self.do_orders[o]))
             fname = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
             rvfile = np.load(fname)
-            rvs_dict['rvs'][o, :, :] = rvfile['rvs']
-            rvs_dict['rvs_nightly'][o, :, :] = rvfile['rvs_nightly']
-            rvs_dict['unc_nightly'][o, :, :] = rvfile['unc_nightly']
+            rvs_dict['rvsfwm'][o, :, :, :] = rvfile['rvsfwm']
+            rvs_dict['rvsfwm_nightly'][o, :, :] = rvfile['rvs_nightly']
+            rvs_dict['uncfwm_nightly'][o, :, :] = rvfile['unc_nightly']
             if rvs_dict['do_xcorr']:
-                rvs_dict['rvsx'][o, :, :] = rvfile['rvs_xcorr']
-                rvs_dict['rvsx_nightly'][o, :, :] = rvfile['rvs_xcorr_nightly']
-                rvs_dict['uncx_nightly'][o, :, :] = rvfile['unc_xcorr_nightly']
-                rvs_dict['BIS'][o, :, :] = rvfile['bis']
+                rvs_dict['rvsxc'][o, :, :, :] = rvfile['rvsxc']
+                rvs_dict['rvsxc_nightly'][o, :, :] = rvfile['rvsxc_nightly']
+                rvs_dict['uncxc_nightly'][o, :, :] = rvfile['uncxc_nightly']
+                rvs_dict['bis'][o, :, :] = rvfile['bis']
                 
         self.rvs_dict = rvs_dict
 
@@ -185,9 +186,9 @@ class PostParser:
             stddevs = np.full(self.n_iters_rvs, fill_value=np.nan)
             for k in range(self.n_iters_rvs):
                 if self.rvs_out == 'XC':
-                    stddevs[k] = np.nanstd(self.rvs_dict['rvsx_nightly'][o, :, k])
+                    stddevs[k] = np.nanstd(self.rvs_dict['rvsxc_nightly'][o, :, k])
                 else:
-                    stddevs[k] = np.nanstd(self.rvs_dict['rvs_nightly'][o, :, k])
+                    stddevs[k] = np.nanstd(self.rvs_dict['rvsfwm_nightly'][o, :, k])
             best_iters[o] = np.nanargmin(stddevs)
             best_stddevs[o] = stddevs[best_iters[o]]
 
@@ -198,19 +199,21 @@ class PostParser:
         res = []
         for o in range(self.n_orders):
             
-            res.append(np.zeros())
+            res.append(np.empty(self.n_spec, self.n_chunks), dtype=np.ndarray)
             
             for ispec in range(self.n_spec):
                 
-                for ispec in range(self.n_iters_opt):
-            
-                    # Get the best fit parameters
-                    pars = self.forward_models[o][i].opt_results[j + parser.index_offset]['xbest']
-            
-                    # Build the model
-                    wave_data, model_lr = parser.forward_models[o][i].build_full(pars, parser.forward_models[o].templates_dict)
-                    _res = self.forward_models[o][ispec].data.flux - model_lr
-                    res[-1][:, i, j] = _res
+                for ichunk in range(self.n_chunks):
+                
+                    for k in range(self.n_iters_opt):
+                
+                        # Get the best fit parameters
+                        pars = self.forward_models[o][ispec].opt_results[k + parser.index_offset][ichunk]['xbest']
+                
+                        # Build the model
+                        wave_data, model_lr = parser.forward_models[o][ispec].build_full(pars, parser.forward_models[o].templates_dict)
+                        _res = self.forward_models[o][ispec].data.flux - model_lr
+                        res[-1][ispec, ichunk] = _res
         
         self.residuals = res
         return res
