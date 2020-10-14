@@ -352,7 +352,7 @@ class ForwardModels(list):
         plt.xlabel('BJD - BJD$_{0}$', fontweight='bold')
         plt.ylabel('RV [m/s]', fontweight='bold')
         plt.legend(loc='upper right')
-        plt.tight_layout()
+        plt.tight_layout(pad=0.4, w_pad=0.5, h_pad=1.0)
         fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_rvs_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
         plt.savefig(fname)
         plt.close()
@@ -637,7 +637,7 @@ class ForwardModel:
             fig.text(0.015, 0.5, 'Data, Model, Residuals', fontsize=6, rotation=90, verticalalignment='center', horizontalalignment='center')
         
         # Save
-        plt.subplots_adjust(left=0.1, bottom=0.03, right=0.9, top=0.98, wspace=None, hspace=0.04)
+        plt.tight_layout(pad=0.4, h_pad=0.3)
         plt.savefig(fname)
         plt.close()
         

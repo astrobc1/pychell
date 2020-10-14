@@ -598,22 +598,27 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
     """
     
     # Numbers
-    n_orders, n_spec = rvs.shape
+    n_orders, n_spec, n_chunks = rvs.shape
     n_nights = len(n_obs_nights)
     
+    # Rephrase problem as n_quasi_orders = n_orders * n_chunks
+    n_tot_chunks = n_orders * n_chunks
+    
     # Determine differences and weights tensors
-    rvlij = np.zeros((n_orders, n_spec, n_spec))
-    wlij = np.zeros((n_orders, n_spec, n_spec))
+    rvlij = np.zeros((n_tot_chunks, n_spec, n_spec))
+    wlij = np.zeros((n_tot_chunks, n_spec, n_spec))
     for l in range(n_orders):
-        for i in range(n_spec):
-            for j in range(n_spec):
-                rvlij[l, i, j] = rvs[l, i] - rvs[l, j]
-                wlij[l, i, j] = weights[l, i] * weights[l, j]
+        for ichunk in range(n_chunks):
+            i_quasi_chunk = l * n_chunks + ichunk
+            for i in range(n_spec):
+                for j in range(n_spec):
+                    rvlij[i_quasi_chunk, i, j] = rvs[l, i, ichunk] - rvs[l, j, ichunk]
+                    wlij[i_quasi_chunk, i, j] = weights[l, i, ichunk] * weights[l, j, ichunk]
 
     # Average over differences
-    rvli = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    uncli = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    for l in range(n_orders):
+    rvli = np.full(shape=(n_tot_chunks, n_spec), fill_value=np.nan)
+    uncli = np.full(shape=(n_tot_chunks, n_spec), fill_value=np.nan)
+    for l in range(n_tot_chunks):
         for i in range(n_spec):
             good = np.where(wlij[l, i, :] > 0)[0]
             ng = good.size

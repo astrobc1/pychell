@@ -152,9 +152,6 @@ def init(user_forward_model_settings, user_model_blueprints):
     # Pipeline Defaults
     init_config(config, user_forward_model_settings)
     
-    # Create output dirs
-    create_output_dirs(config)
-    
     # The model blueprints
     init_blueprints(config, model_blueprints, user_model_blueprints=user_model_blueprints)
     

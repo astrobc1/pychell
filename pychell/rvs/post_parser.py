@@ -34,9 +34,9 @@ class PostParser:
         if iter_indices == 'best':
             _, iter_indices = self.get_best_iters()
         elif iter_indices is None:
-            iter_indices = np.zeros(self.n_orders).astype(int) + self.n_iters_rvs - 1
+            iter_indices = np.zeros((self.n_orders, self.n_chunks)).astype(int) + self.n_iters_rvs - 1
         elif type(iter_indices) is int:
-            iter_indices = np.zeros(self.n_orders).astype(int) + iter_indices
+            iter_indices = np.zeros((self.n_orders, self.n_chunks)).astype(int) + iter_indices
         return iter_indices
     
     def resolve_rvprec_templates(self, templates=None):
@@ -47,9 +47,9 @@ class PostParser:
             return [templates]
         elif templates is None:
             _templates = []
-            if 'gas_cell' in self.forward_models.templates_dict:
+            if 'gas_cell' in self.forward_models[0].templates_dict:
                 _templates += ['gas_cell']
-            if 'star' in self.forward_models.templates_dict:
+            if 'star' in self.forward_models[0].templates_dict:
                 _templates += ['star']
             return _templates
             
@@ -59,7 +59,7 @@ class PostParser:
             for o in range(self.n_orders):
                 print('Loading in forward model for ' + os.path.basename(self.output_path_root[0:-1]) + ' , Order ' + str(self.do_orders[o]))
                 try:
-                    f = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + '*forward_models*.pkl')[0]
+                    f = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'ForwardModels' + os.sep + '*forward_models*.pkl')[0]
                     with open(f, 'rb') as ff:
                         self.forward_models.append(pickle.load(ff))
                 except:
@@ -72,23 +72,23 @@ class PostParser:
             self.n_iters_rvs = self.forward_models[0].n_template_fits
             self.n_iters_opt = self.n_iters_rvs + self.index_offset
             self.tag = self.forward_models[0].tag + '_' + datetime.date.today().strftime("%d%m%Y")
-            self.n_chunks = self.forward_models.n_chunks
+            self.n_chunks = self.forward_models[0].n_chunks
             self.spectrograph = self.forward_models[0].spectrograph
 
     def parse_fit_metric(self):
         
-        if hasattr(self, 'fit_metrics'):
-            return self.fit_metrics
+        if hasattr(self, 'fit_metric'):
+            return self.fit_metric
         
         # Parse the fwms
         self.parse_forward_models()
             
-        fit_metrics = np.empty(shape=(self.n_orders, self.n_chunks, self.n_spec, self.n_iters_opt), dtype=float)
+        fit_metric = np.empty(shape=(self.n_orders, self.n_spec, self.n_chunks, self.n_iters_opt), dtype=float)
         for o in range(self.n_orders):
             for ispec in range(self.n_spec):
                 for ichunk in range(self.n_chunks):
-                    fit_metric[o, ichunk, ispec, :] = [self.forward_models[o][ispec].opt_results[k][ichunk]['fbest'] for k in range(self.n_iters_opt)]
-        self.fit_metrics = fit_metrics
+                    fit_metric[o, ispec, ichunk, :] = [self.forward_models[o][ispec].opt_results[k][ichunk]['fbest'] for k in range(self.n_iters_opt)]
+        self.fit_metric = fit_metric
         return self.fit_metric
 
     def parse_stellar_templates(self):
@@ -137,27 +137,27 @@ class PostParser:
         # Load in a single forward model object to determine if x corr is set
         fname = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[0]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
         rvs0 = np.load(fname)
-        rvs_dict['do_xcorr'] = True if 'rvs_xcorr' in rvs0 else False
+        rvs_dict['do_xcorr'] = True if 'rvsxc' in rvs0 else False
         self.n_spec = rvs0['rvsfwm'].shape[0]
         self.n_chunks = rvs0['rvsfwm'].shape[1]
-        self.n_iters_rvs = rvs0['rvs'].shape[2]
+        self.n_iters_rvs = rvs0['rvsfwm'].shape[2]
         self.n_nights = len(rvs0['n_obs_nights'])
         rvs_dict['n_obs_nights'] = rvs0['n_obs_nights']
         self.do_xcorr = rvs_dict['do_xcorr']
         self.n_obs_nights = rvs_dict['n_obs_nights']
         
         # Create arrays
-        rvs_dict['rvsfwm'] = np.full(shape=(self.n_orders, self.n_chunks, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
+        rvs_dict['rvsfwm'] = np.full(shape=(self.n_orders, self.n_spec, self.n_chunks, self.n_iters_rvs), fill_value=np.nan)
         rvs_dict['rvsfwm_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
         rvs_dict['uncfwm_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
         rvs_dict['bjds'] = rvs0['bjds']
         rvs_dict['bjds_nightly'] = rvs0['bjds_nightly']
         
         if rvs_dict['do_xcorr']:
-            rvs_dict['rvsxc'] = np.full(shape=(self.n_orders, self.n_chunks, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
+            rvs_dict['rvsxc'] = np.full(shape=(self.n_orders, self.n_spec, self.n_chunks, self.n_iters_rvs), fill_value=np.nan)
             rvs_dict['rvsxc_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
             rvs_dict['uncxc_nightly'] = np.full(shape=(self.n_orders, self.n_nights, self.n_iters_rvs), fill_value=np.nan)
-            rvs_dict['bis'] = np.full(shape=(self.n_orders, self.n_spec, self.n_iters_rvs), fill_value=np.nan)
+            rvs_dict['bis'] = np.full(shape=(self.n_orders, self.n_spec, self.n_chunks, self.n_iters_rvs), fill_value=np.nan)
 
         # Load in rvs for each order
         for o in range(self.n_orders):
@@ -165,8 +165,8 @@ class PostParser:
             fname = glob.glob(self.output_path_root + 'Order' + str(self.do_orders[o]) + os.sep + 'RVs' + os.sep + '*.npz')[0]
             rvfile = np.load(fname)
             rvs_dict['rvsfwm'][o, :, :, :] = rvfile['rvsfwm']
-            rvs_dict['rvsfwm_nightly'][o, :, :] = rvfile['rvs_nightly']
-            rvs_dict['uncfwm_nightly'][o, :, :] = rvfile['unc_nightly']
+            rvs_dict['rvsfwm_nightly'][o, :, :] = rvfile['rvsfwm_nightly']
+            rvs_dict['uncfwm_nightly'][o, :, :] = rvfile['uncfwm_nightly']
             if rvs_dict['do_xcorr']:
                 rvs_dict['rvsxc'][o, :, :, :] = rvfile['rvsxc']
                 rvs_dict['rvsxc_nightly'][o, :, :] = rvfile['rvsxc_nightly']
@@ -179,8 +179,8 @@ class PostParser:
             
     def get_best_iters(self):
         
-        best_iters = np.zeros(self.n_orders, dtype=int)
-        best_stddevs = np.zeros(self.n_orders, dtype=int)
+        best_iters = np.zeros(shape=(self.n_orders, self.n_chunks), dtype=int)
+        best_stddevs = np.zeros(shape=(self.n_orders, self.n_chunks), dtype=int)
         
         for o in range(self.n_orders):
             stddevs = np.full(self.n_iters_rvs, fill_value=np.nan)

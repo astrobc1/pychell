@@ -296,7 +296,6 @@ class SplineBlaze(EmpiricalMult):
             self.n_spline_pars = self.n_splines + 1
 
         # Set the spline parameter names and knots
-        self.spline_wave_set_points = np.linspace(self.wave_bounds[0] - 2, self.wave_bounds[1] + 2, num=self.n_splines + 1)
         for i in range(self.n_splines+1):
             self.base_par_names.append('_spline_' + str(i+1))
                 
@@ -317,27 +316,16 @@ class SplineBlaze(EmpiricalMult):
         return spline_blaze
 
     def init_parameters(self, forward_model):
-        
-        # Estimate the continuum
-        wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
-        log_continuum = fit_continuum_wobble(wave, np.log(forward_model.data.flux), forward_model.data.mask, order=4, nsigma=[0.25, 3.0], maxniter=50)
-        
-        continuum = np.exp(log_continuum)
-        good = np.where(np.isfinite(continuum))[0]
-
-        # Spline parameters
-        for i in range(self.n_spline_pars):
-            if forward_model.remove_continuum:
-                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=self.blueprint['spline'][1] + 1, minv=self.blueprint['spline'][0] + 1, maxv=self.blueprint['spline'][2] + 1, vary=self.enabled))
-            else:
-                k = np.argmin(np.abs(wave[good] - self.spline_wave_set_points[i])) + good[0]
-                forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=continuum[k], minv=continuum[k] + self.blueprint['spline'][0], maxv=continuum[k] + self.blueprint['spline'][2], vary=self.enabled))
+        for ispline in range(self.n_splines + 1):
+            forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[ispline], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], vary=self.enabled))
                 
     def __repr__(self):
         return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
     
     def init_chunk(self, forward_model, templates_dict, sregion):
-        self.wavemid = sregion.midwave()
+        wave_estimate = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+        good = sregion.wave_within(wave_estimate)
+        self.spline_wave_set_points = np.linspace(wave_estimate[good[0]], wave_estimate[good[-1]], num=self.n_splines + 1)
 
 
 #### Gas Cell ####
@@ -877,8 +865,6 @@ class PolyWavelengthSolution(WavelengthSolution):
         self.poly_pixel_set_points = np.linspace(good[0], good[-1], num=self.poly_order + 1).astype(int)
         self.poly_wave_set_points = wave_estimate[self.poly_pixel_set_points]
         
-
-
 class SplineWavelengthSolution(WavelengthSolution):
     """ Class for a full wavelength solution defined through cubic splines.
 
@@ -913,8 +899,6 @@ class SplineWavelengthSolution(WavelengthSolution):
         wave_estimate = np.polyval(coeffs, np.arange(self.nx))
 
         # Set the spline parameter names and knots
-        self.spline_pixel_set_points_order = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_spline_pars).astype(int)
-        self.spline_wave_zero_points_order = wave_estimate[self.spline_pixel_set_points]
         for i in range(self.n_spline_pars):
             self.base_par_names.append('_spline_' + str(i + 1))
                 
@@ -948,7 +932,6 @@ class SplineWavelengthSolution(WavelengthSolution):
         self.spline_pixel_set_points = np.linspace(good[0], good[-1], num=self.n_splines + 1)
         self.spline_wave_set_points = wave_estimate[self.spline_pixel_set_points]
 
-
 class HybridWavelengthSolution(WavelengthSolution):
     """ Class for a wavelength solution which starts from some pre-derived solution (say a ThAr lamp), with the option of an additional spline offset if further constrained by a gas cell.
 
@@ -976,7 +959,6 @@ class HybridWavelengthSolution(WavelengthSolution):
 
         # Construct spline parameter names
         if self.n_splines > 0:
-            self.spline_pixel_set_points = np.linspace(self.pix_bounds[0], self.pix_bounds[1], num=self.n_splines + 1)
             for i in range(self.n_splines+1):
                 self.base_par_names.append('_wave_spline_' + str(i+1))
         self.par_names = [self.name + s for s in self.base_par_names]
