@@ -322,6 +322,13 @@ class SplineBlaze(EmpiricalMult):
     def __repr__(self):
         return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
     
+    def init_optimize(self, forward_model, templates_dict):
+        if forward_model.remove_continuum:
+            _ = forward_model.init_chunk(templates_dict)
+            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+            continuum = fit_continuum_wobble(wave, forward_model.data.flux_chunk, forward_model.data.mask_chunk, order=6, nsigma=[0.3, 3.0], maxniter=50)
+            forward_model.data.flux[forward_model.sregion_order.data_inds] /= np.exp(continuum)
+    
     def init_chunk(self, forward_model, templates_dict, sregion):
         wave_estimate = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
         good = sregion.wave_within(wave_estimate)
@@ -609,8 +616,8 @@ class LSF(SpectralComponent):
 
     # Returns a delta function
     def build_fake(self):
-        delta = np.zeros(self.nx_lsf, dtype=float)
-        delta[int(np.floor(self.nx_lsf / 2))] = 1.0
+        delta = np.zeros(self.nx, dtype=float)
+        delta[int(np.floor(self.nx / 2))] = 1.0
         return delta
 
     # Convolves the flux
@@ -969,12 +976,12 @@ class HybridWavelengthSolution(WavelengthSolution):
 
     def build(self, pars):
         if not self.splines_enabled:
-            return self.default_wave_grid
+            return self.default_wave_grid[self.sregion.data_inds]
         else:
             pixel_grid = np.arange(self.nx)
             splines = np.array([pars[self.par_names[i]].value for i in range(self.n_splines + 1)], dtype=np.float64)
             wave_spline = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, splines, bc_type='not-a-knot', extrapolate=False)(pixel_grid)
-            return self.default_wave_grid + wave_spline
+            return self.default_wave_grid[self.sregion.data_inds] + wave_spline
 
     def build_fake(self):
         pass
@@ -987,6 +994,7 @@ class HybridWavelengthSolution(WavelengthSolution):
 
 
     def init_chunk(self, forward_model, templates_dict, sregion):
+        self.sregion = sregion
         if self.n_splines > 0:
             wave_estimate = self.estimate_order_wave(forward_model, self.blueprint)
             good = sregion.wave_within(wave_estimate)

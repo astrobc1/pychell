@@ -118,6 +118,8 @@ forward_model_settings = {
     
     # Whether or not to crudely remove the continuum from the data before any optimizing.
     'remove_continuum': False,
+    
+    "gen_fwm_plots": True,
         
     # Model Resolution (n_model_pixels = model_resolution * n_data_pixels)
     # This is only important because of the instrument line profile (LSF)

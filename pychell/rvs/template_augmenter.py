@@ -320,10 +320,11 @@ def weighted_median(forward_models, iter_index=None):
 
     # Augment the template
     new_flux = current_stellar_template[:, 1] + residuals_median
+    med_fitmetric = np.nanmedian(fit_metrics)
     # Force the max to be less than 1.
-    locs = np.where(new_flux > 1)[0]
+    locs = np.where(new_flux > 1 + med_fitmetric)[0]
     if locs.size > 0:
-        new_flux[locs] = 1
+        new_flux[locs] = med_fitmetric
 
     forward_models.templates_dict['star'][:, 1] = new_flux
 

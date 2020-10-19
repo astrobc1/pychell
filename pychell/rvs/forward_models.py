@@ -344,9 +344,10 @@ class ForwardModels(list):
                         yerr=rvs_dict['uncfwm_nightly'][:, iter_index], marker='o', linewidth=0, elinewidth=1, label='Nelder Mead', color=(0, 114/255, 189/255))
         
         # Nightly RVs from xc
-        plt.errorbar(rvs_dict['bjds_nightly'] - rvs_dict['bjds_nightly'][0],
-                                rvs_dict['rvsxc_nightly'][:, iter_index] - np.nanmedian(rvs_dict['rvsxc_nightly'][:, iter_index]),
-                                yerr=rvs_dict['uncxc_nightly'][:, iter_index], marker='X', linewidth=0, alpha=0.8, label='X Corr', color='darkorange', elinewidth=1)
+        if rvs_dict['do_xcorr']:
+            plt.errorbar(rvs_dict['bjds_nightly'] - rvs_dict['bjds_nightly'][0],
+                                    rvs_dict['rvsxc_nightly'][:, iter_index] - np.nanmedian(rvs_dict['rvsxc_nightly'][:, iter_index]),
+                                    yerr=rvs_dict['uncxc_nightly'][:, iter_index], marker='X', linewidth=0, alpha=0.8, label='X Corr', color='darkorange', elinewidth=1)
         
         plt.title(self[0].star_name + ' RVs Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
         plt.xlabel('BJD - BJD$_{0}$', fontweight='bold')
@@ -548,9 +549,9 @@ class ForwardModel:
             fname = self.run_output_path + self.o_folder + 'ForwardModels' + os.sep + self.tag + '_data_model_spec' + str(self.spec_num) + '_ord' + str(self.order_num) + '_iter0.png'
             
         # Figure
-        plot_width, plot_height = 1600, 800
+        plot_width, plot_height = 2000, 720
         dpi = 200
-        fig, axarr = plt.subplots(self.n_chunks, 1, figsize=(int(plot_width / dpi), int(self.n_chunks * plot_height / dpi)), dpi=dpi)
+        fig, axarr = plt.subplots(self.n_chunks, 1, figsize=(int(plot_width / dpi), int(self.n_chunks * plot_height / dpi)), dpi=dpi, constrained_layout=True)
         axarr = np.atleast_1d(axarr)
             
         for ichunk, sregion in enumerate(self.chunk_regions):
@@ -631,13 +632,13 @@ class ForwardModel:
             else:
                 axarr[ichunk].set_ylim(-0.1, 1.1)
                 
-            axarr[ichunk].tick_params(axis='both', labelsize=6)
+            axarr[ichunk].tick_params(axis='both', labelsize=10)
             axarr[ichunk].set_xlim((sregion.wavemin - pad) / 10, (sregion.wavemax + pad) / 10)
-            fig.text(0.5, 0.015, 'Wavelength [nm]', fontsize=6, horizontalalignment='center', verticalalignment='center')
-            fig.text(0.015, 0.5, 'Data, Model, Residuals', fontsize=6, rotation=90, verticalalignment='center', horizontalalignment='center')
+            fig.text(0.5, 0.015, 'Wavelength [nm]', fontsize=10, horizontalalignment='center', verticalalignment='center')
+            fig.text(0.015, 0.5, 'Data, Model, Residuals', fontsize=10, rotation=90, verticalalignment='center', horizontalalignment='center')
         
         # Save
-        plt.tight_layout(pad=0.4, h_pad=0.3)
+        plt.subplots_adjust(left=0.05, bottom=0.05, right=None, top=0.95, wspace=None, hspace=None)
         plt.savefig(fname)
         plt.close()
         
@@ -784,7 +785,8 @@ class ForwardModel:
         print('Fit Spectrum ' + str(forward_model.spec_num) + ' in ' + str(round((stopwatch.time_since())/60, 2)) + ' min', flush=True)
 
         # Output a plot
-        forward_model.plot_order(templates_dict, iter_index)
+        if forward_model.gen_fwm_plots:
+            forward_model.plot_order(templates_dict, iter_index)
 
         # Return new forward model object since we possibly fit in parallel
         return forward_model
@@ -1023,8 +1025,6 @@ class MinervaAustralisForwardModel(ForwardModel):
 
     def build_full(self, pars, templates_dict):
         
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
         final_hr_wave_grid = templates_dict['star'][:, 0]
         
         model = np.ones_like(final_hr_wave_grid)
@@ -1032,31 +1032,31 @@ class MinervaAustralisForwardModel(ForwardModel):
         # Star
         if self.models_dict['star'].enabled:
             model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
-        
+            
         # All tellurics
         if self.models_dict['tellurics'].enabled:
             model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-
-        # Convolve Model with LSF
+            
+        # Convolve
         if self.models_dict['lsf'].enabled:
-            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+            model[:] = self.models_dict['lsf'].convolve_flux(model, pars)
             
         # Renormalize model to remove degeneracy between blaze and lsf
         model /= pcmath.weighted_median(model, percentile=0.999)
-        
+            
         # Blaze Model
         if self.models_dict['blaze'].enabled:
             model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        
+        # Residual lab flux
+        if 'residual_lab' in templates_dict:
+            model += templates_dict['residual_lab'][:, 1]
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        good = np.where(np.isfinite(model))[0]
-        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
-        
-        if self.debug:
-            stop()
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
 
         return wavelength_solution, model_lr
     

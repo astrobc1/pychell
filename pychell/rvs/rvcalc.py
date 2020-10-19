@@ -678,5 +678,7 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
         if i < n_nights - 1:
             f += n_obs_nights[i]
             l += n_obs_nights[i+1]
+            
+    rvs_out = {"rvs": rvs_single_out, "unc": unc_single_out, "rvs_nightly": rvs_nightly_out, "unc_nightly" : unc_nightly_out}
         
-    return rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out
+    return rvs_out

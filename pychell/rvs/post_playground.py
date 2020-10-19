@@ -896,7 +896,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indices, star_
     
     return forward_models
             
-def rvs_quicklook(parser, iter_index, phase_to=None, tc=None, thresh=None, debug=False):
+def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thresh=None, debug=False):
     
     if phase_to is None:
         _phase_to = 1E20
@@ -912,46 +912,29 @@ def rvs_quicklook(parser, iter_index, phase_to=None, tc=None, thresh=None, debug
     parser.parse_rvs()
     
     # Print summary
-    print_rv_summary(parser, [iter_index]*parser.n_orders)
+    iter_indices = np.full(shape=(parser.n_orders, parser.n_chunks), fill_value=iter_index)
+    print_rv_summary(parser, iter_indices)
     
-    # Generate mask
-    mask = gen_rv_mask(parser)
-    
-    # Unpack and combine RVs
-    weights = np.zeros((parser.n_orders, parser.n_spec, parser.n_iters_rvs))
-    if parser.rvs_out == 'NM':
-        for o in range(parser.n_orders):
-            for i in range(parser.n_spec):
-                inight = pcforwardmodels.ForwardModel.get_night_index(i, parser.n_obs_nights)
-                weights[o, i, :] = 1 / parser.rvs_dict["unc_nightly"][o, inight, :]**2
-        rvs_unpacked = np.array([parser.rvs_dict['rvs'][o, :, iter_index] for o in range(parser.n_orders)])
-        rvsn_unpacked = np.array([parser.rvs_dict['rvs_nightly'][o, :, iter_index] for o in range(parser.n_orders)])
-        uncn_unpacked = np.array([parser.rvs_dict['unc_nightly'][o, :, iter_index] for o in range(parser.n_orders)])
-        weights_unpacked = np.array([weights[o, :, iter_index] for o in range(parser.n_orders)])
-        rv_results = pcrvcalc.combine_relative_rvs(rvs_unpacked, weights_unpacked, parser.n_obs_nights)
-    else:
-        for o in range(parser.n_orders):
-            for i in range(parser.n_spec):
-                inight = pcforwardmodels.ForwardModel.get_night_index(i, parser.n_obs_nights)
-                weights[o, i, :] = 1 / parser.rvs_dict["uncx_nightly"][o, inight, :]**2
-
-        rvs_unpacked = np.array([parser.rvs_dict['rvsx'][o, :, iter_index ] for o in range(parser.n_orders)])
-        rvsn_unpacked = np.array([parser.rvs_dict['rvsx_nightly'][o, :, iter_index] for o in range(parser.n_orders)])
-        uncn_unpacked = np.array([parser.rvs_dict['uncx_nightly'][o, :, iter_index] for o in range(parser.n_orders)])
-        weights_unpacked = np.array([weights[o, :, iter_index] for o in range(parser.n_orders)])
-        rv_results = pcrvcalc.combine_relative_rvs(rvs_unpacked, weights_unpacked, parser.n_obs_nights)
-        
-    # Combine
-    result = pcrvcalc.combine_relative_rvs(rvs_unpacked, weights_unpacked, parser.n_obs_nights)
-    rvs_final = result[0]
-    unc_final = result[1]
-    rvs_nightly_final = result[2]
-    unc_nightly_final = result[3]
-    bjds, bjdsn = parser.rvs_dict["BJDS"], parser.rvs_dict["BJDS_nightly"]
+    # Combine RVs for NM
+    rvsfwm_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+    weights_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+    for o in range(parser.n_orders):
+        for ichunk in range(parser.n_chunks):
+            rvsfwm_single_iter[o, :, :] = parser.rvs_dict["rvsfwm"][o, :, :, iter_indices[o, 0]]
+            weights = 1 / parser.rvs_dict["uncfwm_nightly"][o, :, iter_indices[o, 0]]**2
+            for ispec in range(parser.n_spec):
+                night_index = pcforwardmodels.ForwardModel.get_night_index(ispec, parser.rvs_dict["n_obs_nights"])
+                weights_single_iter[o, :, :] = weights[night_index]
+    result_nm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, parser.n_obs_nights)
+    rvs_final = result_nm["rvs"]
+    unc_final = result_nm["unc"]
+    rvs_nightly_final = result_nm["rvs_nightly"]
+    unc_nightly_final = result_nm["unc_nightly"]
+    bjds, bjdsn = parser.rvs_dict["bjds"], parser.rvs_dict["bjds_nightly"]
     
     # Plot
-    for o in range(parser.n_orders):
-        plt.errorbar((bjdsn - alpha)%_phase_to, rvsn_unpacked[o, :] - np.nanmedian(rvsn_unpacked[o, :]), yerr=uncn_unpacked[o, :], marker='o', markersize=6, lw=0, label='Order ' + str(parser.do_orders[o]), alpha=0.6)
+    #for o in range(parser.n_orders):
+    #    plt.errorbar((bjdsn - alpha)%_phase_to, rvsn_unpacked[o, :] - np.nanmedian(rvsn_unpacked[o, :]), yerr=uncn_unpacked[o, :], marker='o', markersize=6, lw=0, label='Order ' + str(parser.do_orders[o]), alpha=0.6)
     
     plt.errorbar((bjdsn - alpha)%_phase_to, rvs_nightly_final - np.nanmedian(rvs_nightly_final), yerr=unc_nightly_final, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
     plt.legend()

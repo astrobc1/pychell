@@ -75,7 +75,9 @@ def compute_rvs(user_forward_model_settings, user_model_blueprints):
             if len(forward_models[0].initial_parameters.get_varied()) == 0:
                 print('No parameters to optimize, moving on', flush=True)
                 for fwm in forward_models:
-                    fwm.opt_results.append({'xbest': fwm.initial_parameters, 'fbest': np.nan, 'fcalls': np.nan})
+                    fwm.opt_results.append([])
+                    for _ in range(forward_models.n_chunks):
+                        fwm.opt_results[-1].append({'xbest': fwm.initial_parameters, 'fbest': np.nan, 'fcalls': np.nan})
                 forward_models.template_augmenter(forward_models, iter_index=0)
                 forward_models.update_models(0)
             else:
@@ -163,6 +165,7 @@ def init(user_forward_model_settings, user_model_blueprints):
         matplotlib.use("AGG")
     else:
         matplotlib.use("MacOSX")
+    plt.ioff()
 
     return config, model_blueprints
         
