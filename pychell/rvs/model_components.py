@@ -281,6 +281,8 @@ class SplineBlaze(EmpiricalMult):
         blaze_wave_estimate (bool): The estimate of the blaze wavelegnth. If not provided, defaults to the average of the wavelength grid provided in the build method.
         spline_set_points (np.ndarray): The location of the spline knots.
     """
+    
+    name = 'spline_blaze'
 
     def __init__(self, forward_model, blueprint):
         
@@ -900,10 +902,6 @@ class SplineWavelengthSolution(WavelengthSolution):
         self.quad_wave_zero_points = np.array([blueprint['quad_set_point_1'][self.order_num - 1],
                                                blueprint['quad_set_point_2'][self.order_num - 1],
                                                blueprint['quad_set_point_3'][self.order_num - 1]])
-        
-        # Estimate the wave grid
-        coeffs = pcmath.poly_coeffs(self.quad_pixel_set_points, self.quad_wave_zero_points)
-        wave_estimate = np.polyval(coeffs, np.arange(self.nx))
 
         # Set the spline parameter names and knots
         for i in range(self.n_spline_pars):
@@ -914,13 +912,13 @@ class SplineWavelengthSolution(WavelengthSolution):
     def build(self, pars):
         
         # The detector grid
-        pixel_grid = np.arange(self.nx)
+        pixel_grid = np.arange(self.sregion.pixmin, self.sregion.pixmax + 1, 1)
 
         # Get the spline parameters
         spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_spline_pars)], dtype=np.float64)
         
         # Build the spline model
-        spline_wave = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, spline_pars + self.spline_wave_zero_points, extrapolate=False, bc_type='not-a-knot')(pixel_grid)
+        spline_wave = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, spline_pars + self.spline_wave_set_points, extrapolate=False, bc_type='not-a-knot')(pixel_grid)
         
         return spline_wave
 
@@ -934,10 +932,13 @@ class SplineWavelengthSolution(WavelengthSolution):
         pass
     
     def init_chunk(self, forward_model, templates_dict, sregion):
-        wave_estimate = self.estimate_order_wave(forward_model, self.blueprint)
-        good = sregion.wave_within(wave_estimate)
-        self.spline_pixel_set_points = np.linspace(good[0], good[-1], num=self.n_splines + 1)
-        self.spline_wave_set_points = wave_estimate[self.spline_pixel_set_points]
+        self.sregion = sregion
+        if self.n_splines > 0:
+            wave_estimate = self.estimate_order_wave(forward_model, self.blueprint)
+            good = sregion.wave_within(wave_estimate)
+            self.nx = sregion.pix_len()
+            self.spline_pixel_set_points = np.linspace(good[0], good[-1], num=self.n_splines + 1).astype(int)
+            self.spline_wave_set_points = wave_estimate[self.spline_pixel_set_points]
 
 class HybridWavelengthSolution(WavelengthSolution):
     """ Class for a wavelength solution which starts from some pre-derived solution (say a ThAr lamp), with the option of an additional spline offset if further constrained by a gas cell.

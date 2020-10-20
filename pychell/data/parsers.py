@@ -13,6 +13,7 @@ import importlib
 import copy
 import pychell.data as pcdata
 from astropy.io import fits
+import sys
 from astropy.coordinates import SkyCoord
 import pychell.maths as pcmath
 import astropy.units as units
