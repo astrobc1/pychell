@@ -31,7 +31,7 @@ from numba import njit, jit, prange
 import pychell.rvs.model_components as pcmodelcomponents # the data objects
 import pychell.maths as pcmath
 
-def simple_rms(gp, forward_model, templates_dict, sregion):
+def weighted_rms(gp, forward_model, templates_dict, sregion):
     """Target function which returns the RMS and constraint. The RMS is weighted by bad pixels only (i.e., a binary mask). The constraint is used to force the LSF to be positive everywhere.
 
     Args:
@@ -46,7 +46,7 @@ def simple_rms(gp, forward_model, templates_dict, sregion):
     wave_lr, model_lr = forward_model.build_full(gp, templates_dict)
 
     # Weights are just bad pixels
-    weights = np.copy(forward_model.data.mask_chunk)
+    weights = forward_model.data.mask_chunk / forward_model.data.flux_unc_chunk**2
     
     # Compute rms ignoring bad pixels
     rms = pcmath.rmsloss(forward_model.data.flux_chunk, model_lr, weights=weights, flag_worst=forward_model.flag_n_worst_pixels)
@@ -54,27 +54,3 @@ def simple_rms(gp, forward_model, templates_dict, sregion):
 
     # Return rms and constraint
     return rms, cons
-
-
-def weighted_data_flux(gp, forward_model, templates_dict, sregion):
-    """Target function which returns the RMS and constraint. The RMS is weighted by bad pixels and the provided flux uncertainties. The constraint is used to force the LSF to be positive everywhere.
-
-    Args:
-        gp (Parameters): The Parameters object.
-        forward_model (ForwardModel): The forwad model object
-    Returns:
-        (float): The rms.
-        (float): The constraint.
-    """
-    # Generate the forward model
-    wave_lr, model_lr = forward_model.build_full(gp, templates_dict)
-    
-    # Build weights from flux uncertainty
-    weights = 1 / forward_model.data.flux_unc**2 * forward_model.data.mask
-
-    # RMS and cons
-    rms = pcmath.rmsloss(forward_model.data.flux, model_lr, weights=weights, flag_worst=forward_model.flag_n_worst_pixels)
-    cons = np.nanmin(forward_model.models_dict['lsf'].build(gp)) # Ensure LSF is greater than zero
-
-    # Return rms and constraint
-    return wrms, cons

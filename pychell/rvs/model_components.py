@@ -10,7 +10,7 @@ from scipy import constants as cs  # cs.c = speed of light in m/s
 import numpy as np  # Math, Arrays
 import sys
 from scipy.special import legendre
-import scipy.interpolate  # Cubic, Akima interpolation
+import scipy.interpolate  # Cubic, Akima, Pchip interpolation
 
 # Graphics
 import matplotlib.pyplot as plt
@@ -23,6 +23,12 @@ import numba
 import pychell.maths as pcmath
 import pychell.rvs.template_augmenter as pcaugmenter
 import optimparameters.parameters as OptimParameters
+
+# NOTE: The idea is to first define crude "quasi abstract" classes
+# Then define a quasi abstract class for each sub type.
+# Then define a concrete class for particular models.
+
+#### Quasi Abstract Classes ####
 
 class SpectralComponent:
     """Base class for a general spectral component model.
@@ -74,6 +80,16 @@ class SpectralComponent:
     def build_fake(self, *args, **kwargs):
         raise NotImplementedError("Must implement a build fake method for this Spectral Component")
 
+    def enable(self, forward_model):
+        self.enabled = True
+        for pname in self.par_names:
+            forward_model.initial_parameters[pname].vary = True
+        
+    def disable(self, forward_model):
+        self.enabled = False
+        for pname in self.par_names:
+            forward_model.initial_parameters[pname].vary = False
+
     # Called after each iteration, may overload.
     def update(self, forward_model, iter_index):
         """Updates this model component given the iteration index and the n_delay attribute. This function may be extended / re-implmented for each model.
@@ -101,7 +117,7 @@ class SpectralComponent:
         Returns:
             str: The string representation of the model.
         """
-        return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
+        return self.name
     
     def init_parameters(self, forward_model):
         """Initializes the parameters for this model
@@ -119,8 +135,6 @@ class SpectralComponent:
         """
         pass
     
-
-
 class MultModelComponent(SpectralComponent):
     """ Base class for a multiplicative (or log-additive) spectral component.
 
@@ -140,14 +154,13 @@ class MultModelComponent(SpectralComponent):
         """
         return np.ones(nx)
 
-
 class EmpiricalMult(MultModelComponent):
     """ Base class for an empirically derived multiplicative (or log-additive) spectral component (i.e., based purely on parameters, no templates involved). As of now, this is purely a node in the Type heirarchy and provides no unique functionality.
     """
     pass
 
-
 class TemplateMult(MultModelComponent):
+    
     """ A base class for a template based multiplicative model.
 
     Attributes:
@@ -170,7 +183,6 @@ class TemplateMult(MultModelComponent):
             self.input_file = forward_model.templates_path + blueprint['input_file']
         else:
             self.input_file = None
-            
             
     def normalize_template(self, forward_model, wave, flux, uniform=False):
         
@@ -198,15 +210,102 @@ class TemplateMult(MultModelComponent):
         max_range = np.max(flux[good]) - np.min(flux[good])
         return max_range
     
-    def init_chunk(self, forward_model, templates_dict, sregion, key):
-        pad = 15
-        good = sregion.wave_within(templates_dict[key], pad=pad)
-        templates_dict[key] = templates_dict[key][good, :]
-        templates_dict[key][:, 1] = self.normalize_template(forward_model, templates_dict[key][:, 0], templates_dict[key][:, 1], uniform=False)
+    def init_chunk(self, forward_model, templates_dict, sregion, pad=1):
+        good = sregion.wave_within(templates_dict[self.key][:, 0], pad=pad)
+        templates_dict[self.key] = templates_dict[self.key][good, :]
+        templates_dict[self.key][:, 1] = self.normalize_template(forward_model, templates_dict[self.key][:, 0], templates_dict[self.key][:, 1], uniform=False)
 
-#### Blaze Models ####
+#### Continuum ####
+class ContinuumModel(EmpiricalMult):
+    
+    key = "continuum"
+    
+    def __init__(self, forward_model, blueprint):
+        super().__init__(forward_model, blueprint)
+        if "remove" in blueprint:
+            self.remove = blueprint["remove"]
+        else:
+            self.remove = False
+    
+    @staticmethod
+    def estimate_splines(forward_model):
+        
+        # Number of points
+        nx = len(wave)
+        
+        # Init an array of ones
+        continuum_coarse = np.ones(nx, dtype=np.float64)
+        
+        # Smooth the flux
+        y = pcmath.median_filter1d(flux, width=7)
+        
+        # Loop over x and pick out the approximate continuum
+        for ix in range(nx):
+            use = np.where((x > x[ix] - width/2) & (x < x[ix] + width/2) & np.isfinite(y))[0]
+            if use.size == 0 or np.all(~np.isfinite(y[use])):
+                continuum_coarse[ix] = np.nan
+            else:
+                continuum_coarse[ix] = pcmath.weighted_median(y[use], weights=None, percentile=cont_val)
+        good = np.where(np.isfinite(y))[0]
+        inds = np.linspace(good[0], good[-1], num=n_knots).astype(int)
+        cspline = scipy.interpolate.CubicSpline(wave[inds], continuum_coarse[inds], extrapolate=False, bc_type='not-a-knot')
+        continuum = cspline(ix)
+        return continuum
 
-class PolyBlaze(EmpiricalMult):
+    @staticmethod
+    def estimate_wobble(wave, flux, mask, poly_order=6, n_sigma=[0.3,3.0], max_iters=50):
+        """Fit the continuum using sigma clipping. This function is nearly identical to Megan Bedell's Wobble code.
+        Args:
+            x: The wavelengths.
+            y: The log-fluxes.
+            order: The polynomial order to use
+            nsigma: The sigma clipping threshold: tuple (low, high)
+            maxniter: The maximum number of iterations to do
+        Returns:
+            The value of the continuum at the wavelengths in x in log space.
+        """
+        
+        # Copy the wave and flux
+        x = np.copy(wave)
+        y = np.copy(flux)
+        
+        # Smooth the flux
+        y = pcmath.median_filter1d(y, 7, preserve_nans=True)
+        
+        # Create a Vander Matrix to solve
+        V = np.vander(xx - np.nanmean(xx), poly_order + 1)
+        
+        # Mask to update
+        maskcp = np.copy(mask)
+        
+        # Iteratively solve for continuum
+        for i in range(max_iters):
+            
+            # Solve for continuum
+            w = np.linalg.solve(np.dot(V[maskcp].T, A[maskcp]), np.dot(V[maskcp].T, y[maskcp]))
+            mu = np.dot(V, w)
+            residuals = y - mu
+            
+            # Effective n sigma
+            sigma = np.sqrt(np.nanmedian(resid**2))
+            
+            # Update mask
+            mask_new = (residuals > -1 * n_sigma[0] * sigma) & (residuals < n_sigma[1] * sigma)
+            if maskcp.sum() == mask_new.sum():
+                maskcp = mask_new
+                break
+            else:
+                maskcp = mask_new
+        return mu
+    
+    def init_optimize(self, forward_model, templates_dict):
+        if self.remove:
+            _ = forward_model.init_chunk(templates_dict, sregion)
+            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
+            continuum_estim = self.fit_continuum_wobble(wave, forward_model.data.flux_chunk, forward_model.data.mask_chunk, poly_order=6, nsigma=[0.3, 3.0], maxniter=50)
+            forward_model.data.flux[forward_model.sregion_order.data_inds] /= np.exp(continuum_estim)
+
+class PolyContinuum(ContinuumModel):
     """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
     
     .. math:
@@ -219,6 +318,8 @@ class PolyBlaze(EmpiricalMult):
         blaze_wave_estimate (bool): The estimate of the blaze wavelegnth. If not provided, defaults to the average of the wavelength grid provided in the build method.
         spline_set_points (np.ndarray): The location of the spline knots.
     """
+    
+    name = "polynomial_continuum"
 
     def __init__(self, forward_model, blueprint):
         
@@ -246,9 +347,9 @@ class PolyBlaze(EmpiricalMult):
         poly_pars = np.array([pars[self.par_names[i]].value for i in range(self.poly_order + 1)])
         
         # Build polynomial
-        poly_blaze = np.polyval(poly_pars[::-1], wave_final - self.wave_mid)
+        poly_cont = np.polyval(poly_pars[::-1], wave_final - self.wave_mid)
         
-        return poly_blaze
+        return poly_cont
 
     def init_parameters(self, forward_model):
         
@@ -260,15 +361,11 @@ class PolyBlaze(EmpiricalMult):
             else:
                 prev = forward_model.initial_parameters[self.par_names[i-1]]
                 forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i], value=prev.value/10, minv=prev.minv/10, maxv=prev.maxv/10, vary=self.enabled))
-
-    def __repr__(self):
-        return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
     
     def init_chunk(self, forward_model, templates_dict, sregion):
         self.wave_mid = sregion.midwave()
-    
-    
-class SplineBlaze(EmpiricalMult):
+
+class SplineContinuum(ContinuumModel):
     """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
     
     .. math:
@@ -282,7 +379,7 @@ class SplineBlaze(EmpiricalMult):
         spline_set_points (np.ndarray): The location of the spline knots.
     """
     
-    name = 'spline_blaze'
+    name = "spline_continuum"
 
     def __init__(self, forward_model, blueprint):
         
@@ -300,7 +397,7 @@ class SplineBlaze(EmpiricalMult):
         # Set the spline parameter names and knots
         for i in range(self.n_splines+1):
             self.base_par_names.append('_spline_' + str(i+1))
-                
+
         self.par_names = [self.name + s for s in self.base_par_names]
 
     def build(self, pars, wave_final):
@@ -313,54 +410,26 @@ class SplineBlaze(EmpiricalMult):
         spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_spline_pars)], dtype=np.float64)
 
         # Build
-        spline_blaze = scipy.interpolate.CubicSpline(self.spline_wave_set_points, spline_pars, extrapolate=False, bc_type='not-a-knot')(wave_final)
+        spline_cont = scipy.interpolate.CubicSpline(self.spline_wave_set_points, spline_pars, extrapolate=False, bc_type='not-a-knot')(wave_final)
         
-        return spline_blaze
+        return spline_cont
 
     def init_parameters(self, forward_model):
         for ispline in range(self.n_splines + 1):
             forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[ispline], value=self.blueprint['spline'][1], minv=self.blueprint['spline'][0], maxv=self.blueprint['spline'][2], vary=self.enabled))
-                
-    def __repr__(self):
-        return ' Model Name: ' + self.name + ' [Active: ' + str(self.enabled) + ']'
-    
-    def init_optimize(self, forward_model, templates_dict):
-        if forward_model.remove_continuum:
-            _ = forward_model.init_chunk(templates_dict)
-            wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
-            continuum = fit_continuum_wobble(wave, forward_model.data.flux_chunk, forward_model.data.mask_chunk, order=6, nsigma=[0.3, 3.0], maxniter=50)
-            forward_model.data.flux[forward_model.sregion_order.data_inds] /= np.exp(continuum)
     
     def init_chunk(self, forward_model, templates_dict, sregion):
         wave_estimate = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
         good = sregion.wave_within(wave_estimate)
         self.spline_wave_set_points = np.linspace(wave_estimate[good[0]], wave_estimate[good[-1]], num=self.n_splines + 1)
 
-
 #### Gas Cell ####
 class GasCell(TemplateMult):
-    """ A gas cell model which is consistent across orders.
+    """ A gas cell model.
     """
-
-    def __init__(self, forward_model, blueprint):
-
-        # Call super method
-        super().__init__(forward_model, blueprint)
-
-        self.base_par_names = ['_shift', '_depth']
-
-        self.par_names = [self.name + s for s in self.base_par_names]
-
-    def build(self, pars, template, wave_final):
-        wave, flux = template[:, 0], template[:, 1]
-        if self.enabled:
-            wave = wave + pars[self.par_names[0]].value
-            flux = flux ** pars[self.par_names[1]].value
-            return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+    
+    key = "gas_cell"
         
-        else:
-            return self.build_fake(wave_final.size)
-
     def load_template(self, forward_model):
         print('Loading in Gas Cell Template', flush=True)
         pad = 5
@@ -372,17 +441,50 @@ class GasCell(TemplateMult):
         template = np.array([wave, flux]).T
         return template
 
+class DynamicGasCell(GasCell):
+    """ A gas cell model which is consistent across orders.
+    """
+    
+    name = "dynamic_gas_cell"
+
+    def __init__(self, forward_model, blueprint):
+
+        # Call super method
+        super().__init__(forward_model, blueprint)
+
+        self.base_par_names = ['_shift', '_depth']
+        self.par_names = [self.name + s for s in self.base_par_names]
+
+    def build(self, pars, template, wave_final):
+        wave, flux = template[:, 0], template[:, 1]
+        wave = wave + pars[self.par_names[0]].value
+        flux = flux ** pars[self.par_names[1]].value
+        return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+
     def init_parameters(self, forward_model):
-        
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['shift'][1], minv=self.blueprint['shift'][0], maxv=self.blueprint['shift'][2], vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['depth'][1], minv=self.blueprint['depth'][0], maxv=self.blueprint['depth'][2], vary=True))
         
     def init_optimize(self, forward_model, templates_dict):
         wave, flux = templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1]
         templates_dict['gas_cell'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
-        
-    def init_chunk(self, forward_model, templates_dict, sregion):
-        super().init_chunk(forward_model, templates_dict, sregion, "gas_cell")
+
+class PerfectGasCell(GasCell):
+    """ A gas cell model which is consistent across orders.
+    """
+    
+    name = "perfect_gascell"
+    
+    def __init__(self, forward_model, blueprint):
+
+        # Call super method
+        super().__init__(forward_model, blueprint)
+
+        self.par_names = []
+
+    def build(self, pars, template, wave_final):
+        wave, flux = template[:, 0], template[:, 1]
+        return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
 
 #### Star ####
 class Star(TemplateMult):
@@ -391,61 +493,82 @@ class Star(TemplateMult):
     Attr:
         from_synthetic (bool): Whether or not this model started from a synthetic template or not.
     """
+    
+    key = "star"
+    
+    def __init__(self, forward_model, blueprint):
+        
+        # Super
+        super().__init__(forward_model, blueprint)
+        
+        # Whether or not the star is from a synthetic source
+        if "input_file" in blueprint and blueprint["input_file"] is not None:
+            self.from_synthetic = True
+            self.n_delay = 0
+        else:
+            self.from_synthetic = False
+            self.n_delay = 1
+        
+        # The augmenter
+        if "augmenter" in blueprint:
+            self.augmenter = blueprint["augmenter"]
+    
+    def init_chunk(self, forward_model, templates_dict, sregion):
+        pad = 15
+        good = sregion.wave_within(templates_dict[self.key][:, 0], pad=pad)
+        templates_dict[self.key] = templates_dict[self.key][good, :]
+        templates_dict[self.key][:, 1] = self.normalize_template(forward_model, templates_dict[self.key][:, 0], templates_dict[self.key][:, 1], uniform=False)
+
+class AugmentedStar(Star):
+    """ A star model which did not start from a synthetic template.
+    
+    Attr:
+        from_synthetic (bool): Whether or not this model started from a synthetic template or not.
+    """
+    
+    name = "augmented_star"
 
     def __init__(self, forward_model, blueprint):
 
         # Call super method
         super().__init__(forward_model, blueprint)
 
+        # Pars
         self.base_par_names = ['_vel']
-
-        if hasattr(self, 'input_file') and self.input_file is not None:
-            self.from_synthetic = True
-            self.n_delay = 0
-        else:
-            self.from_synthetic = False
-            self.enabled = False
-            self.n_delay = 1
         
         # Update parameter names
         self.par_names = [self.name + s for s in self.base_par_names]
 
     def build(self, pars, template, wave_final):
         wave, flux = template[:, 0], template[:, 1]
-        if self.enabled:
-            return pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=None, flux=flux)
-        else:
-            return self.build_fake(wave_final.size)
+        flux_shifted_interp = pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=None, flux=flux)
+        return flux_shifted_interp
 
     def init_parameters(self, forward_model):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=-1*forward_model.data.bc_vel, minv=self.blueprint['vel'][0], maxv=self.blueprint['vel'][2], vary=self.enabled))
-
+        
     def load_template(self, forward_model):
         pad = 15
-        wave_even = np.linspace(forward_model.sregion_order.wavemin - pad, forward_model.sregion_order.wavemax + pad, num=forward_model.n_model_pix_order)
+        wave_uniform = np.linspace(forward_model.sregion_order.wavemin - pad, forward_model.sregion_order.wavemax + pad, num=forward_model.n_model_pix_order)
         if self.from_synthetic:
             print('Loading in Synthetic Stellar Template', flush=True)
             template_raw = np.loadtxt(self.input_file, delimiter=',')
             wave, flux = template_raw[:, 0], template_raw[:, 1]
             good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
-            flux_interp = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=False, bc_type='not-a-knot')(wave_even)
+            flux_interp = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=False, bc_type='not-a-knot')(wave_uniform)
             flux_interp /= pcmath.weighted_median(flux_interp, percentile=0.999)
-            template = np.array([wave_even, flux_interp]).T
+            template = np.array([wave_uniform, flux_interp]).T
         else:
             template = np.array([wave_even, np.ones(wave_even.size)]).T
-
         return template
-    
-    def init_optimize(self, forward_model, templates_dict):
-        wave, flux = templates_dict['star'][:, 0], templates_dict['star'][:, 1]
-        templates_dict['star'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
         
-    def init_chunk(self, forward_model, templates_dict, sregion):
-        super().init_chunk(forward_model, templates_dict, sregion, "star")
-
 
 #### Tellurics ####
-class TelluricsTAPAS(TemplateMult):
+class Tellurics(TemplateMult):
+    key = "tellurics"
+    pass
+
+class TelluricsTAPAS(Tellurics):
     """ A telluric model based on Templates obtained from TAPAS. These templates should be pre-fetched from TAPAS and specific to the observatory. Only water has a unique depth, with all others being identical. The model uses a common Doppler shift.
 
     Attributes:
@@ -454,46 +577,40 @@ class TelluricsTAPAS(TemplateMult):
         species_enabled (dict): A dictionary with species as keys, and boolean values for items (True=enabled, False=disabled)
         species_input_files (list): A list of input files (strings) for the individual species.
     """
+    
+    name = "tapas_tellurics"
 
     def __init__(self, forward_model, blueprint):
-
-        # Call super method
         super().__init__(forward_model, blueprint)
 
         self.base_par_names = ['_vel', '_water_depth', '_airmass_depth']
-        
         self.species = ['water', 'methane', 'carbon_dioxide', 'nitrous_oxide', 'oxygen', 'ozone']
-        self.n_species = len(self.species)
         self.species_input_files = blueprint['input_files']
-
         self.water_enabled, self.airmass_enabled = True, True
-        self.min_range = blueprint['min_range']
-
+        self.thresh = blueprint['flag_thresh']
+        self.flag_and_ignore = blueprint['flag_and_ignore']
         self.par_names = [self.name + s for s in self.base_par_names]
 
     def build(self, pars, templates, wave_final):
-        if self.enabled:
-            vel = pars[self.par_names[0]].value
-            flux = np.ones(wave_final.size)
-            if self.water_enabled:
-                flux *= self.build_component(pars, templates, 'water', wave_final)
-            if self.airmass_enabled:
-                flux *= self.build_component(pars, templates, 'airmass', wave_final)
+        vel = pars[self.par_names[0]].value
+        flux = np.ones(templates[:, 0].size)
+        if self.water_enabled:
+            flux *= self.build_component(pars, templates, 'water', wave_final)
+        if self.airmass_enabled:
+            flux *= self.build_component(pars, templates, 'airmass', wave_final)
+        flux = np.interp(wave_final, templates[:, 0], flux, left=np.nan, right=np.nan)
+        if vel != 0:
             flux = pcmath.doppler_shift(wave_final, vel=vel, flux=flux, interp='linear')
-            return flux
-        else:
-            return self.build_fake(wave_final.size)
+        return flux
 
-    def build_component(self, pars, templates, single_species, wave_final):
-        if single_species == 'water':
+    def build_component(self, pars, templates, component, wave_final):
+        wave = templates[:, 0]
+        if component == 'water':
             depth = pars[self.par_names[1]].value
-            wave, flux = templates['water'][:, 0], templates['water'][:, 1]
+            flux = templates[:, 1]**depth
         else:
             depth = pars[self.par_names[2]].value
-            wave, flux = templates['airmass'][:, 0], templates['airmass'][:, 1]
-        
-        flux = flux ** depth
-        return np.interp(wave_final, wave, flux, left=np.nan, right=np.nan)
+            flux = templates[:, 2]**depth
         return flux
 
     def init_parameters(self, forward_model):
@@ -509,19 +626,18 @@ class TelluricsTAPAS(TemplateMult):
 
     def load_template(self, forward_model):
         print('Loading in Telluric Templates', flush=True)
-        templates = {}
-        pad = 5
-        
+        pad = 1
         # Water
         water = np.load(forward_model.templates_path + self.species_input_files['water'])
         wave, flux = water['wave'], water['flux']
         good = np.where((wave > forward_model.sregion_order.wavemin - pad) & (wave < forward_model.sregion_order.wavemax + pad))[0]
-        wave, flux = wave[good], flux[good]
-        templates['water'] = np.array([wave, flux]).T
+        wave_water, flux_water = wave[good], flux[good]
+        templates = np.zeros(shape=(wave_water.size, 3), dtype=float)
+        templates[:, 0] = wave_water
+        templates[:, 1] = flux_water
         
         # Remaining, do in a loop...
-        wave_water = templates['water'][:, 0]
-        flux = np.ones(wave_water.size)
+        flux_airmass = np.ones(wave_water.size)
         for species in self.species:
             if species == 'water':
                 continue
@@ -530,64 +646,101 @@ class TelluricsTAPAS(TemplateMult):
             good = np.where((wave > forward_model.sregion_order.wavemin - pad) & (wave < forward_model.sregion_order.wavemax + pad))[0]
             wave, _flux = wave[good], _flux[good]
             good = np.where(np.isfinite(wave) & np.isfinite(_flux))[0]
-            flux *= scipy.interpolate.CubicSpline(wave[good], _flux[good], extrapolate=False)(wave_water)
+            flux_airmass *= scipy.interpolate.CubicSpline(wave[good], _flux[good], extrapolate=False)(wave_water)
             
-        templates['airmass'] = np.array([wave_water, flux]).T
+        templates[:, 2] = flux_airmass
             
         return templates
     
     def init_chunk(self, forward_model, templates_dict, sregion):
-        pad = 2
-        for t in templates_dict["tellurics"]:
-            super().init_chunk(forward_model, templates_dict["tellurics"], sregion, t)
+        pad = 15
+        good = sregion.wave_within(templates_dict[self.key][:, 0], pad=pad)
+        templates_dict[self.key] = templates_dict[self.key][good, :]
+        templates_dict[self.key][:, 1] = self.normalize_template(forward_model, templates_dict[self.key][:, 0], templates_dict[self.key][:, 1], uniform=False)
+        templates_dict[self.key][:, 2] = self.normalize_template(forward_model, templates_dict[self.key][:, 0], templates_dict[self.key][:, 2], uniform=False)
 
-        yrange_water = self.template_yrange(forward_model, templates_dict["tellurics"]["water"][:, 0], templates_dict["tellurics"]["water"][:, 1], sregion)
-        yrange_airmass = self.template_yrange(forward_model, templates_dict["tellurics"]["airmass"][:, 0], templates_dict["tellurics"]["airmass"][:, 1],  sregion)
-        if yrange_water > self.min_range:
-            self.water_enabled = True
+        # Check the depth range of the templates
+        yrange_water = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 1], sregion)
+        yrange_airmass = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 2],  sregion)
+        if yrange_water > self.flag_thresh[0]:
+            self.has_water_features = True
+            self.enable(forward_model, "water")
         else:
-            self.water_enabled = False
-        if yrange_airmass > self.min_range:
-            self.airmass_enabled = True
+            self.has_water_features = False
+            self.disable(forward_model, "water")
+        if yrange_airmass > self.flag_thresh[0]:
+            self.has_airmass_features = True
+            self.enable(forward_model, "airmass")
         else:
-            self.airmass_enabled = False
-
-    def __repr__(self):
-        ss = ' Model Name: ' + self.name
-        return ss
+            self.has_airmass_features = False
+            self.disable(forward_model, "airmass")
+            
+        if self.flag_and_ignore:
+            self.flag_tellurics(forward_model, templates_dict)
+            self.disable(forward_model, "water")
+            self.disable(forward_model, "airmass")
     
     def init_optimize(self, forward_model, templates_dict):
         
-        # Normalize the water flux
-        templates_dict['tellurics']['water'][:, 1] = self.normalize_template(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['water'][:, 1], uniform=False)
+        # Normalize the flux
+        templates_dict['tellurics'][:, 1] = self.normalize_template(forward_model, templates_dict['tellurics'][:, 0], templates_dict['tellurics'][:, 1], uniform=False)
+        templates_dict['tellurics'][:, 2] = self.normalize_template(forward_model, templates_dict['tellurics'][:, 0], templates_dict['tellurics'][:, 2], uniform=False)
         
-        water_range = self.template_yrange(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['water'][:, 1], forward_model.sregion_order)
-        
-        if water_range > self.min_range:
-            self.water_enabled = True
+        # Check the depth range of the templates
+        yrange_water = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 1], forward_model.sregion_order)
+        yrange_airmass = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 2], forward_model.sregion_order)
+        if yrange_water > self.flag_thresh[0]:
+            self.has_water_features = True
+            self.enable(forward_model, "water")
         else:
+            self.has_water_features = False
+            self.disable(forward_model, "water")
+        if yrange_airmass > self.flag_thresh[0]:
+            self.has_airmass_features = True
+            self.enable(forward_model, "airmass")
+        else:
+            self.has_airmass_features = False
+            self.disable(forward_model, "airmass")
+            
+        # Flag and ignore?
+        if self.flag_and_ignore:
+            self.flag_tellurics(forward_model, templates_dict)
+            self.disable(forward_model, "water")
+            self.disable(forward_model, "airmass")
+        
+        
+    def enable(self, forward_model, component):
+        if component == "water":
+            self.water_enabled = True
+            forward_model.initial_parameters[self.par_names[1]].vary = True
+        elif component == "airmass":
+            self.airmass_enabled = True
+            forward_model.initial_parameters[self.par_names[2]].vary = True
+        if self.water_enabled or self.airmass_enabled:
+            self.enabled = True
+            forward_model.initial_parameters[self.par_names[0]].vary = True
+        
+    def disable(self, forward_model, component):
+        if component == "water":
             self.water_enabled = False
             forward_model.initial_parameters[self.par_names[1]].vary = False
-        
-        
-        # Normalize the other components
-        templates_dict['tellurics']['airmass'][:, 1] = self.normalize_template(forward_model, templates_dict['tellurics']['water'][:, 0], templates_dict['tellurics']['airmass'][:, 1], uniform=False)
-        
-        airmass_range = self.template_yrange(forward_model, templates_dict['tellurics']['airmass'][:, 0], templates_dict['tellurics']['airmass'][:, 1], forward_model.sregion_order)
-        if airmass_range > self.min_range:
-            self.airmass_enabled = True
-        else:
+        elif component == "airmass":
             self.airmass_enabled = False
             forward_model.initial_parameters[self.par_names[2]].vary = False
-
-        # Shift
-        shift_vary = True if self.water_enabled or self.airmass_enabled else False
-        
-        if not shift_vary:
+        if not (self.water_enabled or self.airmass_enabled):
             self.enabled = False
-            self.n_delay = int(1E3)
             forward_model.initial_parameters[self.par_names[0]].vary = False
-
+    
+    def flag_tellurics(self, forward_model, templates_dict):
+        tell_flux_hr = self.build(forward_model.initial_parameters, templates_dict["tellurics"], templates_dict["star"][:, 0])
+        wave_data = forward_model.models_dict["wavelength_solution"].build(forward_model.initial_parameters)
+        tell_flux_lr = np.interp(wave_data, templates_dict["star"][:, 0], tell_flux_hr, left=np.nan, right=np.nan)
+        tell_flux_lr / pcmath.weighted_median(tell_flux_lr, percentile=0.999)
+        bad = np.where(tell_flux_lr < 1 - self.thresh)[0]
+        if bad.size > 0:
+            forward_model.data.flux[forward_model.sregion_order.data_inds[bad]] = np.nan
+            forward_model.data.flux_unc[forward_model.sregion_order.data_inds[bad]] = np.nan
+            forward_model.data.mask[forward_model.sregion_order.data_inds[bad]] = 0
 
 #### LSF ####
 class LSF(SpectralComponent):
@@ -600,6 +753,8 @@ class LSF(SpectralComponent):
         x (np.ndarray): The lsf grid.
         default_lsf (np.ndarray): The default LSF to use or start from. Defaults to None.
     """
+    
+    key = "lsf"
 
     def __init__(self, forward_model, blueprint):
 
@@ -656,6 +811,8 @@ class HermiteLSF(LSF):
     Attributes:
         hermdeg (int): The degree of the hermite model. Zero corresponds to a pure Gaussian.
     """
+    
+    name = "hermite_lsf"
 
     def __init__(self, forward_model, blueprint):
 
@@ -691,11 +848,12 @@ class HermiteLSF(LSF):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['width'][1], minv=self.blueprint['width'][0], maxv=self.blueprint['width'][2], vary=self.enabled))
         for i in range(self.hermdeg):
             forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[i+1], value=self.blueprint['ak'][1], minv=self.blueprint['ak'][0], maxv=self.blueprint['ak'][2], vary=True))
-            
-            
+
 class ModGaussLSF(LSF):
     """ A Modified Gaussian LSF model.
     """
+    
+    name = "modgauss_lsf"
 
     def __init__(self, forward_model, blueprint):
 
@@ -716,10 +874,8 @@ class ModGaussLSF(LSF):
             return self.build_fake()
 
     def init_parameters(self, forward_model):
-        
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['width'][1], minv=self.blueprint['width'][0], maxv=self.blueprint['width'][2], vary=self.enabled))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['p'][1], minv=self.blueprint['p'][0], maxv=self.blueprint['p'][2], vary=True))
-
 
 class APrioriLSF(LSF):
     """ A container for an LSF known a priori.
@@ -727,6 +883,8 @@ class APrioriLSF(LSF):
     Attr:
         default_lsf (np.ndarray): The default LSF model to use.
     """
+    
+    name = "apriori_lsf"
 
     def __init__(self, forward_model, blueprint):
 
@@ -739,11 +897,9 @@ class APrioriLSF(LSF):
     
     def convolve_flux(self, raw_flux, pars=None, lsf=None):
         lsf = build(pars=pars)
-        return super().convolve_flux(raw_flux, lsf=lsf)
-        
+        return super().convolve_flux(raw_flux, lsf=lsf)     
 
 #### Wavelenth Soluton ####
-
 class WavelengthSolution(SpectralComponent):
     """ A base class for a wavelength solution (i.e., conversion from pixels to wavelength).
 
@@ -752,6 +908,8 @@ class WavelengthSolution(SpectralComponent):
         nx (int): The total number of data pixels.
         default_wave_grid (np.ndarray): The default wavelength grid to use or start from.
     """
+    
+    key = "wavelength_solution"
 
     def __init__(self, forward_model, blueprint):
 
@@ -797,7 +955,6 @@ class WavelengthSolution(SpectralComponent):
     def init_chunk(self, forward_model, templates_dict, sregion):
         pass
 
-
 class PolyWavelengthSolution(WavelengthSolution):
     """ Class for a full wavelength solution defined through cubic splines.
 
@@ -808,6 +965,8 @@ class PolyWavelengthSolution(WavelengthSolution):
         quad_wave_zero_points (np.ndarray): Estimates of the corresonding zero points of quad_pixel_set_points.
         spline_pixel_set_points (np.ndarray): The location of the spline knots in pixel space.
     """
+    
+    name = "poly_wls"
 
     def __init__(self, forward_model, blueprint):
 
@@ -873,7 +1032,7 @@ class PolyWavelengthSolution(WavelengthSolution):
         self.nx = sregion.pix_len()
         self.poly_pixel_set_points = np.linspace(good[0], good[-1], num=self.poly_order + 1).astype(int)
         self.poly_wave_set_points = wave_estimate[self.poly_pixel_set_points]
-        
+
 class SplineWavelengthSolution(WavelengthSolution):
     """ Class for a full wavelength solution defined through cubic splines.
 
@@ -884,6 +1043,8 @@ class SplineWavelengthSolution(WavelengthSolution):
         quad_wave_zero_points (np.ndarray): Estimates of the corresonding zero points of quad_pixel_set_points.
         spline_pixel_set_points (np.ndarray): The location of the spline knots in pixel space.
     """
+    
+    name = "spline_wls"
 
     def __init__(self, forward_model, blueprint):
 
@@ -912,7 +1073,7 @@ class SplineWavelengthSolution(WavelengthSolution):
     def build(self, pars):
         
         # The detector grid
-        pixel_grid = np.arange(self.sregion.pixmin, self.sregion.pixmax + 1, 1)
+        pixel_grid = np.arange(self.sregion.pixmin, self.sregion.pixmax + 1)
 
         # Get the spline parameters
         spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_spline_pars)], dtype=np.float64)
@@ -948,6 +1109,8 @@ class HybridWavelengthSolution(WavelengthSolution):
         splines_enabled (bool): Whether or not the splines are enabled.
         spline_pixel_set_points (np.ndarray): The location of the spline knots.
     """
+    
+    name = "hybrid_wls"
 
     def __init__(self, forward_model, blueprint):
 
@@ -1012,6 +1175,8 @@ class LegPolyWavelengthSolution(WavelengthSolution):
         quad_wave_zero_points (np.ndarray): Estimates of the corresonding zero points of quad_pixel_set_points.
         spline_pixel_set_points (np.ndarray): The location of the spline knots in pixel space.
     """
+    
+    name = "legpoly_wls"
 
     def __init__(self, forward_model, blueprint):
 
@@ -1081,20 +1246,23 @@ class LegPolyWavelengthSolution(WavelengthSolution):
 class FPCavityFringing(EmpiricalMult):
     """ A basic Fabry-Perot cavity model.
     """
+    
+    name = "fp_fringing"
+    key = "fringing"
 
     def __init__(self, forward_model, blueprint):
 
         # Super
         super().__init__(forward_model, blueprint)
 
-        self.base_par_names = ['_d', '_fin']
+        self.base_par_names = ['_logd', '_fin']
 
         self.par_names = [self.name + s for s in self.base_par_names]
 
     def build(self, pars, wave_final):
         if self.enabled:
             wave_final
-            d = pars[self.par_names[0]].value
+            d = np.exp(pars[self.par_names[0]].value)
             fin = pars[self.par_names[1]].value
             theta = (2 * np.pi / wave_final) * d
             fringing = 1 / (1 + fin * np.sin(theta / 2)**2)
@@ -1103,75 +1271,8 @@ class FPCavityFringing(EmpiricalMult):
             return self.build_fake(nx)
 
     def init_parameters(self, forward_model):
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['d'][1], minv=self.blueprint['d'][0], maxv=self.blueprint['d'][2], vary=self.enabled))
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['logd'][1], minv=self.blueprint['logd'][0], maxv=self.blueprint['logd'][2], vary=self.enabled))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['fin'][1], minv=self.blueprint['fin'][0], maxv=self.blueprint['fin'][2], vary=self.enabled))
         
     def init_chunk(self, forward_model, templates_dict, sregion):
         pass
-        
-
-# Misc Methods
-
-# This calculates the weighted median of a data set for rolling calculations
-def estimate_continuum(x, y, width=7, n_knots=8, cont_val=0.98, smooth=True):
-    """This will estimate the continuum with adjustable spline knots.
-
-    Args:
-        x (np.ndarray): The wavelength array.
-        y (np.ndarray): The flux array.
-        width (float, optional): The width of the window in units of x. Defaults to 7.
-        n_knots (int, optional): The number of spline knots. Defaults to 8.
-        cont_val (float, optional): The estimate of the percentile of the continuum. Defaults to 0.98.
-        smooth (bool, optional): Whether or not to smooth the input spectrum. Defaults to True.
-
-    Returns:
-        np.ndarray: The estimate of the continuum
-    """
-    nx = x.size
-    continuum_coarse = np.ones(nx, dtype=np.float64)
-    if smooth:
-        ys = pcmath.median_filter1d(y, width=7)
-    else:
-        ys = np.copy(y)
-    for ix in range(nx):
-        use = np.where((x > x[ix]-width/2) & (x < x[ix]+width/2) & np.isfinite(y))[0]
-        if use.size == 0 or np.all(~np.isfinite(ys[use])):
-            continuum_coarse[ix] = np.nan
-        else:
-            continuum_coarse[ix] = pcmath.weighted_median(ys[use], weights=None, percentile=cont_val)
-    good = np.where(np.isfinite(ys))[0]
-    knot_points = x[np.linspace(good[0], good[-1], num=n_knots).astype(int)]
-    cspline = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=n_knots).astype(int)], extrapolate=False, bc_type='not-a-knot')
-    continuum = cspline(x)
-    return continuum
-
-def fit_continuum_wobble(x, y, badpix, order=6, nsigma=[0.3,3.0], maxniter=50):
-    """Fit the continuum using sigma clipping. This function is nearly identical to Megan Bedell's Wobble code.
-    Args:
-        x: The wavelengths.
-        y: The log-fluxes.
-        order: The polynomial order to use
-        nsigma: The sigma clipping threshold: tuple (low, high)
-        maxniter: The maximum number of iterations to do
-    Returns:
-        The value of the continuum at the wavelengths in x in log space.
-    """
-    
-    xx = np.copy(x)
-    yy = np.copy(y)
-    yy = pcmath.median_filter1d(yy, 7, preserve_nans=True)
-    A = np.vander(xx - np.nanmean(xx), order+1)
-    mask = np.ones(len(xx), dtype=bool)
-    badpixcp = np.copy(badpix)
-    for i in range(maxniter):
-        mask[badpixcp == 0] = 0
-        w = np.linalg.solve(np.dot(A[mask].T, A[mask]), np.dot(A[mask].T, yy[mask]))
-        mu = np.dot(A, w)
-        resid = yy - mu
-        sigma = np.sqrt(np.nanmedian(resid**2))
-        mask_new = (resid > -nsigma[0]*sigma) & (resid < nsigma[1]*sigma)
-        if mask.sum() == mask_new.sum():
-            mask = mask_new
-            break
-        mask = mask_new
-    return mu

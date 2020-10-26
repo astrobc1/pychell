@@ -68,7 +68,7 @@ class ForwardModels(list):
         self.template_augmenter = getattr(pcaugmenter, self.template_augmenter)
             
         # The output directories
-        self.create_output_path()
+        self.create_output_paths()
             
         # grab the input files
         input_files = self.load_filelist()
@@ -80,8 +80,12 @@ class ForwardModels(list):
         fwm_class = eval(self.spectrograph + 'ForwardModel')
         
         # Init the sub classes for each chunk
+        print('Initializing Forward Models for Each Observation', flush=True)
         for ispec in range(self.n_spec):
             self.append(fwm_class(input_files[ispec], config, model_blueprints, parser, order_num, ispec + 1))
+            
+        # Sort by bjd
+        self.sort()
             
         # Init RVs dictionary
         self.init_rvs()
@@ -116,6 +120,13 @@ class ForwardModels(list):
     @property
     def bc_vels(self):
         return self.rvs_dict['bc_vels']
+    
+    def sort(self):
+        jds = np.array([fwm.data.parser.parse_time(fwm.data).jd for fwm in self], dtype=float)
+        ss = np.argsort(jds)
+        __tempself__ = copy.deepcopy(self)
+        for ispec in range(self.n_spec):
+            self[ispec] = copy.deepcopy(__tempself__[ss[ispec]])
     
     def update_models(self, iter_index):
         for ispec in range(self.n_spec):
@@ -173,7 +184,7 @@ class ForwardModels(list):
             if hasattr(self[0].models_dict[model], 'load_template'):
                 self.templates_dict[model] = self[0].models_dict[model].load_template(self[0])
             
-    def create_output_path(self):
+    def create_output_paths(self):
         self.run_output_path = self.output_path + self.tag + os.sep
         self.o_folder = 'Order' + str(self.order_num) + os.sep
         os.makedirs(self.run_output_path, exist_ok=True)
@@ -189,7 +200,7 @@ class ForwardModels(list):
             fwm.init_optimize(self.templates_dict)
 
     def save_to_pickle(self):
-        fname = self.run_output_path + self.o_folder + self.tag + '_forward_models_ord' + str(self.order_num) + '.pkl'
+        fname = self.run_output_path + self.o_folder + 'ForwardModels' + os.sep + self.tag + '_forward_models_ord' + str(self.order_num) + '.pkl'
         with open(fname, 'wb') as f:
             dill.dump(self, f)
             
@@ -267,7 +278,7 @@ class ForwardModels(list):
                 
         print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
         
-    def generate_nightly_rvs(self, iter_index):
+    def compute_nightly_rvs(self, iter_index):
         """Genreates individual and nightly (co-added) RVs after forward modeling all spectra and stores them in the ForwardModels object. If do_xcorr is True, nightly cross-correlation RVs are also computed.
 
         Args:
@@ -466,7 +477,7 @@ class ForwardModel:
     def init_chunks(self, model_blueprints):
         good = np.where(self.data.mask)[0]
         order_pixmin, order_pixmax = good[0], good[-1]
-        wave_class = getattr(pcmodels, model_blueprints['wavelength_solution']['class_name'])
+        wave_class = getattr(pcmodels, model_blueprints['wavelength_solution']['class'])
         self.chunk_regions = []
         stitch_points_pix = np.linspace(order_pixmin, order_pixmax, num=self.n_chunks + 1).astype(int)
         wave_estimate = wave_class.estimate_order_wave(self, model_blueprints["wavelength_solution"])
@@ -485,7 +496,7 @@ class ForwardModel:
         self.n_model_pix_order = int(self.model_resolution * self.data.flux.size)
 
         # First generate the wavelength solution model
-        model_class = getattr(pcmodels, model_blueprints['wavelength_solution']['class_name'])
+        model_class = getattr(pcmodels, model_blueprints['wavelength_solution']['class'])
         
         # Init the chunks
         self.init_chunks(model_blueprints)
@@ -494,7 +505,7 @@ class ForwardModel:
         
         # Define the LSF model if present
         if 'lsf' in model_blueprints:
-            model_class_init = getattr(pcmodels, model_blueprints['lsf']['class_name'])
+            model_class_init = getattr(pcmodels, model_blueprints['lsf']['class'])
             self.models_dict['lsf'] = model_class_init(self, model_blueprints['lsf'])
         
         # Generate the remaining model components from their blueprints and load any input templates
@@ -505,7 +516,7 @@ class ForwardModel:
                 continue
             
             # Construct the model
-            model_class = getattr(pcmodels, model_blueprints[blueprint]['class_name'])
+            model_class = getattr(pcmodels, model_blueprints[blueprint]['class'])
             self.models_dict[blueprint] = model_class(self, model_blueprints[blueprint])
 
 
@@ -881,8 +892,8 @@ class iSHELLForwardModel(ForwardModel):
         model /= pcmath.weighted_median(model, percentile=0.999)
             
         # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        if self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
         
         # Residual lab flux
         if 'residual_lab' in templates_dict:
@@ -892,11 +903,10 @@ class iSHELLForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        good = np.where(np.isfinite(model))[0]
         model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
         
         if self.debug:
-            stop()
+            breakpoint()
 
         return wavelength_solution, model_lr
                     
@@ -929,7 +939,7 @@ class iSHELLForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
         
         if self.debug:
-            stop()
+            breakpoint()
 
         return wavelength_solution, model
     
@@ -964,8 +974,8 @@ class CHIRONForwardModel(ForwardModel):
         model /= pcmath.weighted_median(model, percentile=0.999)
             
         # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        if self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -975,7 +985,7 @@ class CHIRONForwardModel(ForwardModel):
         model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
-            stop()
+            breakpoint()
         
         return wavelength_solution, model_lr
 
@@ -1006,8 +1016,8 @@ class PARVIForwardModel(ForwardModel):
         model /= pcmath.weighted_median(model, percentile=0.999)
             
         # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        if self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -1016,7 +1026,7 @@ class PARVIForwardModel(ForwardModel):
         model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
         
         if self.debug:
-            stop()
+            breakpoint()
         
         return wavelength_solution, model_lr
 
@@ -1045,8 +1055,8 @@ class MinervaAustralisForwardModel(ForwardModel):
         model /= pcmath.weighted_median(model, percentile=0.999)
             
         # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        if self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
         
         # Residual lab flux
         if 'residual_lab' in templates_dict:
@@ -1091,8 +1101,8 @@ class MinervaNorthForwardModel(ForwardModel):
         model /= pcmath.weighted_median(model, percentile=0.999)
             
         # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        if self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
@@ -1123,8 +1133,8 @@ class MinervaNorthForwardModel(ForwardModel):
             model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
         
         # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        if self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
         
         # Residual lab flux
         if 'residual_lab' in templates_dict:
@@ -1134,7 +1144,7 @@ class MinervaNorthForwardModel(ForwardModel):
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
         
         if self.debug:
-            stop()
+            breakpoint()
 
         return wavelength_solution, model
     
@@ -1161,10 +1171,6 @@ class NIRSPECForwardModel(ForwardModel):
         if self.models_dict['fringing'].enabled:
             model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
         
-        # Blaze Model
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
-        
         # Residual lab flux
         if 'residual_lab' in templates_dict:
             model += templates_dict['residual_lab'][:, 1]
@@ -1172,16 +1178,22 @@ class NIRSPECForwardModel(ForwardModel):
         # Convolve Model with LSF
         if self.models_dict['lsf'].enabled:
             model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
+            
+        # Renormalize model to remove degeneracy between blaze and lsf
+        model /= pcmath.weighted_median(model, percentile=0.999)
+        
+        # Blaze Model
+        if self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
 
         # Generate the wavelength solution of the data
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        good = np.where(np.isfinite(model))[0]
-        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
         
         if self.debug:
-            stop()
+            breakpoint()
 
         return wavelength_solution, model_lr
     
@@ -1203,8 +1215,8 @@ class SimulatedForwardModel(ForwardModel):
         if self.models_dict['tellurics'].enabled:
             model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
             
-        if self.models_dict['blaze'].enabled:
-            model *= self.models_dict['blaze'].build(pars, final_hr_wave_grid)
+        if self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
 
         # Convolve Model with LSF
         if self.models_dict['lsf'].enabled:
@@ -1218,7 +1230,7 @@ class SimulatedForwardModel(ForwardModel):
         model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
         
         if self.debug:
-            stop()
+            breakpoint()
         
         return wavelength_solution, model_lr
     

@@ -79,6 +79,8 @@ forward_model_settings = {
     
     # The units for plotting
     'plot_wave_unit': 'microns',
+    
+    "n_chunks": 1,
 
     # Crops (masks) data pixels
     'crop_pix': [200, 200],
@@ -92,8 +94,8 @@ forward_model_blueprints = {
     
     # The star
     'star': {
-        'name': 'star',
-        'class_name': 'Star',
+        'class': 'AugmentedStar',
+        'augmenter': 'cubic_spline_lsq',
         'input_file': None,
         'vel': [-1000 * 300, 10, 1000 * 300]
     },
@@ -101,7 +103,7 @@ forward_model_blueprints = {
     # The methane gas cell
     'gas_cell': {
         'name': 'methane_gas_cell', # NOTE: full parameter names are name + base_name.
-        'class_name': 'GasCell',
+        'class': 'DynamicGasCell',
         'input_file': 'methane_gas_cell_ishell_kgas.npz',
         'shift': [0, 0, 0],
         'depth': [0.97, 0.97, 0.97]
@@ -110,11 +112,13 @@ forward_model_blueprints = {
     # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'kband_tellurics',
-        'class_name': 'TelluricsTAPAS',
+        'class': 'TelluricsTAPAS',
         'vel': [-500, -100, 500],
         'water_depth': [0.01, 1.2, 5.0],
         'airmass_depth': [0.8, 1.2, 4.0],
         'min_range': 0.01,
+        'flag_thresh': [0.05, 0.5], # below this level of norm flux is flagged
+        'flag_and_ignore': 0,
         'input_files': {
             'water': 'telluric_water_tapas_maunakea.npz',
             'methane': 'telluric_methane_tapas_maunakea.npz',
@@ -126,10 +130,10 @@ forward_model_blueprints = {
     },
     
     # The default blaze is a quadratic + splines.
-    'blaze': {
+    'continuum': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'SplineBlaze',
-        'n_splines': 0,
+        'class': 'SplineContinuum',
+        'n_splines': 10,
         'poly_order': 2,
         'poly_6': [-5.5E-9, -2E-6, 5.5E-9],
         'poly_5': [-5.5E-8, -2E-6, 5.5E-8],
@@ -138,7 +142,7 @@ forward_model_blueprints = {
         'poly_2': [-5.5E-5, -2E-6, 5.5E-5],
         'poly_1': [-0.001, 1E-5, 0.001],
         'poly_0': [0.96, 1.0, 1.1],
-        'spline': [-0.135, 0.01, 0.135],
+        'spline': [0.3, 0.95, 1.2],
         'n_delay': 0,
         'n_delay_splines': 0,
         
@@ -149,21 +153,21 @@ forward_model_blueprints = {
     # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
-        'class_name': 'HermiteLSF',
+        'class': 'HermiteLSF',
         'hermdeg': 6,
         'n_delay': 0,
-        'compress': 128,
-        'width': [0.08, 0.12, 0.16], # LSF width, in angstroms
-        'ak': [-0.1, 0.001, 0.1] # Hermite polynomial coefficients
+        'width': [0.08, 0.11, 0.15], # LSF width, in angstroms
+        #'width': [0.11037, 0.11037, 0.11037],
+        'ak': [-0.05, 0.001, 0.1] # Hermite polynomial coefficients
     },
     
     # Determined by splines
     'wavelength_solution': {
         
         'name': 'csplines_wavesol',
-        'class_name': 'SplineWavelengthSolution',
+        'class': 'SplineWavelengthSolution',
         'name': 'leg_wavesol',
-        #'class_name': 'LegPolyWavelengthSolution',
+        #'class': 'LegPolyWavelengthSolution',
         'poly_order': 4,
         
         # The three pixels to span the detector corresponding to the above wavelengths
@@ -188,8 +192,8 @@ forward_model_blueprints = {
     # Fabry Perot cavity with two parameters
     'fringing': {
         'name': 'fringing',
-        'class_name': 'FPCavityFringing',
-        'd': [183900000.0, 183911000.0, 183930000.0],
+        'class': 'FPCavityFringing',
+        'logd': [19.02990269, 19.0299625 , 19.03006581],
         'fin': [0.01, 0.04, 0.08],
         'n_delay': 10000 # To delay indefinitely, user may wish to enable.
     }

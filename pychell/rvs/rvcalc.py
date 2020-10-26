@@ -97,6 +97,8 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         tell_weights = tell_flux_lr**2
         # Combine weights
         weights_init *= tell_weights
+            
+        
     
     # Star weights depend on the information content.
     rvc, _ = compute_rv_content(templates_dict['star'][:, 0], templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, width=pars[forward_model.models_dict['lsf'].par_names[0]].value)

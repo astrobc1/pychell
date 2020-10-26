@@ -26,8 +26,8 @@ class DataParser:
             self.run_output_path = config["run_output_path"]
         except:
             pass
-                
-        self.specmod = importlib.import_module('pychell.data.' + config["spectrograph"].lower())
+        
+        self.spectrograph = config["spectrograph"]
     
     def categorize_raw_data(self, config):
         # Allowed entries in data_dict:
@@ -36,6 +36,13 @@ class DataParser:
         # science
         # wavecals
         raise NotImplementedError("Must implement a categorize method for this instrument")
+    
+    def load_specmod(self, relmod):
+        try:
+            return importlib.import_module(relmod)
+        except:
+            raise ValueError("Could not load spectrograph module for " + relmod)
+            
     
     def parse_image_header(self, data):
         
@@ -112,12 +119,16 @@ class DataParser:
         # Parse the target
         if target is None:
             target = self.parse_target(data)
+            
+        # Parse the spectrograph mod
+        relmod = 'pychell.data.' + self.spectrograph.lower()
+        specmod = self.load_specmod(relmod)
         
         # BJD
-        data.bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=target.replace('_', ' '), obsname=self.specmod.observatory['name'], leap_update=False)[0][0]
+        data.bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=target.replace('_', ' '), obsname=specmod.observatory['name'], leap_update=False)[0][0]
         
         # bc vel
-        data.bc_vel = get_BC_vel(JDUTC=jdmid, starname=target.replace('_', ' '), obsname=self.specmod.observatory['name'], leap_update=False)[0][0]
+        data.bc_vel = get_BC_vel(JDUTC=jdmid, starname=target.replace('_', ' '), obsname=specmod.observatory['name'], leap_update=False)[0][0]
         
         return data.bjd, data.bc_vel
         

@@ -83,7 +83,7 @@ forward_model_blueprints = {
     # The star
     'star': {
         'name': 'star',
-        'class_name': 'Star',
+        'class': 'Star',
         'input_file': None,
         'vel': [-1000 * 300, 10, 1000 * 300]
     },
@@ -91,7 +91,7 @@ forward_model_blueprints = {
     # The iodine gas cell
     'gas_cell': {
         'name': 'iodine_gas_cell',
-        'class_name': 'GasCell',
+        'class': 'GasCell',
         'input_file': 'iodine_gas_cell_minervanorth_nist.npz',
         'shift': [0, 0, 0],
         'depth': [1, 1, 1]
@@ -100,7 +100,7 @@ forward_model_blueprints = {
     # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'vis_tellurics',
-        'class_name': 'TelluricsTAPAS',
+        'class': 'TelluricsTAPAS',
         'vel': [-300, 0, 300],
         'water_depth': [0.01, 1.5, 4.0],
         'airmass_depth': [0.8, 1.2, 4.0],
@@ -115,14 +115,14 @@ forward_model_blueprints = {
         }
     },
     
-    'blaze': {
+    'continuum': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'SplineBlaze',
+        'class': 'SplineContinuum',
         'n_splines': 10,
         'spline': [0.2, 0.8, 1.1],
-        'poly_2': [-5.5E-5, -2E-6, 5.5E-5],
-        'poly_1': [-0.001, 1E-5, 0.001],
-        'poly_0': [0.96, 1.0, 1.08],
+        'poly_2': [-5.5E-3, -2E-6, 5.5E-5],
+        'poly_1': [-0.01, 1E-5, 0.01],
+        'poly_0': [0.5, 1.0, 1.1],
         'n_delay': 0,
         'poly_order': 4,
         'n_delay_splines': 0,
@@ -133,10 +133,9 @@ forward_model_blueprints = {
     # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
-        'class_name': 'HermiteLSF',
+        'class': 'HermiteLSF',
         'hermdeg': 0,
         'n_delay': 0,
-        'compress': 64,
         'width': [0.021, 0.0229, 0.0245], # LSF width, in angstroms
         'ak': [-0.005, 0.001, 0.005] # Hermite polynomial coefficients
     },
@@ -145,12 +144,12 @@ forward_model_blueprints = {
     'wavelength_solution': {
         
         'name': 'wavesol_csplines',
-        'class_name': 'HybridWavelengthSolution',
+        'class': 'HybridWavelengthSolution',
         
         # The three pixels to span the detector
         'quad_pixel_set_points': [199, 1023, 1847],
         
-        'poly_lagrange': [-0.03, 0.0001, 0.03],
+        'poly_lagrange': [-0.3, 0.0001, 0.3],
         'poly_order': 2,
         
         'quad_set_point_1': np.array([0.0, 5034.853697572874, 5076.812630787258, 5119.47332870002, 5162.863938423941, 5206.991404425711, 5251.871712707604, 5297.537806125327, 5344.011497745494, 5391.301574584434, 5439.441398147255, 5488.441679478328, 5538.341607959066, 5589.311652278706, 5640.893680573438, 5693.618386820708, 5747.332360938869, 5802.065798040452, 5857.861297042003, 5914.742834118711, 5972.7310335422535, 6031.866877601428, 6092.185400272845, 6153.720542873271, 6216.5249581525495, 6280.615403285079, 6346.037489025672, 6412.829961078201, 0.0]),

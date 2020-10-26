@@ -98,7 +98,7 @@ forward_model_settings = {
     "n_chunks": 1,
     
     # Stellar template augmentation
-    'target_function': 'simple_rms',
+    'target_function': 'weighted_rms',
     
     # The number of bad pixels to flag in fitting.
     'flag_n_worst_pixels': 20,
