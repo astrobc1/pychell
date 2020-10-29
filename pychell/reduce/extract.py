@@ -109,9 +109,6 @@ def extract_full_image(data, config):
         stopwatch.lap(order_index)
         print('  Extracting Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' ...')
         
-        if order_index != 10:
-            continue
-        
         # Orders are composed of multiple traces
         if len(single_order_list) > 1:
             
@@ -195,7 +192,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, config, 
     # Flag obvious bad pixels
     trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
     med_val = pcmath.weighted_median(trace_image_smooth, percentile=0.99)
-    bad = np.where((trace_image < 0) & (trace_image > 2*med_val))
+    bad = np.where((trace_image < 0) | (trace_image > 2 * med_val))
     if bad[0].size > 0:
         trace_image[bad] = np.nan
         badpix_mask[bad] = 0
@@ -1186,7 +1183,6 @@ def plot_extracted_spectra(data, reduced_orders, boxcar_spectra):
     fname = data.parser.run_output_path + 'spectra' + os.sep + data.base_input_file_noext + '_' + data.target.replace(' ', '_') + '_preview.png'
     
     # Save
-    breakpoint()
     plt.savefig(fname)
     plt.close()
     
@@ -1336,10 +1332,10 @@ def crop_image(data_image, config, cval=np.nan):
     # The data shape
     ny, nx = data_image.shape
     
-    data_image[0:config['mask_bottom'], :] = cval
-    data_image[ny-config['mask_top']:, :] = cval
-    data_image[:, 0:config['mask_left']] = cval
-    data_image[:, nx-config['mask_right']:] = cval
+    data_image[0:config['mask_image_bottom'], :] = cval
+    data_image[ny-config['mask_image_top']:, :] = cval
+    data_image[:, 0:config['mask_image_left']] = cval
+    data_image[:, nx-config['mask_image_right']:] = cval
     return data_image
             
 

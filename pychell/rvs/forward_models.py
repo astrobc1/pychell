@@ -121,6 +121,11 @@ class ForwardModels(list):
     def bc_vels(self):
         return self.rvs_dict['bc_vels']
     
+    def update_templates(self, iter_index):
+        for model in self[0].models_dict:
+            if hasattr(self[0].models_dict[model], 'augmenter'):
+                self[0].models_dict[model].augmenter(self, iter_index)
+    
     def sort(self):
         jds = np.array([fwm.data.parser.parse_time(fwm.data).jd for fwm in self], dtype=float)
         ss = np.argsort(jds)
@@ -464,6 +469,11 @@ class ForwardModel:
         
         # Init the models
         self.init_models(config, model_blueprints)
+        
+        # N iters
+        self.n_iters_rvs = self.n_template_fits
+        self.index_offset = int(not self.models_dict['star'].from_synthetic)
+        self.n_iters_opt = self.n_template_fits + self.index_offset
     
         # Storage arrays after each iteration
         # Each entry is a tuple for each iteration: (best_fit_pars, RMS, FCALLS)
@@ -858,382 +868,123 @@ class ForwardModel:
              ccf_results.append(forward_model.cross_correlate_region_wrapper(forward_model, templates_dict, iter_index, sregion, xcorr_options))
 
         return ccf_results
+    
+    def build_full(self, pars, templates_dict):
+        
+        # A final wave grid
+        final_hr_wave_grid = templates_dict['star'][:, 0]
+        
+        # Init a model
+        model = np.ones_like(final_hr_wave_grid)
+
+        # Star
+        if 'star' in self.models_dict and self.models_dict['star'].enabled:
+            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
+        
+        # Gas Cell
+        if 'gas_cell' in self.models_dict and self.models_dict['gas_cell'].enabled:
+            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
+            
+        # All tellurics
+        if 'tellurics' in self.models_dict and self.models_dict['tellurics'].enabled:
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
+        
+        # Fringing from who knows what
+        if 'fringing' in self.models_dict and self.models_dict['fringing'].enabled:
+            model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
+            
+        # Convolve
+        if 'lsf' in self.models_dict and self.models_dict['lsf'].enabled:
+            model[:] = self.models_dict['lsf'].convolve_flux(model, pars)
+            
+            # Renormalize model to remove degeneracy between blaze and lsf
+            model /= pcmath.weighted_median(model, percentile=0.999)
+            
+        # Continuum
+        if 'continuum' in self.models_dict and self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
+        
+        # Residual lab flux
+        if 'residual_lab' in templates_dict:
+            model += templates_dict['residual_lab'][:, 1]
+
+        # Generate the wavelength solution of the data
+        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
+
+        # Interpolate high res model onto data grid
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
+        
+        if self.debug:
+            breakpoint()
+
+        return wavelength_solution, model_lr
+    
+    # Returns the high res model on the fiducial grid with no stellar template and the low res wavelength solution
+    def build_hr_nostar(self, pars, templates_dict):
+        
+        # A final wave grid
+        final_hr_wave_grid = templates_dict['star'][:, 0]
+        
+        # Init a model
+        model = np.ones_like(final_hr_wave_grid)
+        
+        # Gas Cell
+        if 'gas_cell' in self.models_dict and self.models_dict['gas_cell'].enabled:
+            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
+            
+        # All tellurics
+        if 'tellurics' in self.models_dict and self.models_dict['tellurics'].enabled:
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
+        
+        # Fringing from who knows what
+        if 'fringing' in self.models_dict and self.models_dict['fringing'].enabled:
+            model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
+            
+        # Continuum
+        if 'continuum' in self.models_dict and self.models_dict['continuum'].enabled:
+            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
+        
+        # Residual lab flux
+        if 'residual_lab' in templates_dict:
+            model += templates_dict['residual_lab'][:, 1]
+
+        # Generate the wavelength solution of the data
+        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
+
+        # Interpolate high res model onto data grid
+        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
+        
+        if self.debug:
+            breakpoint()
+
+        return wavelength_solution, model_lr
   
   
 class iSHELLForwardModel(ForwardModel):
-
-    def build_full(self, pars, templates_dict):
-        
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
-        model = np.ones_like(final_hr_wave_grid)
-
-        # Star
-        if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
-        
-        # Gas Cell
-        if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
-            
-        # All tellurics
-        if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Fringing from who knows what
-        if self.models_dict['fringing'].enabled:
-            model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
-            
-        # Convolve
-        if self.models_dict['lsf'].enabled:
-            model[:] = self.models_dict['lsf'].convolve_flux(model, pars)
-            
-        # Renormalize model to remove degeneracy between blaze and lsf
-        model /= pcmath.weighted_median(model, percentile=0.999)
-            
-        # Blaze Model
-        if self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
-        
-        # Residual lab flux
-        if 'residual_lab' in templates_dict:
-            model += templates_dict['residual_lab'][:, 1]
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
-        
-        if self.debug:
-            breakpoint()
-
-        return wavelength_solution, model_lr
-                    
-    # Returns the high res model on the fiducial grid with no stellar template and the low res wavelength solution
-    def build_hr_nostar(self, pars, iter_index):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
-        model = np.ones_like(final_hr_wave_grid)
-        
-        # Gas Cell
-        if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
-        
-        # All tellurics
-        if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Fringing from who knows what
-        if self.models_dict['fringing'].enabled:
-            model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
-        
-        # Residual lab flux
-        if 'residual_lab' in templates_dict:
-            model += templates_dict['residual_lab'][:, 1]
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-        
-        if self.debug:
-            breakpoint()
-
-        return wavelength_solution, model
+    pass
     
     
 class CHIRONForwardModel(ForwardModel):
-
-    def build_full(self, pars, templates_dict):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
-        model = np.ones_like(final_hr_wave_grid)
-
-        # Star
-        if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
-        
-        # Gas Cell
-        if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
-        
-        # All tellurics
-        if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-
-        # Convolve Model with LSF
-        if self.models_dict['lsf'].enabled:
-            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
-            
-        # Renormalize model to remove degeneracy between blaze and lsf
-        model /= pcmath.weighted_median(model, percentile=0.999)
-            
-        # Blaze Model
-        if self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        good = np.where(np.isfinite(model))[0]
-        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
-        
-        if self.debug:
-            breakpoint()
-        
-        return wavelength_solution, model_lr
+    pass
 
 
 class PARVIForwardModel(ForwardModel):
-
-    def build_full(self, pars, templates_dict):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
-        model = np.ones_like(final_hr_wave_grid)
-
-        # Star
-        if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
-        
-        # All tellurics
-        if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-
-        # Convolve Model with LSF
-        if self.models_dict['lsf'].enabled:
-            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
-            
-        # Renormalize model to remove degeneracy between blaze and lsf
-        model /= pcmath.weighted_median(model, percentile=0.999)
-            
-        # Blaze Model
-        if self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
-        
-        if self.debug:
-            breakpoint()
-        
-        return wavelength_solution, model_lr
+    pass
 
 
 class MinervaAustralisForwardModel(ForwardModel):
-
-    def build_full(self, pars, templates_dict):
-        
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
-        model = np.ones_like(final_hr_wave_grid)
-
-        # Star
-        if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
-            
-        # All tellurics
-        if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-            
-        # Convolve
-        if self.models_dict['lsf'].enabled:
-            model[:] = self.models_dict['lsf'].convolve_flux(model, pars)
-            
-        # Renormalize model to remove degeneracy between blaze and lsf
-        model /= pcmath.weighted_median(model, percentile=0.999)
-            
-        # Blaze Model
-        if self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
-        
-        # Residual lab flux
-        if 'residual_lab' in templates_dict:
-            model += templates_dict['residual_lab'][:, 1]
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
-
-        return wavelength_solution, model_lr
+    pass
     
     
 class MinervaNorthForwardModel(ForwardModel):
-
-    def build_full(self, pars, templates_dict):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
-        model = np.ones_like(final_hr_wave_grid)
-
-        # Star
-        if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
-        
-        # Gas Cell
-        if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
-        
-        # All tellurics
-        if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-
-        # Convolve Model with LSF
-        if self.models_dict['lsf'].enabled:
-            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
-            
-        # Renormalize model to remove degeneracy between blaze and lsf
-        model /= pcmath.weighted_median(model, percentile=0.999)
-            
-        # Blaze Model
-        if self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
-        
-        if self.debug:
-            breakpoint()
-        
-        return wavelength_solution, model_lr
-    
-    # Returns the high res model on the fiducial grid with no stellar template and the low res wavelength solution
-    def build_hr_nostar(self, pars, iter_index):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
-        model = np.ones_like(final_hr_wave_grid)
-        
-        # Gas Cell
-        if self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
-        
-        # All tellurics
-        if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Blaze Model
-        if self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
-        
-        # Residual lab flux
-        if 'residual_lab' in templates_dict:
-            model += templates_dict['residual_lab'][:, 1]
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-        
-        if self.debug:
-            breakpoint()
-
-        return wavelength_solution, model
+    pass
     
     
 class NIRSPECForwardModel(ForwardModel):
-
-    def build_full(self, pars, templates_dict):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
-        model = np.ones_like(final_hr_wave_grid)
-
-        # Star
-        if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
-            
-        # All tellurics
-        if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-        
-        # Fringing
-        if self.models_dict['fringing'].enabled:
-            model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
-        
-        # Residual lab flux
-        if 'residual_lab' in templates_dict:
-            model += templates_dict['residual_lab'][:, 1]
-
-        # Convolve Model with LSF
-        if self.models_dict['lsf'].enabled:
-            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
-            
-        # Renormalize model to remove degeneracy between blaze and lsf
-        model /= pcmath.weighted_median(model, percentile=0.999)
-        
-        # Blaze Model
-        if self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
-        
-        if self.debug:
-            breakpoint()
-
-        return wavelength_solution, model_lr
-    
+    pass
     
 class SimulatedForwardModel(ForwardModel):
-
-    def build_full(self, pars, templates_dict):
-        
-        # The final high res wave grid for the model
-        # Eventually linearly interpolated to the data grid (wavelength solution)
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
-        model = np.ones_like(final_hr_wave_grid)
-
-        # Star
-        if self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
-            
-        if self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
-            
-        if self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
-
-        # Convolve Model with LSF
-        if self.models_dict['lsf'].enabled:
-            model[:] = self.models_dict['lsf'].convolve_flux(model, pars=pars)
-
-        # Generate the wavelength solution of the data
-        wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
-
-        # Interpolate high res model onto data grid
-        good = np.where(np.isfinite(model))[0]
-        model_lr = scipy.interpolate.Akima1DInterpolator(final_hr_wave_grid[good], model[good])(wavelength_solution)
-        
-        if self.debug:
-            breakpoint()
-        
-        return wavelength_solution, model_lr
-    
+    pass
     
     
 # Post init summary

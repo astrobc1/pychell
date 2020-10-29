@@ -35,10 +35,10 @@ redux_settings = {
     'flatfield_percentile': 0.75,
     
     # Pixels to mask on the top, bottom, left, and right edges
-    'mask_left_edge': 200,
-    'mask_right_edge': 200,
-    'mask_top_edge': 20,
-    'mask_bottom_edge': 20,
+    'mask_image_left': 200,
+    'mask_image_right': 200,
+    'mask_image_top': 20,
+    'mask_image_bottom': 20,
     
     # The height of an order is defined as where the flat is located.
     # This masks additional pixels on each side of the initial trace profile before moving forward.

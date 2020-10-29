@@ -41,18 +41,18 @@ def trace_orders_from_flat_field(order_map, config):
     # Image dimensions
     ny, nx = flat_input.shape
     
-    flat_input[0:config['mask_bottom'], :] = np.nan
-    flat_input[ny-config['mask_top']:, :] = np.nan
-    flat_input[:, 0:config['mask_left']] = np.nan
-    flat_input[:, nx-config['mask_right']:] = np.nan
+    flat_input[0:config['mask_image_bottom'], :] = np.nan
+    flat_input[ny-config['mask_image_top']:, :] = np.nan
+    flat_input[:, 0:config['mask_image_left']] = np.nan
+    flat_input[:, nx-config['mask_image_right']:] = np.nan
 
     # Smooth the flat.
     flat_smooth = pcmath.median_filter2d(flat_input, width=5, preserve_nans=False)
     
     # Do a horizontal normalization of the smoothed flat image to remove the blaze
     y_ranges = np.linspace(0, ny, num=10).astype(int)
-    first_x = config['mask_left']
-    last_x = nx - config['mask_right']
+    first_x = config['mask_image_left']
+    last_x = nx - config['mask_image_right']
     for i in range(len(y_ranges)-1):
         y_low = y_ranges[i]
         y_top = y_ranges[i+1]
@@ -144,9 +144,9 @@ def trace_orders_from_flat_field(order_map, config):
             ymin = int(pmodel - height / 2)
             if ymin > ny - 1 or ymax < 0:
                 continue
-            if ymax > ny - 1 - config['mask_top']:
+            if ymax > ny - 1 - config['mask_image_top']:
                 continue
-            if ymin < 0 + config['mask_bottom']:
+            if ymin < 0 + config['mask_image_bottom']:
                 continue
             order_image[ymin:ymax, x] = int(orders_list[o][0]['label'])
             
@@ -165,18 +165,18 @@ def trace_orders_empirical(data, config):
     data_image = data_image
     ny, nx = data_image.shape
     
-    data_image[0:config['mask_bottom'], :] = np.nan
-    data_image[ny-config['mask_top']:, :] = np.nan
-    data_image[:, 0:config['mask_left']] = np.nan
-    data_image[:, nx-config['mask_right']:] = np.nan
+    data_image[0:config['mask_image_bottom'], :] = np.nan
+    data_image[ny-config['mask_image_top']:, :] = np.nan
+    data_image[:, 0:config['mask_image_left']] = np.nan
+    data_image[:, nx-config['mask_image_right']:] = np.nan
 
     # Smooth the image
     data_smooth = pcmath.median_filter2d(data_image, width=5, preserve_nans=True)
     
     # Do a horizontal normalization of the smoothed flat image to remove the blaze
     y_ranges = np.linspace(0, ny, num=10).astype(int)
-    first_x = config['mask_left']
-    last_x = nx - config['mask_right'] - 1
+    first_x = config['mask_image_left']
+    last_x = nx - config['mask_image_right'] - 1
     #for i in range(len(y_ranges)-1):
         #y_low = y_ranges[i]
         #y_top = y_ranges[i+1]
@@ -259,9 +259,9 @@ def trace_orders_empirical(data, config):
             ymin = int(pmodel - height / 2)
             if ymin > ny - 1 or ymax < 0:
                 continue
-            if ymax > ny - 1 - config['mask_top']:
+            if ymax > ny - 1 - config['mask_image_top']:
                 continue
-            if ymin < 0 + config['mask_bottom']:
+            if ymin < 0 + config['mask_image_bottom']:
                 continue
             order_image[ymin:ymax, x] = int(orders_list[o][0]['label'])
 
@@ -281,17 +281,17 @@ def trace_minerva_north(data, config):
     data_image = data_image
     ny, nx = data_image.shape
     
-    data_image[0:config['mask_bottom_edge'], :] = np.nan
-    data_image[ny-config['mask_top_edge']:, :] = np.nan
-    data_image[:, 0:config['mask_left_edge']] = np.nan
-    data_image[:, nx-config['mask_right_edge']:] = np.nan
+    data_image[0:config['mask_image_bottom'], :] = np.nan
+    data_image[ny-config['mask_image_top']:, :] = np.nan
+    data_image[:, 0:config['mask_image_left']] = np.nan
+    data_image[:, nx-config['mask_image_right']:] = np.nan
 
     # Smooth the image.
     data_smooth = pcmath.median_filter2d(data_image, width=3, preserve_nans=True)
     
     # Do a horizontal normalization of the smoothed flat image to remove the blaze
-    first_x = config['mask_left_edge']
-    last_x = nx - config['mask_right_edge'] - 1
+    first_x = config['mask_image_left']
+    last_x = nx - config['mask_image_right'] - 1
     for x in range(nx):
         data_smooth[:, x] = data_smooth[:, x] / pcmath.weighted_median(data_smooth[:, x], percentile=0.99)
 
@@ -358,9 +358,9 @@ def trace_minerva_north(data, config):
             ymin = int(pmodel - height / 2)
             if ymin > ny - 1 or ymax < 0:
                 continue
-            if ymax > ny - 1 - config['mask_top_edge']:
+            if ymax > ny - 1 - config['mask_image_top']:
                 continue
-            if ymin < 0 + config['mask_bottom_edge']:
+            if ymin < 0 + config['mask_image_bottom']:
                 continue
             order_image[ymin:ymax, x] = int(orders_list[o][0]['label'])
 

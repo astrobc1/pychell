@@ -122,10 +122,10 @@ def rv_precision_wavelength(parser, iter_indices=None):
     snrs = 1 / parser.parse_fit_metric()
     
     # Mean wavelengths of each chunk.
-    mean_waves = np.zeros(shape=(parser.forward_models.n_orders, parser.forward_models.n_chunks))
-    for o in range(parser.forward_models.n_orders):
-        for ichunk in range(parser.forward_models.n_chunks):
-            mean_waves[o, i] = parser.forward_models[o][0].chunk_regions[ichunk].mid_wave()
+    mean_waves = np.zeros(shape=(parser.n_orders, parser.n_chunks))
+    for o in range(parser.n_orders):
+        for ichunk in range(parser.n_chunks):
+            mean_waves[o, ichunk] = parser.forward_models[o][0].chunk_regions[ichunk].midwave()
     
     # Compute approx nightly snrs for all targets, orders, obs, all orders
     print('Computing nightly S/N')
@@ -141,18 +141,18 @@ def rv_precision_wavelength(parser, iter_indices=None):
     rvprecs_onesigma_allchunks = np.zeros(shape=(parser.n_orders, parser.n_chunks))
     _rvcontents = compute_rv_contents(parser)
     for o in range(parser.n_orders):
-        rvcontents[o] = _rvcontents[o, iter_indices[o]]
-        rvprecs[o] = np.nanmedian(parser.rvs_dict['unc_nightly'][o, :, iter_indices[o]])
-        rvprecs_onesigma[o] = np.nanstd(parser.rvs_dict['unc_nightly'][o, :, iter_indices[o]])
+        rvcontents_allchunks[o] = np.nanmedian(_rvcontents[o, iter_indices[o]])
+        rvprecs_allchunks[o] = np.nanmedian(parser.rvs_dict['unc_nightly'][o, :, iter_indices[o]])
+        rvprecs_onesigma_allchunks[o] = np.nanstd(parser.rvs_dict['unc_nightly'][o, :, iter_indices[o]])
         
     # RV prec and noise limit vs snr for each target
     plt.figure(1, figsize=(12, 8), dpi=200)
 
     # Plot rv unc in nm
-    plt.errorbar(mean_waves / 10, rvprecs, yerr=rvprecs_onesigma, marker='o', elinewidth=2, lw=0, markersize=14, label='Reported Unc.')
+    plt.errorbar(mean_waves / 10, rvprecs_allchunks, yerr=rvprecs_onesigma_allchunks, marker='o', elinewidth=2, lw=0, markersize=14, label='Reported Unc.')
 
     # Plot noise limit in nm
-    plt.plot(mean_waves / 10, rvcontents, marker='X', lw=2.5, c='black', mfc='deeppink', markersize=14, label='Empirical Noise Limit')
+    plt.plot(mean_waves / 10, rvcontents_allchunks, marker='X', lw=2.5, c='black', mfc='deeppink', markersize=14, label='Empirical Noise Limit')
 
     # Plot attrs
     plt.tick_params(which='both', labelsize=20)
@@ -254,7 +254,7 @@ def combine_rvs(parser, iter_indices=None):
     weights_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
     for o in range(parser.n_orders):
         for ichunk in range(parser.n_chunks):
-            rvsxc_single_iter[o, :, :] = rvs_dict["rvsfwm"][o, :, :, iter_indices[o, ichunk]]
+            rvsxc_single_iter[o, :, :] = rvs_dict["rvsxc"][o, :, :, iter_indices[o, ichunk]]
             weights_single_iter[o, :, :] = weights[o, :, :, iter_indices[o, ichunk]]
     result_xc = pcrvcalc.combine_relative_rvs(rvsxc_single_iter, weights_single_iter, parser.n_obs_nights)
     
@@ -264,28 +264,28 @@ def combine_rvs(parser, iter_indices=None):
         weights_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
         for o in range(parser.n_orders):
             for ichunk in range(parser.n_chunks):
-                rvsxcdet_single_iter[o, :, :] = rvs_dict["rvsfwm"][o, :, :, iter_indices[o, ichunk]]
+                rvsxcdet_single_iter[o, :, :] = rvs_dict["rvsxcdet"][o, :, :, iter_indices[o, ichunk]]
                 weights_single_iter[o, :, :] = weights[o, :, :, iter_indices[o, ichunk]]
         result_det = pcrvcalc.combine_relative_rvs(rvsxcdet_single_iter, weights_single_iter, parser.n_obs_nights)
     
     # Add to dictionary
-    parser.rvs_dict['rvsfwm_out'] = result_nm[0]
-    parser.rvs_dict['uncfwm_out'] = result_nm[1]
-    parser.rvs_dict['rvsfwm_nightly_out'] = result_nm[2]
-    parser.rvs_dict['uncfwm_nightly_out'] = result_nm[3]
+    parser.rvs_dict['rvsfwm_out'] = result_nm['rvs']
+    parser.rvs_dict['uncfwm_out'] = result_nm['unc']
+    parser.rvs_dict['rvsfwm_nightly_out'] = result_nm['rvs_nightly']
+    parser.rvs_dict['uncfwm_nightly_out'] = result_nm['unc_nightly']
     
     
     if 'rvsxc' in parser.rvs_dict:
-        parser.rvs_dict['rvsxc_out'] = result_xc[0]
-        parser.rvs_dict['uncxc_out'] = result_xc[1]
-        parser.rvs_dict['rvsxc_nightly_out'] = result_xc[2]
-        parser.rvs_dict['uncxc_nightly_out'] = result_xc[3]
+        parser.rvs_dict['rvsxc_out'] = result_xc['rvs']
+        parser.rvs_dict['uncxc_out'] = result_xc['unc']
+        parser.rvs_dict['rvsxc_nightly_out'] = result_xc['rvs_nightly']
+        parser.rvs_dict['uncxc_nightly_out'] = result_xc['unc_nightly']
     
     if 'rvsxcdet' in parser.rvs_dict:
-        parser.rvs_dict['rvsxcdet_out'] = result_det[0]
-        parser.rvs_dict['uncxcdet_out'] = result_det[1]
-        parser.rvs_dict['rvsxcdet_nightly_out'] = result_det[2]
-        parser.rvs_dict['uncxcdet_nightly_out'] = result_det[3]
+        parser.rvs_dict['rvsxcdet_out'] = result_det['rvs']
+        parser.rvs_dict['uncxcdet_out'] = result_det['unc']
+        parser.rvs_dict['rvsxcdet_nightly_out'] = result_det['rvs_nightly']
+        parser.rvs_dict['uncxcdet_nightly_out'] = result_det['unc_nightly']
     
     # Write to files for radvel
     fname = parser.output_path_root + 'rvs_nightly_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '_' + datetime.date.today().strftime("%d%m%Y") + '.txt'

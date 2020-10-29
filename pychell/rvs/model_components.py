@@ -228,28 +228,32 @@ class ContinuumModel(EmpiricalMult):
             self.remove = False
     
     @staticmethod
-    def estimate_splines(forward_model):
+    def estimate_splines(wave, flux, n_splines=6, cont_val=0.75, width=None):
         
         # Number of points
         nx = len(wave)
+        
+        # Number of knots
+        n_knots = n_splines + 1
         
         # Init an array of ones
         continuum_coarse = np.ones(nx, dtype=np.float64)
         
         # Smooth the flux
-        y = pcmath.median_filter1d(flux, width=7)
+        flux_smooth = pcmath.median_filter1d(flux, width=7)
         
         # Loop over x and pick out the approximate continuum
         for ix in range(nx):
-            use = np.where((x > x[ix] - width/2) & (x < x[ix] + width/2) & np.isfinite(y))[0]
-            if use.size == 0 or np.all(~np.isfinite(y[use])):
+            use = np.where((wave > wave[ix] - width/2) & (wave < wave[ix] + width/2) & np.isfinite(flux_smooth))[0]
+            if use.size == 0 or np.all(~np.isfinite(flux_smooth[use])):
                 continuum_coarse[ix] = np.nan
             else:
-                continuum_coarse[ix] = pcmath.weighted_median(y[use], weights=None, percentile=cont_val)
-        good = np.where(np.isfinite(y))[0]
+                continuum_coarse[ix] = pcmath.weighted_median(flux_smooth[use], weights=None, percentile=cont_val)
+
+        good = np.where(np.isfinite(continuum_coarse))[0]
         inds = np.linspace(good[0], good[-1], num=n_knots).astype(int)
         cspline = scipy.interpolate.CubicSpline(wave[inds], continuum_coarse[inds], extrapolate=False, bc_type='not-a-knot')
-        continuum = cspline(ix)
+        continuum = cspline(wave)
         return continuum
 
     @staticmethod
@@ -273,7 +277,7 @@ class ContinuumModel(EmpiricalMult):
         y = pcmath.median_filter1d(y, 7, preserve_nans=True)
         
         # Create a Vander Matrix to solve
-        V = np.vander(xx - np.nanmean(xx), poly_order + 1)
+        V = np.vander(x - np.nanmean(x), poly_order + 1)
         
         # Mask to update
         maskcp = np.copy(mask)
@@ -282,12 +286,12 @@ class ContinuumModel(EmpiricalMult):
         for i in range(max_iters):
             
             # Solve for continuum
-            w = np.linalg.solve(np.dot(V[maskcp].T, A[maskcp]), np.dot(V[maskcp].T, y[maskcp]))
+            w = np.linalg.solve(np.dot(V[maskcp].T, V[maskcp]), np.dot(V[maskcp].T, y[maskcp]))
             mu = np.dot(V, w)
             residuals = y - mu
             
             # Effective n sigma
-            sigma = np.sqrt(np.nanmedian(resid**2))
+            sigma = np.sqrt(np.nanmedian(residuals**2))
             
             # Update mask
             mask_new = (residuals > -1 * n_sigma[0] * sigma) & (residuals < n_sigma[1] * sigma)
@@ -300,7 +304,7 @@ class ContinuumModel(EmpiricalMult):
     
     def init_optimize(self, forward_model, templates_dict):
         if self.remove:
-            _ = forward_model.init_chunk(templates_dict, sregion)
+            _ = forward_model.init_chunk(templates_dict, forward_model.sregion_order)
             wave = forward_model.models_dict['wavelength_solution'].build(forward_model.initial_parameters)
             continuum_estim = self.fit_continuum_wobble(wave, forward_model.data.flux_chunk, forward_model.data.mask_chunk, poly_order=6, nsigma=[0.3, 3.0], maxniter=50)
             forward_model.data.flux[forward_model.sregion_order.data_inds] /= np.exp(continuum_estim)
@@ -538,6 +542,12 @@ class AugmentedStar(Star):
         
         # Update parameter names
         self.par_names = [self.name + s for s in self.base_par_names]
+        
+        # Augmenter
+        if "augmenter" in blueprint and forward_model.n_template_fits > 1:
+            self.augmenter = getattr(pcaugmenter, blueprint["augmenter"])
+        else:
+            self.augmenter = None
 
     def build(self, pars, template, wave_final):
         wave, flux = template[:, 0], template[:, 1]
@@ -561,6 +571,9 @@ class AugmentedStar(Star):
         else:
             template = np.array([wave_even, np.ones(wave_even.size)]).T
         return template
+    
+    def update_template(self, forward_models, iter_index):
+        self.augmenter(forward_models, iter_index)
         
 
 #### Tellurics ####

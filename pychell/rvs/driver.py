@@ -121,10 +121,7 @@ def compute_rvs(user_forward_model_settings, user_model_blueprints):
             if iter_index + 1 < forward_models.n_template_fits:
                 
                 # Template Augmentation
-                if hasattr(forward_models, 'templates_to_optimize') and len(forward_models.templates_to_optimize) > 0:
-                    pcaugmenter.global_fit(forward_models, iter_index=iter_index, nights_for_template=forward_models.nights_for_template, templates_to_optimize=forward_models.templates_to_optimize)
-                else:
-                    forward_models.template_augmenter(forward_models, iter_index=iter_index)
+                forward_models.update_templates(iter_index=iter_index)
 
                 # Update the forward model initial_parameters.
                 forward_models.update_models(iter_index)
