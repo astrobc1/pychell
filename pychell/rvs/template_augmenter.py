@@ -105,7 +105,6 @@ def cubic_spline_lsq(forward_models, iter_index=None):
                 continuum_estim = pcmodelcomponents.ContinuumModel.estimate_splines(wave_data, _res, cont_val=0.5, n_splines=int(sregion.pix_len() / 100), width=width)
                 _res -= continuum_estim
             residuals_lr += _res.tolist()
-            breakpoint()
 
             # Shift to a pseudo rest frame. All must start from same frame
             if fwm.models_dict['star'].from_synthetic:
