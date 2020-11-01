@@ -195,6 +195,6 @@ forward_model_blueprints = {
         'class': 'FPCavityFringing',
         'logd': [19.02990269, 19.0299625 , 19.03006581],
         'fin': [0.01, 0.04, 0.08],
-        'n_delay': 10000 # To delay indefinitely, user may wish to enable.
+        'n_delay': 1000 # To delay indefinitely, user may wish to enable.
     }
 }

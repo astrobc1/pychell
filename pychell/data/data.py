@@ -243,7 +243,7 @@ class SpecData1d(SpecData):
                 self.mask[-self.crop_pix[1]:] = 0
             
         # Sanity
-        bad = np.where((self.flux < 0.05) | ~np.isfinite(self.flux) | (self.mask == 0) | ~np.isfinite(self.mask) | ~np.isfinite(self.flux_unc))[0]
+        bad = np.where((self.flux <= 0.0) | ~np.isfinite(self.flux) | (self.mask == 0) | ~np.isfinite(self.mask) | ~np.isfinite(self.flux_unc))[0]
         if bad.size > 0:
             self.flux[bad] = np.nan
             self.flux_unc[bad] = np.nan

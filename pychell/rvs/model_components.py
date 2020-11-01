@@ -569,7 +569,7 @@ class AugmentedStar(Star):
             flux_interp /= pcmath.weighted_median(flux_interp, percentile=0.999)
             template = np.array([wave_uniform, flux_interp]).T
         else:
-            template = np.array([wave_even, np.ones(wave_even.size)]).T
+            template = np.array([wave_uniform, np.ones(wave_uniform.size)]).T
         return template
     
     def update_template(self, forward_models, iter_index):
