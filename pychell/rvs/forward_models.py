@@ -6,7 +6,6 @@ import importlib.util # importing other modules from files
 import warnings # ignore warnings
 import time # Time the code
 import pickle
-import dill
 import inspect
 import multiprocessing # parallelization on a single node
 import sys # sys utils
@@ -207,7 +206,7 @@ class ForwardModels(list):
     def save_to_pickle(self):
         fname = self.run_output_path + self.o_folder + 'ForwardModels' + os.sep + self.tag + '_forward_models_ord' + str(self.order_num) + '.pkl'
         with open(fname, 'wb') as f:
-            dill.dump(self, f)
+            pickle.dump(self, f)
             
     def save_results(self):
         self.save_to_pickle()
