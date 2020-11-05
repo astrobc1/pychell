@@ -83,7 +83,7 @@ forward_model_blueprints = {
     # The star
     'star': {
         'name': 'star',
-        'class': 'Star',
+        'class': 'AugmentedStar',
         'input_file': None,
         'vel': [-1000 * 300, 10, 1000 * 300]
     },
@@ -91,7 +91,7 @@ forward_model_blueprints = {
     # The iodine gas cell
     'gas_cell': {
         'name': 'iodine_gas_cell',
-        'class': 'GasCell',
+        'class': 'PerfectGasCell',
         'input_file': 'iodine_gas_cell_minervanorth_nist.npz',
         'shift': [0, 0, 0],
         'depth': [1, 1, 1]
@@ -105,6 +105,8 @@ forward_model_blueprints = {
         'water_depth': [0.01, 1.5, 4.0],
         'airmass_depth': [0.8, 1.2, 4.0],
         'min_range': 0.01,
+        'flag_thresh': [0.05, 0.5], # below this level of norm flux is flagged
+        'flag_and_ignore': 0,
         'input_files': {
             'water': 'telluric_water_tapas_whipple.npz',
             'methane': 'telluric_methane_tapas_whipple.npz',
@@ -136,7 +138,7 @@ forward_model_blueprints = {
         'class': 'HermiteLSF',
         'hermdeg': 0,
         'n_delay': 0,
-        'width': [0.021, 0.0229, 0.0245], # LSF width, in angstroms
+        'width': [0.016, 0.0229, 0.0245], # LSF width, in angstroms
         'ak': [-0.005, 0.001, 0.005] # Hermite polynomial coefficients
     },
     

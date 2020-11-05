@@ -1155,7 +1155,7 @@ class HybridWavelengthSolution(WavelengthSolution):
         if not self.splines_enabled:
             return self.default_wave_grid[self.sregion.data_inds]
         else:
-            pixel_grid = np.arange(self.nx)
+            pixel_grid = np.arange(self.sregion.pixmin, self.sregion.pixmax + 1)
             splines = np.array([pars[self.par_names[i]].value for i in range(self.n_splines + 1)], dtype=np.float64)
             wave_spline = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, splines, bc_type='not-a-knot', extrapolate=False)(pixel_grid)
             return self.default_wave_grid[self.sregion.data_inds] + wave_spline
@@ -1175,7 +1175,7 @@ class HybridWavelengthSolution(WavelengthSolution):
         if self.n_splines > 0:
             wave_estimate = self.estimate_order_wave(forward_model, self.blueprint)
             good = sregion.wave_within(wave_estimate)
-            self.spline_pixel_set_points = np.linspace(good[0], good[-1], num=self.n_splines + 1)
+            self.spline_pixel_set_points = np.linspace(good[0], good[-1], num=self.n_splines + 1).astype(int)
             self.spline_wave_set_points = wave_estimate[self.spline_pixel_set_points]
 
 class LegPolyWavelengthSolution(WavelengthSolution):
