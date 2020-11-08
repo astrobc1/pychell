@@ -92,7 +92,7 @@ forward_model_blueprints = {
     'gas_cell': {
         'name': 'iodine_gas_cell',
         'class': 'PerfectGasCell',
-        'input_file': 'iodine_gas_cell_minervanorth_nist.npz',
+        'input_file': 'iodine_gas_cell_minervanorth_0.1nm.npz',
         'shift': [0, 0, 0],
         'depth': [1, 1, 1]
     },

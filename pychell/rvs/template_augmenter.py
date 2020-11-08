@@ -92,18 +92,15 @@ def cubic_spline_lsq(forward_models, iter_index=None):
         
         for ichunk, sregion in enumerate(fwm.chunk_regions):
             
+            # Init the chunk
             templates_dict_chunked = fwm.init_chunk(forward_models.templates_dict, sregion)
             
+            # Get the best fit pars
             pars = fwm.opt_results[-1][ichunk]['xbest']
         
             # Generate the residuals
             wave_data = fwm.models_dict['wavelength_solution'].build(pars)
             _res = (fwm.data.flux_chunk - fwm.build_full(pars, templates_dict_chunked))[1]
-            width = sregion.wave_len() / 10
-            if iter_index == 0:
-                good = np.where(np.isfinite(wave_data) & np.isfinite(_res))
-                continuum_estim = pcmodelcomponents.ContinuumModel.estimate_splines(wave_data, _res, cont_val=0.5, n_splines=int(sregion.pix_len() / 100), width=width)
-                _res -= continuum_estim
             residuals_lr += _res.tolist()
 
             # Shift to a pseudo rest frame. All must start from same frame
@@ -180,11 +177,11 @@ def cubic_spline_lsq(forward_models, iter_index=None):
 
     # Augment the template
     new_flux = current_stellar_template[:, 1] + residuals_hr_fit
-    ng = np.sum(np.isfinite(residuals_hr_fit))
+    
     # Force the max to be less than 1.
     bad = np.where(new_flux > 1)[0]
     if bad.size > 0:
-        new_flux[bad] = 0
+        new_flux[bad] = 1
 
     forward_models.templates_dict['star'][:, 1] = new_flux
     

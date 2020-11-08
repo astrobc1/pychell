@@ -131,6 +131,7 @@ class ForwardModels(list):
         __tempself__ = copy.deepcopy(self)
         for ispec in range(self.n_spec):
             self[ispec] = copy.deepcopy(__tempself__[ss[ispec]])
+        del __tempself__
     
     def update_models(self, iter_index):
         for ispec in range(self.n_spec):
@@ -560,7 +561,7 @@ class ForwardModel:
         self.initial_parameters.update(pars)
     
     # Plots the forward model after each iteration with other template as well if verbose_plot = True
-    def plot_order(self, templates_dict, iter_index):
+    def plot_data_model(self, templates_dict, iter_index):
         
         # The filename
         if self.models_dict['star'].enabled:
@@ -806,13 +807,10 @@ class ForwardModel:
 
         # Output a plot
         if forward_model.gen_fwm_plots:
-            forward_model.plot_order(templates_dict, iter_index)
+            forward_model.plot_data_model(templates_dict, iter_index)
 
         # Return new forward model object since we possibly fit in parallel
         return forward_model
-
-  
-       # Wrapper for parallel processing. Solves and plots the forward model results. Also does xcorr if set.
     
     @staticmethod
     def cross_correlate_region_wrapper(forward_model, templates_dict, iter_index, sregion, xcorr_options):
