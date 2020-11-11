@@ -52,6 +52,7 @@ def compute_rvs(user_forward_model_settings, user_model_blueprints):
         data_parser_class = getattr(pcparsers, config['spectrograph'] + 'Parser')
         parser = data_parser_class(config)
     else:
+        breakpoint()
         raise NotImplementedError("Must use a supported instrument for now, or implement a new instrument.")
     
     # Main loop over orders

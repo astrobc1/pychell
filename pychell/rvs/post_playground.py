@@ -15,6 +15,7 @@ from numba import jit, njit
 import scipy.signal
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 import datetime
+import pychell.utils as pcutils
 
 # Multi Target rv precision as a function of S/N per spectral pixel, cumulative over a night
 def rv_precision_snr(parsers, iter_indices=None, thresh=np.inf):
@@ -288,21 +289,32 @@ def combine_rvs(parser, iter_indices=None):
         parser.rvs_dict['uncxcdet_nightly_out'] = result_det['unc_nightly']
     
     # Write to files for radvel
-    fname = parser.output_path_root + 'rvs_nightly_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '_' + datetime.date.today().strftime("%d%m%Y") + '.txt'
-    telvec = np.array([parser.spectrograph.replace(' ', '_')] * parser.n_nights, dtype='<U20')
+    fname_nightly = parser.output_path_root + 'rvs_nightly_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '_' + datetime.date.today().strftime("%d%m%Y") + '.txt'
+    fname_single = parser.output_path_root + 'rvs_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '_' + datetime.date.today().strftime("%d%m%Y") + '.txt'
+    telvec_nightly = np.array([parser.spectrograph.replace(' ', '_')] * parser.n_nights, dtype='<U20')
+    telvec_single = np.array([parser.spectrograph.replace(' ', '_')] * parser.n_spec, dtype='<U20')
     if parser.rvs_out == 'xc':
         good = np.where(np.isfinite(parser.rvs_dict['rvsxc_nightly_out']))[0]
-        t, rvs, unc, telvec = parser.rvs_dict['bjds_nightly'][good], parser.rvs_dict['rvsxc_nightly_out'][good], parser.rvs_dict['uncxc_nightly_out'][good], telvec[good]
+        tn, rvsn, uncn, telvec_nightly = parser.rvs_dict['bjds_nightly'][good], parser.rvs_dict['rvsxc_nightly_out'][good], parser.rvs_dict['uncxc_nightly_out'][good], telvec_nightly[good]
+        good = np.where(np.isfinite(parser.rvs_dict['rvsxc_out']))[0]
+        ts, rvss, uncs, telvec_single = parser.rvs_dict['bjds'][good], parser.rvs_dict['rvsxc_out'][good], parser.rvs_dict['uncxc_out'][good], telvec_single[good]
     elif parser.rvs_out == 'xcdet':
-        good = np.where(np.isfinite(parser.rvs_dict['rvsx_nightly_detrended_out']))[0]
-        t, rvs, unc, telvec = parser.rvs_dict['bjds_nightly'][good], parser.rvs_dict['rvsxc_nightly_out'][good], parser.rvs_dict['uncxc_nightly_out'][good], telvec[good]
+        good = np.where(np.isfinite(parser.rvs_dict['rvsxcdet_nightly_out']))[0]
+        tn, rvsn, uncn, telvec_nightly = parser.rvs_dict['bjds_nightly'][good], parser.rvs_dict['rvsxcdet_nightly_out'][good], parser.rvs_dict['uncxcdet_nightly_out'][good], telvec_nightly[good]
+        good = np.where(np.isfinite(parser.rvs_dict['rvsxc_out']))[0]
+        ts, rvss, uncs, telvec_single = parser.rvs_dict['bjds'][good], parser.rvs_dict['rvsxcdet_out'][good], parser.rvs_dict['uncxcdet_out'][good], telvec_single[good]
     else:
         good = np.where(np.isfinite(parser.rvs_dict['rvsfwm_nightly_out']))[0]
-        t, rvs, unc, telvec = parser.rvs_dict['bjds_nightly'][good], parser.rvs_dict['rvsfwm_nightly_out'][good], parser.rvs_dict['uncfwm_nightly_out'][good], telvec[good]
+        tn, rvsn, uncn, telvec_nightly = parser.rvs_dict['bjds_nightly'][good], parser.rvs_dict['rvsfwm_nightly_out'][good], parser.rvs_dict['uncfwm_nightly_out'][good], telvec_nightly[good]
+        good = np.where(np.isfinite(parser.rvs_dict['rvsfwm_out']))[0]
+        ts, rvss, uncs, telvec_single = parser.rvs_dict['bjds'][good], parser.rvs_dict['rvsfwm_out'][good], parser.rvs_dict['uncfwm_out'][good], telvec_single[good]
         
-    with open(fname, 'w+') as f:
+    with open(fname_nightly, 'w+') as f:
         f.write("time,mnvel,errvel,tel\n")
-        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
+        np.savetxt(f, np.array([tn, rvsn, uncn, telvec_nightly], dtype=object).T, fmt="%f,%f,%f,%s")
+    with open(fname_single, 'w+') as f:
+        f.write("time,mnvel,errvel,tel\n")
+        np.savetxt(f, np.array([ts, rvss, uncs, telvec_single], dtype=object).T, fmt="%f,%f,%f,%s")
     
 # Detrend RVs if applicable
 def detrend_rvs(parser: pcparser.PostParser, vec='bis', thresh=0.5):
@@ -597,8 +609,8 @@ def plot_final_rvs(parser, phase_to=None, tc=None, kamp=None):
     else:
         plt.xlabel('Phase [days, P = ' +  str(round(_phase_to, 3)) + ']')
     plt.ylabel('RV [m/s]')
-    
-    plt.savefig(parser.output_path_root + 'rvs_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '.png')
+    plt.tight_layout()
+    plt.savefig(parser.output_path_root + 'rvs_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '.png', dpi=200, figsize=(12, 8))
     plt.show()
     
     
@@ -653,7 +665,7 @@ def residual_coherence(parser, iter_indices=None, frame='star', nsample=1, templ
     templates = parser.resolve_rvprec_templates(templates)
     
     # To coadd
-    res = np.full(shape=(parser.forward_models[0][0].n_model_pix, parser.n_spec), fill_value=np.nan)
+    res = np.full(shape=(parser.forward_models[0][0].n_model_pix_order, parser.n_spec), fill_value=np.nan)
     
     # Create a figure
     plot_height_single = 4
@@ -666,79 +678,90 @@ def residual_coherence(parser, iter_indices=None, frame='star', nsample=1, templ
         # Plot residuals for each observation
         for i in range(0, parser.n_spec, nsample):
             
-            # Get the best fit parameters
-            pars = parser.forward_models[o][i].opt_results[iter_indices[o] + parser.index_offset]['xbest']
+            # Alias
+            fwm = parser.forward_models[o][i]
             
-            # Build the model
-            wave_data, model_lr = parser.forward_models[o][i].build_full(pars, parser.forward_models[o].templates_dict)
+            for ichunk, sregion in enumerate(fwm.chunk_regions):
             
-            # Stellar rest frame
-            if frame == 'star':
+                # Init the chunk
+                templates_dict_chunked = fwm.init_chunk(parser.forward_models[o].templates_dict, sregion)
+            
+                # Get the best fit parameters
+                pars = fwm.opt_results[iter_indices[o, ichunk] + parser.index_offset][ichunk]['xbest']
+            
+                # Build the model
+                wave_data, model_lr = fwm.build_full(pars, templates_dict_chunked)
+            
+                # Stellar rest frame
+                if frame == 'star':
+                    
+                    # Determine the relative shift
+                    if iter_indices[o, 0] == 0 and not parser.forward_models[o][i].models_dict['star'].from_synthetic:
+                        vel = parser.forward_models[o][i].data.bc_vel
+                    else:
+                        vel = -1 * pars[fwm.models_dict['star'].par_names[0]].value
+                    
+                    # Shift the wavelength solution
+                    wave_shifted = pcmath.doppler_shift(wave_data, vel=vel, flux=None, interp=None)
+            
+                    # The residuals for this iteration
+                    residuals = fwm.data.flux_chunk - model_lr
                 
-                # Determine the relative shift
-                if iter_indices[o] == 0 and not parser.forward_models[o][i].models_dict['star'].from_synthetic:
-                    vel = parser.forward_models[o][i].data.bc_vel
+                    # Interpolate so we don't store the unique wavelength grids
+                    good = np.where(np.isfinite(residuals) & np.isfinite(wave_shifted))[0]
+                    res[:, i] = scipy.interpolate.CubicSpline(wave_shifted[good], residuals[good], extrapolate=False)(templates_dict_chunked['star'][:, 0])
+                    
+                    # Plot the lr version
+                    axarr[o].plot(wave_shifted, residuals, alpha=0.7)
+                
+                # Lab rest frame
                 else:
-                    vel = -1 * pars[parser.forward_models[o][i].models_dict['star'].par_names[0]].value
-                
-                # Shift the wavelength solution
-                wave_shifted = pcmath.doppler_shift(wave_data, vel=vel, flux=None, interp=None)
-        
-                # The residuals for this iteration
-                residuals = parser.forward_models[o][i].data.flux - model_lr
-            
-                # Interpolate so we don't store the unique wavelength grids
-                good = np.where(np.isfinite(residuals) & np.isfinite(wave_shifted))[0]
-                res[:, i] = scipy.interpolate.CubicSpline(wave_shifted[good], residuals[good], extrapolate=False)(parser.forward_models[o].templates_dict['star'][:, 0])
-                
-                # Plot the lr version
-                axarr[o].plot(wave_shifted, residuals, alpha=0.7)
-                
-            # Lab rest frame
-            else:
-                
-                # The residuals for this iteration
-                residuals = parser.forward_models[o][i].data.flux - model_lr
-                
-                # Interpolate
-                good = np.where(np.isfinite(residuals))
-                res[:, i] = scipy.interpolate.CubicSpline(wave_data[good], residuals[good], extrapolate=False)(parser.forward_models[o].templates_dict['star'][:, 0])
+                    
+                    # The residuals for this iteration
+                    residuals = parser.forward_models[o][i].data.flux - model_lr
+                    
+                    # Interpolate
+                    good = np.where(np.isfinite(residuals))
+                    res[:, i] = scipy.interpolate.CubicSpline(wave_shifted[good], residuals[good], extrapolate=False)(templates_dict_chunked['star'][:, 0])
 
-                # Plot the lr version
-                axarr[o].plot(wave_data, residuals, alpha=0.7)
+                    # Plot the lr version
+                    axarr[o].plot(wave_data, residuals, alpha=0.7)
         
-        # Plot the template to visually determine any correlations
-        for t in templates:
-            if type(parser.forward_models[o].templates_dict[t]) is dict:
-                for tt in parser.forward_models[o].templates_dict[t]:
-                    w, f = parser.forward_models[o].templates_dict[t][tt][:, 0], parser.forward_models[o].templates_dict[t][tt][:, 1]
-                    ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
-                    ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
-                    fc = parser.forward_models[o][0].models_dict['lsf'].convolve_flux(ff, pars=pars)
-                    axarr[o].plot(ww, fc, alpha=0.8, label=tt)
-            else:
-                w, f = parser.forward_models[o].templates_dict[t][:, 0], parser.forward_models[o].templates_dict[t][:, 1]
-                ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
-                ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
-                fc = parser.forward_models[o][0].models_dict['lsf'].convolve_flux(ff, pars=pars)
-                axarr[o].plot(ww, fc, alpha=0.8, label=t)
+                # Plot the template to visually determine any correlations
+                for t in templates:
+                    if type(templates_dict_chunked[t]) is dict:
+                        for tt in templates_dict_chunked[t]:
+                            w, f = templates_dict_chunked[:, 0], templates_dict_chunked[:, 1]
+                            ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
+                            ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
+                            fc = parser.forward_models[o][0].models_dict['lsf'].convolve_flux(ff, pars=pars)
+                            axarr[o].plot(ww, fc, alpha=0.8, label=tt)
+                    else:
+                        w, f = templates_dict_chunked[t][:, 0], templates_dict_chunked[t][:, 1]
+                        ww = np.linspace(np.nanmin(w), np.nanmax(w), num=w.size)
+                        ff = np.interp(ww, w, f, left=np.nan, right=np.nan)
+                        fc = parser.forward_models[o][0].models_dict['lsf'].convolve_flux(ff, pars=pars)
+                        axarr[o].plot(ww, fc, alpha=0.8, label=t)
+                        
+                    if frame == 'star' and t == 'star':
+                        w, f = templates_dict_chunked[t][:, 0], templates_dict_chunked[t][:, 1]
+                        fc = fwm.models_dict['lsf'].convolve_flux(f, pars=pars)
+                        axarr[o].plot(ww, fc, alpha=0.8, label=t)
                 
-            if frame == 'star' and t == 'star':
-                w, f = parser.forward_models[o].templates_dict[t][:, 0], parser.forward_models[o].templates_dict[t][:, 1]
-                fc = parser.forward_models[o][0].models_dict['lsf'].convolve_flux(f, pars=parser.forward_models[o][0].initial_parameters)
-                axarr[o].plot(ww, fc, alpha=0.8, label=t)
                 
-                
-        axarr[o].plot(parser.forward_models[o].templates_dict['star'][:, 0], np.nanmedian(res, axis=1), c='black')
-        axarr[o].set_title('Order ' + str(parser.do_orders[o]) + ' iter ' + str(iter_indices[o] + 1), fontsize=8)
+            axarr[o].plot(templates_dict_chunked['star'][:, 0], np.nanmedian(res, axis=1), c='black')
+            
+        axarr[o].set_title('Order ' + str(parser.do_orders[o]) + ' iter ' + str(iter_indices[o, ichunk] + 1), fontsize=8)
         axarr[o].tick_params(axis='both', labelsize=10)
         axarr[o].legend()
+        for ichunk in range(1, parser.n_chunks):
+            axarr[o].vlines(x=parser.forward_models[o][0].chunk_regions[ichunk].wavemin, ymin=-0.1, ymax=0.1, c='black', ls=':')
     axarr[-1].set_xlabel('Wavelength [Ang]')
     plt.subplots_adjust(left=0.08, bottom=0.08, right=0.97, top=0.95, wspace=None, hspace=0.5)
     plt.tight_layout()
     fig.text(0.03, 0.5, 'Norm. flux', rotation=90, verticalalignment='center', horizontalalignment='center', fontsize=10)
     fig.text(0.5, 0.97, parser.star_name, fontsize=10, verticalalignment='center', horizontalalignment='center')
-    plt.savefig(parser.output_path_root + 'residuals.png')
+    plt.savefig(parser.output_path_root + 'residuals_coherence_' + pcutils.gendatestr(time=False) + '_.png')
     plt.close()
     
     
@@ -896,10 +919,10 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indices, star_
     
     return forward_models
             
-def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thresh=None, debug=False):
+def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thresh=None, debug=False, kamp=None):
     
     if phase_to is None:
-        _phase_to = 1E20
+        _phase_to = 1E20  
     else:
         _phase_to = phase_to
         
@@ -937,6 +960,10 @@ def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thre
     #    plt.errorbar((bjdsn - alpha)%_phase_to, rvsn_unpacked[o, :] - np.nanmedian(rvsn_unpacked[o, :]), yerr=uncn_unpacked[o, :], marker='o', markersize=6, lw=0, label='Order ' + str(parser.do_orders[o]), alpha=0.6)
     
     plt.errorbar((bjdsn - alpha)%_phase_to, rvs_nightly_final - np.nanmedian(rvs_nightly_final), yerr=unc_nightly_final, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
+    if kamp is not None:
+        modelx = np.linspace(0, _phase_to, num=300)
+        modely = kamp * np.sin(2 * np.pi * modelx / _phase_to)
+        plt.plot(modelx, modely)
     plt.legend()
     plt.show()
     

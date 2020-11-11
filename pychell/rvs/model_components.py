@@ -1,7 +1,6 @@
 # Python built in modules
 from collections import OrderedDict
 from abc import ABC, abstractmethod  # Abstract classes
-from pdb import set_trace as stop  # debugging
 import inspect
 import glob
 
@@ -103,12 +102,12 @@ class SpectralComponent:
         index_offset = 0 if forward_model.models_dict['star'].from_synthetic else 1
         
         # Update based on iteration index
-        if (iter_index + 1) == self.n_delay and not self.enabled:
-            self.enabled = True
-            for pname in self.par_names:
+        if iter_index + 1 == self.n_delay and not self.enabled:
+            self.enabled = True # enable the model
+            for pname in self.par_names: # enable the parameters
                 forward_model.initial_parameters[pname].vary = True
                 
-        # Lock any "accidentally" enabled parameters
+        # Lock any "accidentally" enabled parameters that should be locked
         forward_model.initial_parameters.sanity_lock()
 
     def __repr__(self):
@@ -509,9 +508,11 @@ class Star(TemplateMult):
         if "input_file" in blueprint and blueprint["input_file"] is not None:
             self.from_synthetic = True
             self.n_delay = 0
+            self.enabled = True
         else:
             self.from_synthetic = False
             self.n_delay = 1
+            self.enabled = False
         
         # The augmenter
         if "augmenter" in blueprint:

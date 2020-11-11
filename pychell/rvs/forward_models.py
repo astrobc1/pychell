@@ -10,7 +10,6 @@ import inspect
 import multiprocessing # parallelization on a single node
 import sys # sys utils
 from sys import platform # plotting backend
-from pdb import set_trace as stop # debugging
 
 # Graphics
 import matplotlib # to set the backend
@@ -134,9 +133,9 @@ class ForwardModels(list):
         del __tempself__
     
     def update_models(self, iter_index):
-        for ispec in range(self.n_spec):
-            for model in self[ispec].models_dict.keys():
-                self[ispec].models_dict[model].update(self[ispec], iter_index)
+        for fwm in self:
+            for model in fwm.models_dict:
+                fwm.models_dict[model].update(fwm, iter_index)
     
     
     def init_rvs(self):
@@ -431,10 +430,10 @@ class ForwardModels(list):
             # Cross Correlate in Parallel
             ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
         else:
-            ccf_results = [ccf_method(self[ispec], self.templates_dict, self[ispec].sregion_order) for ispec in tqdm.tqdm(range(self.n_spec))]
+            ccf_results = [ccf_method(fwm, self.templates_dict, fwm.sregion_order) for fwm in tqdm.tqdm(self)]
             
-        for ispec in range(self.n_spec):
-            self[ispec].initial_parameters[self[ispec].models_dict['star'].par_names[0]].value = ccf_results[ispec]
+        for ispec, fwm in enumerate(self):
+            fwm.initial_parameters[fwm.models_dict['star'].par_names[0]].value = ccf_results[ispec]
                 
         print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
 
@@ -659,7 +658,8 @@ class ForwardModel:
             fig.text(0.015, 0.5, 'Data, Model, Residuals', fontsize=10, rotation=90, verticalalignment='center', horizontalalignment='center')
         
         # Save
-        plt.subplots_adjust(left=0.05, bottom=0.05, right=None, top=0.95, wspace=None, hspace=None)
+        #plt.subplots_adjust(left=0.05, bottom=0.05, right=None, top=0.95, wspace=None, hspace=None)
+        plt.tight_layout()
         plt.savefig(fname)
         plt.close()
         
@@ -674,16 +674,18 @@ class ForwardModel:
         for model in self.models_dict:
             self.models_dict[model].init_chunk(self, templates_dict_chunked, sregion)
             
-        # Init params
         try:
+            p0_copy = copy.deepcopy(self.initial_parameters)
             self.initial_parameters = self.opt_results[-2][sregion.label]['xbest']
+            for pname in self.initial_parameters:
+                self.initial_parameters[pname].vary = p0_copy[pname].vary
         except:
             pass
         
         self.data.flux_chunk = self.data.flux[sregion.data_inds] / pcmath.weighted_median(self.data.flux[sregion.data_inds], percentile=0.98)
         self.data.flux_unc_chunk = self.data.flux_unc[sregion.data_inds]
         self.data.mask_chunk = self.data.mask[sregion.data_inds]
-            
+
         return templates_dict_chunked
 
     # Save the forward model object to a pickle

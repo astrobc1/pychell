@@ -36,19 +36,22 @@ forward_model_blueprints = {
     # The star
     'star': {
         'name': 'star',
-        'class_name': 'Star',
+        'class': 'AugmentedStar',
         'input_file': None,
+        "augmenter": "weighted_median",
         'vel': [-3E5, 100, 3E5]
     },
     
     # Tellurics (from TAPAS) NOTE: Still need proper tellurics, so steal Whipple
     'tellurics': {
         'name': 'nir_tellurics',
-        'class_name': 'TelluricsTAPAS',
+        'class': 'TelluricsTAPAS',
         'vel': [0, 0, 0],
-        'water_depth': [1, 1, 1],
-        'airmass_depth': [1, 1, 1],
+        'water_depth': [0.03, 1.1, 5],
+        'airmass_depth': [0.8, 1.1, 3],
         'min_range': 0.01,
+        'flag_thresh': [0.05, 0.5], # below this level of norm flux is flagged
+        'flag_and_ignore': 0,
         'input_files': {
             'water': 'telluric_water_tapas_palomar.npz',
             'methane': 'telluric_methane_tapas_palomar.npz',
@@ -60,11 +63,11 @@ forward_model_blueprints = {
     },
     
     # The default blaze is a quadratic + splines.
-    'blaze': {
-        'name': 'blaze', # The blaze model after a division from a flat field
-        'class_name': 'SplineBlaze',
+    'continuum': {
+        'name': 'continuum', # The blaze model after a division from a flat field
+        'class': 'SplineContinuum',
         'n_splines': 10,
-        'spline': [-0.1, 0.01, 0.1],
+        'spline': [0.9, 0.99, 1.1],
         'poly_2': [-1E-7, -1E-6, 1E-7],
         'poly_1': [-1E-6, 1E-5, 1E-6],
         'poly_0': [0.99, 1, 1.01]
@@ -73,16 +76,16 @@ forward_model_blueprints = {
     # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
-        'class_name': 'HermiteLSF',
+        'class': 'HermiteLSF',
         'hermdeg': 0,
-        'width': [0.05, 0.08, 0.011], # LSF width, in angstroms
+        'width': [0.08, 0.08, 0.08], # LSF width, in angstroms
         'ak': [-0.075, 0.001, 0.075] # See cale et al 2019 or arfken et al some year for definition of ak > 0
     },
     
     # Frequency comb (no splines since no gas cell)
     'wavelength_solution': {
         'name': 'laser_comb_wls',
-        'class_name': 'HybridWavelengthSolution',
+        'class': 'HybridWavelengthSolution',
         'n_splines': 0
     }
 }

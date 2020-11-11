@@ -152,3 +152,11 @@ class SpectralRegion:
     def __repr__(self):
         s = "Pix: (" + str(self.pixmin) + ", " + str(self.pixmax) + ") Wave: (" + str(self.wavemin) + ", " + str(self.wavemax) + ")"
         return s
+    
+def gendatestr(time=False):
+    now = datetime.now()
+    if time:
+        dt_string = now.strftime("%Y%m%d_%H%M%S")
+    else:
+        dt_string = now.strftime("%Y%m%d")
+    return dt_string
