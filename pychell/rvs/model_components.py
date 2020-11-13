@@ -471,6 +471,36 @@ class DynamicGasCell(GasCell):
     def init_optimize(self, forward_model, templates_dict):
         wave, flux = templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1]
         templates_dict['gas_cell'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
+        
+class CHIRONGasCell(DynamicGasCell):
+    """ A gas cell model which is consistent across orders.
+    """
+    
+    name = "chiron_dynamic_gas_cell"
+
+    def __init__(self, forward_model, blueprint):
+
+        # Call super method
+        super().__init__(forward_model, blueprint)
+
+        self.base_par_names = ['_shift', '_depth']
+        self.par_names = [self.name + s for s in self.base_par_names]
+
+    def build(self, pars, template, wave_final):
+        wave, flux = template[:, 0], template[:, 1]
+        wave = wave + pars[self.par_names[0]].value
+        flux = flux ** pars[self.par_names[1]].value
+        return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+
+    def init_parameters(self, forward_model):
+        shift = self.blueprint['shifts'][self.order_num - 1]
+        depth_min, depth, depth_max = self.blueprint['depth'][0], self.blueprint['depth'][1], self.blueprint['depth'][2]
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=shift, minv=shift - self.blueprint['shift_range'][0], maxv=shift + self.blueprint['shifts'][1], vary=True))
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=depth, minv=depth_min, maxv=depth_max, vary=True))
+        
+    def init_optimize(self, forward_model, templates_dict):
+        wave, flux = templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1]
+        templates_dict['gas_cell'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
 
 class PerfectGasCell(GasCell):
     """ A gas cell model which is consistent across orders.

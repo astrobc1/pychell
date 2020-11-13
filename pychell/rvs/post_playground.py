@@ -499,71 +499,67 @@ def compute_nightly_snrs(parser):
     return nightly_snrs
 
 
-def parameter_corrs(parser, iter_indices=None, debug=False, rvvec=False):
+def parameter_corrs(parser, iter_indices=None, debug=False, n_iters_plot=1):
+    
+    plt.style.use("seaborn")
     
     # Parse the RVs
-    rvs_dict = parser.parse_rvs(output_path_root, do_orders=do_orders)
+    rvs_dict = parser.parse_rvs()
     
+    # Generate mask
     mask = gen_rv_mask(parser)
     
-    # Number of spectra and nights
-    n_spec = np.sum(rvs_dict['n_obs_nights'])
-    n_nights = len(rvs_dict['n_obs_nights'])
-    n_iters_rvs = rvs_dict['rvs'].shape[2]
-    n_iters_pars = n_iters_rvs + index_offset
+    # Iterations
+    iter_indices = parser.resolve_iter_indices(iter_indices)
     
-    # Determine which iteration to use
-    if iter_index is None:
-        iter_indices = np.zeros(n_orders).astype(int) + n_iters_rvs - 1
-    elif iter_index == 'best':
-        _, iter_indices = get_best_iterations(rvs_dict, xcorr)
-    else:
-        iter_indices = np.zeros(n_orders).astype(int) + iter_index
-    
-    for o in range(n_orders):
+    # Loop over orders and chunks
+    for o in range(parser.n_orders):
         
-        vp = forward_models[o, 0].opt_results[iter_indices[o] + index_offset]['xbest'].unpack(keys='vary')['vary']
-        vpi = np.where(vp)[0]
-        nv = vpi.size
+        for ichunk in range(parser.n_chunks):
         
-        pars = np.empty(shape=(n_spec, n_iters_pars, nv), dtype=object)
-        par_vals = np.full(shape=(n_spec, n_iters_pars, nv), dtype=float, fill_value=np.nan)
-        par_names = list(forward_models[o, 0].opt_results[iter_indices[o] + index_offset]['xbest'].keys())
-        par_names = [par_names[v] for v in vpi]
-        for ispec in range(n_spec):
-            for j in range(n_iters_pars):
-                for k in range(nv):
-                    pars[ispec, j, k] = forward_models[o, ispec].opt_results[j]['xbest'][par_names[k]]
-                    par_vals[ispec, j, k] = pars[ispec, j, k].value
-        
-        n_cols = 5
-        n_rows = int(np.ceil(nv / n_cols))
-        fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(16, 12), dpi=400)
-        
-        for row in range(n_rows):
-            for col in range(n_cols):
-                
-                # The par index
-                k = n_cols * row + col
-                
-                if k + 1 > nv:
-                    axarr[row, col].set_visible(False)
-                    continue
+            vp = parser.forward_models[o][0].opt_results[iter_indices[o, ichunk] + parser.index_offset][0]['xbest'].unpack(keys='vary')['vary']
+            vpi = np.where(vp)[0]
+            nv = vpi.size
+            
+            pars = np.empty(shape=(parser.n_spec, parser.n_iters_opt, nv), dtype=object)
+            par_vals = np.full(shape=(parser.n_spec, parser.n_iters_opt, nv), dtype=float, fill_value=np.nan)
+            par_names = list(parser.forward_models[o][0].opt_results[iter_indices[o, ichunk] + parser.index_offset][ichunk]['xbest'].keys())
+            par_names = [par_names[v] for v in vpi]
+            for ispec in range(parser.n_spec):
+                for j in range(parser.n_iters_opt):
+                    for k in range(nv):
+                        pars[ispec, j, k] = parser.forward_models[o][ispec].opt_results[j][ichunk]['xbest'][par_names[k]]
+                        par_vals[ispec, j, k] = pars[ispec, j, k].value
+            
+            n_cols = 5
+            n_rows = int(np.ceil(nv / n_cols))
+            fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(16, 12), dpi=400)
+            
+            for row in range(n_rows):
+                for col in range(n_cols):
                     
-                n_iters_plot = np.min([10, n_iters_pars])
-                for ispec in range(n_spec):
-                    axarr[row, col].plot(rvs_dict['rvs'][o, ispec, -n_iters_plot:], par_vals[ispec, -n_iters_plot:, k], alpha=0.7, c='powderblue', lw=0.7)
-                
-                axarr[row, col].plot(rvs_dict['rvs'][o, :, iter_indices[o]], par_vals[:, iter_indices[o] + index_offset, k], marker='.', lw=0, c='black', markersize=8)
-                axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
-                axarr[row, col].set_ylabel(par_names[k].replace('_', ' '), fontsize=4)
-                axarr[row, col].tick_params(axis='both', which='major', labelsize=4)
-                axarr[row, col].grid(None)
-        fig.suptitle(star_name.replace('_', ' ') + ' Parameter Correlations Order ' + str(do_orders[o]), fontsize=10)
-        fname = output_path_root + 'Order' + str(do_orders[o]) + os.sep + tag + '_ord' + str(do_orders[o]) + '_parameter_corrs.png'
-        plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.3, hspace=0.5)
-        plt.savefig(fname)
-        plt.close()
+                    # The par index
+                    k = n_cols * row + col
+                    
+                    if k + 1 > nv:
+                        axarr[row, col].set_visible(False)
+                        continue
+                        
+                    if n_iters_plot > 1:
+                        for ispec in range(n_spec):
+                            axarr[row, col].plot(rvs_dict['rvsfwm'][o, ispec, ichunk, -n_iters_plot:], par_vals[ispec, -n_iters_plot:, k], alpha=0.7, c='powderblue', lw=0.7)
+                    
+                    good = np.where(mask[o, :, ichunk, iter_indices[o, ichunk]] == 1)[0]
+                    axarr[row, col].plot(rvs_dict['rvsfwm'][o, good, ichunk, iter_indices[o, ichunk]], par_vals[good, iter_indices[o, ichunk] + parser.index_offset, k], marker='.', lw=0, c='black', markersize=5)
+                    axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
+                    axarr[row, col].set_ylabel(par_names[k].replace('_', ' '), fontsize=4)
+                    axarr[row, col].tick_params(axis='both', which='major', labelsize=4)
+                    axarr[row, col].grid(None)
+            fig.suptitle(parser.star_name.replace('_', ' ') + ' Parameter Correlations Order ' + str(parser.do_orders[o]), fontsize=10)
+            fname = parser.output_path_root + 'Order' + str(parser.do_orders[o]) + os.sep + 'parameter_corrs_ord' + str(parser.do_orders[o]) + '_parameter_corrs.png'
+            plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.3, hspace=0.5)
+            plt.savefig(fname)
+            plt.close()
         
     if debug:
         breakpoint()

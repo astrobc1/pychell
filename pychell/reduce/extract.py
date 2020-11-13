@@ -227,7 +227,6 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, config, 
         y_positions_refined = y_positions_estimate
         trace_profile_cspline = trace_profile_cspline_estimate
     
-    
     ###########################
     ##### Sky Subtraction #####
     ###########################
@@ -1285,7 +1284,7 @@ def refine_trace_position(data, trace_image, y_positions, trace_profile_cspline,
         xcorr_fit = np.polyfit(lags[good], xcorr[good], 2)
         yfit = -1 * xcorr_fit[1] / (2 * xcorr_fit[0])
         
-        if np.abs(yfit - y_positions[x]) > 1.5:
+        if np.abs(yfit - y_positions[x]) > height / 4:
                 continue
             
         y_positions_xcorr[x] = yfit
