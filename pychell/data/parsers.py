@@ -241,7 +241,7 @@ class DataParser:
     def save_reduced_orders(self, data, reduced_orders):
         fname = self.gen_reduced_spectra_filename(data)
         hdu = fits.PrimaryHDU(reduced_orders, header=data.header)
-        hdu.writeto(fname)
+        hdu.writeto(fname, overwrite=True)
 
     def gen_reduced_spectra_filename(self, data):
         fname = self.run_output_path + 'spectra' + os.sep + data.base_input_file_noext + '_' + data.target + '_reduced.fits'
