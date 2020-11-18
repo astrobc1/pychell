@@ -648,7 +648,7 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
             continue
         elif ng == 1:
             rvs_single_out[i] = rvli[good[0], i]
-            unc_single_out[i] = rvli[good[0], i]
+            unc_single_out[i] = uncli[good[0], i]
         else:
             rvs_single_out[i] = pcmath.weighted_mean(rvli[:, i], wli[:, i])
             unc_single_out[i] = pcmath.weighted_stddev(rvli[:, i], wli[:, i]) / np.sqrt(ng)

@@ -302,7 +302,7 @@ def weighted_median(forward_models, iter_index=None):
         number_weights /= np.nansum(number_weights)
         for ispec in range(forward_models.n_spec):
             inds = np.where(histx >= bc_vels[ispec])[0][0] - 1
-            tot_weights_hr[:, ispec] *= number_weights[inds]
+            tot_weights_hr[ispec, :, :] *= number_weights[inds]
 
     # Only use specified nights
     tot_weights_hr = tot_weights_hr[template_spec_indices, :, :]

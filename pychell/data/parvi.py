@@ -46,7 +46,7 @@ forward_model_blueprints = {
     'tellurics': {
         'name': 'nir_tellurics',
         'class': 'TelluricsTAPAS',
-        'vel': [0, 0, 0],
+        'vel': [-200, 10, 200],
         'water_depth': [0.03, 1.1, 5],
         'airmass_depth': [0.8, 1.1, 3],
         'min_range': 0.01,

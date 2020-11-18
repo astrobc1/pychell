@@ -106,6 +106,9 @@ def extract_full_image(data, config):
     # Loop over orders, possibly multi-trace
     for order_index, single_order_list in enumerate(orders_list):
         
+        if order_index != 0:
+            continue
+        
         stopwatch.lap(order_index)
         print('  Extracting Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' ...')
         
@@ -227,6 +230,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, config, 
         y_positions_refined = y_positions_estimate
         trace_profile_cspline = trace_profile_cspline_estimate
     
+    #breakpoint()
     ###########################
     ##### Sky Subtraction #####
     ###########################
@@ -236,7 +240,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, config, 
         print('    Estimating Background Sky ...', flush=True)
         sky = estimate_sky(trace_image, y_positions_refined, trace_profile_cspline, height, n_sky_rows=config['n_sky_rows'], M=M)
         tp = trace_profile_cspline(trace_profile_cspline.x)
-        _, trace_max = estimate_trace_max(trace_profile_cspline)
+        #_, trace_max = estimate_trace_max(trace_profile_cspline)
         tp -= pcmath.weighted_median(tp, percentile=0.05)
         bad = np.where(tp < 0)[0]
         if bad.size > 0:
@@ -333,7 +337,7 @@ def boxcar_extraction(trace_image, y_positions, trace_profile_cspline, pixel_fra
     
     badpix_maskcp = np.copy(badpix_mask)
     
-    trace_max_pos, _ = estimate_trace_max(trace_profile_cspline)
+    #trace_max_pos, _ = estimate_trace_max(trace_profile_cspline)
 
     for x in range(nx):
         
@@ -515,7 +519,7 @@ def rectify_trace(trace_image, y_positions, height, M=1):
     yarr1 = np.arange(ny)
     yarr2 = np.arange(-height / 2 , height / 2 + 1, 1/M)
     n2 = len(yarr2)
-    
+
     # Shift
     trace_image_rectified = np.empty(shape=(n2, nx)) + np.nan
     
@@ -1383,6 +1387,7 @@ def estimate_trace_profile(trace_image, y_positions, height, M=16, mask_edges=No
 
     # Offset to max=1 and centered at zero.
     max_pos, max_val = estimate_trace_max(cspline)
+
     cspline = scipy.interpolate.CubicSpline(cspline.x - max_pos, cspline(cspline.x) / max_val, extrapolate=False, bc_type='natural')
 
     return cspline

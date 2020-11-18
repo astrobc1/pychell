@@ -494,8 +494,10 @@ class CHIRONGasCell(DynamicGasCell):
 
     def init_parameters(self, forward_model):
         shift = self.blueprint['shifts'][self.order_num - 1]
-        depth_min, depth, depth_max = self.blueprint['depth'][0], self.blueprint['depth'][1], self.blueprint['depth'][2]
-        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=shift, minv=shift - self.blueprint['shift_range'][0], maxv=shift + self.blueprint['shifts'][1], vary=True))
+        shift_min, shift_max = shift - self.blueprint['shift_range'][0], shift + self.blueprint['shift_range'][1]
+        depth = self.blueprint['depth'][1]
+        depth_min, depth_max = self.blueprint['depth'][0], self.blueprint['depth'][2]
+        forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=shift, minv=shift_min, maxv=shift_max, vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=depth, minv=depth_min, maxv=depth_max, vary=True))
         
     def init_optimize(self, forward_model, templates_dict):
@@ -670,7 +672,7 @@ class TelluricsTAPAS(Tellurics):
 
     def load_template(self, forward_model):
         print('Loading in Telluric Templates', flush=True)
-        pad = 1
+        pad = 5
         # Water
         water = np.load(forward_model.templates_path + self.species_input_files['water'])
         wave, flux = water['wave'], water['flux']

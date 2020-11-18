@@ -354,11 +354,11 @@ def gen_rv_mask(parser : pcparser.PostParser):
     if 'bad_nights' in bad_rvs_dict:
         for inight in bad_rvs_dict['bad_nights']:
             inds = parser.forward_models[0][0].get_all_spec_indices_from_night(inight, parser.n_obs_nights)
-            mask[:, :, inds, :] = 0
-            rvs_dict['rvsfwm'][:, :, inds, :] = np.nan
+            mask[:, inds, :, :] = 0
+            rvs_dict['rvsfwm'][:, inds, :, :] = np.nan
             if rvs_dict['do_xcorr']:
-                rvs_dict['rvsxc'][:, inds, :] = np.nan
-                rvs_dict['bis'][:, inds, :] = np.nan
+                rvs_dict['rvsxc'][:, inds, :, :] = np.nan
+                rvs_dict['bis'][:, inds, :, :] = np.nan
     
     # Mask individual spectra
     if 'bad_spec' in bad_rvs_dict:
@@ -499,7 +499,7 @@ def compute_nightly_snrs(parser):
     return nightly_snrs
 
 
-def parameter_corrs(parser, iter_indices=None, debug=False, n_iters_plot=1):
+def parameter_corrs(parser, iter_indices=None, debug=False, n_iters_plot=1, highlight=None):
     
     plt.style.use("seaborn")
     
@@ -540,23 +540,37 @@ def parameter_corrs(parser, iter_indices=None, debug=False, n_iters_plot=1):
                     
                     # The par index
                     k = n_cols * row + col
-                    
                     if k + 1 > nv:
                         axarr[row, col].set_visible(False)
                         continue
+                    
+                    # Views to arrays
+                    _rvs = rvs_dict['rvsfwm'][o, :, ichunk, -n_iters_plot:] # (n_spec, n_iters_plot)
+                    _pars = par_vals[:, -n_iters_plot:, k] # (n_spec, n_iters_plot)
+                    par_range = np.nanmax(_pars) - np.nanmin(_pars)
+                    par_low = pcmath.weighted_median(_pars, percentile=0.01)
+                    par_high = pcmath.weighted_median(_pars, percentile=0.99)
+                    par_range = par_high - par_low
+                    par_low -= 0.1 * par_range
+                    par_high += 0.1 * par_range
+                    rv_low = pcmath.weighted_median(_rvs, percentile=0.1) - 20 
+                    rv_high = pcmath.weighted_median(_rvs, percentile=0.9) + 20
                         
                     if n_iters_plot > 1:
-                        for ispec in range(n_spec):
-                            axarr[row, col].plot(rvs_dict['rvsfwm'][o, ispec, ichunk, -n_iters_plot:], par_vals[ispec, -n_iters_plot:, k], alpha=0.7, c='powderblue', lw=0.7)
+                        for ispec in range(parser.n_spec):
+                            axarr[row, col].plot(_rvs[ispec, :], _pars[ispec, :], alpha=0.6, c='powderblue', lw=0.7)
                     
-                    good = np.where(mask[o, :, ichunk, iter_indices[o, ichunk]] == 1)[0]
-                    axarr[row, col].plot(rvs_dict['rvsfwm'][o, good, ichunk, iter_indices[o, ichunk]], par_vals[good, iter_indices[o, ichunk] + parser.index_offset, k], marker='.', lw=0, c='black', markersize=5)
+                    axarr[row, col].plot(_rvs[:, -1], _pars[:, -1], marker='.', lw=0, c='black', markersize=5, alpha=0.8)
+                    if highlight is not None:
+                        axarr[row, col].plot(_rvs[highlight, -1], _pars[highlight, -1], marker='.', lw=0, c='red', markersize=5, alpha=0.8)
                     axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
                     axarr[row, col].set_ylabel(par_names[k].replace('_', ' '), fontsize=4)
                     axarr[row, col].tick_params(axis='both', which='major', labelsize=4)
                     axarr[row, col].grid(None)
+                    axarr[row, col].set_xlim(rv_low, rv_high)
+                    axarr[row, col].set_ylim(par_low, par_high)
             fig.suptitle(parser.star_name.replace('_', ' ') + ' Parameter Correlations Order ' + str(parser.do_orders[o]), fontsize=10)
-            fname = parser.output_path_root + 'Order' + str(parser.do_orders[o]) + os.sep + 'parameter_corrs_ord' + str(parser.do_orders[o]) + '_parameter_corrs.png'
+            fname = parser.output_path_root + 'Order' + str(parser.do_orders[o]) + os.sep + 'parameter_corrs_ord' + str(parser.do_orders[o]) + '_chunk' + str(ichunk + 1) +'.png'
             plt.subplots_adjust(left=0.05, bottom=0.05, right=0.95, top=0.95, wspace=0.3, hspace=0.5)
             plt.savefig(fname)
             plt.close()
