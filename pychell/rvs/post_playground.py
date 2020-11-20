@@ -345,8 +345,6 @@ def gen_rv_mask(parser : pcparser.PostParser):
     rvs_dict = parser.rvs_dict
     bad_rvs_dict = parser.bad_rvs_dict
     
-    parser.parse_forward_models()
-    
     # Initialize a mask
     mask = np.ones(shape=(parser.n_orders, parser.n_spec, parser.n_chunks, parser.n_iters_rvs), dtype=float)
     
@@ -948,6 +946,8 @@ def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thre
     iter_indices = np.full(shape=(parser.n_orders, parser.n_chunks), fill_value=iter_index)
     print_rv_summary(parser, iter_indices)
     
+    mask = gen_rv_mask(parser)
+    
     # Combine RVs for NM
     rvsfwm_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
     weights_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
@@ -957,7 +957,7 @@ def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thre
             weights = 1 / parser.rvs_dict["uncfwm_nightly"][o, :, iter_indices[o, 0]]**2
             for ispec in range(parser.n_spec):
                 night_index = pcforwardmodels.ForwardModel.get_night_index(ispec, parser.rvs_dict["n_obs_nights"])
-                weights_single_iter[o, :, :] = weights[night_index]
+                weights_single_iter[o, :, :] = weights[night_index] * mask[o, ispec, ichunk, iter_index]
     result_nm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, parser.n_obs_nights)
     rvs_final = result_nm["rvs"]
     unc_final = result_nm["unc"]

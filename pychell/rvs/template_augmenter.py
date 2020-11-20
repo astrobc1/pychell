@@ -339,7 +339,7 @@ def weighted_median(forward_models, iter_index=None):
     locs = np.where(new_flux > max_val)[0]
     if locs.size > 0:
         new_flux[locs] = max_val
-
+    breakpoint()
     forward_models.templates_dict['star'][:, 1] = new_flux
 
 # Uses pytorch to optimize the template

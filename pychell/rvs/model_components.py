@@ -584,7 +584,7 @@ class AugmentedStar(Star):
 
     def build(self, pars, template, wave_final):
         wave, flux = template[:, 0], template[:, 1]
-        flux_shifted_interp = pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=None, flux=flux)
+        flux_shifted_interp = pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=None, flux=flux, interp='cubic')
         return flux_shifted_interp
 
     def init_parameters(self, forward_model):
@@ -592,7 +592,7 @@ class AugmentedStar(Star):
         
     def load_template(self, forward_model):
         pad = 15
-        wave_uniform = np.linspace(forward_model.sregion_order.wavemin - pad, forward_model.sregion_order.wavemax + pad, num=forward_model.n_model_pix_order)
+        wave_uniform = np.arange(forward_model.sregion_order.wavemin - pad, forward_model.sregion_order.wavemax + pad, forward_model.dl)
         if self.from_synthetic:
             print('Loading in Synthetic Stellar Template', flush=True)
             template_raw = np.loadtxt(self.input_file, delimiter=',')
@@ -814,7 +814,7 @@ class LSF(SpectralComponent):
             self.default_lsf = None
             self.n_model_pix_order = forward_model.n_model_pix_order
             self.nx = np.min([self.n_model_pix_order, 513])
-            self.dl = (1 / forward_model.sregion_order.pix_per_wave()) / self.n_model_pix_order
+            self.dl = forward_model.dl
             self.x = np.arange(int(-self.nx / 2), int(self.nx / 2) + 1) * self.dl
 
     # Returns a delta function
@@ -831,7 +831,8 @@ class LSF(SpectralComponent):
             return raw_flux
         if lsf is None:
             lsf = self.build(pars)
-        convolved_flux = pcmath.convolve_flux(None, raw_flux, R=None, width=None, interp=False, lsf=lsf, croplsf=False)
+        #convolved_flux = pcmath.convolve_flux(None, raw_flux, R=None, width=None, interp=False, lsf=lsf, croplsf=False)
+        convolved_flux = pcmath._convolve(raw_flux, lsf)
         return convolved_flux
         
     def init_optimize(self, forward_model, templates_dict):
@@ -839,15 +840,13 @@ class LSF(SpectralComponent):
             
     def init_chunk(self, forward_model, templates_dict, sregion):
         nx = int((sregion.pix_len() - 1) * forward_model.model_resolution)
-        self.dl = (1 / sregion.pix_per_wave()) / forward_model.model_resolution
+        self.dl = forward_model.dl
         x_init = np.arange(int(-nx / 2), int(nx / 2) + 1) * self.dl
         lsf_bad_estim = pcmath.hermfun(x_init / (0.5 * forward_model.initial_parameters[self.par_names[0]].value), deg=0)
         lsf_bad_estim /= np.nanmax(lsf_bad_estim)
         good = np.where(lsf_bad_estim > 1E-10)[0]
         if good.size < lsf_bad_estim.size:
-            self.nx = good.size
-            if self.nx % 2 == 0:
-                self.nx += 1
+            self.nx = good.size * 2 + 1
         self.x = np.arange(int(-self.nx / 2), int(self.nx / 2) + 1) * self.dl
         self.n_pad_model = int(np.floor(self.nx / 2))
 

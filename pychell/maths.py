@@ -37,7 +37,7 @@ def rms_loss_creator(func):
     
     return _rms_loss
 
-def rmsloss(x, y, weights=None, flag_worst=None):
+def rmsloss(x, y, weights=None, flag_worst=None, remove_edges=0):
     
     # Compute squared diffs
     if weights is not None:
@@ -51,12 +51,24 @@ def rmsloss(x, y, weights=None, flag_worst=None):
         if weights is not None:
             weights[ss[-1*flag_worst:]] = 0
         diffs2[ss[-1*flag_worst:]] = np.nan
-        
+                
     if weights is None:
         good = np.where(np.isfinite(diffs2))[0]
-        return np.sqrt(np.nansum(diffs2) / good.size)
+        ng = good.size
+        if remove_edges > 0:
+            diffs2[good[0:remove_edges]] = 0
+            diffs2[good[-remove_edges:]] = 0
+            ng -= 2 * remove_edges
+        return np.sqrt(np.nansum(diffs2) / ng)
     else:
         good = np.where((weights > 0) & np.isfinite(diffs2))[0]
+        ng = good.size
+        if remove_edges > 0:
+            diffs2[good[0:remove_edges]] = 0
+            diffs2[good[-remove_edges:]] = 0
+            weights[good[0:remove_edges]] = 0
+            weights[good[-remove_edges:]] = 0
+            ng -= 2 * remove_edges
         return np.sqrt(np.nansum(diffs2[good]) / np.nansum(weights[good]))
 
 def measure_fwhm(x, y):
@@ -125,11 +137,15 @@ def rolling_clip(x, y, weights=None, width=None, method='median', nsigma=3, perc
                 
     return mask
 
-def doppler_shift(wave, vel, wave_out=None, flux=None, interp='linear'):
+def doppler_shift(wave, vel, wave_out=None, flux=None, interp='linear', kind='exp'):
     if wave_out is None:
         wave_out = wave
-    z = vel / cs.c
-    wave_shifted = wave * np.sqrt((1 + z) / (1 - z))
+        
+    if kind == 'exp':
+        wave_shifted = _dop_shift_exponential(wave, vel)
+    else:
+        wave_shifted = _dop_shift_SR(wave, vel)
+    
     if interp is None and flux is None:
         return wave_shifted
     good = np.where(np.isfinite(wave_shifted) & np.isfinite(flux))[0]
@@ -143,6 +159,15 @@ def doppler_shift(wave, vel, wave_out=None, flux=None, interp='linear'):
         flux_out = scipy.interpolate.PchipInterpolator(wave_shifted[good], flux[good], extrapolate=False)(wave_out)
     return flux_out
     
+
+@njit
+def _dop_shift_SR(wave, vel):
+    z = vel / cs.c
+    return wave * np.sqrt((1 + z) / (1 - z))
+
+@njit
+def _dop_shift_exponential(wave, vel):
+    return wave * np.exp(vel / cs.c)
 
 @jit_filter_function
 def fmedian(x):
@@ -683,6 +708,33 @@ def cross_correlate2(x1, y1, x2, y2, lags):
             weights[bad] = 0
         corrfun[i] = np.nansum(vec_cross * weights) / np.nansum(weights)
 
+    return corrfun
+
+def cross_correlate3(x1, y1, x2, y2, vels):
+    """Cross-correlation in "pixel" space.
+
+    Args:
+        y1 (np.ndarray): The array to cross-correlate.
+        y2 (np.ndarray): The array to cross-correlate against.
+        lags (np.ndarray): An array of lags (shifts), must be integers.
+
+    Returns:
+        np.ndarray: The cross-correlation function
+    """
+    # Shifts y2 and compares it to y1
+    n1 = y1.size
+    n2 = y2.size
+
+    nvels = vels.size
+    
+    corrfun = np.zeros(nvels, dtype=float)
+    corrfun[:] = np.nan
+    for i in range(nvels):
+        y2_shifted = doppler_shift(x2, vels[i], wave_out=x1, flux=y2, interp='cubic', kind='exp')
+        good = np.where(np.isfinite(y2_shifted) & np.isfinite(y1))[0]
+        if good.size < 500:
+            continue
+        corrfun[i] = rmsloss(y1, y2_shifted)
     return corrfun
 
 def intersection(x, y, yval, precision=None):

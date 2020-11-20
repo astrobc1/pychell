@@ -381,9 +381,8 @@ class ForwardModels(list):
                     depths = np.linspace(0, 1, num=rvs_dict['xcorr_options']['n_bs'])
                     ccf_ = rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 1] - np.nanmin(rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 1])
                     ccf_ = ccf_ / np.nanmax(ccf_)
-                    plt.plot(rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 0] - v0, ccf_)
-                    #plt.plot(rvs_dict['line_bisectors'][:, ispec, iter_index], depths)
-            
+                    plt.plot(rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 0], ccf_)
+                    
             plt.title(self.star_name + ' CCFs Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
             plt.xlabel('RV$_{\star}$ [m/s]', fontweight='bold')
             plt.ylabel('CCF (RMS surface)', fontweight='bold')
@@ -491,6 +490,7 @@ class ForwardModel:
         stitch_points_pix = np.linspace(order_pixmin, order_pixmax, num=self.n_chunks + 1).astype(int)
         wave_estimate = wave_class.estimate_order_wave(self, model_blueprints["wavelength_solution"])
         self.sregion_order = pcutils.SpectralRegion(order_pixmin, order_pixmax, wave_estimate[order_pixmin], wave_estimate[order_pixmax], label="order")
+        self.dl = (1 / self.sregion_order.pix_per_wave()) / self.model_resolution
         for ichunk in range(self.n_chunks):
             pixmin, pixmax = stitch_points_pix[ichunk], stitch_points_pix[ichunk + 1]
             wavemin, wavemax = wave_estimate[pixmin], wave_estimate[pixmax]
@@ -578,6 +578,8 @@ class ForwardModel:
             
             # The best fit parameters
             pars = self.opt_results[-1][sregion.label]['xbest']
+            
+            plt.plot(self.models_dict['lsf'].x, self.models_dict['lsf'].build(pars)); plt.show()
             
             # Init chunk
             templates_dict_chunked = self.init_chunk(templates_dict, sregion)
