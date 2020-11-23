@@ -371,9 +371,6 @@ class PolyContinuum(ContinuumModel):
 class SplineContinuum(ContinuumModel):
     """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
     
-    .. math:
-        B(\\lambda) = (\\sum_{k=0}^{N} a_{i} \\lambda^{k} ) sinc(b (\\lambda - \\lambda_{B}))^{2d}
-    
 
     Attributes:
         poly_order (int): The polynomial order.
@@ -468,10 +465,6 @@ class DynamicGasCell(GasCell):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['shift'][1], minv=self.blueprint['shift'][0], maxv=self.blueprint['shift'][2], vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=self.blueprint['depth'][1], minv=self.blueprint['depth'][0], maxv=self.blueprint['depth'][2], vary=True))
         
-    def init_optimize(self, forward_model, templates_dict):
-        wave, flux = templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1]
-        templates_dict['gas_cell'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
-        
 class CHIRONGasCell(DynamicGasCell):
     """ A gas cell model which is consistent across orders.
     """
@@ -499,10 +492,6 @@ class CHIRONGasCell(DynamicGasCell):
         depth_min, depth_max = self.blueprint['depth'][0], self.blueprint['depth'][2]
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=shift, minv=shift_min, maxv=shift_max, vary=True))
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[1], value=depth, minv=depth_min, maxv=depth_max, vary=True))
-        
-    def init_optimize(self, forward_model, templates_dict):
-        wave, flux = templates_dict['gas_cell'][:, 0], templates_dict['gas_cell'][:, 1]
-        templates_dict['gas_cell'][:, 1] = self.normalize_template(forward_model, wave, flux, uniform=False)
 
 class PerfectGasCell(GasCell):
     """ A gas cell model which is consistent across orders.
@@ -558,7 +547,7 @@ class Star(TemplateMult):
 
 class AugmentedStar(Star):
     """ A star model which did not start from a synthetic template.
-    
+
     Attr:
         from_synthetic (bool): Whether or not this model started from a synthetic template or not.
     """
@@ -584,7 +573,7 @@ class AugmentedStar(Star):
 
     def build(self, pars, template, wave_final):
         wave, flux = template[:, 0], template[:, 1]
-        flux_shifted_interp = pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=None, flux=flux, interp='cubic')
+        flux_shifted_interp = pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=wave_final, flux=flux, interp='cubic')
         return flux_shifted_interp
 
     def init_parameters(self, forward_model):
@@ -607,7 +596,7 @@ class AugmentedStar(Star):
     
     def update_template(self, forward_models, iter_index):
         self.augmenter(forward_models, iter_index)
-        
+
 
 #### Tellurics ####
 class Tellurics(TemplateMult):
@@ -728,10 +717,6 @@ class TelluricsTAPAS(Tellurics):
     
     def init_optimize(self, forward_model, templates_dict):
         
-        # Normalize the flux
-        templates_dict['tellurics'][:, 1] = self.normalize_template(forward_model, templates_dict['tellurics'][:, 0], templates_dict['tellurics'][:, 1], uniform=False)
-        templates_dict['tellurics'][:, 2] = self.normalize_template(forward_model, templates_dict['tellurics'][:, 0], templates_dict['tellurics'][:, 2], uniform=False)
-        
         # Check the depth range of the templates
         yrange_water = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 1], forward_model.sregion_order)
         yrange_airmass = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 2], forward_model.sregion_order)
@@ -812,10 +797,7 @@ class LSF(SpectralComponent):
             self.default_lsf = forward_model.data.default_lsf
         else:
             self.default_lsf = None
-            self.n_model_pix_order = forward_model.n_model_pix_order
-            self.nx = np.min([self.n_model_pix_order, 513])
             self.dl = forward_model.dl
-            self.x = np.arange(int(-self.nx / 2), int(self.nx / 2) + 1) * self.dl
 
     # Returns a delta function
     def build_fake(self):
@@ -831,8 +813,8 @@ class LSF(SpectralComponent):
             return raw_flux
         if lsf is None:
             lsf = self.build(pars)
-        #convolved_flux = pcmath.convolve_flux(None, raw_flux, R=None, width=None, interp=False, lsf=lsf, croplsf=False)
-        convolved_flux = pcmath._convolve(raw_flux, lsf)
+        convolved_flux = pcmath.convolve_flux(None, raw_flux, R=None, width=None, interp=False, lsf=lsf, croplsf=False)
+        #convolved_flux = pcmath._convolve(raw_flux, lsf)
         return convolved_flux
         
     def init_optimize(self, forward_model, templates_dict):

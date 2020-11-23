@@ -716,6 +716,7 @@ def residual_coherence(parser, iter_indices=None, frame='star', nsample=1, templ
                     residuals = fwm.data.flux_chunk - model_lr
                 
                     # Interpolate so we don't store the unique wavelength grids
+                    breakpoint()
                     good = np.where(np.isfinite(residuals) & np.isfinite(wave_shifted))[0]
                     res[:, i] = scipy.interpolate.CubicSpline(wave_shifted[good], residuals[good], extrapolate=False)(templates_dict_chunked['star'][:, 0])
                     
@@ -969,7 +970,7 @@ def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thre
     #for o in range(parser.n_orders):
     #    plt.errorbar((bjdsn - alpha)%_phase_to, rvsn_unpacked[o, :] - np.nanmedian(rvsn_unpacked[o, :]), yerr=uncn_unpacked[o, :], marker='o', markersize=6, lw=0, label='Order ' + str(parser.do_orders[o]), alpha=0.6)
     
-    plt.errorbar((bjdsn - alpha)%_phase_to, rvs_nightly_final - np.nanmedian(rvs_nightly_final), yerr=unc_nightly_final, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
+    plt.errorbar((bjdsn[20:] - alpha)%_phase_to, rvs_nightly_final[20:] - np.nanmedian(rvs_nightly_final), yerr=unc_nightly_final[20:], marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
     if kamp is not None:
         modelx = np.linspace(0, _phase_to, num=300)
         modely = kamp * np.sin(2 * np.pi * modelx / _phase_to)

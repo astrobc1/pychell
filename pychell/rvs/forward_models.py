@@ -381,7 +381,7 @@ class ForwardModels(list):
                     depths = np.linspace(0, 1, num=rvs_dict['xcorr_options']['n_bs'])
                     ccf_ = rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 1] - np.nanmin(rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 1])
                     ccf_ = ccf_ / np.nanmax(ccf_)
-                    plt.plot(rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 0], ccf_)
+                    plt.plot(rvs_dict['xcorrs'][:, ispec, ichunk, iter_index, 0] - v0, ccf_)
                     
             plt.title(self.star_name + ' CCFs Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
             plt.xlabel('RV$_{\star}$ [m/s]', fontweight='bold')
@@ -476,11 +476,6 @@ class ForwardModel:
         # Storage arrays after each iteration
         # Each entry is a tuple for each iteration: (best_fit_pars, RMS, FCALLS)
         self.opt_results = []
-            
-    # Must define a build_full method which returns wave, model_flux on the detector grid
-    # Can also define other build methods that return modified forward models
-    def build_full(self, pars, templates_dict):
-        raise NotImplementedError("Must implement a build_full function for this instrument")
     
     def init_chunks(self, model_blueprints):
         good = np.where(self.data.mask)[0]
@@ -500,9 +495,6 @@ class ForwardModel:
         
         # A dictionary to store model components
         self.models_dict = {}
-        
-        # The number of model pixels for this order
-        self.n_model_pix_order = int(self.model_resolution * self.data.flux.size)
 
         # First generate the wavelength solution model
         model_class = getattr(pcmodels, model_blueprints['wavelength_solution']['class'])
@@ -535,10 +527,10 @@ class ForwardModel:
             self.models_dict[model].init_parameters(self)
         self.initial_parameters.sanity_lock()
  
-
     def init_optimize(self, templates_dict):
+        templates_dict_chunked = self.init_chunk(templates_dict, self.sregion_order)
         for model in self.models_dict:
-            self.models_dict[model].init_optimize(self, templates_dict)
+            self.models_dict[model].init_optimize(self, templates_dict_chunked)
                 
     # Prints the models and corresponding parameters after each fit if verbose_print=True
     def pretty_print(self):
@@ -578,8 +570,6 @@ class ForwardModel:
             
             # The best fit parameters
             pars = self.opt_results[-1][sregion.label]['xbest']
-            
-            plt.plot(self.models_dict['lsf'].x, self.models_dict['lsf'].build(pars)); plt.show()
             
             # Init chunk
             templates_dict_chunked = self.init_chunk(templates_dict, sregion)
@@ -624,30 +614,30 @@ class ForwardModel:
                 
                 # Star
                 if self.models_dict['star'].enabled:
-                    star_flux_hr = self.models_dict['star'].build(pars, templates_dict_chunked['star'], templates_dict_chunked['star'][:, 0])
+                    star_flux_hr = self.models_dict['star'].build(pars, templates_dict_chunked['star'], self.model_wave)
                     star_convolved = self.models_dict['lsf'].convolve_flux(star_flux_hr, lsf=lsf)
-                    star_flux_lr = np.interp(wave_data, templates_dict_chunked['star'][:, 0], star_convolved, left=np.nan, right=np.nan)
+                    star_flux_lr = np.interp(wave_data, self.model_wave, star_convolved, left=np.nan, right=np.nan)
                     axarr[ichunk].plot(wave_data / 10, star_flux_lr - 1.1, label='Star', lw=0.8, color='deeppink', alpha=0.8)
                 
                 # Tellurics
                 if 'tellurics' in self.models_dict and self.models_dict['tellurics'].enabled:
-                    tellurics = self.models_dict['tellurics'].build(pars, templates_dict_chunked['tellurics'], templates_dict_chunked['star'][:, 0])
+                    tellurics = self.models_dict['tellurics'].build(pars, templates_dict_chunked['tellurics'], self.model_wave)
                     tellurics_convolved = self.models_dict['lsf'].convolve_flux(tellurics, lsf=lsf)
-                    tell_flux_lr = np.interp(wave_data, templates_dict_chunked['star'][:, 0], tellurics_convolved, left=np.nan, right=np.nan)
+                    tell_flux_lr = np.interp(wave_data, self.model_wave, tellurics_convolved, left=np.nan, right=np.nan)
                     axarr[ichunk].plot(wave_data / 10, tell_flux_lr - 1.1, label='Tellurics', lw=0.8, color='indigo', alpha=0.8)
                 
                 # Gas Cell
                 if 'gas_cell' in self.models_dict and self.models_dict['gas_cell'].enabled:
-                    gas_flux_hr = self.models_dict['gas_cell'].build(pars, templates_dict_chunked['gas_cell'], templates_dict_chunked['star'][:, 0])
+                    gas_flux_hr = self.models_dict['gas_cell'].build(pars, templates_dict_chunked['gas_cell'], self.model_wave)
                     gas_cell_convolved = self.models_dict['lsf'].convolve_flux(gas_flux_hr, lsf=lsf)
-                    gas_flux_lr = np.interp(wave_data, templates_dict_chunked['star'][:, 0], gas_cell_convolved, left=np.nan, right=np.nan)
+                    gas_flux_lr = np.interp(wave_data, self.model_wave, gas_cell_convolved, left=np.nan, right=np.nan)
                     axarr[ichunk].plot(wave_data / 10, gas_flux_lr - 1.1, label='Gas Cell', lw=0.8, color='green', alpha=0.8)
                 axarr[ichunk].set_ylim(-1.1, 1.1)
                 
                 # Residual lab flux
                 if 'residual_lab' in templates_dict:
                     res_hr = templates_dict['residual_lab'][:, 1]
-                    res_lr = np.interp(wave_data, templates_dict_chunked['star'][:, 0], res_hr, left=np.nan, right=np.nan)
+                    res_lr = np.interp(wave_data, self.model_wave, res_hr, left=np.nan, right=np.nan)
                     ax.plot(wave_data / 10, res_lr - 0.1, label='Lab Frame Coherence', lw=0.8, color='darkred', alpha=0.8)
                     
                 axarr[ichunk].legend(prop={'size': 8}, loc='lower right')
@@ -671,6 +661,8 @@ class ForwardModel:
             sregion = self.sregion_order
             
         templates_dict_chunked = copy.deepcopy(templates_dict)
+        
+        self.model_wave = np.arange(sregion.wavemin - 5, sregion.wavemax + 5, self.dl)
         
         # Init the models
         for model in self.models_dict:
@@ -872,27 +864,24 @@ class ForwardModel:
     
     def build_full(self, pars, templates_dict):
         
-        # A final wave grid
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
         # Init a model
-        model = np.ones_like(final_hr_wave_grid)
+        model = np.ones_like(self.model_wave)
 
         # Star
         if 'star' in self.models_dict and self.models_dict['star'].enabled:
-            model *= self.models_dict['star'].build(pars, templates_dict['star'], final_hr_wave_grid)
+            model *= self.models_dict['star'].build(pars, templates_dict['star'], self.model_wave)
         
         # Gas Cell
         if 'gas_cell' in self.models_dict and self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
+            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], self.model_wave)
             
         # All tellurics
         if 'tellurics' in self.models_dict and self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], self.model_wave)
         
         # Fringing from who knows what
         if 'fringing' in self.models_dict and self.models_dict['fringing'].enabled:
-            model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
+            model *= self.models_dict['fringing'].build(pars, self.model_wave)
             
         # Convolve
         if 'lsf' in self.models_dict and self.models_dict['lsf'].enabled:
@@ -903,7 +892,7 @@ class ForwardModel:
             
         # Continuum
         if 'continuum' in self.models_dict and self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
+            model *= self.models_dict['continuum'].build(pars, self.model_wave)
         
         # Residual lab flux
         if 'residual_lab' in templates_dict:
@@ -913,7 +902,7 @@ class ForwardModel:
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
+        model_lr = np.interp(wavelength_solution, self.model_wave, model, left=np.nan, right=np.nan)
         
         if self.debug:
             breakpoint()
@@ -923,27 +912,24 @@ class ForwardModel:
     # Returns the high res model on the fiducial grid with no stellar template and the low res wavelength solution
     def build_hr_nostar(self, pars, templates_dict):
         
-        # A final wave grid
-        final_hr_wave_grid = templates_dict['star'][:, 0]
-        
         # Init a model
-        model = np.ones_like(final_hr_wave_grid)
+        model = np.ones_like(self.model_wave)
         
         # Gas Cell
         if 'gas_cell' in self.models_dict and self.models_dict['gas_cell'].enabled:
-            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], final_hr_wave_grid)
+            model *= self.models_dict['gas_cell'].build(pars, templates_dict['gas_cell'], self.model_wave)
             
         # All tellurics
         if 'tellurics' in self.models_dict and self.models_dict['tellurics'].enabled:
-            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], final_hr_wave_grid)
+            model *= self.models_dict['tellurics'].build(pars, templates_dict['tellurics'], self.model_wave)
         
         # Fringing from who knows what
         if 'fringing' in self.models_dict and self.models_dict['fringing'].enabled:
-            model *= self.models_dict['fringing'].build(pars, final_hr_wave_grid)
+            model *= self.models_dict['fringing'].build(pars, self.model_wave)
             
         # Continuum
         if 'continuum' in self.models_dict and self.models_dict['continuum'].enabled:
-            model *= self.models_dict['continuum'].build(pars, final_hr_wave_grid)
+            model *= self.models_dict['continuum'].build(pars, self.model_wave)
         
         # Residual lab flux
         if 'residual_lab' in templates_dict:
@@ -953,7 +939,7 @@ class ForwardModel:
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, final_hr_wave_grid, model, left=np.nan, right=np.nan)
+        model_lr = np.interp(wavelength_solution, self.model_wave, model, left=np.nan, right=np.nan)
         
         if self.debug:
             breakpoint()

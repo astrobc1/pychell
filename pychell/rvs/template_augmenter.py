@@ -333,12 +333,11 @@ def weighted_median(forward_models, iter_index=None):
     # Augment the template
     new_flux = current_stellar_template[:, 1] + residuals_median
     ng = np.sum(np.isfinite(residuals_hr))
-    med_rms = np.nanmedian(np.sqrt(np.nansum(residuals_hr**2) / ng))
+    
     # Force the max to be less than 1 + sigma.
-    max_val = 1 + med_rms
-    locs = np.where(new_flux > max_val)[0]
+    locs = np.where(new_flux > 1)[0]
     if locs.size > 0:
-        new_flux[locs] = max_val
+        new_flux[locs] = 1
         
     forward_models.templates_dict['star'][:, 1] = new_flux
 
