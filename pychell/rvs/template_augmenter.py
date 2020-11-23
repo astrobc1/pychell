@@ -116,7 +116,8 @@ def cubic_spline_lsq(forward_models, iter_index=None):
             tell_weights = tell_flux_lrc**2
             
             # Almost final weights
-            tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk] * tell_weights).tolist()
+            #tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk] * tell_weights).tolist()
+            tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk]).tolist()
 
     # Loop over spectra and also weight spectra according to the barycenter sampling
     # Here we explicitly use a multiplicative combination of weights.
@@ -229,6 +230,10 @@ def weighted_median(forward_models, iter_index=None):
     bad = np.where(~np.isfinite(fit_weights))[0]
     if good.size == 0:
         fit_weights = np.ones(shape=(forward_models.n_spec, forward_models.n_chunks))
+    else:
+        ss = np.argsort(fit_weights)
+        nflag = int(forward_models.n_spec / 20)
+        fit_weights[ss[-nflag:]] = 0
     
     # Unpack bc vels
     bc_vels = np.array([fwm.data.bc_vel for fwm in forward_models])
