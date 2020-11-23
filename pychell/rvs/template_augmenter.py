@@ -182,7 +182,7 @@ def cubic_spline_lsq(forward_models, iter_index=None):
     bad = np.where(new_flux > 1)[0]
     if bad.size > 0:
         new_flux[bad] = 1
-
+    
     forward_models.templates_dict['star'][:, 1] = new_flux
     
 
@@ -255,9 +255,10 @@ def weighted_median(forward_models, iter_index=None):
 
             # Shift to a pseudo rest frame. All must start from same frame
             if forward_models[ispec].models_dict['star'].from_synthetic:
-                wave_star_rest = pcmath.doppler_shift(wave_data, -1 * pars[fwm.models_dict['star'].par_names[0]].value, flux=None, wave_out=None, interp=None)
+                vel_offset = -1 * pars[fwm.models_dict['star'].par_names[0]].value
             else:
-                wave_star_rest = pcmath.doppler_shift(wave_data, bc_vels[ispec], flux=None, wave_out=None, interp=None)
+                vel_offset = bc_vels[ispec]
+            wave_star_rest = pcmath.doppler_shift(wave_data, vel_offset, flux=None, wave_out=None, interp=None)
             
             # HR residuals
             good = np.where(np.isfinite(wave_star_rest) & np.isfinite(residuals_lr))[0]
@@ -274,7 +275,8 @@ def weighted_median(forward_models, iter_index=None):
             # Telluric weights
             tell_flux_hr = fwm.models_dict['tellurics'].build(pars, templates_dict_chunked['tellurics'], current_stellar_template[:, 0])
             tell_flux_hrc = fwm.models_dict['lsf'].convolve_flux(tell_flux_hr, pars=pars)
-            tell_weights = tell_flux_hrc**2
+            tell_flux_hr_shifted = pcmath.doppler_shift(current_stellar_template[:, 0], vel_offset, flux=tell_flux_hrc, wave_out=None, interp=None)
+            tell_weights = tell_flux_hr_shifted**4
         
             # HR Mask
             mask_hr = np.interp(star_wave_master_hr, wave_star_rest, fwm.data.mask[sregion.data_inds], left=0, right=0)
@@ -283,7 +285,7 @@ def weighted_median(forward_models, iter_index=None):
                 mask_hr[bad] = 0
         
             # Almost final weights
-            tot_weights_hr[ispec, ichunk, :] = mask_hr * fit_weights[ispec, ichunk] * tell_weights
+            tot_weights_hr[ispec, ichunk, :] = mask_hr * fit_weights[ispec, ichunk] # * tell_weights
 
     # Loop over spectra and also weight spectra according to the barycenter sampling
     # Here we explicitly use a multiplicative combination of weights.
@@ -332,9 +334,8 @@ def weighted_median(forward_models, iter_index=None):
 
     # Augment the template
     new_flux = current_stellar_template[:, 1] + residuals_median
-    ng = np.sum(np.isfinite(residuals_hr))
     
-    # Force the max to be less than 1 + sigma.
+    # Force the max to be less than 1
     locs = np.where(new_flux > 1)[0]
     if locs.size > 0:
         new_flux[locs] = 1
