@@ -763,9 +763,9 @@ class TelluricsTAPAS(Tellurics):
             forward_model.initial_parameters[self.par_names[0]].vary = False
     
     def flag_tellurics(self, forward_model, templates_dict):
-        tell_flux_hr = self.build(forward_model.initial_parameters, templates_dict["tellurics"], templates_dict["star"][:, 0])
+        tell_flux_hr = self.build(forward_model.initial_parameters, templates_dict["tellurics"], forward_model.model_wave)
         wave_data = forward_model.models_dict["wavelength_solution"].build(forward_model.initial_parameters)
-        tell_flux_lr = np.interp(wave_data, templates_dict["star"][:, 0], tell_flux_hr, left=np.nan, right=np.nan)
+        tell_flux_lr = np.interp(wave_data, forward_model.model_wave, tell_flux_hr, left=np.nan, right=np.nan)
         tell_flux_lr / pcmath.weighted_median(tell_flux_lr, percentile=0.999)
         bad = np.where(tell_flux_lr < 1 - self.thresh)[0]
         if bad.size > 0:

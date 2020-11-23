@@ -233,7 +233,7 @@ def weighted_median(forward_models, iter_index=None):
     else:
         ss = np.argsort(fit_weights)
         nflag = int(forward_models.n_spec / 20)
-        fit_weights[ss[-nflag:]] = 0
+        fit_weights[ss[0:nflag]] = 0
     
     # Unpack bc vels
     bc_vels = np.array([fwm.data.bc_vel for fwm in forward_models])
