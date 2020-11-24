@@ -120,12 +120,12 @@ forward_model_blueprints = {
         'flag_thresh': [0.05, 0.5], # below this level of norm flux is flagged
         'flag_and_ignore': 0,
         'input_files': {
-            'water': 'telluric_water_tapas_ctio.npz',
-            'methane': 'telluric_methane_tapas_ctio.npz',
-            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_ctio.npz',
-            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_ctio.npz',
-            'oxygen' : 'telluric_oxygen_tapas_ctio.npz',
-            'ozone': 'telluric_ozone_tapas_ctio.npz'
+            'water': 'telluric_water_tapas_maunakea.npz',
+            'methane': 'telluric_methane_tapas_maunakea.npz',
+            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_maunakea.npz',
+            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_maunakea.npz',
+            'oxygen' : 'telluric_oxygen_tapas_maunakea.npz',
+            'ozone': 'telluric_ozone_tapas_maunakea.npz'
         }
     },
     

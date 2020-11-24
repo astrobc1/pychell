@@ -31,45 +31,43 @@ def rms_loss_creator(func):
     
     def _rms_loss(pars, x, data):
         model = func(x, *pars)
-        good = np.where(np.isfinite(model) & np.isfinite(data))[0]
-        rms = np.sqrt(np.nansum((data[good] - model[good])**2) / good.size)
-        return rms
+        return rmsloss(x, data)
     
     return _rms_loss
 
-def rmsloss(x, y, weights=None, flag_worst=None, remove_edges=0):
+def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
+    
+    # Good indices
+    good = np.where((weights > 0) & np.isfinite(y))[0]
     
     # Compute squared diffs
+    diffs2 = (x[good] - y[good])**2
+    
+    # Apply weights
     if weights is not None:
-        diffs2 = (x - y)**2 * weights
-    else:
-        diffs2 = (x - y)**2
+        diffs2 *= weights[good]
+        norm = np.copy(weights[good])
     
     # Ignore worst N pixels
-    if flag_worst is not None:
+    if flag_worst > 0:
         ss = np.argsort(diffs2)
-        if weights is not None:
-            weights[ss[-1*flag_worst:]] = 0
         diffs2[ss[-1*flag_worst:]] = np.nan
+        if weights is not None:
+            norm[ss[-1*flag_worst:]] = 0
                 
-    if weights is None:
-        good = np.where(np.isfinite(diffs2))[0]
-        ng = good.size
-        if remove_edges > 0:
-            diffs2[good[0:remove_edges]] = 0
-            diffs2[good[-remove_edges:]] = 0
-            ng -= 2 * remove_edges
-        return np.sqrt(np.nansum(diffs2) / ng)
+    # Remove edges
+    if remove_edges > 0:
+        diffs2[0:remove_edges] = 0
+        diffs2[-remove_edges:] = 0
+        
+    # Compute rms
+    if weights is not None:
+        _rms = np.sqrt(np.nansum(diffs2) / np.nansum(norm))
     else:
-        good = np.where((weights > 0) & np.isfinite(diffs2))[0]
-        ng = good.size
-        if remove_edges > 0:
-            diffs2[good[0:remove_edges]] = 0
-            diffs2[good[-remove_edges:]] = 0
-            weights[good[0:remove_edges]] = 0
-            weights[good[-remove_edges:]] = 0
-            ng -= 2 * remove_edges
-        return np.sqrt(np.nansum(diffs2[good]) / np.nansum(weights[good]))
+        ng = np.where(np.isfinite(diffs2))[0].size
+        _rms = np.sqrt(np.nansum(diffs2) / ng)
+
+    return _rms
 
 def measure_fwhm(x, y):
     

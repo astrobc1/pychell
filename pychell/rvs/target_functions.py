@@ -47,7 +47,7 @@ def weighted_rms(gp, forward_model, templates_dict, sregion):
 
     # Weights are just bad pixels
     weights = forward_model.data.mask_chunk / forward_model.data.flux_unc_chunk**2
-    
+
     # Compute rms ignoring bad pixels
     rms = pcmath.rmsloss(forward_model.data.flux_chunk, model_lr, weights=weights, flag_worst=forward_model.flag_n_worst_pixels, remove_edges=6)
     cons = np.nanmin(forward_model.models_dict['lsf'].build(gp))

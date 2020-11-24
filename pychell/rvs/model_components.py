@@ -182,7 +182,12 @@ class TemplateMult(MultModelComponent):
             self.input_file = forward_model.templates_path + blueprint['input_file']
         else:
             self.input_file = None
-            
+    
+    def template_yrange(self, forward_model, wave, flux, sregion):
+        good = sregion.wave_within(wave)
+        max_range = np.max(flux[good]) - np.min(flux[good])
+        return max_range
+    
     def normalize_template(self, forward_model, wave, flux, uniform=False):
         
         if not uniform:
@@ -200,19 +205,14 @@ class TemplateMult(MultModelComponent):
             flux_conv = flux_lin
 
         data_continuum = pcmath.weighted_median(flux_conv, percentile=0.999)
-        flux /= data_continuum
+        flux = flux / data_continuum
         
         return flux
-    
-    def template_yrange(self, forward_model, wave, flux, sregion):
-        good = sregion.wave_within(wave)
-        max_range = np.max(flux[good]) - np.min(flux[good])
-        return max_range
     
     def init_chunk(self, forward_model, templates_dict, sregion, pad=1):
         good = sregion.wave_within(templates_dict[self.key][:, 0], pad=pad)
         templates_dict[self.key] = templates_dict[self.key][good, :]
-        templates_dict[self.key][:, 1] = self.normalize_template(forward_model, templates_dict[self.key][:, 0], templates_dict[self.key][:, 1], uniform=False)
+        templates_dict[self.key][:, 1] = templates_dict[self.key][:, 1] / np.nanmax(templates_dict[self.key][:, 1])
 
 #### Continuum ####
 class ContinuumModel(EmpiricalMult):
@@ -543,7 +543,7 @@ class Star(TemplateMult):
         pad = 15
         good = sregion.wave_within(templates_dict[self.key][:, 0], pad=pad)
         templates_dict[self.key] = templates_dict[self.key][good, :]
-        templates_dict[self.key][:, 1] = self.normalize_template(forward_model, templates_dict[self.key][:, 0], templates_dict[self.key][:, 1], uniform=False)
+        templates_dict[self.key][:, 1] = templates_dict[self.key][:, 1] / np.nanmax(templates_dict[self.key][:, 1])
 
 class AugmentedStar(Star):
     """ A star model which did not start from a synthetic template.
@@ -630,15 +630,16 @@ class TelluricsTAPAS(Tellurics):
         vel = pars[self.par_names[0]].value
         flux = np.ones(templates[:, 0].size)
         if self.water_enabled:
-            flux *= self.build_component(pars, templates, 'water', wave_final)
+            flux *= self.build_component(pars, templates, 'water')
         if self.airmass_enabled:
-            flux *= self.build_component(pars, templates, 'airmass', wave_final)
-        flux = np.interp(wave_final, templates[:, 0], flux, left=np.nan, right=np.nan)
+            flux *= self.build_component(pars, templates, 'airmass')
         if vel != 0:
-            flux = pcmath.doppler_shift(wave_final, vel=vel, flux=flux, interp='linear')
+            flux = pcmath.doppler_shift(templates[:, 0], wave_out=wave_final, vel=vel, flux=flux, interp='linear')
+        else:
+            flux = np.interp(wave_final, templates[:, 0], flux, left=np.nan, right=np.nan)
         return flux
 
-    def build_component(self, pars, templates, component, wave_final):
+    def build_component(self, pars, templates, component):
         wave = templates[:, 0]
         if component == 'water':
             depth = pars[self.par_names[1]].value
@@ -662,6 +663,7 @@ class TelluricsTAPAS(Tellurics):
     def load_template(self, forward_model):
         print('Loading in Telluric Templates', flush=True)
         pad = 5
+        
         # Water
         water = np.load(forward_model.templates_path + self.species_input_files['water'])
         wave, flux = water['wave'], water['flux']
@@ -688,12 +690,13 @@ class TelluricsTAPAS(Tellurics):
         return templates
     
     def init_chunk(self, forward_model, templates_dict, sregion):
-        pad = 15
+        
+        pad = 1
         good = sregion.wave_within(templates_dict[self.key][:, 0], pad=pad)
         templates_dict[self.key] = templates_dict[self.key][good, :]
-        templates_dict[self.key][:, 1] = self.normalize_template(forward_model, templates_dict[self.key][:, 0], templates_dict[self.key][:, 1], uniform=False)
-        templates_dict[self.key][:, 2] = self.normalize_template(forward_model, templates_dict[self.key][:, 0], templates_dict[self.key][:, 2], uniform=False)
-
+        templates_dict[self.key][:, 1] = templates_dict[self.key][:, 1] / np.nanmax(templates_dict[self.key][:, 1])
+        templates_dict[self.key][:, 2] = templates_dict[self.key][:, 2] / np.nanmax(templates_dict[self.key][:, 2])
+        
         # Check the depth range of the templates
         yrange_water = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 1], sregion)
         yrange_airmass = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 2],  sregion)
@@ -720,6 +723,7 @@ class TelluricsTAPAS(Tellurics):
         # Check the depth range of the templates
         yrange_water = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 1], forward_model.sregion_order)
         yrange_airmass = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 2], forward_model.sregion_order)
+        
         if yrange_water > self.flag_thresh[0]:
             self.has_water_features = True
             self.enable(forward_model, "water")
@@ -806,15 +810,16 @@ class LSF(SpectralComponent):
         return delta
 
     # Convolves the flux
-    def convolve_flux(self, raw_flux, pars=None, lsf=None):
+    def convolve_flux(self, raw_flux, pars=None, lsf=None, interp=False):
         if lsf is None and pars is None:
             raise ValueError("Cannot construct LSF with no parameters")
         if not self.enabled:
             return raw_flux
         if lsf is None:
             lsf = self.build(pars)
-        convolved_flux = pcmath.convolve_flux(None, raw_flux, R=None, width=None, interp=False, lsf=lsf, croplsf=False)
+        convolved_flux = pcmath.convolve_flux(None, raw_flux, R=None, width=None, interp=interp, lsf=lsf, croplsf=False)
         #convolved_flux = pcmath._convolve(raw_flux, lsf)
+
         return convolved_flux
         
     def init_optimize(self, forward_model, templates_dict):

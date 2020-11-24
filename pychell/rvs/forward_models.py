@@ -565,6 +565,7 @@ class ForwardModel:
         dpi = 200
         fig, axarr = plt.subplots(self.n_chunks, 1, figsize=(int(plot_width / dpi), int(self.n_chunks * plot_height / dpi)), dpi=dpi, constrained_layout=True)
         axarr = np.atleast_1d(axarr)
+        
             
         for ichunk, sregion in enumerate(self.chunk_regions):
             
@@ -583,7 +584,8 @@ class ForwardModel:
             # Define some helpful indices
             good = np.where(self.data.mask_chunk == 1)[0]
             bad = np.where(self.data.mask_chunk == 0)[0]
-            bad_data_locs = np.argsort(np.abs(residuals[good]))[-1*self.flag_n_worst_pixels:]
+            if self.flag_n_worst_pixels > 0:
+                bad_data_locs = np.argsort(np.abs(residuals[good]))[-1*self.flag_n_worst_pixels:]
         
             # Left and right padding
             pad = 0.01 * sregion.wave_len()
@@ -601,7 +603,8 @@ class ForwardModel:
             axarr[ichunk].plot(wave_data[good] / 10, residuals[good], color=(255/255, 169/255, 22/255), lw=0.8)
             
             # The worst N pixels that were flagged
-            axarr[ichunk].plot(wave_data[good][bad_data_locs] / 10, residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
+            if self.flag_n_worst_pixels > 0:
+                axarr[ichunk].plot(wave_data[good][bad_data_locs] / 10, residuals[good][bad_data_locs], color='darkred', marker='X', lw=0)
             
             # Plot the convolved low res templates for debugging 
             # Plots the star and tellurics by default. Plots gas cell if present.
@@ -667,7 +670,7 @@ class ForwardModel:
         # Init the models
         for model in self.models_dict:
             self.models_dict[model].init_chunk(self, templates_dict_chunked, sregion)
-            
+
         try:
             p0_copy = copy.deepcopy(self.initial_parameters)
             self.initial_parameters = self.opt_results[-2][sregion.label]['xbest']
@@ -888,7 +891,7 @@ class ForwardModel:
             model[:] = self.models_dict['lsf'].convolve_flux(model, pars)
             
             # Renormalize model to remove degeneracy between blaze and lsf
-            model /= pcmath.weighted_median(model, percentile=0.999)
+            model /= np.nanmax(model)
             
         # Continuum
         if 'continuum' in self.models_dict and self.models_dict['continuum'].enabled:
