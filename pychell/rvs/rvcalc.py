@@ -115,8 +115,9 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         
         # Shift the stellar weights instead of recomputing the rv content.
         star_weights_shifted = pcmath.doppler_shift(templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='linear', wave_out=wave_lr)
-        tell_weights = forward_model.models_dict['tellurics'].build(pars, templates_dict['tellurics'], wave_lr)
-        weights *= star_weights_shifted
+        tell_flux_lr = forward_model.models_dict['tellurics'].build(pars, templates_dict['tellurics'], wave_lr)
+        tell_weights = tell_flux_lr**2
+        weights *= (star_weights_shifted * tell_weights)
         
         # Construct the RMS
         rmss[i] = pcmath.rmsloss(forward_model.data.flux_chunk, model_lr, weights=weights)
