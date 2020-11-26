@@ -539,7 +539,7 @@ class ForwardModel:
             if not self.models_dict[mname].enabled:
                 continue
             # Print the model string
-            print(self.models_dict[mname])
+            print(self.models_dict[mname], flush=True)
             # Sub loop over per model parameters
             for pname in self.models_dict[mname].par_names:
                 print('    ', end='', flush=True)

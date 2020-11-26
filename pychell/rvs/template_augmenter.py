@@ -105,19 +105,20 @@ def cubic_spline_lsq(forward_models, iter_index=None):
 
             # Shift to a pseudo rest frame. All must start from same frame
             if fwm.models_dict['star'].from_synthetic:
-                wave_star_rest += pcmath.doppler_shift(wave_data, -1 * pars[fwm.models_dict['star'].par_names[0]].value, flux=None, wave_out=None, interp=None).tolist()
+                vel = -1 * pars[fwm.models_dict['star'].par_names[0]].value
             else:
-                wave_star_rest += pcmath.doppler_shift(wave_data, bc_vels[ispec], flux=None, wave_out=None, interp=None).tolist()
+                vel = bc_vels[ispec]
+            wave_star_rest += pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None).tolist()
 
             # Telluric weights
             tell_flux_hr = fwm.models_dict['tellurics'].build(pars, templates_dict_chunked['tellurics'], current_stellar_template[:, 0])
-            tell_flux_hrc = fwm.models_dict['lsf'].convolve_flux(tell_flux_hr, pars=pars)
-            tell_flux_lrc = np.interp(wave_data, current_stellar_template[:, 0], tell_flux_hrc, left=np.nan, right=np.nan)
-            tell_weights = tell_flux_lrc**2
+            tell_flux_hr_shifted = pcmath.doppler_shift(current_stellar_template[:, 0], vel, flux=tell_flux_hr)
+            tell_flux_lr = np.interp(wave_data, current_stellar_template[:, 0], tell_flux_hr, left=np.nan, right=np.nan)
+            tell_weights = tell_flux_lr**4
             
             # Almost final weights
-            #tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk] * tell_weights).tolist()
-            tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk]).tolist()
+            tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk] * tell_weights).tolist()
+            #tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk]).tolist()
 
     # Loop over spectra and also weight spectra according to the barycenter sampling
     # Here we explicitly use a multiplicative combination of weights.
@@ -279,9 +280,9 @@ def weighted_median(forward_models, iter_index=None):
 
             # Telluric weights
             tell_flux_hr = fwm.models_dict['tellurics'].build(pars, templates_dict_chunked['tellurics'], current_stellar_template[:, 0])
-            tell_flux_hrc = fwm.models_dict['lsf'].convolve_flux(tell_flux_hr, pars=pars)
-            tell_flux_hr_shifted = pcmath.doppler_shift(current_stellar_template[:, 0], vel_offset, flux=tell_flux_hrc, wave_out=None, interp=None)
-            tell_weights = tell_flux_hr_shifted**4
+            tell_flux_hr_shifted = pcmath.doppler_shift(current_stellar_template[:, 0], vel, flux=tell_flux_hr)
+            tell_flux_lr = np.interp(wave_data, current_stellar_template[:, 0], tell_flux_hr, left=np.nan, right=np.nan)
+            tell_weights = tell_flux_lr**4
         
             # HR Mask
             mask_hr = np.interp(star_wave_master_hr, wave_star_rest, fwm.data.mask[sregion.data_inds], left=0, right=0)
