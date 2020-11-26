@@ -115,6 +115,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         
         # Shift the stellar weights instead of recomputing the rv content.
         star_weights_shifted = pcmath.doppler_shift(templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='linear', wave_out=wave_lr)
+        tell_weights = forward_model.models_dict['tellurics'].build(pars, templates_dict['tellurics'], wave_lr)
         weights *= star_weights_shifted
         
         # Construct the RMS
@@ -146,6 +147,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         bspan_result = (np.nan, np.nan)
         
     ccf_result = {'rv': xcorr_rv, 'rv_unc': xcorr_rv_unc, 'bis': bspan_result[1], 'vels': vels_for_rv, 'ccf': rmss}
+
     return ccf_result
 
 # Super silly and crude but moderately sensible.

@@ -38,7 +38,10 @@ def rms_loss_creator(func):
 def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
     
     # Good indices
-    good = np.where((weights > 0) & np.isfinite(y))[0]
+    if weights is not None:
+        good = np.where((weights > 0) & np.isfinite(y))[0]
+    else:
+        good = np.where(np.isfinite(y))[0]
     
     # Compute squared diffs
     diffs2 = (x[good] - y[good])**2
