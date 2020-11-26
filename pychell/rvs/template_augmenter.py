@@ -261,10 +261,10 @@ def weighted_median(forward_models, iter_index=None):
 
             # Shift to a pseudo rest frame. All must start from same frame
             if forward_models[ispec].models_dict['star'].from_synthetic:
-                vel_offset = -1 * pars[fwm.models_dict['star'].par_names[0]].value
+                vel = -1 * pars[fwm.models_dict['star'].par_names[0]].value
             else:
-                vel_offset = bc_vels[ispec]
-            wave_star_rest = pcmath.doppler_shift(wave_data, vel_offset, flux=None, wave_out=None, interp=None)
+                vel = bc_vels[ispec]
+            wave_star_rest = pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None)
             
             # HR residuals
             good = np.where(np.isfinite(wave_star_rest) & np.isfinite(residuals_lr))[0]
