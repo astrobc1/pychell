@@ -115,9 +115,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         
         # Shift the stellar weights instead of recomputing the rv content.
         star_weights_shifted = pcmath.doppler_shift(templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='linear', wave_out=wave_lr)
-        tell_flux_lr = forward_model.models_dict['tellurics'].build(pars, templates_dict['tellurics'], wave_lr)
-        tell_weights = tell_flux_lr**2
-        weights *= (star_weights_shifted * tell_weights)
+        weights *= star_weights_shifted
         
         # Construct the RMS
         rmss[i] = pcmath.rmsloss(forward_model.data.flux_chunk, model_lr, weights=weights)
@@ -130,12 +128,14 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
     # Fit with a polynomial
     # Include 3 points on each side of min vel
     use = np.arange(M-3, M+3).astype(int)
+
     try:
         pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
         xcorr_rv = pfit[1] / (-2 * pfit[0])
     
         # Estimate uncertainty
-        xcorr_rv_unc = ccf_uncertainty(vels_for_rv, rmss, xcorr_rv_init, forward_model.data.mask_chunk.sum())
+        #xcorr_rv_unc = ccf_uncertainty(vels_for_rv, rmss, xcorr_rv_init, forward_model.data.mask_chunk.sum())
+        xcorr_rv_unc = np.nan
     except:
         xcorr_rv = np.nan
         xcorr_rv_unc = np.nan
@@ -146,7 +146,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         bspan_result = compute_bisector_span(vels_for_rv, rmss, xcorr_rv, n_bs=forward_model.xcorr_options['n_bs'])
     except:
         bspan_result = (np.nan, np.nan)
-        
+
     ccf_result = {'rv': xcorr_rv, 'rv_unc': xcorr_rv_unc, 'bis': bspan_result[1], 'vels': vels_for_rv, 'ccf': rmss}
 
     return ccf_result
