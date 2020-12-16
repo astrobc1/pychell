@@ -67,7 +67,7 @@ forward_model_blueprints = {
         'name': 'continuum', # The blaze model after a division from a flat field
         'class': 'SplineContinuum',
         'n_splines': 10,
-        'spline': [0.9, 0.99, 1.1],
+        'spline': [0.3, 0.99, 1.1],
         'poly_2': [-1E-7, -1E-6, 1E-7],
         'poly_1': [-1E-6, 1E-5, 1E-6],
         'poly_0': [0.99, 1, 1.01]

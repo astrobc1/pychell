@@ -106,9 +106,6 @@ def extract_full_image(data, config):
     # Loop over orders, possibly multi-trace
     for order_index, single_order_list in enumerate(orders_list):
         
-        if order_index != 0:
-            continue
-        
         stopwatch.lap(order_index)
         print('  Extracting Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' ...')
         
@@ -495,6 +492,8 @@ def flag_bad_pixels(trace_image, current_spectrum, y_positions, trace_profile_cs
     ng = np.where(np.isfinite(deviations_smooth))[0].size
     rms = np.sqrt(np.nansum(deviations_smooth**2) / ng)
     bad = np.where(np.abs(deviations) > nsig*rms)
+
+    ax.plot(bad[0], bad[1], bad[2], color='red', marker='o', markersize=5, alpha=0.6)
     if bad[0].size > 0:
         badpix_maskcp[bad] = 0
     
@@ -1389,6 +1388,8 @@ def estimate_trace_profile(trace_image, y_positions, height, M=16, mask_edges=No
     max_pos, max_val = estimate_trace_max(cspline)
 
     cspline = scipy.interpolate.CubicSpline(cspline.x - max_pos, cspline(cspline.x) / max_val, extrapolate=False, bc_type='natural')
+    # plt.figure(figsize=(10, 6)); plt.imshow(trace_image_smooth[:, 500:800]); plt.ylim(825, 725); plt.tight_layout(); plt.show()
+    # plt.figure(figsize=(10, 6)); plt.imshow(trace_image_smooth_rectified[:, 500:800]); plt.tight_layout(); plt.show()
 
     return cspline
 
