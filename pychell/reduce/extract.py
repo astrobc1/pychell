@@ -109,6 +109,9 @@ def extract_full_image(data, config):
         stopwatch.lap(order_index)
         print('  Extracting Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' ...')
         
+        if order_index != 11:
+            continue
+        
         # Orders are composed of multiple traces
         if len(single_order_list) > 1:
             
@@ -227,7 +230,7 @@ def extract_single_trace(data, data_image, trace_map_image, trace_dict, config, 
         y_positions_refined = y_positions_estimate
         trace_profile_cspline = trace_profile_cspline_estimate
     
-    #breakpoint()
+  
     ###########################
     ##### Sky Subtraction #####
     ###########################
@@ -493,7 +496,6 @@ def flag_bad_pixels(trace_image, current_spectrum, y_positions, trace_profile_cs
     rms = np.sqrt(np.nansum(deviations_smooth**2) / ng)
     bad = np.where(np.abs(deviations) > nsig*rms)
 
-    ax.plot(bad[0], bad[1], bad[2], color='red', marker='o', markersize=5, alpha=0.6)
     if bad[0].size > 0:
         badpix_maskcp[bad] = 0
     

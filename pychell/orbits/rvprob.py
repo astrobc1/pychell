@@ -13,6 +13,19 @@ import copy
 import pychell.orbits.rvmodels as pcrvmodels
 plt.style.use("gadfly_stylesheet")
 
+plotly_colors = [
+    '#1f77b4',  # muted blue
+    '#ff7f0e',  # safety orange
+    '#2ca02c',  # cooked asparagus green
+    '#d62728',  # brick red
+    '#9467bd',  # muted purple
+    '#8c564b',  # chestnut brown
+    '#e377c2',  # raspberry yogurt pink
+    '#7f7f7f',  # middle gray
+    '#bcbd22',  # curry yellow-green
+    '#17becf'   # blue-teal
+]
+
 class ExoProblem(optframeworks.OptProblem):
     
     planet_par_base_names = pcrvmodels.RVModel.planet_par_base_names
@@ -63,17 +76,13 @@ class ExoProblem(optframeworks.OptProblem):
             else:
                 residuals = like.residuals_before_kernel(pars)
             
-            # Compute the data with only the planet
-            mod_data = like.model.data_only_planet(pars, planet_index)
-            
             # Compute error bars
             errors = like.model.kernel.compute_data_errors(pars)
             
             # Loop over instruments and plot each
             for data in like.data.values():
                 _errors = errors[like.model.data_inds[data.label]]
-                _data = mod_data[data.label]
-                #_data = residuals[like.model.data_inds[data.label]] + like.model.build_planet(pars, data.t, planet_index)
+                _data = residuals[like.model.data_inds[data.label]] + like.model.build_planet(pars, data.t, planet_index)
                 phases_data = self.get_phases(data.t, per, tc)
                 plt.errorbar(phases_data, _data, yerr=_errors, marker='o', lw=0, elinewidth=1, alpha=0.8, label=data.label)
 
@@ -123,13 +132,27 @@ class ExoProblem(optframeworks.OptProblem):
         # Use a different time grid for the gp since det(K)~ O(n^3)
         t_data_all = self.data.get_vec('t')
         t_start, t_end = np.nanmin(t_data_all), np.nanmax(t_data_all)
+        dt = t_end - t_start
         t_hr = np.linspace(t_start, t_end, num=n_model_pts)
         like0 = next(iter(self.scorer.values()))
         model_arr_hr = like0.model._builder(pars, t_hr)
         
+        # Plot the Model
+        if backend == 'pyplot':
+            axarr[0].plot(t_hr - time_offset, model_arr_hr, c='black', lw=1)
+        else:
+            fig.add_trace(plotly.graph_objects.Scatter(x=t_hr - time_offset, y=model_arr_hr, line=dict(color='black', width=2)), row=1, col=1)
+        
+        # Ad a zero line for the residuals
+        if backend == 'pyplot':
+            axarr[1].axhline(0, ls=':', alpha=0.5)
+        else:
+            fig.add_shape(type='line', x0=0, y0=0, x1=1, y1=0, line=dict(color='Black'), xref='paper', yref='paper', row=2, col=1)
+        
         # Loop over likes and:
         # 1. Create high res GP
         # 2. Plot high res GP and data
+        color_index = 0
         for like in self.scorer.values():
             
             # High res grid for this gp, smartly sampled
@@ -138,7 +161,7 @@ class ExoProblem(optframeworks.OptProblem):
             
             # Loop over all indices for this like
             for i in range(like.data_t.size):
-                t_hr_gp = np.concatenate((t_hr_gp, np.linspace(like.data_t[i] - 3, like.data_t[i] + 3, num=20)))
+                t_hr_gp = np.concatenate((t_hr_gp, np.linspace(like.data_t[i] - 5, like.data_t[i] + 5, num=30)))
             t_hr_gp = np.sort(t_hr_gp)
         
             # Create the high res GP and plot as well, separately
@@ -146,52 +169,38 @@ class ExoProblem(optframeworks.OptProblem):
             if like.model.has_gp:
                 residuals = like.residuals_before_kernel(pars)
                 gpmu, gpstddev = like.model.kernel.realize(pars, xpred=t_hr_gp, residuals=residuals, return_unc=True)
-
-            # Further loop over actual instruments and plot each
-            for data in like.data.values():
-                data_arr_offset = data.rv - pars['gamma_' + data.label].value
-                _errors = errors[like.model.data_inds[data.label]]
-                if backend == 'pyplot':
-                    axarr[0].errorbar(data.t - time_offset, data_arr_offset, yerr=_errors, marker='o', lw=0, elinewidth=1, alpha=0.8, label=data.label)
-                else:
-                    _yerr = dict(type='constant', array=_errors)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers'), row=1, col=1)
-
-            # Plot the model
-            if backend == 'pyplot':
-                axarr[0].plot(t_hr - time_offset, model_arr_hr, c='black', lw=1)
-                axarr[0].plot(t_hr_gp - time_offset, gpmu, c='red', lw=0.8)
-            else:
-                fig.add_trace(plotly.graph_objects.Scatter(x=t_hr - time_offset, y=model_arr_hr, line=dict(color='black', width=2)), row=1, col=1)
-                if like.model.has_gp:
-                    fig.add_trace(plotly.graph_objects.Scatter(x=t_hr_gp - time_offset, y=gpmu, line=dict(width=1)), row=1, col=1)
-        
-            # Now plot residuals
+                
+            # Compute residuals
             if like.model.has_gp:
                 residuals = like.residuals_after_kernel(pars)
             else:
                 residuals = like.residuals_before_kernel(pars)
-            
-            # Loop over actual instruments and plot each again
+
+            # Further loop over actual instruments and plot each with the model
+            # Also plot residuals
             for data in like.data.values():
+                data_arr_offset = data.rv - pars['gamma_' + data.label].value
                 _errors = errors[like.model.data_inds[data.label]]
                 _residuals = residuals[like.model.data_inds[data.label]]
                 if backend == 'pyplot':
-                    axarr[1].errorbar(data.t - time_offset, _residuals, yerr=_errors, marker='o', lw=0, elinewidth=1, alpha=0.8, label=data.label)
+                    axarr[0].errorbar(data.t - time_offset, data_arr_offset, yerr=_errors, marker='o', lw=0, elinewidth=1, alpha=0.8, label=data.label)
+                    axarr[1].errorbar(data.t - time_offset, _residuals, yerr=_errors, marker='o', lw=0, elinewidth=1, alpha=0.8)
                 else:
                     _yerr = dict(type='constant', array=_errors)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers'), row=2, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=plotly_colors[color_index])), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=plotly_colors[color_index]), showlegend=False), row=2, col=1)
+                    color_index += 1
+                    
+            # Plot the GP
+            if like.model.has_gp:
+                if backend == 'pyplot':
+                    axarr[0].plot(t_hr_gp - time_offset, gpmu, c='red', lw=0.8)
+                else:
+                    fig.add_trace(plotly.graph_objects.Scatter(x=t_hr_gp - time_offset, y=gpmu, line=dict(width=1), name=like.label), row=1, col=1)
                 
         # Add a legend
         if backend == 'pyplot':
             axarr[0].legend(loc='upper right')
-            
-        # Plot the residuals
-        # First plot a zero line
-        if backend == 'pyplot':
-            axarr[1].axhline(0, ls=':', alpha=0.5)
-        else:
-            fig.add_shape(type='line', x0=0, y0=0, x1=1, y1=0, line=dict(color='Black'), xref='paper', yref='paper')
         
         # Labels
         if backend == 'pyplot':
@@ -204,6 +213,14 @@ class ExoProblem(optframeworks.OptProblem):
             fig.update_yaxes(title_text='RVs [m/s]', row=1, col=1)
             fig.update_yaxes(title_text='Residual RVs [m/s]', row=2, col=1)
             fig.update_yaxes(title_text=self.star_name + ' RVs', row=1, col=1)
+            
+        # Limits
+        if backend == 'pyplot':
+            axarr[0].set_xlim(t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset)
+            axarr[1].set_xlim(t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset)
+        else:
+            fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=1, col=1)
+            fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=2, col=1)
         
         # Show or return
         if backend == 'pyplot':

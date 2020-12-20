@@ -29,7 +29,7 @@ class RVLikelihood(optscore.Likelihood):
                 return -np.inf
         else:
             lnL = 0
-            
+
         # Copy the rvs for this likelihood
         data_arr = np.copy(self.data_rv)
         
@@ -51,16 +51,16 @@ class RVLikelihood(optscore.Likelihood):
             # Reduce the cov matrix and solve for KX = residuals
             alpha = cho_solve(cho_factor(K), residuals)
 
-            # Compute the determinant of K
-            _, detK = np.linalg.slogdet(K)
+            # Compute the log determinant of K
+            _, lndetK = np.linalg.slogdet(K)
 
             # Compute the likelihood
             N = len(data_arr)
-            lnL += -0.5 * (np.dot(residuals, alpha) + detK + N * np.log(2 * np.pi))
+            lnL += -0.5 * (np.dot(residuals, alpha) + lndetK + N * np.log(2 * np.pi))
     
         except:
             # If things fail (matrix decomp) return -inf
-            return -np.inf
+            lnL = -np.inf
         
         # Return the final ln(L)
         return lnL
@@ -79,6 +79,23 @@ class RVLikelihood(optscore.Likelihood):
         data_arr = np.copy(self.data_rv)
         data_arr = self.model.apply_offsets(data_arr, pars)
         residuals = data_arr - model_arr
+        return residuals
+    
+    def residuals_after_kernel(self, pars):
+        """Computes the residuals after subtracting off the best fit noise kernel.
+
+        Args:
+            pars (Parameters): The parameters to use.
+
+        Returns:
+            np.ndarray: The residuals.
+        """
+        residuals = self.residuals_before_kernel(pars)
+        x_data = self.data.get_vec(key='x')
+        if self.model.has_gp:
+            for data in self.data.values():
+                gpmean = self.model.kernel.realize(pars, residuals, xpred=x_data, xres=x_data, return_unc=False)
+            residuals -= gpmean
         return residuals
     
     @property
