@@ -19,6 +19,7 @@ import optimize.kernels as optkernels
 import pychell.orbits.rvkernels as pcrvkernels
 import pychell.utils as pcutils
 PLOTLY_COLORS = pcutils.PLOTLY_COLORS
+import os
 import pychell
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
