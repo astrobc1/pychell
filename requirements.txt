@@ -13,4 +13,4 @@ joblib>=0.14.1
 scikit-learn>=0.22.2
 torch>=1.5.1
 streamlit>=0.73.1
-emece>=3.0.2
+emcee>=3.0.2
