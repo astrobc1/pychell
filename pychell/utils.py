@@ -1,18 +1,21 @@
 # Python default modules
 from functools import reduce
 import operator
+from string import ascii_lowercase
 import numpy as np
-from pdb import set_trace as stop
 import sys
 import time
 import traceback
 import pathlib
 import logging
 import pychell
+from itertools import chain, combinations
 from datetime import datetime
 import glob
 import os
 from google_drive_downloader import GoogleDriveDownloader as gdd
+
+PLOTLY_COLORS = ['steelblue', 'lightsalmon', 'grey', 'darkslateblue', 'olive', 'chocolate', 'slategrey', 'purple', 'honeydew', 'gainsboro', 'midnightblue', 'lightgreen', 'paleturquoise', 'sienna', 'greenyellow', 'aliceblue', 'lightblue', 'mediumpurple', 'indigo', 'cadetblue', 'wheat', 'olivedrab', 'salmon', 'seagreen', 'darkturquoise', 'lightcoral', 'cyan', 'mediumorchid', 'blue', 'mediumturquoise', 'goldenrod', 'peachpuff', 'peru', 'saddlebrown', 'rosybrown', 'silver', 'darkgreen', 'deepskyblue', 'mediumblue', 'tomato', 'darkorange', 'mediumseagreen', 'orange', 'lemonchiffon', 'powderblue', 'darkslategrey', 'mintcream', 'coral', 'tan', 'darkkhaki', 'firebrick', 'beige', 'violet', 'skyblue', 'palevioletred', 'lightsteelblue', 'turquoise', 'darkviolet', 'darkseagreen', 'lightyellow', 'green', 'bisque', 'khaki', 'mediumaquamarine', 'seashell', 'darkorchid', 'lightskyblue', 'darkolivegreen', 'yellow', 'darkslategray', 'springgreen', 'lightpink', 'darkred', 'sandybrown', 'darkgoldenrod', 'burlywood', 'blueviolet', 'linen', 'lightcyan', 'dodgerblue', 'mediumslateblue', 'indianred', 'forestgreen', 'mediumvioletred', 'plum', 'chartreuse', 'cornflowerblue', 'dimgrey', 'deeppink', 'lavenderblush', 'darkgray', 'moccasin', 'orangered', 'teal', 'maroon', 'mistyrose', 'palegreen', 'lime', 'hotpink', 'gold', 'darksalmon', 'lawngreen', 'brown', 'lightgoldenrodyellow', 'rebeccapurple', 'darkgrey', 'lightseagreen', 'aqua', 'royalblue', 'crimson', 'azure', 'mediumspringgreen', 'fuchsia', 'ivory', 'lightgrey', 'lavender', 'slateblue', 'dimgray', 'navy', 'oldlace', 'cornsilk', 'papayawhip', 'blanchedalmond', 'magenta', 'limegreen', 'orchid', 'thistle', 'yellowgreen', 'black', 'darkcyan', 'pink', 'darkmagenta', 'aquamarine', 'palegoldenrod', 'darkblue', 'red', 'lightgray']
 
 # Helpful timer
 class StopWatch:
@@ -160,3 +163,33 @@ def gendatestr(time=False):
     else:
         dt_string = now.strftime("%Y%m%d")
     return dt_string
+
+class SessionState:
+    """Session State for Streamlit.
+    """
+    
+    def __init__(self, **kwargs):
+        for key, val in kwargs.items():
+            setattr(self, key, val)
+        
+    def save(self, fname):
+        with open(fname, 'wb') as f:
+            pickle.dump(f)
+        
+    @staticmethod
+    def load(fname):
+        with open(fname, 'rb') as f:
+            d = pickle.load(f)
+        return d
+     
+def dict_diff(d1, d2):
+    out = {}
+    common_keys = set(d1) - set(d2)
+    for key in common_keys:
+        if key in d1:
+            out[key] = d1[key]
+    return out
+
+def powerset(iterable):
+    s = list(iterable)
+    return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))

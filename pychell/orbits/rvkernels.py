@@ -13,14 +13,14 @@ class RVColor(optkernels.GaussianProcess):
     def t(self):
         return self.x
     
-    def compute_cov_matrix(self, pars, apply_errors=True, instname=False):
+    def compute_cov_matrix(self, pars, apply_errors=True):
         
         # Alias params
         amp = pars[self.par_names[0]].value
-        exp_length = pars[self.par_names[0]].value
-        per = pars[self.par_names[0]].value
-        per_length = pars[self.par_names[0]].value
-        wave_scale = pars[self.par_names[0]].value
+        wave_scale = pars[self.par_names[1]].value
+        exp_length = pars[self.par_names[2]].value
+        per = pars[self.par_names[3]].value
+        per_length = pars[self.par_names[4]].value
         
         # Compute exp decay term
         decay_term = -0.5 * self.dist_matrix**2 / exp_length**2
@@ -40,7 +40,28 @@ class RVColor(optkernels.GaussianProcess):
         
         return cov_matrix
     
-    def compute_dist_matrix(self, x1=None, x2=None, wavelength=None):
+    def compute_data_errors(self, pars):
+        """Computes the errors added in quadrature for all datasets corresponding to this kernel.
+
+        Args:
+            pars (Parameters): The parameters to use.
+
+        Returns:
+            np.ndarray: The errors
+        """
+        if self.current_instname is not None:
+            errors = np.copy(self.data[self.current_instname].rverr)
+            errors **= 2
+            errors += pars['jitter_' + self.current_instname].value**2
+        else:
+            errors = self.get_data_errors()
+            errors **= 2
+            for label in self.data:
+                errors[self.data_inds[label]] += pars['jitter_' + label].value**2
+        errors **= 0.5
+        return errors
+    
+    def compute_dist_matrix(self, x1=None, x2=None, instname=None):
         """Computes the distance matrix.
 
         Args:
@@ -52,25 +73,27 @@ class RVColor(optkernels.GaussianProcess):
             x1 = self.t
         if x2 is None:
             x2 = self.t
+        self.current_instname = instname
         super().compute_dist_matrix(x1=x1, x2=x2)
-        self.compute_wave_matrix(x1, x2, wavelength=wavelength)
+        self.compute_wave_matrix(x1, x2, instname=instname)
         
-    def compute_wave_matrix(self, x1, x2, wavelength=None):
-        """Computes the wavelength matrix, 
+    def compute_wave_matrix(self, x1, x2, instname=None):
+        """Computes the wavelength matrix, sqrt(lambda_1 * lambda_2)
 
         Args:
             x1 (np.ndarray): The array of times for axis 1.
             x2 (np.ndarray): The array of times for axis 2.
             wavelength (float, optional): The wavelength of the instrument to use. If None (default), the full wavelength matrix is computed.
         """
-        if wavelength is None:
+        if instname is None:
             assert x1.size == x2.size
-            wave_vector = self.data.make_wave_vec()
+            wave_vector = self.make_wave_vec()
             self.wave_matrix = self.wavelength0 / np.sqrt(np.outer(wave_vector, wave_vector))
         else:
-            self.wave_matrix = np.full(shape=(x1.size, x2.size), fill_value=self.wavelength0 / (wavelength * wavelength)**0.5)
+            w = self.data[instname].wavelength
+            self.wave_matrix = np.full(shape=(x1.size, x2.size), fill_value=self.wavelength0 / (w * w)**0.5)
             
-    def realize(self, pars, residuals, xpred=None, xres=None, return_unc=False, wavelength=None, **kwargs):
+    def realize(self, pars, residuals, xpred=None, xres=None, return_unc=False, instname=None, **kwargs):
         """Realize the GP (sample at arbitrary points). Meant to be the same as the predict method offered by other codes.
 
         Args:
@@ -85,20 +108,21 @@ class RVColor(optkernels.GaussianProcess):
             np.ndarray OR tuple: If stddev is False, only the mean GP is returned. If stddev is True, the uncertainty in the GP is computed and returned as well. The mean GP is computed through a linear optimization (i.e, minimiation surface is purely concave or convex).
         """
         
-        # Resolve the grids to use.
+        # Resolve grids
         if xres is None:
-            xres = self.data.get_vec('x')
+            if instname is None:
+                xres = self.data.get_vec('x')
+            else:
+                xres = self.data[instname].t
         if xpred is None:
             xpred = xres
-            
-        # Resolve wavelength
         
         # Get K
-        self.compute_dist_matrix(xres, xres)
+        self.compute_dist_matrix(xres, xres, instname=instname)
         K = self.compute_cov_matrix(pars, apply_errors=True)
         
         # Compute version of K without errorbars
-        self.compute_dist_matrix(xpred, xres)
+        self.compute_dist_matrix(xpred, xres, instname=instname)
         Ks = self.compute_cov_matrix(pars, apply_errors=False)
 
         # Avoid overflow errors in det(K) by reducing the matrix.
@@ -108,11 +132,22 @@ class RVColor(optkernels.GaussianProcess):
 
         # Compute the uncertainty in the GP fitting.
         if return_unc:
-            self.compute_dist_matrix(xpred, xpred)
+            self.compute_dist_matrix(xpred, xpred, instname=instname)
             Kss = self.compute_cov_matrix(pars, apply_errors=False)
             B = cho_solve(L, Ks.T)
             var = np.array(np.diag(Kss - np.dot(Ks, B))).flatten()
             unc = np.sqrt(var)
+            self.current_instname = None
             return mu, unc
         else:
+            self.current_instname = None
             return mu
+        
+    def make_wave_vec(self):
+        wave_vec = np.array([], dtype=float)
+        x = self.data.get_vec('x', sort=False)
+        ss = np.argsort(x)
+        for data in self.data.values():
+            wave_vec = np.concatenate((wave_vec, np.full(data.t.size, fill_value=data.wavelength)))
+        wave_vec = wave_vec[ss]
+        return wave_vec

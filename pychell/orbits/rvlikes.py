@@ -65,7 +65,6 @@ class RVLikelihood(optscore.Likelihood):
         # Return the final ln(L)
         return lnL
     
-    
     def residuals_before_kernel(self, pars):
         """Computes the residuals without subtracting off the best fit noise kernel.
 
@@ -91,10 +90,8 @@ class RVLikelihood(optscore.Likelihood):
             np.ndarray: The residuals.
         """
         residuals = self.residuals_before_kernel(pars)
-        x_data = self.data.get_vec(key='x')
         if self.model.has_gp:
-            for data in self.data.values():
-                gpmean = self.model.kernel.realize(pars, residuals, xpred=x_data, xres=x_data, return_unc=False)
+            gpmean = self.model.kernel.realize(pars, residuals, return_unc=False)
             residuals -= gpmean
         return residuals
     
@@ -113,7 +110,44 @@ class RVLikelihood(optscore.Likelihood):
     
 class MixedRVLikelihood(optscore.MixedLikelihood):
     
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.redchi2s = []
+    
+    def compute_logL(self, pars, apply_priors=True):
+        """Computes the log of the likelihood.
+    
+        Args:
+            pars (Parameters): The parameters to use.
+            apply_priors (bool, optional): Whether or not to apply the priors. Defaults to True.
+
+        Returns:
+            float: The log likelihood, ln(L).
+        """
+        #self.redchi2s.append(self.compute_redchi2(pars))
+        lnL = 0
+        if apply_priors:
+            lnL += self.compute_logL_priors(pars)
+            if not np.isfinite(lnL):
+                return -np.inf
+        for like in self.values():
+            lnL += like.compute_logL(pars, apply_priors=False)
+        return lnL
     
     
+class RVChromaticLikelihood(RVLikelihood):
     
+    def residuals_after_kernel(self, pars):
+        """Computes the residuals after subtracting off the best fit noise kernel.
+
+        Args:
+            pars (Parameters): The parameters to use.
+
+        Returns:
+            np.ndarray: The residuals.
+        """
+        residuals = self.residuals_before_kernel(pars)
+        for data in self.data.values():
+            gpmean = self.model.kernel.realize(pars, residuals=residuals[self.model.data_inds[data.label]], xres=data.t, instname=data.label, return_unc=False)
+            residuals[self.model.data_inds[data.label]] -= gpmean
+        return residuals

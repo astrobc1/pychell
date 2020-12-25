@@ -1,29 +1,30 @@
 import optimize.scores as optscore
 import optimize.kernels as optnoisekernels
 import optimize.optimizers as optimizers
+import optimize.knowledge as optknow
 import optimize.frameworks as optframeworks
 import plotly.subplots
-import gls
+import pychell.orbits.gls as gls
+import tqdm
 import plotly.graph_objects
 from itertools import chain, combinations
+from joblib import Parallel, delayed
 import numpy as np
 from numba import jit, njit
 import matplotlib.pyplot as plt
 import copy
+import abc
 import pychell.orbits.rvmodels as pcrvmodels
+import optimize.kernels as optkernels
+import pychell.orbits.rvkernels as pcrvkernels
+import pychell.utils as pcutils
+PLOTLY_COLORS = pcutils.PLOTLY_COLORS
 plt.style.use("gadfly_stylesheet")
 
-plotly_colors = [
-    '#1f77b4',  # muted blue
-    '#ff7f0e',  # safety orange
-    '#2ca02c',  # cooked asparagus green
-    '#d62728',  # brick red
-    '#9467bd',  # muted purple
-    '#8c564b',  # chestnut brown
-    '#e377c2',  # raspberry yogurt pink
-    '#7f7f7f',  # middle gray
-    '#bcbd22',  # curry yellow-green
-    '#17becf'   # blue-teal
+# "It's blue you imbecile."
+# "I don't hear it."
+CSS_COLORS = [
+    
 ]
 
 class ExoProblem(optframeworks.OptProblem):
@@ -34,17 +35,17 @@ class ExoProblem(optframeworks.OptProblem):
         super().__init__(*args, **kwargs)
         self.star_name = 'Star' if star_name is None else star_name
         self.scorer = likes
+        gen_latex_labels(self.p0, self.planets_dict)
     
-    def rv_phase_plot(self, planet_index, opt_result=None, show=True):
+    def rv_phase_plot(self, planet_index, opt_result=None):
         """Creates a phased rv plot for a given planet with the model on top.
 
         Args:
             planet_index (int): The planet index/
             opt_result (dict, optional): The optimization or sampler result to use. Defaults to None, and uses the initial parameters.
-            show (bool, optional): Whether to show or return the figure. Defaults to True.
 
         Returns:
-            plt.figure: A matplotlib figure containing the plot if show is False, and None if True.
+            plotly.figure: A plotly figure containing the plot.
         """
         
         # Resolve which pars to use
@@ -54,8 +55,7 @@ class ExoProblem(optframeworks.OptProblem):
             pars = opt_result["pbest"]
             
         # Creat a figure
-        plt.clf()
-        fig = plt.figure(1)
+        fig = plotly.subplots.make_subplots(rows=1, cols=1)
         
         # Alias
         per = pars['per' + str(planet_index)].value
@@ -68,6 +68,7 @@ class ExoProblem(optframeworks.OptProblem):
         planet_model_phased = like0.model.build_planet(pars, t_hr, planet_index)
         
         # Loop over likes
+        color_index = 0
         for like in self.scorer.values():
             
             # Create a data rv vector where everything is removed except this planet
@@ -84,27 +85,25 @@ class ExoProblem(optframeworks.OptProblem):
                 _errors = errors[like.model.data_inds[data.label]]
                 _data = residuals[like.model.data_inds[data.label]] + like.model.build_planet(pars, data.t, planet_index)
                 phases_data = self.get_phases(data.t, per, tc)
-                plt.errorbar(phases_data, _data, yerr=_errors, marker='o', lw=0, elinewidth=1, alpha=0.8, label=data.label)
+                _yerr = dict(array=_errors)
+                fig.add_trace(plotly.graph_objects.Scatter(x=phases_data, y=_data, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])))
+                color_index += 1
 
         # Plot the model on top
         ss = np.argsort(phases_hr)
-        plt.plot(phases_hr[ss], planet_model_phased[ss], c='black')
+        fig.add_trace(plotly.graph_objects.Scatter(x=phases_hr[ss], y=planet_model_phased[ss], line=dict(color='black', width=2)))
         
-        # Axis labels
-        plt.xlabel('Phase', fontsize=12, fontweight='bold')
-        plt.ylabel('RV $\mathrm{ms}^{-1}$', fontsize=12, fontweight='bold')
-        plt.title(self.star_name + ' ' + like0.model.planets_dict[planet_index], fontweight='bold', fontsize=14)
+        # Labels
+        fig.update_xaxes(title_text='<b>Phase</b>')
+        fig.update_yaxes(title_text='<b>RVs [m/s]</b>')
+        fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
+        fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '</b>')
+        fig.update_layout(template="ggplot2")
         
-        # Legend
-        plt.legend(loc='upper right')
-        
-        # Show or return
-        if show:
-            plt.show()
-        else:
-            return fig
+        # Return fig
+        return fig
 
-    def rv_plot(self, opt_result, n_rows=1, n_model_pts=5000, time_offset=2450000, show=True, backend='plotly'):
+    def rv_plot(self, opt_result, n_rows=1, n_model_pts=5000, time_offset=2450000):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
@@ -113,7 +112,7 @@ class ExoProblem(optframeworks.OptProblem):
             n_rows (int, optional): The number of rows to split the plot into. Defaults to 1.
 
         Returns:
-            plt.figure: A matplotlib figure containing the plot if show is False, and None if True.
+            plotly.figure: A Plotly figure.
         """
         
         # Resolve which pars to use
@@ -123,31 +122,24 @@ class ExoProblem(optframeworks.OptProblem):
             pars = opt_result["pbest"]
             
         # Create a figure
-        if backend == 'pyplot':
-            fig, axarr = plt.subplots(nrows=2, ncols=1, sharex=True)
-        else:
-            fig = plotly.subplots.make_subplots(rows=2, cols=1)
+        fig = plotly.subplots.make_subplots(rows=2, cols=1)
         
         # Create the full planet model, high res.
         # Use a different time grid for the gp since det(K)~ O(n^3)
         t_data_all = self.data.get_vec('t')
         t_start, t_end = np.nanmin(t_data_all), np.nanmax(t_data_all)
         dt = t_end - t_start
-        t_hr = np.linspace(t_start, t_end, num=n_model_pts)
+        t_hr = np.linspace(t_start - dt / 100, t_end + dt / 100, num=n_model_pts)
+        
+        # Create hr planet model
         like0 = next(iter(self.scorer.values()))
         model_arr_hr = like0.model._builder(pars, t_hr)
+
+        # Plot the planet model
+        fig.add_trace(plotly.graph_objects.Scatter(x=t_hr - time_offset, y=model_arr_hr, line=dict(color='black', width=2)), row=1, col=1)
         
-        # Plot the Model
-        if backend == 'pyplot':
-            axarr[0].plot(t_hr - time_offset, model_arr_hr, c='black', lw=1)
-        else:
-            fig.add_trace(plotly.graph_objects.Scatter(x=t_hr - time_offset, y=model_arr_hr, line=dict(color='black', width=2)), row=1, col=1)
-        
-        # Ad a zero line for the residuals
-        if backend == 'pyplot':
-            axarr[1].axhline(0, ls=':', alpha=0.5)
-        else:
-            fig.add_shape(type='line', x0=0, y0=0, x1=1, y1=0, line=dict(color='Black'), xref='paper', yref='paper', row=2, col=1)
+        # Add a zero line for the residuals
+        fig.add_shape(type='line', x0=0, y0=0, x1=1, y1=0, line=dict(color='Black'), xref='paper', yref='paper', row=2, col=1)
         
         # Loop over likes and:
         # 1. Create high res GP
@@ -155,83 +147,102 @@ class ExoProblem(optframeworks.OptProblem):
         color_index = 0
         for like in self.scorer.values():
             
-            # High res grid for this gp, smartly sampled
-            t_hr_gp = np.array([], dtype=float)
-            gpmus = []
-            
-            # Loop over all indices for this like
-            for i in range(like.data_t.size):
-                t_hr_gp = np.concatenate((t_hr_gp, np.linspace(like.data_t[i] - 5, like.data_t[i] + 5, num=30)))
-            t_hr_gp = np.sort(t_hr_gp)
-        
-            # Create the high res GP and plot as well, separately
+            # Data errors
             errors = like.model.kernel.compute_data_errors(pars)
-            if like.model.has_gp:
-                residuals = like.residuals_before_kernel(pars)
-                gpmu, gpstddev = like.model.kernel.realize(pars, xpred=t_hr_gp, residuals=residuals, return_unc=True)
+            
+            # RV Color
+            if isinstance(like.model.kernel, pcrvkernels.RVColor):
                 
-            # Compute residuals
-            if like.model.has_gp:
-                residuals = like.residuals_after_kernel(pars)
-            else:
-                residuals = like.residuals_before_kernel(pars)
-
-            # Further loop over actual instruments and plot each with the model
-            # Also plot residuals
-            for data in like.data.values():
-                data_arr_offset = data.rv - pars['gamma_' + data.label].value
-                _errors = errors[like.model.data_inds[data.label]]
-                _residuals = residuals[like.model.data_inds[data.label]]
-                if backend == 'pyplot':
-                    axarr[0].errorbar(data.t - time_offset, data_arr_offset, yerr=_errors, marker='o', lw=0, elinewidth=1, alpha=0.8, label=data.label)
-                    axarr[1].errorbar(data.t - time_offset, _residuals, yerr=_errors, marker='o', lw=0, elinewidth=1, alpha=0.8)
-                else:
-                    _yerr = dict(type='constant', array=_errors)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=plotly_colors[color_index])), row=1, col=1)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=plotly_colors[color_index]), showlegend=False), row=2, col=1)
+                # Generate the residuals
+                residuals_with_noise = like.residuals_before_kernel(pars)
+                residuals_no_noise = like.residuals_after_kernel(pars)
+                
+                # Plot a GP for each instrument
+                for data in like.data.values():
+                    
+                    # Time array
+                    t_hr_gp = np.array([], dtype=float)
+                    for i in range(data.t.size):
+                        t_hr_gp = np.concatenate((t_hr_gp, np.linspace(data.t[i] - pars['gp_per'].value / 2, data.t[i] + pars['gp_per'].value / 2, num=50)))
+                    t_hr_gp = np.sort(t_hr_gp)
+                    
+                    # Realize the GP
+                    gpmu, gpstddev = like.model.kernel.realize(pars, residuals=residuals_with_noise[like.model.data_inds[data.label]], xpred=t_hr_gp, return_unc=True, instname=data.label)
+                    
+                    # Plot the GP
+                    fig.add_trace(plotly.graph_objects.Scatter(x=t_hr_gp - time_offset, y=gpmu, line=dict(width=1, color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), name='GP ' + data.label), row=1, col=1)
+                    
+                    # Plot the data and residuals
+                    data_arr_offset = data.rv - pars['gamma_' + data.label].value
+                    _errors = errors[like.model.data_inds[data.label]]
+                    _residuals = residuals_no_noise[like.model.data_inds[data.label]]
+                    _yerr = dict(array=_errors)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
                     color_index += 1
                     
-            # Plot the GP
-            if like.model.has_gp:
-                if backend == 'pyplot':
-                    axarr[0].plot(t_hr_gp - time_offset, gpmu, c='red', lw=0.8)
-                else:
-                    fig.add_trace(plotly.graph_objects.Scatter(x=t_hr_gp - time_offset, y=gpmu, line=dict(width=1), name=like.label), row=1, col=1)
+            # Standard GP
+            elif isinstance(like.model.kernel, optkernels.GaussianProcess):
                 
-        # Add a legend
-        if backend == 'pyplot':
-            axarr[0].legend(loc='upper right')
-        
+                # Make hr array for GP
+                if 'gp_per' in pars:
+                    s = pars['gp_per'].value
+                elif 'gp_decay' in pars:
+                    s = pars['gp_decay'].value / 10
+                else:
+                    s = 10
+                t_hr_gp = np.array([], dtype=float)
+                for i in range(like.data_t.size):
+                    t_hr_gp = np.concatenate((t_hr_gp, np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=20)))
+                t_hr_gp = np.sort(t_hr_gp)
+                
+                # Generate the residuals and realize the GP
+                residuals_with_noise = like.residuals_before_kernel(pars)
+                residuals_no_noise = like.residuals_after_kernel(pars)
+                gpmu, gpstddev = like.model.kernel.realize(pars, xpred=t_hr_gp, residuals=residuals_with_noise, return_unc=True)
+                
+                # Plot the GP
+                fig.add_trace(plotly.graph_objects.Scatter(x=t_hr_gp - time_offset, y=gpmu, line=dict(width=1, color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), name=like.label), row=1, col=1)
+                
+                # For each instrument, plot
+                for data in like.data.values():
+                    data_arr_offset = data.rv - pars['gamma_' + data.label].value
+                    _errors = errors[like.model.data_inds[data.label]]
+                    _residuals = residuals_no_noise[like.model.data_inds[data.label]]
+                    _yerr = dict(array=_errors)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
+                    color_index += 1
+                
+            # White noise
+            else:
+                residuals_no_noise = like.residuals_after_kernel(pars)
+                
+                # For each instrument, plot
+                for data in like.data.values():
+                    data_arr_offset = data.rv - pars['gamma_' + data.label].value
+                    _errors = errors[like.model.data_inds[data.label]]
+                    _residuals = residuals_no_noise[like.model.data_inds[data.label]]
+                    _yerr = dict(array=_errors)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
+                    color_index += 1
+                
         # Labels
-        if backend == 'pyplot':
-            axarr[1].set_xlabel('BJD - ' + str(time_offset), fontsize=12, fontweight='bold')
-            axarr[0].set_ylabel('RVs [m/s]', fontsize=12, fontweight='bold')
-            axarr[1].set_ylabel('Residual RVs [m/s]', fontsize=8, fontweight='bold')
-            axarr[0].set_title(self.star_name + ' RVs', fontweight='bold')
-        else:
-            fig.update_xaxes(title_text='BJD - ' + str(time_offset), row=2, col=1)
-            fig.update_yaxes(title_text='RVs [m/s]', row=1, col=1)
-            fig.update_yaxes(title_text='Residual RVs [m/s]', row=2, col=1)
-            fig.update_yaxes(title_text=self.star_name + ' RVs', row=1, col=1)
+        fig.update_xaxes(title_text='BJD - ' + str(time_offset), row=2, col=1)
+        fig.update_yaxes(title_text='RVs [m/s]', row=1, col=1)
+        fig.update_yaxes(title_text='Residual RVs [m/s]', row=2, col=1)
+        fig.update_yaxes(title_text=self.star_name + ' RVs', row=1, col=1)
             
         # Limits
-        if backend == 'pyplot':
-            axarr[0].set_xlim(t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset)
-            axarr[1].set_xlim(t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset)
-        else:
-            fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=1, col=1)
-            fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=2, col=1)
+        fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=1, col=1)
+        fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=2, col=1)
+        fig.update_layout(template="ggplot2")
         
-        # Show or return
-        if backend == 'pyplot':
-            if show:
-                plt.show()
-            else:
-                return fig
-        else:
-            return fig
+        # Return the figure for saving or showing
+        return fig
         
-    def rv_period_search(self, pars=None, pmin=None, pmax=None, apply_gp=True, remove_planets=None):
+    def gls_periodogram(self, pars=None, pmin=None, pmax=None, apply_gp=True, remove_planets=None):
         
         # Resolve parameters
         if pars is None:
@@ -281,7 +292,7 @@ class ExoProblem(optframeworks.OptProblem):
                 self.optimizer = optimizers.NelderMead(scorer=self.optimizer.scorer)
                 
                 # Set the planets dict to be what's left (difference of two dicts)
-                like.model.planets_dict = dict_diff(planets_dict_cp, remove_planets)
+                like.model.planets_dict = pcutils.dict_diff(planets_dict_cp, remove_planets)
                 
                 # Optimize without some planets
                 opt_result = self.optimize()
@@ -308,14 +319,14 @@ class ExoProblem(optframeworks.OptProblem):
                 # Loop over planets and remove from parameters
                 for planet in planets_dict_cp:
                     if planet in remove_planets:
-                        self.remove_planet_pars(p0_mod, planet)
+                        self.remove_planet_pars(p0_mod, planet_dict)
                     
                 # Set the new parameters without planets
                 self.set_pars(p0_mod)
                 self.optimizer = optimizers.NelderMead(scorer=self.optimizer.scorer)
                 
                 # Set the planets dict to be what's left (difference of two dicts)
-                like.model.planets_dict = dict_diff(planets_dict_cp, remove_planets)
+                like.model.planets_dict = pcutils.dict_diff(planets_dict_cp, remove_planets)
                 
                 # Optimize without some planets
                 opt_result = self.optimize()
@@ -337,7 +348,56 @@ class ExoProblem(optframeworks.OptProblem):
         fig.add_trace(plotly.graph_objects.Scatter(x=1 / pgram.f, y=pgram.power, line=dict(color='black', width=1)), row=1, col=1)
         fig.update_xaxes(title_text='Period [days]', row=1, col=1)
         fig.update_yaxes(title_text='Power', row=1, col=1)
+        fig.update_layout(template="ggplot2")
         return fig
+        
+
+    def rv_period_search(self, pars=None, pmin=None, pmax=None, n_periods=None, n_threads=1, planet_index=None):
+        
+        # Resolve parameters
+        if pars is None:
+            pars = self.p0
+            
+        if planet_index is None:
+            planet_index = 1
+        
+        # Resolve period min and period max
+        if pmin is None:
+            pmin = 1.1
+        if pmax is None:
+            times = self.data.get_vec('x')
+            pmax = np.max(times) - np.min(times)
+        if pmax <= pmin:
+            raise ValueError("Pmin is less than Pmax")
+        if n_periods is None:
+            n_periods = 500
+        
+        # Periods array    
+        periods = np.geomspace(pmin, pmax, num=n_periods)
+        args_pass = []
+        
+        # Construct all args
+        for i in range(n_periods):
+            args_pass.append((self, periods[i], planet_index))
+        
+        # Run in parallel
+        opt_results = Parallel(n_jobs=n_threads, verbose=0, batch_size=2)(delayed(self._rv_period_search_wrapper)(*args_pass[i]) for i in tqdm.tqdm(range(n_periods)))
+        
+        lnLs = np.array([-1 * opt_result["fbest"] for opt_result in opt_results])
+        
+        # Create a plot and return results
+        fig = plotly.subplots.make_subplots(rows=1, cols=1)
+        fig.add_trace(plotly.graph_objects.Scatter(x=periods, y=lnLs, line=dict(color='black', width=1)), row=1, col=1)
+        fig.update_xaxes(title_text='Period [days]', row=1, col=1)
+        fig.update_yaxes(title_text='ln(L)', row=1, col=1)
+        
+        return fig, opt_results
+    
+    def sample(self, *args, **kwargs):
+        self.scorer.redchi2s = []
+        sampler_result = super().sample(*args, **kwargs)
+        sampler_result["redchi2s"] = self.scorer.redchi2s
+        return sampler_result
         
 
     @staticmethod
@@ -359,7 +419,7 @@ class ExoProblem(optframeworks.OptProblem):
     
     @staticmethod
     def generate_all_planet_dicts(planets_dict):
-        pset = powerset(planets_dict.items())
+        pset = pcutils.powerset(planets_dict.items())
         planet_dicts = []
         for item in pset:
             pdict = {}
@@ -367,6 +427,10 @@ class ExoProblem(optframeworks.OptProblem):
                 pdict[subitem[0]] = subitem[1]
             planet_dicts.append(pdict)
         return planet_dicts
+    
+    @property
+    def planets_dict(self):
+        return self.scorer.like0.model.planets_dict
     
     def model_comparison(self, do_planets=True, do_gp=False):
         
@@ -444,21 +508,81 @@ class ExoProblem(optframeworks.OptProblem):
 
         for pname in remove:
             del pars[pname]
+        
+    @staticmethod
+    def _rv_period_search_wrapper(optprob, period, planet_index):
+        p0 = optprob.p0
+        p0['per' + str(planet_index)].value = period
+        optprob.set_pars(p0)
+        opt_result = optprob.optimize()
+        return opt_result
+    
+    
+class SessionState:
+    
+    def __init__(self, fname, data=None):
+        if data is not None:
+            self.data = data
+            self.fname = fname
+        if os.path.exists(fname) and data is None:
+            self = self.load(fname)
+        
+    def save(self):
+        with open(self.fname, 'wb') as f:
+            pickle.dump(self, f)
             
-    def corner_plot(self, *args, opt_result=None, **kwargs):
-        return self.sampler.corner_plot(*args, sampler_result=opt_result, **kwargs)
-            
-            
-            
-def powerset(iterable):
-    s = list(iterable)
-    return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
-            
+    def load(self):
+        with open(self.fname, 'wb') as f:
+            return pickle.load(f)
+    
+    def __getitem__(self, key):
+        if key == "fname":
+            return self.fname
+        if key in self.data:
+            return self.data[key]
+        else:
+            return super().__getitem__(key)
 
-def dict_diff(d1, d2):
-    out = {}
-    common_keys = set(d1) - set(d2)
-    for key in common_keys:
-        if key in d1:
-            out[key] = d1[key]
-    return out
+def gen_latex_labels(pars, planets_dict):
+    """Default Settings for latex labels for orbit fitting. Any GP parameters must be set manually via parameter.latex_str = "$latexname$"
+
+    Args:
+        pars (Parameters): The parameters to generate labels for
+    
+    Returns:
+        dict: Keys are parameter names, values are latex labels.
+    """
+    
+    for pname in pars:
+        
+        # Planets (per, tc, k, ecc, w, sqecosw, sqesinw, other bases added later if necessary)
+        if pname.startswith('per') and pname[3:].isdigit():
+            pars[pname].latex_str = "$P_{" + planets_dict[int(pname[-1])]["label"] + "}$"
+        elif pname.startswith('tc') and pname[2:].isdigit():
+            pars[pname].latex_str = "$Tc_{" + planets_dict[int(pname[-1])]["label"] + "}$"
+        elif pname.startswith('ecc') and pname[3:].isdigit():
+            pars[pname].latex_str = "$e_{" + planets_dict[int(pname[-1])]["label"] + "}$"
+        elif pname.startswith('w') and pname[1:].isdigit():
+            pars[pname].latex_str = "$\omega_{" + planets_dict[int(pname[-1])]["label"] + "}$"
+        elif pname.startswith('k') and pname[1:].isdigit():
+            pars[pname].latex_str = "$K_{" + planets_dict[int(pname[-1])]["label"] + "}$"
+        elif pname.startswith('sqecosw') and pname[7:].isdigit():
+            pars[pname].latex_str = "$\sqrt{e} \cos{\omega}_{" + planets_dict[int(pname[-1])]["label"] + "}$"
+        elif pname.startswith('sqesinw') and pname[7:].isdigit():
+            pars[pname].latex_str = "$\sqrt{e} \sin{\omega}_{" + planets_dict[int(pname[-1])]["label"] + "}$"
+        elif pname.startswith('cosw') and pname[7:].isdigit():
+            pars[pname].latex_str = "$\cos{\omega}_{" + planets_dict[int(pname[-1])]["label"] + "}$"
+        elif pname.startswith('sinw') and pname[7:].isdigit():
+            pars[pname].latex_str = "$\sin{\omega}_{" + planets_dict[int(pname[-1])]["label"] + "}$"
+            
+        # Gammas
+        elif pname.startswith('gamma') and not pname.endswith('dot'):
+            pars[pname].latex_str = "$\gamma_{" + pname.split('_')[-1] + "}$"
+        elif pname.startswith('gamma') and pname.endswith('_dot'):
+            pars[pname].latex_str = "$\dot{\gamma}$"
+        elif pname.startswith('gamma') and pname.endswith('_ddot'):
+            pars[pname].latex_str = "$\ddot{\gamma}$"
+        
+        # Jitter
+        elif pname.startswith('jitter'):
+            pars[pname].latex_str = "$\sigma_{" + pname.split('_')[-1] + "}$"

@@ -57,19 +57,12 @@ class RVModel(optmodels.Model):
         Returns:
             np.ndarray: The RV model for this planet
         """
-        # Alias pars
-        ii = str(planet_index)
-        k = pars["k" + ii].value
-        per = pars["per" + ii].value
-        tc = pars["tc" + ii].value
-        ecc = pars["ecc" + ii].value
-        omega = pars["w" + ii].value
         
-        # Convert to tp
-        tp = tc_to_tp(tc, per, ecc, omega)
+        # Get the planet parameters on the standard basis
+        planet_pars = self.planets_dict[planet_index]["basis"].to_standard(pars)
         
         # Build and return planet signal
-        vels = planet_signal(t, k, per, ecc, omega, tp)
+        vels = planet_signal(t, *planet_pars)
         
         # Return vels
         return vels
@@ -189,52 +182,58 @@ class RVModel(optmodels.Model):
 
 
 
-def solve_kepler(Marr, eccarr):
-    """Solve Kepler's Equation. THIS CODE IS FROM RADVEL.
+@njit
+def solve_kepler(mas, ecc):
+    eas = np.zeros_like(mas)
+    for i in range(mas.size):
+        eas[i] = _solve_kepler(mas[i], ecc)
+    return eas
+
+@njit
+def _solve_kepler(ma, ecc):
+    """Solve Kepler's Equation for one planet.
     Args:
-        Marr (np.ndarray): input Mean anomaly
-        eccarr (np.ndarray): eccentricity
+        ma (float): mean anomaly
+        eccarr (float): eccentricity
     Returns:
-        np.ndarray: The eccentric anomalies.
+        float: The eccentric anomaly.
     """
 
-    conv = 1.0E-12  # convergence criterion
+    # Convergence criterion
+    conv = 1.0E-12
     k = 0.85
-    Earr = Marr + np.sign(np.sin(Marr)) * k * eccarr  # first guess at E
-    # fiarr should go to zero when converges
-    fiarr = ( Earr - eccarr * np.sin(Earr) - Marr)
-    convd = np.where(np.abs(fiarr) > conv)[0]  # which indices have not converged
-    nd = len(convd)  # number of unconverged elements
+    
+    # First guess for ea
+    ea = ma + np.sign(np.sin(ma)) * k * ecc
+    fi = ea - ecc * np.sin(ea) - ma
+    
+    # Counter
     count = 0
-    while nd > 0:  # while unconverged elements exist
+    
+    # Break when converged
+    while True:
         
+        # Increase counter
         count += 1
-
-        M = Marr[convd]  # just the unconverged elements ...
-        ecc = eccarr[convd]
-        E = Earr[convd]
-
-        fi = fiarr[convd]  # fi = E - e*np.sin(E)-M    ; should go to 0
-        fip = 1 - ecc * np.cos(E)  # d/dE(fi) ;i.e.,  fi^(prime)
-        fipp = ecc * np.sin(E)  # d/dE(d/dE(fi)) ;i.e.,  fi^(\prime\prime)
-        fippp = 1 - fip  # d/dE(d/dE(d/dE(fi))) ;i.e.,  fi^(\prime\prime\prime)
-
-        # first, second, and third order corrections to E
-        d1 = -fi / fip
-        d2 = -fi / (fip + d1 * fipp / 2.0)
-        d3 = -fi / (fip + d2 * fipp / 2.0 + d2 * d2 * fippp / 6.0)
-        E = E + d3
-        Earr[convd] = E
-        fiarr = ( Earr - eccarr * np.sin( Earr ) - Marr) # how well did we do?
-        convd = np.abs(fiarr) > conv  # test for convergence
-        nd = np.where(convd)[0].size
         
-    if Earr.size > 1:
-        return Earr
-    else:
-        return Earr[0]
+        # Update ea
+        fip = 1 - ecc * np.cos(ea)
+        fipp = ecc * np.sin(ea)
+        fippp = 1 - fip
+        d1 = -1 * fi / fip
+        d1 = -1 * fi / (fip + d1 * fipp / 2.0)
+        d1 = -1 * fi / (fip + d1 * fipp / 2.0 + d1 * d1 * fippp / 6.0)
+        ea_new = ea + d1
+        
+        # Check convergence
+        fi = ea_new - ecc * np.sin(ea_new) - ma
+        if fi < conv:
+            break
+        ea = ea_new
+    
+    return ea_new
 
-
+@njit
 def true_anomaly(t, tp, per, ecc):
     """
     Calculate the true anomaly for a given time, period, eccentricity.
@@ -251,16 +250,15 @@ def true_anomaly(t, tp, per, ecc):
 
     # f in Murray and Dermott p. 27
     m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
-    eccarr = np.zeros(t.size) + ecc
-    e1 = solve_kepler(m, eccarr)
+    e1 = solve_kepler(m, ecc)
     n1 = 1.0 + ecc
     n2 = 1.0 - ecc
     nu = 2.0 * np.arctan((n1 / n2)**0.5 * np.tan(e1 / 2.0))
 
     return nu
 
-
-def planet_signal(t, k, per, ecc, omega, tp):
+@njit
+def planet_signal(t, per, tp, ecc, w, k):
     """Computes the RV signal of one planet for a given time vector.
 
     Args:
@@ -269,7 +267,7 @@ def planet_signal(t, k, per, ecc, omega, tp):
         per (float): The period of the orbit in units of t.
         tc (float): The time of conjunction.
         ecc (float): The eccentricity of the bounded orbit.
-        omega (float): The angle of periastron
+        w (float): The angle of periastron
         tp (float): The time of perisatron
 
     Returns:
@@ -279,7 +277,7 @@ def planet_signal(t, k, per, ecc, omega, tp):
     # Circular orbits are easy
     if ecc == 0.0:
         m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
-        return k * np.cos(m + omega)
+        return k * np.cos(m + w)
 
     if per < 0:
         per = 1E-4
@@ -290,13 +288,13 @@ def planet_signal(t, k, per, ecc, omega, tp):
         
     # Calculate the approximate eccentric anomaly, E1, via the mean anomaly  M.
     nu = true_anomaly(t, tp, per, ecc)
-    rv = k * (np.cos(nu + omega) + ecc * np.cos(omega))
+    rv = k * (np.cos(nu + w) + ecc * np.cos(w))
 
     # Return rv
     return rv
 
-@jit
-def tc_to_tp(tc, per, ecc, omega):
+@njit
+def tc_to_tp(tc, per, ecc, w):
     """
     Convert Time of Transit (time of conjunction) to Time of Periastron Passage
 
@@ -304,7 +302,7 @@ def tc_to_tp(tc, per, ecc, omega):
         tc (float): time of transit
         per (float): period [days]
         ecc (float): eccentricity
-        omega (float): longitude of periastron (radians)
+        w (float): angle of periastron (radians)
 
     Returns:
         float: time of periastron passage
@@ -315,14 +313,14 @@ def tc_to_tp(tc, per, ecc, omega):
     if ecc >= 1:
         return tc
 
-    f = np.pi / 2 - omega
-    ee = 2 * np.arctan(np.tan(f / 2) * np.sqrt((1 - ecc)/(1 + ecc)))  # eccentric anomaly
+    f = np.pi / 2 - w
+    ee = 2 * np.arctan(np.tan(f / 2) * np.sqrt((1 - ecc) / (1 + ecc)))  # eccentric anomaly (ee = f for ecc=0)
     tp = tc - per / (2 * np.pi) * (ee - ecc * np.sin(ee)) # time of periastron
 
     return tp
 
 @njit
-def tp_to_tc(tp, per, ecc, omega):
+def tp_to_tc(tp, per, ecc, w):
     """
     Convert Time of Periastron to Time of Transit (time of conjunction).
 
@@ -330,7 +328,7 @@ def tp_to_tc(tp, per, ecc, omega):
         tp (float): time of periastron
         per (float): period [days]
         ecc (float): eccentricity
-        omega (float): argument of peri (radians)
+        w (float): argument of periastron (radians)
         secondary (bool): calculate time of secondary eclipse instead
 
     Returns:
@@ -341,9 +339,157 @@ def tp_to_tc(tp, per, ecc, omega):
     if ecc >= 1:
         return tp
 
-    f = np.pi/2 - omega                                         # true anomaly during transit
+    f = np.pi / 2 - w                                         # true anomaly during transit
     ee = 2 * np.arctan(np.tan( f / 2) * np.sqrt((1 - ecc) / (1 + ecc)))  # eccentric anomaly
 
     tc = tp + per / (2 * np.pi) * (ee - ecc * np.sin(ee))         # time of conjunction
 
     return tc
+
+
+class AbstractOrbitBasis:
+    
+    def __init__(self, planet_index):
+        self.planet_index = planet_index
+        
+    def to_standard(self, pars):
+        pass
+    
+    @classmethod
+    def from_standard(cls, pars):
+        pass
+        
+        
+class StandardOrbitBasis(AbstractOrbitBasis):
+    
+    names = ["per", "tp", "ecc", "w", "k"]
+    
+    def to_standard(self, pars):
+        ii = str(self.planet_index)
+        per = pars["per" + ii].value
+        tp = pars["tp" + ii].value
+        ecc = pars["ecc" + ii].value
+        w = pars["w" + ii].value
+        k = pars["k" + ii].value
+        return (per, tp, ecc, w, k)
+    
+    def from_standard(self, pars):
+        return self.to_standard(pars)
+    
+class TCOrbitBasis(AbstractOrbitBasis):
+    
+    names = ["per", "tc", "ecc", "w", "k"]
+    
+    def to_standard(self, pars):
+        ii = str(self.planet_index)
+        per = pars["per" + ii].value
+        tc = pars["tc" + ii].value
+        ecc = pars["ecc" + ii].value
+        w = pars["w" + ii].value
+        k = pars["k" + ii].value
+        tp = tc_to_tp(tc, per, ecc, w)
+        return (per, tp, ecc, w, k)
+    
+    def from_standard(self, pars):
+        ii = str(self.planet_index)
+        per = pars["per" + ii].value
+        tp = pars["tp" + ii].value
+        ecc = pars["ecc" + ii].value
+        w = pars["w" + ii].value
+        k = pars["k" + ii].value
+        tc = tp_to_tc(tp, per, ecc, w)
+        return (per, tc, ecc, w, k)
+    
+
+class TCSQEOrbitBasis(AbstractOrbitBasis):
+    
+    names = ["per", "tc", "sqecosw", "sqesinw", "k"]
+    
+    def to_standard(self, pars):
+        ii = str(self.planet_index)
+        per = pars["per" + ii].value
+        k = pars["k" + ii].value
+        tc = pars["tc" + ii].value
+        sqecosw = pars["sqecosw" + ii].value
+        sqesinw = pars["sqesinw" + ii].value
+        w = np.arctan2(sqesinw, sqecosw)
+        ecc = sqecosw**2 + sqesinw**2
+        tp = tc_to_tp(tc, per, ecc, w)
+        return (per, tp, ecc, w, k)
+        
+    def from_standard(self, pars):
+        ii = str(self.planet_index)
+        per = pars["per" + ii].value
+        k = pars["k" + ii].value
+        tp = pars["tp" + ii].value
+        ecc = pars["ecc" + ii].value
+        w = pars["w" + ii].value
+        eccsq = np.sqrt(ecc)
+        sqecosw = eccsq * np.cos(w)
+        sqesinw = eccsq * np.sin(w)
+        tc = tp_to_tc(tp, per, ecc, w)
+        return (per, tc, sqecosw, sqesinw, k)
+    
+    def convert_unc_to_standard(self, unc_dict):
+        ii = str(self.planet_index)
+        per_unc = unc_dict["per" + ii]
+        k_unc = unc_dict["k" + ii]
+        tp_unc = unc_dict["tp" + ii]
+        sqecosw_unc = unc_dict["sqecosw" + ii]
+        sqesinw_unc = unc_dict["sqesinw" + ii]
+        
+        ecc_unc = np.sqrt((2 * sqecosw_unc + sqesinw_unc**2)**2 * sqecosw_unc**2 + \
+                          (sqecosw_unc**2 + 2 * sqesinw_unc)**2 * sqesinw_unc**2)
+        
+        w_unc = np.sqrt((sqesinw_unc / (sqecosw_unc**2 + sqesinw_unc**2))**2 * sqecosw_unc**2 + \
+                          (sqew_unc / (sqecosw_unc**2 + sqesinw_unc**2))**2 * sqesinw_unc**2)
+        
+        return (per_unc, tp_unc, ecc_unc, w_unc, k_unc)
+    
+    
+class TCEOrbitBasis(AbstractOrbitBasis):
+    
+    names = ["per", "tc", "cosw", "sinw", "k"]
+    
+    def to_standard(self, pars):
+        ii = str(self.planet_index)
+        per = pars["per" + ii].value
+        k = pars["k" + ii].value
+        ecc = pars["ecc" + ii].value
+        tc = pars["tc" + ii].value
+        cosw = pars["cosw" + ii].value
+        sinw = pars["sinw" + ii].value
+        w = np.arctan2(sinw, cosw)
+        tp = tc_to_tp(tc, per, ecc, w)
+        return (per, tp, ecc, w, k)
+        
+    def from_standard(self, pars):
+        ii = str(self.planet_index)
+        per = pars["per" + ii].value
+        k = pars["k" + ii].value
+        tp = pars["tp" + ii].value
+        ecc = pars["ecc" + ii].value
+        w = pars["w" + ii].value
+        cosw = np.cos(w)
+        sinw = np.sin(w)
+        tc = tp_to_tc(tp, per, ecc, w)
+        return (per, tc, ecc, cosw, sinw, k)
+    
+    def convert_unc_to_standard(self, unc_dict):
+        ii = str(self.planet_index)
+        per_unc = unc_dict["per" + ii]
+        k_unc = unc_dict["k" + ii]
+        tp_unc = unc_dict["tp" + ii]
+        sqecosw_unc = unc_dict["sqecosw" + ii]
+        sqesinw_unc = unc_dict["sqesinw" + ii]
+        
+        ecc_unc = np.sqrt((2 * sqecosw_unc + sqesinw_unc**2)**2 * sqecosw_unc**2 + \
+                          (sqecosw_unc**2 + 2 * sqesinw_unc)**2 * sqesinw_unc**2)
+        
+        w_unc = np.sqrt((sqesinw_unc / (sqecosw_unc**2 + sqesinw_unc**2))**2 * sqecosw_unc**2 + \
+                          (sqew_unc / (sqecosw_unc**2 + sqesinw_unc**2))**2 * sqesinw_unc**2)
+        
+        return (per_unc, tp_unc, ecc_unc, w_unc, k_unc)
+        
+
+        

@@ -1,27 +1,8 @@
 import optimize.data as optdata
 import numpy as np
 import pandas as pd
+import warnings
 import matplotlib.pyplot as plt
-
-WAVELENGTH_DEFAULTS = {
-    'iSHELL': 2350,
-    'SPIROU': 2350,
-    'TRES': 550,
-    'HIRES': 550,
-    'HARPS': 550,
-    'CSHELL': 2400,
-    'NIRSPEC': 2100,
-    'CHIRON': 550,
-    'CARMENESVIS': 550,
-    'PARVI': 1300
-}
-
-def get_wavelength(instname):
-    try:
-        return WAVELENGTH_DEFAULTS[instname]
-    except:
-        warnings.warn("Wavelength not found.")
-        return None
 
 def group_vis_nir(data, cut=1000):
     data_vis = MixedRVData()
@@ -32,6 +13,19 @@ def group_vis_nir(data, cut=1000):
         else:
             data_nir[_data.label] = _data
     return data_vis, data_nir
+
+def get_wavelength(instname):
+    try:
+        return WAVELENGTH_DEFAULTS[instname]
+    except:
+        warnings.warn("Wavelength not found.")
+        return None
+
+def gen_jitter_dict(data, value):
+    out = {}
+    for _data in data.values():
+        out[_data.label] = value
+    return out
 
 class RVData(optdata.Data):
     
@@ -73,7 +67,7 @@ class MixedRVData(optdata.MixedData):
         return [d.instname for d in self.items()]
 
     @classmethod
-    def from_radvel_file(cls, fname):
+    def from_radvel_file(cls, fname, wavelengths=None):
         """Constructs a new RV data object from a standard radvel csv file.
 
         Args:
@@ -91,7 +85,11 @@ class MixedRVData(optdata.MixedData):
         rverr_all = rvdf.errvel.to_numpy()
         for tel in tel_vec_unq:
             inds = np.where(tel_vec == tel)[0]
-            data[tel] = RVData(t_all[inds], rv_all[inds], rverr_all[inds], instname=tel)
+            if wavelengths is not None and tel in wavelengths:
+                wavelength = wavelengths[tel]
+            else:
+                wavelength = None
+            data[tel] = RVData(t_all[inds], rv_all[inds], rverr_all[inds], instname=tel, wavelength=wavelength)
         return data
     
     def to_radvel_file(self, fname):
@@ -118,15 +116,6 @@ class MixedRVData(optdata.MixedData):
         ss = np.argsort(t_all)
         tel_vec = tel_vec[ss]
         return tel_vec
-    
-    def make_wave_vec(self):
-        wave_vec = np.array([], dtype=float)
-        x = self.get_vec('x', sort=False)
-        ss = np.argsort(x)
-        for data in self.values():
-            wave_vec = np.concatenate((wave_vec, np.full(data.t.size, fill_value=data.wavelength)))
-        wave_vec = wave_vec[ss]
-        return wave_vec
     
     def get_inds(self, label):
         tel_vec = self.make_tel_vec()
