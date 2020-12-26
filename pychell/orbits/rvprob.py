@@ -25,7 +25,6 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 
 class ExoProblem(optframeworks.OptProblem):
     
-    planet_par_base_names = pcrvmodels.RVModel.planet_par_base_names
     
     def __init__(self, *args, star_name=None, likes=None, **kwargs):
         super().__init__(*args, **kwargs)
@@ -437,7 +436,7 @@ class ExoProblem(optframeworks.OptProblem):
             
             model_comp_results = []
             
-            like0 = next(iter(self.scorer.values()))
+            like0 = self.scorer.like0
             
             # Get all combos
             planet_dicts = self.generate_all_planet_dicts(like0.model.planets_dict)
@@ -454,9 +453,6 @@ class ExoProblem(optframeworks.OptProblem):
                 # Remove all other planets except this combo.
                 for like in _optprob.scorer.values():
                     like.model.planets_dict = planets_dict
-                for planet in like0.model.planets_dict:
-                    if planet not in planets_dict:
-                        _optprob.remove_planet_pars(p0, planet)
                 
                 # Pars
                 _optprob.set_pars(p0)
@@ -488,22 +484,6 @@ class ExoProblem(optframeworks.OptProblem):
                 model_comp_result['delta_aicc'] = aicc_diffs[i]
             
         return model_comp_results
-    
-    def remove_planet_pars(self, pars, planet_index):
-        """Removes all parameters corresponding to planets for the given index.
-
-        Args:
-            pars (Parameters): The parameters to remove planets from.
-            planet_index (int): The planet index.
-        """
-        remove = []
-        for pname1 in self.planet_par_base_names:
-            for pname2 in pars:
-                if pname2 == pname1 + str(planet_index):
-                    remove.append(pname2)
-
-        for pname in remove:
-            del pars[pname]
         
     @staticmethod
     def _rv_period_search_wrapper(optprob, period, planet_index):

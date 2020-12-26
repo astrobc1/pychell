@@ -5,6 +5,8 @@ import optimize.kernels as optkernels
 
 class RVColor(optkernels.GaussianProcess):
     
+    is_diag = False
+    
     def __init__(self, *args, wavelength0=550, **kwargs):
         self.wavelength0 = wavelength0
         super().__init__(*args, **kwargs)
@@ -137,10 +139,10 @@ class RVColor(optkernels.GaussianProcess):
             B = cho_solve(L, Ks.T)
             var = np.array(np.diag(Kss - np.dot(Ks, B))).flatten()
             unc = np.sqrt(var)
-            self.current_instname = None
+            self.compute_dist_matrix()
             return mu, unc
         else:
-            self.current_instname = None
+            self.compute_dist_matrix()
             return mu
         
     def make_wave_vec(self):

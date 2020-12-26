@@ -17,8 +17,6 @@ class RVModel(optmodels.Model):
         time_base (float): The time to subtract off for the linear and quadratic gamma offsets.
     """
     
-    planet_par_base_names = ['per', 'tc', 'ecc', 'w', 'k']
-    
     def __init__(self, planets_dict=None, data=None, p0=None, kernel=None, time_base=None):
         """Construct an RV Model for multiple datasets.
 
@@ -41,6 +39,9 @@ class RVModel(optmodels.Model):
         self.data_t = self.data.get_vec('t')
         self.data_rv = self.data.get_vec('rv')
         self.data_rverr = self.data.get_vec('rverr')
+        self.data_inds = {}
+        for data in self.data.values():
+            self.data_inds[data.label] = self.data.get_inds(data.label)
         
     @property
     def n_planets(self):
@@ -124,7 +125,7 @@ class RVModel(optmodels.Model):
         """
         _model = self._builder(pars, self.data_t)
         return _model
-    
+
     def apply_offsets(self, rv_vec, pars):
         """Apply gamma offsets (zero points only) to the data. Linear and quadratic terms are applied to the model.
 
@@ -136,31 +137,6 @@ class RVModel(optmodels.Model):
         for instname in self.data:
             rv_vec[self.data_inds[instname]] -= pars["gamma_" + instname].value
         return rv_vec
-    
-    def data_only_planet(self, pars, planet_index):
-        """Removes the full model from the data except for one planet.
-
-        Args:
-            pars (Parameters): The parameters.
-            planet_index (int): The planet index to keep in the data.
-
-        Returns:
-            dict: The modified data as a dictionary, where keys are the labels, and values are numpy arrays.
-        """
-        mod_data = {}
-        model_array_without_planet = self.build_without_planet(pars, self.data_t, planet_index=planet_index)
-        
-        if self.has_gp:
-            residuals = self.residuals_before_kernel(pars)
-            errors = self.kernel.compute_data_errors(pars)
-            gpmu = self.kernel.realize(pars, residuals=residuals, return_unc=False)
-        else:
-            gpmu = np.zeros_like(self.data_t)
-        for data in self.data.values():
-            # For each data set, subtract off the model without the above planet, the offset, and the gp.
-            _mod_data = data.rv - model_array_without_planet[self.data_inds[data.label]] - pars["gamma_" + data.label].value - gpmu[self.data_inds[data.label]]
-            mod_data[data.label] = _mod_data
-        return mod_data
     
     def residuals_before_kernel(self, pars):
         """Computes the residuals without subtracting off the best fit noise kernel.

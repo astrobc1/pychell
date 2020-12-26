@@ -11,6 +11,9 @@ class RVLikelihood(optscore.Likelihood):
     def __init__(self, label=None, data=None, model=None):
         super().__init__(label=label, data=data, model=model)
         self.p0 = model.p0
+        self.data_inds = {}
+        for data in self.data.values():
+            self.data_inds[data.label] = self.data.get_inds(data.label)
     
     def compute_logL(self, pars, apply_priors=True):
         """Computes the log of the likelihood.
@@ -90,10 +93,28 @@ class RVLikelihood(optscore.Likelihood):
             np.ndarray: The residuals.
         """
         residuals = self.residuals_before_kernel(pars)
-        if self.model.has_gp:
-            gpmean = self.model.kernel.realize(pars, residuals, return_unc=False)
-            residuals -= gpmean
+        if not self.model.kernel.is_diag:
+            kernel_mean = self.model.kernel.realize(pars, residuals, return_unc=False)
+            residuals -= kernel_mean
         return residuals
+    
+    def data_only_planet(self, pars, planet_index):
+        """Removes the full model from the data except for one planet.
+
+        Args:
+            pars (Parameters): The parameters.
+            planet_index (int): The planet index to keep in the data.
+
+        Returns:
+            dict: The modified data as a dictionary, where keys are the labels, and values are numpy arrays.
+        """
+        mod_data = {}
+        residuals = self.residuals_after_kernel(pars)
+        planet_model_arr = self.model.build_planet(pars, self.data_t, planet_index)
+        for data in self.data.values():
+            mod_data[data.label] = residuals[self.data_inds[data.label]] + planet_model_arr[self.data_inds[data.label]]
+        
+        return mod_data
     
     @property
     def data_t(self):
@@ -106,6 +127,23 @@ class RVLikelihood(optscore.Likelihood):
     @property
     def data_rverr(self):
         return self.data_yerr
+    
+class RVChromaticLikelihood(RVLikelihood):
+    
+    def residuals_after_kernel(self, pars):
+        """Computes the residuals after subtracting off the best fit noise kernel.
+
+        Args:
+            pars (Parameters): The parameters to use.
+
+        Returns:
+            np.ndarray: The residuals.
+        """
+        residuals = self.residuals_before_kernel(pars)
+        for data in self.data.values():
+            gp_mean = self.model.kernel.realize(pars, residuals=residuals[self.data_inds[data.label]], xres=data.t, instname=data.label, return_unc=False)
+            residuals[self.model.data_inds[data.label]] -= gp_mean
+        return residuals
     
     
 class MixedRVLikelihood(optscore.MixedLikelihood):
@@ -133,21 +171,3 @@ class MixedRVLikelihood(optscore.MixedLikelihood):
         for like in self.values():
             lnL += like.compute_logL(pars, apply_priors=False)
         return lnL
-    
-    
-class RVChromaticLikelihood(RVLikelihood):
-    
-    def residuals_after_kernel(self, pars):
-        """Computes the residuals after subtracting off the best fit noise kernel.
-
-        Args:
-            pars (Parameters): The parameters to use.
-
-        Returns:
-            np.ndarray: The residuals.
-        """
-        residuals = self.residuals_before_kernel(pars)
-        for data in self.data.values():
-            gpmean = self.model.kernel.realize(pars, residuals=residuals[self.model.data_inds[data.label]], xres=data.t, instname=data.label, return_unc=False)
-            residuals[self.model.data_inds[data.label]] -= gpmean
-        return residuals
