@@ -25,7 +25,6 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 
 class ExoProblem(optframeworks.OptProblem):
     
-    
     def __init__(self, *args, star_name=None, likes=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.star_name = 'Star' if star_name is None else star_name
@@ -36,7 +35,7 @@ class ExoProblem(optframeworks.OptProblem):
         """Creates a phased rv plot for a given planet with the model on top.
 
         Args:
-            planet_index (int): The planet index/
+            planet_index (int): The planet index
             opt_result (dict, optional): The optimization or sampler result to use. Defaults to None, and uses the initial parameters.
 
         Returns:
@@ -98,7 +97,7 @@ class ExoProblem(optframeworks.OptProblem):
         # Return fig
         return fig
 
-    def rv_plot(self, opt_result, n_rows=1, n_model_pts=5000, time_offset=2450000):
+    def rv_plot(self, opt_result, n_model_pts=5000, time_offset=2450000, kernel_sampling=10):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
@@ -158,7 +157,7 @@ class ExoProblem(optframeworks.OptProblem):
                     # Time array
                     t_hr_gp = np.array([], dtype=float)
                     for i in range(data.t.size):
-                        t_hr_gp = np.concatenate((t_hr_gp, np.linspace(data.t[i] - pars['gp_per'].value / 2, data.t[i] + pars['gp_per'].value / 2, num=50)))
+                        t_hr_gp = np.concatenate((t_hr_gp, np.linspace(data.t[i] - pars['gp_per'].value / 2, data.t[i] + pars['gp_per'].value / 2, num=kernel_sampling)))
                     t_hr_gp = np.sort(t_hr_gp)
                     
                     # Realize the GP
@@ -188,7 +187,7 @@ class ExoProblem(optframeworks.OptProblem):
                     s = 10
                 t_hr_gp = np.array([], dtype=float)
                 for i in range(like.data_t.size):
-                    t_hr_gp = np.concatenate((t_hr_gp, np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=20)))
+                    t_hr_gp = np.concatenate((t_hr_gp, np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=kernel_sampling)))
                 t_hr_gp = np.sort(t_hr_gp)
                 
                 # Generate the residuals and realize the GP

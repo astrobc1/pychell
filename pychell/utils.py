@@ -15,7 +15,7 @@ import glob
 import os
 from google_drive_downloader import GoogleDriveDownloader as gdd
 
-PLOTLY_COLORS = ['steelblue', 'lightsalmon', 'grey', 'darkslateblue', 'olive', 'chocolate', 'slategrey', 'purple', 'honeydew', 'gainsboro', 'midnightblue', 'lightgreen', 'paleturquoise', 'sienna', 'greenyellow', 'aliceblue', 'lightblue', 'mediumpurple', 'indigo', 'cadetblue', 'wheat', 'olivedrab', 'salmon', 'seagreen', 'darkturquoise', 'lightcoral', 'cyan', 'mediumorchid', 'blue', 'mediumturquoise', 'goldenrod', 'peachpuff', 'peru', 'saddlebrown', 'rosybrown', 'silver', 'darkgreen', 'deepskyblue', 'mediumblue', 'tomato', 'darkorange', 'mediumseagreen', 'orange', 'lemonchiffon', 'powderblue', 'darkslategrey', 'mintcream', 'coral', 'tan', 'darkkhaki', 'firebrick', 'beige', 'violet', 'skyblue', 'palevioletred', 'lightsteelblue', 'turquoise', 'darkviolet', 'darkseagreen', 'lightyellow', 'green', 'bisque', 'khaki', 'mediumaquamarine', 'seashell', 'darkorchid', 'lightskyblue', 'darkolivegreen', 'yellow', 'darkslategray', 'springgreen', 'lightpink', 'darkred', 'sandybrown', 'darkgoldenrod', 'burlywood', 'blueviolet', 'linen', 'lightcyan', 'dodgerblue', 'mediumslateblue', 'indianred', 'forestgreen', 'mediumvioletred', 'plum', 'chartreuse', 'cornflowerblue', 'dimgrey', 'deeppink', 'lavenderblush', 'darkgray', 'moccasin', 'orangered', 'teal', 'maroon', 'mistyrose', 'palegreen', 'lime', 'hotpink', 'gold', 'darksalmon', 'lawngreen', 'brown', 'lightgoldenrodyellow', 'rebeccapurple', 'darkgrey', 'lightseagreen', 'aqua', 'royalblue', 'crimson', 'azure', 'mediumspringgreen', 'fuchsia', 'ivory', 'lightgrey', 'lavender', 'slateblue', 'dimgray', 'navy', 'oldlace', 'cornsilk', 'papayawhip', 'blanchedalmond', 'magenta', 'limegreen', 'orchid', 'thistle', 'yellowgreen', 'black', 'darkcyan', 'pink', 'darkmagenta', 'aquamarine', 'palegoldenrod', 'darkblue', 'red', 'lightgray']
+PLOTLY_COLORS = ['steelblue', 'lightsalmon', 'darkslategray', 'olive', 'chocolate', 'purple', 'honeydew', 'gainsboro', 'midnightblue', 'lightgreen', 'paleturquoise', 'sienna', 'greenyellow', 'aliceblue', 'lightblue', 'mediumpurple', 'indigo', 'cadetblue', 'wheat', 'olivedrab', 'salmon', 'seagreen', 'darkturquoise', 'lightcoral', 'cyan', 'mediumorchid', 'blue', 'mediumturquoise', 'goldenrod', 'peachpuff', 'peru', 'saddlebrown', 'rosybrown', 'silver', 'darkgreen', 'deepskyblue', 'mediumblue', 'tomato', 'darkorange', 'mediumseagreen', 'orange', 'lemonchiffon', 'powderblue', 'mintcream', 'coral', 'tan', 'darkkhaki', 'firebrick', 'beige', 'violet', 'skyblue', 'palevioletred', 'lightsteelblue', 'turquoise', 'darkviolet', 'darkseagreen', 'green', 'bisque', 'khaki', 'mediumaquamarine', 'seashell', 'darkorchid', 'lightskyblue', 'darkolivegreen', 'yellow', 'springgreen', 'lightpink', 'darkred', 'sandybrown', 'darkgoldenrod', 'burlywood', 'blueviolet', 'linen', 'lightcyan', 'dodgerblue', 'mediumslateblue', 'indianred', 'forestgreen', 'mediumvioletred', 'plum', 'chartreuse', 'cornflowerblue', 'deeppink', 'lavenderblush', 'moccasin', 'orangered', 'teal', 'maroon', 'mistyrose', 'palegreen', 'lime', 'hotpink', 'gold', 'darksalmon', 'lawngreen', 'brown', 'lightgoldenrodyellow', 'rebeccapurple', 'lightseagreen', 'aqua', 'royalblue', 'crimson', 'azure', 'mediumspringgreen', 'fuchsia', 'ivory', 'lavender', 'slateblue', 'navy', 'oldlace', 'cornsilk', 'papayawhip', 'blanchedalmond', 'magenta', 'limegreen', 'orchid', 'thistle', 'yellowgreen', 'black', 'darkcyan', 'pink', 'darkmagenta', 'aquamarine', 'palegoldenrod', 'darkblue', 'red']
 
 # Helpful timer
 class StopWatch:
@@ -168,13 +168,37 @@ class SessionState:
     """Session State for Streamlit.
     """
     
-    def __init__(self, **kwargs):
-        for key, val in kwargs.items():
-            setattr(self, key, val)
+    __slots__ = ['fname', 'data']
+    
+    def __init__(self, fname=None, use_prev=True):
         
-    def save(self, fname):
-        with open(fname, 'wb') as f:
-            pickle.dump(f)
+        # Load existing state
+        if os.path.exists(fname) and use_prev:
+            self = self.load(fname)
+        # Start from new state
+        else:
+            self.data = {}
+            self.fname = fname
+        
+    def save(self):
+        with open(self.fname, 'wb') as f:
+            pickle.dump(self, f)
+            
+    @staticmethod
+    def make_default_fname():
+        fname = 'results_' + pcutils.gendatestr(True) + '.pkl'
+        return fname
+            
+    def __setitem__(self, key, value):
+        self.data[key] = value
+        
+    def __setattr__(self, key, value):
+        if key == "fname":
+            self.fname = value
+        self.data[key] = value
+    
+    def __getitem__(self, key):
+        return self.data[key]
         
     @staticmethod
     def load(fname):

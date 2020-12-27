@@ -1,1 +1,3 @@
 recursive-include pychell *
+recursive-exclude examples *
+recursive-exclude docs *
