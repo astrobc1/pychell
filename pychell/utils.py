@@ -5,7 +5,9 @@ from string import ascii_lowercase
 import numpy as np
 import sys
 import time
+import pickle
 import traceback
+import importlib
 import pathlib
 import logging
 import pychell
@@ -15,7 +17,7 @@ import glob
 import os
 from google_drive_downloader import GoogleDriveDownloader as gdd
 
-PLOTLY_COLORS = ['steelblue', 'lightsalmon', 'darkslategray', 'olive', 'chocolate', 'purple', 'honeydew', 'gainsboro', 'midnightblue', 'lightgreen', 'paleturquoise', 'sienna', 'greenyellow', 'aliceblue', 'lightblue', 'mediumpurple', 'indigo', 'cadetblue', 'wheat', 'olivedrab', 'salmon', 'seagreen', 'darkturquoise', 'lightcoral', 'cyan', 'mediumorchid', 'blue', 'mediumturquoise', 'goldenrod', 'peachpuff', 'peru', 'saddlebrown', 'rosybrown', 'silver', 'darkgreen', 'deepskyblue', 'mediumblue', 'tomato', 'darkorange', 'mediumseagreen', 'orange', 'lemonchiffon', 'powderblue', 'mintcream', 'coral', 'tan', 'darkkhaki', 'firebrick', 'beige', 'violet', 'skyblue', 'palevioletred', 'lightsteelblue', 'turquoise', 'darkviolet', 'darkseagreen', 'green', 'bisque', 'khaki', 'mediumaquamarine', 'seashell', 'darkorchid', 'lightskyblue', 'darkolivegreen', 'yellow', 'springgreen', 'lightpink', 'darkred', 'sandybrown', 'darkgoldenrod', 'burlywood', 'blueviolet', 'linen', 'lightcyan', 'dodgerblue', 'mediumslateblue', 'indianred', 'forestgreen', 'mediumvioletred', 'plum', 'chartreuse', 'cornflowerblue', 'deeppink', 'lavenderblush', 'moccasin', 'orangered', 'teal', 'maroon', 'mistyrose', 'palegreen', 'lime', 'hotpink', 'gold', 'darksalmon', 'lawngreen', 'brown', 'lightgoldenrodyellow', 'rebeccapurple', 'lightseagreen', 'aqua', 'royalblue', 'crimson', 'azure', 'mediumspringgreen', 'fuchsia', 'ivory', 'lavender', 'slateblue', 'navy', 'oldlace', 'cornsilk', 'papayawhip', 'blanchedalmond', 'magenta', 'limegreen', 'orchid', 'thistle', 'yellowgreen', 'black', 'darkcyan', 'pink', 'darkmagenta', 'aquamarine', 'palegoldenrod', 'darkblue', 'red']
+PLOTLY_COLORS = ['darkmagenta', 'mediumslateblue', 'orangered', 'sienna', 'darkblue', 'teal', 'springgreen', 'seagreen', 'darkseagreen', 'plum', 'indianred', 'lawngreen', 'mediumorchid', 'rosybrown', 'turquoise', 'lightgreen', 'cadetblue', 'mediumblue', 'darkorchid', 'olivedrab', 'darkgreen', 'royalblue', 'mediumspringgreen', 'darkviolet', 'yellowgreen', 'mediumturquoise', 'lightpink', 'mediumaquamarine', 'forestgreen', 'slateblue', 'blue', 'mediumpurple', 'burlywood', 'deepskyblue', 'palegreen', 'magenta', 'darkgoldenrod', 'goldenrod', 'cornflowerblue', 'salmon', 'wheat', 'lime', 'coral', 'chartreuse', 'darkturquoise', 'paleturquoise', 'fuchsia', 'purple', 'maroon', 'mediumvioletred', 'palevioletred', 'violet', 'darkkhaki', 'aquamarine', 'darkred', 'darksalmon', 'black', 'darkcyan', 'dodgerblue', 'gold', 'lightblue', 'moccasin', 'lightseagreen', 'orchid', 'palegoldenrod', 'aqua', 'chocolate', 'tan', 'powderblue', 'orange', 'navy', 'lightskyblue', 'darkorange', 'saddlebrown', 'greenyellow', 'green', 'hotpink', 'blueviolet', 'brown', 'limegreen', 'skyblue', 'firebrick', 'darkolivegreen', 'lightsteelblue', 'rebeccapurple', 'khaki', 'cyan', 'indigo', 'olive', 'linen', 'sandybrown', 'lightcyan', 'mediumseagreen', 'peru', 'steelblue', 'pink', 'red', 'midnightblue', 'deeppink', 'crimson', 'tomato']
 
 # Helpful timer
 class StopWatch:
@@ -168,17 +170,18 @@ class SessionState:
     """Session State for Streamlit.
     """
     
-    __slots__ = ['fname', 'data']
-    
     def __init__(self, fname=None, use_prev=True):
         
         # Load existing state
-        if os.path.exists(fname) and use_prev:
+        if fname is not None and os.path.exists(fname) and use_prev:
             self = self.load(fname)
         # Start from new state
         else:
             self.data = {}
-            self.fname = fname
+            if fname is None:
+                self.fname = "state_" + gendatestr(time=True) + ".pkl"
+            else:
+                self.fname = fname
         
     def save(self):
         with open(self.fname, 'wb') as f:
@@ -195,7 +198,8 @@ class SessionState:
     def __setattr__(self, key, value):
         if key == "fname":
             self.fname = value
-        self.data[key] = value
+        else:
+            self.data[key] = value
     
     def __getitem__(self, key):
         return self.data[key]
@@ -217,3 +221,9 @@ def dict_diff(d1, d2):
 def powerset(iterable):
     s = list(iterable)
     return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+
+def module_from_file(fname):
+    spec = importlib.util.spec_from_file_location("user_mod", fname)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
