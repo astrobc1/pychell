@@ -25,10 +25,11 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 
 class ExoProblem(optframeworks.OptProblem):
     
-    def __init__(self, *args, star_name=None, likes=None, **kwargs):
+    def __init__(self, output_path, *args, star_name=None, likes=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.star_name = 'Star' if star_name is None else star_name
         self.scorer = likes
+        self.output_path = output_path
         gen_latex_labels(self.p0, self.planets_dict)
     
     def rv_phase_plot(self, planet_index, opt_result=None):
@@ -80,7 +81,7 @@ class ExoProblem(optframeworks.OptProblem):
                 _data = residuals[like.model.data_inds[data.label]] + like.model.build_planet(pars, data.t, planet_index)
                 phases_data = self.get_phases(data.t, per, tc)
                 _yerr = dict(array=_errors)
-                fig.add_trace(plotly.graph_objects.Scatter(x=phases_data, y=_data, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])))
+                fig.add_trace(plotly.graph_objects.Scatter(x=phases_data, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])))
                 color_index += 1
 
         # Plot the model on top
@@ -93,6 +94,8 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
         fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '</b>')
         fig.update_layout(template="ggplot2")
+        fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
+        fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         
         # Return fig
         return fig
@@ -171,7 +174,7 @@ class ExoProblem(optframeworks.OptProblem):
                     _errors = errors[like.model.data_inds[data.label]]
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
                     _yerr = dict(array=_errors)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
                     color_index += 1
                     
@@ -227,6 +230,8 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_yaxes(title_text='RVs [m/s]', row=1, col=1)
         fig.update_yaxes(title_text='Residual RVs [m/s]', row=2, col=1)
         fig.update_yaxes(title_text=self.star_name + ' RVs', row=1, col=1)
+        fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
+        fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
             
         # Limits
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=1, col=1)
@@ -338,15 +343,11 @@ class ExoProblem(optframeworks.OptProblem):
         
         # Call GLS
         pgram = gls.Gls((data_times, data_rvs, data_errors), Pbeg=pmin, Pend=pmax)
-        fig = plotly.subplots.make_subplots(rows=1, cols=1)
-        fig.add_trace(plotly.graph_objects.Scatter(x=1 / pgram.f, y=pgram.power, line=dict(color='black', width=1)), row=1, col=1)
-        fig.update_xaxes(title_text='Period [days]', row=1, col=1)
-        fig.update_yaxes(title_text='Power', row=1, col=1)
-        fig.update_layout(template="ggplot2")
-        return fig
+        
+        return pgram
         
 
-    def rv_period_search(self, pars=None, pmin=None, pmax=None, n_periods=None, n_threads=1, planet_index=None):
+    def rv_period_search(self, pars=None, pmin=None, pmax=None, n_periods=None, n_cores=1, planet_index=None):
         
         # Resolve parameters
         if pars is None:
@@ -375,17 +376,9 @@ class ExoProblem(optframeworks.OptProblem):
             args_pass.append((self, periods[i], planet_index))
         
         # Run in parallel
-        opt_results = Parallel(n_jobs=n_threads, verbose=0, batch_size=2)(delayed(self._rv_period_search_wrapper)(*args_pass[i]) for i in tqdm.tqdm(range(n_periods)))
+        persearch_results = Parallel(n_jobs=n_cores, verbose=0, batch_size=2)(delayed(self._rv_period_search_wrapper)(*args_pass[i]) for i in tqdm.tqdm(range(n_periods)))
         
-        lnLs = np.array([-1 * opt_result["fbest"] for opt_result in opt_results])
-        
-        # Create a plot and return results
-        fig = plotly.subplots.make_subplots(rows=1, cols=1)
-        fig.add_trace(plotly.graph_objects.Scatter(x=periods, y=lnLs, line=dict(color='black', width=1)), row=1, col=1)
-        fig.update_xaxes(title_text='Period [days]', row=1, col=1)
-        fig.update_yaxes(title_text='ln(L)', row=1, col=1)
-        
-        return fig, opt_results
+        return periods, persearch_results
     
     def sample(self, *args, **kwargs):
         self.scorer.redchi2s = []

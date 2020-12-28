@@ -157,6 +157,8 @@ class RVModel(optmodels.Model):
         return 'An RV Model'
 
 
+#class RVModelGrad(RVModel, optmodels.PyMC3Model):
+    
 
 @njit
 def solve_kepler(mas, ecc):
