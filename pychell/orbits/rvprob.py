@@ -7,6 +7,7 @@ import plotly.subplots
 import pychell.orbits.gls as gls
 import tqdm
 import plotly.graph_objects
+import pickle
 from itertools import chain, combinations
 from joblib import Parallel, delayed
 import numpy as np
@@ -96,6 +97,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_layout(template="ggplot2")
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
+        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + self.planets_dict[planet_index]["label"] + '_rvs_phased_' + pcutils.gendatestr(True) + '.html')
         
         # Return fig
         return fig
@@ -237,8 +239,9 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=1, col=1)
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=2, col=1)
         fig.update_layout(template="ggplot2")
+        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(True) + '.html')
         
-        # Return the figure for saving or showing
+        # Return the figure for stremlit
         return fig
         
     def gls_periodogram(self, pars=None, pmin=None, pmax=None, apply_gp=True, remove_planets=None):
@@ -367,7 +370,7 @@ class ExoProblem(optframeworks.OptProblem):
         if n_periods is None:
             n_periods = 500
         
-        # Periods array    
+        # Periods array
         periods = np.geomspace(pmin, pmax, num=n_periods)
         args_pass = []
         
@@ -378,6 +381,10 @@ class ExoProblem(optframeworks.OptProblem):
         # Run in parallel
         persearch_results = Parallel(n_jobs=n_cores, verbose=0, batch_size=2)(delayed(self._rv_period_search_wrapper)(*args_pass[i]) for i in tqdm.tqdm(range(n_periods)))
         
+        # Save
+        with open(self.output_path + self.star_name.replace(' ', '_') + '_persearch_results_' + pcutils.gendatestr(True) + '.pkl', 'wb') as f:
+            pickle.dump({"periods": periods, "persearch_results": persearch_results}, f)
+            
         return periods, persearch_results
     
     def sample(self, *args, **kwargs):
@@ -385,6 +392,23 @@ class ExoProblem(optframeworks.OptProblem):
         sampler_result = super().sample(*args, **kwargs)
         sampler_result["redchi2s"] = self.scorer.redchi2s
         return sampler_result
+    
+    def corner_plot(self, sampler_result):
+        """Constructs a corner plot.
+
+        Args:
+            sampler_result (dict): The sampler result
+
+        Returns:
+            fig: A matplotlib figure.
+        """
+        plt.clf()
+        pbest_vary_dict = sampler_result["pmed"].unpack(vary_only=True)
+        truths = pbest_vary_dict["value"]
+        labels = [par.latex_str for par in sampler_result["pbest"].values() if par.vary]
+        corner_plot = corner.corner(sampler_result["flat_chains"], labels=labels, truths=truths, show_titles=True)
+        corner_plot.savefig(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(True) + '.png')
+        return corner_plot
         
 
     @staticmethod

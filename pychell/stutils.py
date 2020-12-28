@@ -91,7 +91,6 @@ class MaxLikeResult(StreamlitComponent):
         st.markdown('## Full RV Plot')
         plotly_fig = self.optprob.rv_plot(opt_result=self.opt_result, n_model_pts=5000)
         self.comps["rvfigfull_maxlike"] = st.plotly_chart(plotly_fig)
-        plotly_fig.write_html(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + '_rvs_full_maxlike' + pcutils.gendatestr(True) + '.html')
     
         # Phased rv plot
         st.markdown('## Phased Planets')
@@ -99,7 +98,6 @@ class MaxLikeResult(StreamlitComponent):
             name = "figplanet_" + str(planet_index) + "_maxlike"
             plotly_fig = self.optprob.rv_phase_plot(planet_index=planet_index, opt_result=self.opt_result)
             self.comps[name] = st.plotly_chart(plotly_fig)
-            plotly_fig.write_html(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + self.optprob.planets_dict[planet_index]["label"] + '_rvsphased_maxlike' + pcutils.gendatestr(True) + '.html')
             
         return self.comps
     
@@ -138,7 +136,6 @@ class MCMCResult(StreamlitComponent):
         st.markdown('## Full RV Plot')
         plotly_fig = self.optprob.rv_plot(opt_result=self.sampler_result, n_model_pts=5000)
         self.comps["rvfigfull_mcmc"] = st.plotly_chart(plotly_fig)
-        plotly_fig.write_html(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + '_rvs_full_mcmc_' + pcutils.gendatestr(True) + '.html')
     
         # Phased rv plot
         st.markdown('## Phased Planets')
@@ -146,12 +143,10 @@ class MCMCResult(StreamlitComponent):
             name = "figplanet_" + str(planet_index) + "_mcmc"
             plotly_fig = self.optprob.rv_phase_plot(planet_index=planet_index, opt_result=self.sampler_result)
             self.comps[name] = st.plotly_chart(plotly_fig)
-            plotly_fig.write_html(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + self.optprob.planets_dict[planet_index]["label"] + '_rvsphased_mcmc' + pcutils.gendatestr(True) + '.html')
     
         # Corner plot
         st.markdown('## Corner Plot')
         corner_plot = self.optprob.corner_plot(opt_result=self.sampler_result)
-        corner_plot.savefig(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + self.optprob.planets_dict[planet_index]["label"] + '_corner_' + pcutils.gendatestr(True) + '.png')
         self.comps["corner_plot"] = st.pyplot(corner_plot)
       
 class GLSResult(StreamlitComponent):
