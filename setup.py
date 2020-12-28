@@ -14,7 +14,7 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="pychell",
-    version="1.0.2",
+    version="1.0.3",
     author="Bryson Cale",
     author_email="bryson.cale1@gmail.com",
     description="Reduce echelle spectra and generate radial velocities",

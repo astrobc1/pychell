@@ -15,5 +15,4 @@ torch>=1.5.1
 streamlit>=0.73.1
 plotly>=4.14.1
 emcee>=3.0.2
-pychell>=1.0.2
 bayesoptimize>=1.0.1
