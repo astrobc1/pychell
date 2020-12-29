@@ -146,7 +146,7 @@ class MCMCResult(StreamlitComponent):
     
         # Corner plot
         st.markdown('## Corner Plot')
-        corner_plot = self.optprob.corner_plot(opt_result=self.sampler_result)
+        corner_plot = self.optprob.corner_plot(sampler_result=self.sampler_result)
         self.comps["corner_plot"] = st.pyplot(corner_plot)
       
 class GLSResult(StreamlitComponent):

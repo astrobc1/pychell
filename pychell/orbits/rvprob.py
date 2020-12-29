@@ -2,6 +2,7 @@ import optimize.scores as optscore
 import optimize.kernels as optnoisekernels
 import optimize.optimizers as optimizers
 import optimize.knowledge as optknow
+import corner
 import optimize.frameworks as optframeworks
 import plotly.subplots
 import pychell.orbits.gls as gls
@@ -407,7 +408,7 @@ class ExoProblem(optframeworks.OptProblem):
         truths = pbest_vary_dict["value"]
         labels = [par.latex_str for par in sampler_result["pbest"].values() if par.vary]
         corner_plot = corner.corner(sampler_result["flat_chains"], labels=labels, truths=truths, show_titles=True)
-        corner_plot.savefig(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(True) + '.png')
+        corner_plot.savefig(self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(True) + '.png')
         return corner_plot
         
 
@@ -444,8 +445,6 @@ class ExoProblem(optframeworks.OptProblem):
         return self.scorer.like0.model.planets_dict
     
     def model_comparison(self, do_planets=True, do_gp=False):
-        
-        model_comp_results: Union[None, list] = None
         
         # Go through every permutation of planet dicts
         if do_planets:
@@ -492,12 +491,12 @@ class ExoProblem(optframeworks.OptProblem):
                 
                 del _optprob
                 
-            aicc_vals = np.array([model_comp_result['aicc'] for model_comp_result in model_comp_results], dtype=float)
+            aicc_vals = np.array([mcr['aicc'] for mcr in model_comp_results], dtype=float)
             ss = np.argsort(aicc_vals)
             model_comp_results = [model_comp_results[ss[i]] for i in range(len(ss))]
-            aicc_diffs = np.abs(aicc_vals[ss] - np.nanmin(aicc_vals)) # NOTE: 
-            for i, model_comp_result in enumerate(model_comp_results):
-                model_comp_result['delta_aicc'] = aicc_diffs[i]
+            aicc_diffs = np.abs(aicc_vals[ss] - np.nanmin(aicc_vals))
+            for i, mcr in enumerate(model_comp_results):
+                mcr['delta_aicc'] = aicc_diffs[i]
             
         return model_comp_results
         
