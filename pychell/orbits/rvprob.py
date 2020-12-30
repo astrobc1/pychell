@@ -290,10 +290,6 @@ class ExoProblem(optframeworks.OptProblem):
             opt_result = self.optimize()
             pbest = opt_result["pbest"]
             
-            # Reset parameters dict
-            for like in self.scorer.values():
-                like.model.planets_dict = planets_dict_cp
-            
             # Construct the best fit planets and remove from the data
             for planet_index in planets_dict_mod:
                 data_rvs -= self.scorer.like0.model.build_planet(pbest, data_times, planet_index)
@@ -310,6 +306,10 @@ class ExoProblem(optframeworks.OptProblem):
                     data_rvs[inds] = data_arr[like.model.data_inds[data.label]] - gp_mean[like.model.data_inds[data.label]]
                     data_errors[inds] = errors[like.model.data_inds[data.label]]
             
+            # Reset parameters dict
+            for like in self.scorer.values():
+                like.model.planets_dict = planets_dict_cp
+                
             # Reset parameters
             self.set_pars(p0cp)
         
@@ -335,10 +335,6 @@ class ExoProblem(optframeworks.OptProblem):
             # Perform max like fit
             opt_result = self.optimize()
             pbest = opt_result["pbest"]
-            
-            # Reset planets dict
-            for like in self.scorer.values():
-                like.model.planets_dict = planets_dict_cp
                 
             # Construct the GP for each like and remove from the data
             for like in self.scorer.values():
@@ -354,6 +350,10 @@ class ExoProblem(optframeworks.OptProblem):
             
             # Reset parameters and planets_dict
             self.set_pars(p0cp)
+            
+            # Reset planets dict
+            for like in self.scorer.values():
+                like.model.planets_dict = planets_dict_cp
                 
         elif not apply_gp and len(remove_planets) > 0:
             
@@ -379,14 +379,6 @@ class ExoProblem(optframeworks.OptProblem):
             # Perform max like fit
             opt_result = self.optimize()
             pbest = opt_result["pbest"]
-            
-            # Reset parameters dict
-            for like in self.scorer.values():
-                like.model.planets_dict = planets_dict_cp
-            
-            # Construct the best fit planets and remove from the data
-            for planet_index in planets_dict_mod:
-                data_rvs -= self.scorer.like0.model.build_planet(pbest, data_times, planet_index)
                 
             for like in self.scorer.values():
                 errors = like.model.kernel.compute_data_errors(pbest)
@@ -396,6 +388,14 @@ class ExoProblem(optframeworks.OptProblem):
                     inds = self.data.get_inds(data.label)
                     data_rvs[inds] = data_arr[like.model.data_inds[data.label]]
                     data_errors[inds] = errors[like.model.data_inds[data.label]]
+                    
+            # Reset parameters dict
+            for like in self.scorer.values():
+                like.model.planets_dict = planets_dict_cp
+            
+            # Construct the best fit planets and remove from the data
+            for planet_index in planets_dict_mod:
+                data_rvs -= self.scorer.like0.model.build_planet(pbest, data_times, planet_index)
             
             # Reset parameters
             self.set_pars(p0cp)
@@ -410,7 +410,7 @@ class ExoProblem(optframeworks.OptProblem):
                     inds = self.data.get_inds(data.label)
                     data_rvs[inds] = data_arr[like.model.data_inds[data.label]]
                     data_errors[inds] = errors[like.model.data_inds[data.label]]
-                
+
         
         # Call GLS
         pgram = gls.Gls((data_times, data_rvs, data_errors), Pbeg=pmin, Pend=pmax)
