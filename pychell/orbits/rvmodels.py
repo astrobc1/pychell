@@ -3,7 +3,7 @@ import optimize.kernels as optnoisekernels
 import numpy as np
 import time
 import matplotlib.pyplot as plt
-from numba import jit, njit
+from numba import jit, njit, prange
 
 class RVModel(optmodels.Model):
     """
@@ -137,33 +137,22 @@ class RVModel(optmodels.Model):
         for instname in self.data:
             rv_vec[self.data_inds[instname]] -= pars["gamma_" + instname].value
         return rv_vec
-    
-    def residuals_before_kernel(self, pars):
-        """Computes the residuals without subtracting off the best fit noise kernel.
-
-        Args:
-            pars (Parameters): The parameters to use.
-
-        Returns:
-            np.ndarray: The residuals.
-        """
-        model_arr = self.build(pars)
-        data_arr = np.copy(self.data_rv)
-        data_arr = self.apply_offsets(data_arr, pars)
-        residuals = data_arr - model_arr
-        return residuals
 
     def __repr__(self):
         return 'An RV Model'
 
 
-#class RVModelGrad(RVModel, optmodels.PyMC3Model):
+# class RVModelGrad(RVModel, optmodels.PyMC3Model):
+    
+#     def __init__(self, planets_dict=None, data=None, p0=None, kernel=None, time_base=None):
+#         RVModel.__init__(planets_dict=planets_dict, data=data, p0=None, kernel=None, time_base=None)
+        
     
 
 @njit
 def solve_kepler(mas, ecc):
     eas = np.zeros_like(mas)
-    for i in range(mas.size):
+    for i in prange(mas.size):
         eas[i] = _solve_kepler(mas[i], ecc)
     return eas
 

@@ -54,9 +54,9 @@ class ExoProblem(optframeworks.OptProblem):
         # Creat a figure
         fig = plotly.subplots.make_subplots(rows=1, cols=1)
         
-        # Alias
-        per = pars['per' + str(planet_index)].value
-        tc = pars['tc' + str(planet_index)].value
+        # Convert parameters to standard basis and compute tc for consistent plotting
+        per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
+        tc = pcrvmodels.tp_to_tc(tp, per, ecc, w)
         
         # Create the phased model, high res
         t_hr = np.linspace(0, per, num=500)
@@ -94,7 +94,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_xaxes(title_text='<b>Phase</b>')
         fig.update_yaxes(title_text='<b>RVs [m/s]</b>')
         fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
-        fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '</b>')
+        fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(per) + ', e = ' + str(ecc) + '</b>')
         fig.update_layout(template="ggplot2")
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
@@ -103,7 +103,7 @@ class ExoProblem(optframeworks.OptProblem):
         # Return fig
         return fig
 
-    def rv_plot(self, opt_result, n_model_pts=5000, time_offset=2450000, kernel_sampling=10):
+    def rv_plot(self, opt_result, n_model_pts=5000, time_offset=2450000, kernel_sampling=30):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
@@ -245,15 +245,10 @@ class ExoProblem(optframeworks.OptProblem):
         # Return the figure for stremlit
         return fig
         
-    def gls_periodogram(self, pars=None, pmin=None, pmax=None, apply_gp=True, remove_planets=None):
+    def gls_periodogram(self, pmin=None, pmax=None, apply_gp=True, remove_planets=None):
         
-        # Resolve parameters
-        if pars is None:
-            pars = self.p0
-            
-        # Resolve which planets to remove by default
         if remove_planets is None:
-            remove_planets = {}
+            remove_planets = []
         
         # Resolve period min and period max
         if pmin is None:
@@ -264,92 +259,171 @@ class ExoProblem(optframeworks.OptProblem):
         if pmax <= pmin:
             raise ValueError("Pmin is less than Pmax")
             
-        # Arrays for periodogram
-        data_times = np.array([], dtype=float)
-        data_rvs = np.array([], dtype=float)
-        data_errors = np.array([], dtype=float)
+        # Get the data times. RVs and errors are created in each case below.
+        data_times = self.data.get_vec('t')
+        data_rvs = np.zeros_like(data_times)
+        data_errors = np.zeros_like(data_times)
         
-        # Loop over likes and add to above arrays
-        for like in self.scorer.values():
+        # Cases
+        if apply_gp and len(remove_planets) > 0:
             
-            # Add times and errors
-            data_times = np.concatenate((data_times, like.data.get_vec('x')))
-            data_errors = np.concatenate((data_errors, like.model.kernel.compute_data_errors(pars)))
+            # Create new pars and planets dict, keep copies of old
+            p0cp = copy.deepcopy(self.p0)
+            p0mod = copy.deepcopy(self.p0)
+            planets_dict_cp = copy.deepcopy(self.scorer.like0.model.planets_dict)
+            planets_dict_mod = copy.deepcopy(self.scorer.like0.model.planets_dict)
             
-            # Remove GP from data first
-            if like.model.has_gp and apply_gp:
-                
-                # Copy original parameters, optimizer, and planets dict
-                p0cp = copy.deepcopy(self.p0)
-                p0_mod = copy.deepcopy(self.p0)
-                planets_dict_cp = copy.deepcopy(like.model.planets_dict)
-                optimizercp = copy.deepcopy(self.optimizer)
-                
-                # Loop over planets and remove from parameters
-                for planet in planets_dict_cp:
-                    if planet in remove_planets:
-                        self.remove_planet_pars(p0_mod, planet)
+            # If the planet is not in remove_planets, we want to disable it from the initial fitting so it stays in the data
+            for planet_index in remove_planets:
+                if planet_index not in remove_planets:
+                    self.disable_planet_pars(p0mod, planets_dict_cp, planet_index)
+                    del planets_dict_cp[planet_index]
                     
-                # Set the new parameters without planets
-                self.set_pars(p0_mod)
-                self.optimizer = optimizers.NelderMead(scorer=self.optimizer.scorer)
+            # Set the planets dict
+            for like in self.scorer.values():
+                like.model.planets_dict = planets_dict_mod
                 
-                # Set the planets dict to be what's left (difference of two dicts)
-                like.model.planets_dict = pcutils.dict_diff(planets_dict_cp, remove_planets)
-                
-                # Optimize without some planets
-                opt_result = self.optimize()
-                
-                # Alias pbest
-                pbest = opt_result['pbest']
-                
-                # Add to data vec
-                data_rvs = np.concatenate((data_rvs, like.residuals_after_kernel(pbest)))
-                
-                # Set pars, planets dict, and optimizer back to original
-                self.set_pars(p0cp)
+            # Set the modified parameters
+            self.set_pars(p0mod)
+            
+            # Perform max like fit
+            opt_result = self.optimize()
+            pbest = opt_result["pbest"]
+            
+            # Reset parameters dict
+            for like in self.scorer.values():
                 like.model.planets_dict = planets_dict_cp
-                self.optimizer = optimizercp
+            
+            # Construct the best fit planets and remove from the data
+            for planet_index in planets_dict_mod:
+                data_rvs -= self.scorer.like0.model.build_planet(pbest, data_times, planet_index)
                 
-            else:
-                
-                # Copy original parameters, optimizer, and planets dict
-                p0cp = copy.deepcopy(self.p0)
-                p0_mod = copy.deepcopy(self.p0)
-                planets_dict_cp = copy.deepcopy(like.model.planets_dict)
-                optimizercp = copy.deepcopy(self.optimizer)
-                
-                # Loop over planets and remove from parameters
-                for planet in planets_dict_cp:
-                    if planet in remove_planets:
-                        self.remove_planet_pars(p0_mod, planet_dict)
+            # Construct the GP for each like and remove from the data
+            for like in self.scorer.values():
+                errors = like.model.kernel.compute_data_errors(pbest)
+                residuals = like.residuals_before_kernel(pbest)
+                gp_mean = like.model.kernel.realize(pbest, residuals, return_unc=False)
+                data_arr = np.copy(like.data_rv)
+                data_arr = like.model.apply_offsets(data_arr, pbest)
+                for data in like.data.values():
+                    inds = self.data.get_inds(data.label)
+                    data_rvs[inds] = data_arr[like.model.data_inds[data.label]] - gp_mean[like.model.data_inds[data.label]]
+                    data_errors[inds] = errors[like.model.data_inds[data.label]]
+            
+            # Reset parameters
+            self.set_pars(p0cp)
+        
+        elif apply_gp and len(remove_planets) == 0:
+            
+            # Create new pars and planets dict, keep copies of old
+            p0cp = copy.deepcopy(self.p0)
+            p0mod = copy.deepcopy(self.p0)
+            planets_dict_cp = copy.deepcopy(self.scorer.like0.model.planets_dict)
+            planets_dict_mod = {}
+            
+            # Disable all planet parameters
+            for planet_index in planets_dict_cp:
+                self.disable_planet_pars(p0mod, planets_dict_cp, planet_index)
                     
-                # Set the new parameters without planets
-                self.set_pars(p0_mod)
-                self.optimizer = optimizers.NelderMead(scorer=self.optimizer.scorer)
+            # Set the planets dict
+            for like in self.scorer.values():
+                like.model.planets_dict = planets_dict_mod
                 
-                # Set the planets dict to be what's left (difference of two dicts)
-                like.model.planets_dict = pcutils.dict_diff(planets_dict_cp, remove_planets)
-                
-                # Optimize without some planets
-                opt_result = self.optimize()
-                
-                # Alias pbest
-                pbest = opt_result['pbest']
-                
-                # Add to data vec
-                data_rvs = np.concatenate((data_rvs, like.residuals_after_kernel(pbest)))
-                
-                # Set pars, planets dict, and optimizer back to original
-                self.set_pars(p0cp)
+            # Set the modified parameters
+            self.set_pars(p0mod)
+
+            # Perform max like fit
+            opt_result = self.optimize()
+            pbest = opt_result["pbest"]
+            
+            # Reset planets dict
+            for like in self.scorer.values():
                 like.model.planets_dict = planets_dict_cp
-                self.optimizer = optimizercp
+                
+            # Construct the GP for each like and remove from the data
+            for like in self.scorer.values():
+                errors = like.model.kernel.compute_data_errors(pbest)
+                residuals = like.residuals_before_kernel(pbest)
+                gp_mean = like.model.kernel.realize(pbest, residuals, return_unc=False)
+                data_arr = np.copy(like.data_rv)
+                data_arr = like.model.apply_offsets(data_arr, pbest)
+                for data in like.data.values():
+                    inds = self.data.get_inds(data.label)
+                    data_rvs[inds] = data_arr[like.model.data_inds[data.label]] - gp_mean[like.model.data_inds[data.label]]
+                    data_errors[inds] = errors[like.model.data_inds[data.label]]
+            
+            # Reset parameters and planets_dict
+            self.set_pars(p0cp)
+                
+        elif not apply_gp and len(remove_planets) > 0:
+            
+            # Create new pars and planets dict, keep copies of old
+            p0cp = copy.deepcopy(self.p0)
+            p0mod = copy.deepcopy(self.p0)
+            planets_dict_cp = copy.deepcopy(self.scorer.like0.model.planets_dict)
+            planets_dict_mod = copy.deepcopy(self.scorer.like0.model.planets_dict)
+            
+            # If the planet is not in remove_planets, we want to disable it from the initial fitting so it stays in the data
+            for planet_index in remove_planets:
+                if planet_index not in remove_planets:
+                    self.disable_planet_pars(p0mod, planets_dict_cp, planet_index)
+                    del planets_dict_cp[planet_index]
+                    
+            # Set the planets dict
+            for like in self.scorer.values():
+                like.model.planets_dict = planets_dict_mod
+                
+            # Set the modified parameters
+            self.set_pars(p0mod)
+            
+            # Perform max like fit
+            opt_result = self.optimize()
+            pbest = opt_result["pbest"]
+            
+            # Reset parameters dict
+            for like in self.scorer.values():
+                like.model.planets_dict = planets_dict_cp
+            
+            # Construct the best fit planets and remove from the data
+            for planet_index in planets_dict_mod:
+                data_rvs -= self.scorer.like0.model.build_planet(pbest, data_times, planet_index)
+                
+            for like in self.scorer.values():
+                errors = like.model.kernel.compute_data_errors(pbest)
+                data_arr = np.copy(like.data_rv)
+                data_arr = like.model.apply_offsets(data_arr, pbest)
+                for data in like.data.values():
+                    inds = self.data.get_inds(data.label)
+                    data_rvs[inds] = data_arr[like.model.data_inds[data.label]]
+                    data_errors[inds] = errors[like.model.data_inds[data.label]]
+            
+            # Reset parameters
+            self.set_pars(p0cp)
+            
+        else:
+            
+            for like in self.scorer.values():
+                errors = like.model.kernel.compute_data_errors(self.p0)
+                data_arr = np.copy(like.data_rv)
+                data_arr = like.model.apply_offsets(data_arr, self.p0)
+                for data in like.data.values():
+                    inds = self.data.get_inds(data.label)
+                    data_rvs[inds] = data_arr[like.model.data_inds[data.label]]
+                    data_errors[inds] = errors[like.model.data_inds[data.label]]
+                
         
         # Call GLS
         pgram = gls.Gls((data_times, data_rvs, data_errors), Pbeg=pmin, Pend=pmax)
         
         return pgram
-        
+    
+    @staticmethod
+    def disable_planet_pars(pars, planets_dict, planet_index):
+        for par in pars.values():
+            for planet_par_name in planets_dict[planet_index]["basis"].names:
+                if par.name == planet_par_name + str(planet_index):
+                    pars[par.name].vary = False
+        return pars
 
     def rv_period_search(self, pars=None, pmin=None, pmax=None, n_periods=None, n_cores=1, planet_index=None):
         
@@ -497,6 +571,10 @@ class ExoProblem(optframeworks.OptProblem):
             aicc_diffs = np.abs(aicc_vals[ss] - np.nanmin(aicc_vals))
             for i, mcr in enumerate(model_comp_results):
                 mcr['delta_aicc'] = aicc_diffs[i]
+        
+        # Save
+        with open(self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(True) + '.pkl', 'wb') as f:
+            pickle.dump(model_comp_results, f)
             
         return model_comp_results
         

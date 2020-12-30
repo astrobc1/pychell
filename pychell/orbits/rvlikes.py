@@ -58,8 +58,8 @@ class RVLikelihood(optscore.Likelihood):
             _, lndetK = np.linalg.slogdet(K)
 
             # Compute the likelihood
-            N = len(data_arr)
-            lnL += -0.5 * (np.dot(residuals, alpha) + lndetK + N * np.log(2 * np.pi))
+            n = len(data_arr)
+            lnL += -0.5 * (np.dot(residuals, alpha) + lndetK + n * np.log(2 * np.pi))
     
         except:
             # If things fail (matrix decomp) return -inf
@@ -97,24 +97,6 @@ class RVLikelihood(optscore.Likelihood):
             kernel_mean = self.model.kernel.realize(pars, residuals, return_unc=False)
             residuals -= kernel_mean
         return residuals
-    
-    def data_only_planet(self, pars, planet_index):
-        """Removes the full model from the data except for one planet.
-
-        Args:
-            pars (Parameters): The parameters.
-            planet_index (int): The planet index to keep in the data.
-
-        Returns:
-            dict: The modified data as a dictionary, where keys are the labels, and values are numpy arrays.
-        """
-        mod_data = {}
-        residuals = self.residuals_after_kernel(pars)
-        planet_model_arr = self.model.build_planet(pars, self.data_t, planet_index)
-        for data in self.data.values():
-            mod_data[data.label] = residuals[self.data_inds[data.label]] + planet_model_arr[self.data_inds[data.label]]
-        
-        return mod_data
     
     @property
     def data_t(self):
@@ -170,4 +152,5 @@ class MixedRVLikelihood(optscore.MixedLikelihood):
                 return -np.inf
         for like in self.values():
             lnL += like.compute_logL(pars, apply_priors=False)
+        
         return lnL
