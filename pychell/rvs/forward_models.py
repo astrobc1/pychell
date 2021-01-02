@@ -350,6 +350,7 @@ class ForwardModels(list):
         # Alias
         rvs_dict = self.rvs_dict
         
+        # Plot the individual rvs for each chunk (n_chunks * n_spec)
         for ichunk in range(self.n_chunks):
         
             # Individual rvs from nelder mead fitting
@@ -411,7 +412,7 @@ class ForwardModels(list):
                 plt.title(self[0].star_name + ' CCF Bisector Spans Order ' + str(self.order_num) + ', Iteration ' + str(iter_index + 1), fontweight='bold')
                 plt.xlabel('X Corr RV [m/s]', fontweight='bold')
                 plt.ylabel('Bisector Span [m/s]', fontweight='bold')
-                plt.tight_layout()
+            plt.tight_layout()
             fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_bisectorspans_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
             plt.savefig(fname)
             plt.close()
@@ -578,7 +579,6 @@ class ForwardModel:
         fig, axarr = plt.subplots(self.n_chunks, 1, figsize=(int(plot_width / dpi), int(self.n_chunks * plot_height / dpi)), dpi=dpi, constrained_layout=True)
         axarr = np.atleast_1d(axarr)
         
-            
         for ichunk, sregion in enumerate(self.chunk_regions):
             
             # The best fit parameters
@@ -666,7 +666,6 @@ class ForwardModel:
         
         # Save
         #plt.subplots_adjust(left=0.05, bottom=0.05, right=None, top=0.95, wspace=None, hspace=None)
-        plt.tight_layout()
         plt.savefig(fname)
         plt.close()
         

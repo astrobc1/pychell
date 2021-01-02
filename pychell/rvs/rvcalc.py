@@ -126,8 +126,8 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
     xcorr_rv_init = vels[M] + forward_model.data.bc_vel
 
     # Fit with a polynomial
-    # Include 3 points on each side of min vel
-    use = np.arange(M-3, M+3).astype(int)
+    # Include 5 points on each side of min vel (11 total points)
+    use = np.arange(M-5, M+6).astype(int)
 
     try:
         pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
