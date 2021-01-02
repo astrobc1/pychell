@@ -26,7 +26,7 @@ import pychell
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 class ExoProblem(optframeworks.OptProblem):
-    
+
     def __init__(self, output_path, *args, star_name=None, likes=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.star_name = 'Star' if star_name is None else star_name
@@ -162,12 +162,19 @@ class ExoProblem(optframeworks.OptProblem):
                     
                     # Time array
                     t_hr_gp = np.array([], dtype=float)
+                    gpmu = np.array([], dtype=float)
                     for i in range(data.t.size):
-                        t_hr_gp = np.concatenate((t_hr_gp, np.linspace(data.t[i] - pars['gp_per'].value / 2, data.t[i] + pars['gp_per'].value / 2, num=kernel_sampling)))
-                    t_hr_gp = np.sort(t_hr_gp)
+                        _t_hr_gp = np.linspace(data.t[i] - 2*pars['gp_per'].value, data.t[i] + 2*pars['gp_per'].value, num=60)
+                        _gpmu, _gpstddev = like.model.kernel.realize(pars, residuals=residuals_with_noise[like.model.data_inds[data.label]], xpred=t_hr_gp, return_unc=True, instname=data.label)
+                        t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
+                        gpmu = np.concatenate((gpmu, _gpmu))
+                        gpstddev = np.concatenate((gpstddev, _gpstddev))
                     
-                    # Realize the GP
-                    gpmu, gpstddev = like.model.kernel.realize(pars, residuals=residuals_with_noise[like.model.data_inds[data.label]], xpred=t_hr_gp, return_unc=True, instname=data.label)
+                    ss = np.argsort(t_hr_gp)
+                    t_hr_gp = t_hr_gp[ss]
+                    gpmus = gpmus[ss]
+                    gpmu = gpmu[ss]
+                    gpstddev= gpstddev[ss]
                     
                     # Plot the GP
                     fig.add_trace(plotly.graph_objects.Scatter(x=t_hr_gp - time_offset, y=gpmu, line=dict(width=1, color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), name='GP ' + data.label), row=1, col=1)
@@ -191,15 +198,25 @@ class ExoProblem(optframeworks.OptProblem):
                     s = pars['gp_decay'].value / 10
                 else:
                     s = 10
+                    
                 t_hr_gp = np.array([], dtype=float)
-                for i in range(like.data_t.size):
-                    t_hr_gp = np.concatenate((t_hr_gp, np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=kernel_sampling)))
-                t_hr_gp = np.sort(t_hr_gp)
-                
-                # Generate the residuals and realize the GP
+                gpmu = np.array([], dtype=float)
+                gpstddev = np.array([], dtype=float)
                 residuals_with_noise = like.residuals_before_kernel(pars)
+                for i in range(like.data_t.size):
+                    _t_hr_gp = np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=80)
+                    _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals=residuals_with_noise, return_unc=True)
+                    t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
+                    gpmu = np.concatenate((gpmu, _gpmu))
+                    gpstddev = np.concatenate((gpstddev, _gpstddev))
+                
+                ss = np.argsort(t_hr_gp)
+                t_hr_gp = t_hr_gp[ss]
+                gpmu = gpmu[ss]
+                gpstddev = gpstddev[ss]
+                
+                # Generate the residuals
                 residuals_no_noise = like.residuals_after_kernel(pars)
-                gpmu, gpstddev = like.model.kernel.realize(pars, xpred=t_hr_gp, residuals=residuals_with_noise, return_unc=True)
                 
                 # Plot the GP
                 fig.add_trace(plotly.graph_objects.Scatter(x=t_hr_gp - time_offset, y=gpmu, line=dict(width=1, color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), name=like.label), row=1, col=1)
@@ -289,23 +306,16 @@ class ExoProblem(optframeworks.OptProblem):
             # Perform max like fit
             opt_result = self.optimize()
             pbest = opt_result["pbest"]
-            
-            # Construct the best fit planets and remove from the data
-            for planet_index in planets_dict_mod:
-                data_rvs -= self.scorer.like0.model.build_planet(pbest, data_times, planet_index)
                 
             # Construct the GP for each like and remove from the data
             for like in self.scorer.values():
                 errors = like.model.kernel.compute_data_errors(pbest)
-                residuals = like.residuals_before_kernel(pbest)
-                gp_mean = like.model.kernel.realize(pbest, residuals, return_unc=False)
-                data_arr = np.copy(like.data_rv)
-                data_arr = like.model.apply_offsets(data_arr, pbest)
+                residuals_no_noise = like.residuals_after_kernel(pbest)
                 for data in like.data.values():
                     inds = self.data.get_inds(data.label)
-                    data_rvs[inds] = data_arr[like.model.data_inds[data.label]] - gp_mean[like.model.data_inds[data.label]]
+                    data_rvs[inds] = residuals_no_noise[like.model.data_inds[data.label]]
                     data_errors[inds] = errors[like.model.data_inds[data.label]]
-            
+                    
             # Reset parameters dict
             for like in self.scorer.values():
                 like.model.planets_dict = planets_dict_cp

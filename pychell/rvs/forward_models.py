@@ -25,13 +25,13 @@ import tqdm
 # Science/math
 from scipy import constants as cs # cs.c = speed of light in m/s
 import numpy as np # Math, Arrays
-import scipy.interpolate # Cubic interpolation, Akima interpolation
 
 # llvm
 from numba import njit, jit, prange
 
 # User defined
 import pychell.maths as pcmath
+from pychell.maths import cspline_interp, lin_interp
 import pychell.rvs.template_augmenter as pcaugmenter
 import pychell.rvs.model_components as pcmodels
 import pychell.data as pcdata
@@ -95,7 +95,7 @@ class ForwardModels(list):
         # Load templates
         self.load_templates()
             
-        print_init_summary(self)
+        self.print_init_summary()
         
         # Initial optimization to guess some parameters
         self.init_optimize()
@@ -137,6 +137,18 @@ class ForwardModels(list):
             for model in fwm.models_dict:
                 fwm.models_dict[model].update(fwm, iter_index)
     
+    def print_init_summary(self):
+        """Print a summary for this run.
+        """
+        # Print summary
+        print('***************************************', flush=True)
+        print('** Target: ' + self.star_name, flush=True)
+        print('** Spectrograph: ' + self.observatory['name'] + ' / ' + self.spectrograph, flush=True)
+        print('** Observations: ' + str(self.n_spec) + ' spectra, ' + str(self.n_nights) + ' nights', flush=True)
+        print('** Echelle Order: ' + str(self.order_num), flush=True)
+        print('** TAG: ' + self.tag, flush=True)
+        print('** N Iterations: ' + str(self.n_template_fits), flush=True)
+        print('***************************************', flush=True)
     
     def init_rvs(self):
         
@@ -619,28 +631,28 @@ class ForwardModel:
                 if self.models_dict['star'].enabled:
                     star_flux_hr = self.models_dict['star'].build(pars, templates_dict_chunked['star'], self.model_wave)
                     star_convolved = self.models_dict['lsf'].convolve_flux(star_flux_hr, lsf=lsf)
-                    star_flux_lr = np.interp(wave_data, self.model_wave, star_convolved, left=np.nan, right=np.nan)
+                    star_flux_lr = cspline_interp(self.model_wave, star_convolved, wave_data)
                     axarr[ichunk].plot(wave_data / 10, star_flux_lr - 1.1, label='Star', lw=0.8, color='deeppink', alpha=0.8)
                 
                 # Tellurics
                 if 'tellurics' in self.models_dict and self.models_dict['tellurics'].enabled:
                     tellurics = self.models_dict['tellurics'].build(pars, templates_dict_chunked['tellurics'], self.model_wave)
                     tellurics_convolved = self.models_dict['lsf'].convolve_flux(tellurics, lsf=lsf)
-                    tell_flux_lr = np.interp(wave_data, self.model_wave, tellurics_convolved, left=np.nan, right=np.nan)
+                    tell_flux_lr = cspline_interp(self.model_wave, tellurics_convolved, wave_data)
                     axarr[ichunk].plot(wave_data / 10, tell_flux_lr - 1.1, label='Tellurics', lw=0.8, color='indigo', alpha=0.8)
                 
                 # Gas Cell
                 if 'gas_cell' in self.models_dict and self.models_dict['gas_cell'].enabled:
                     gas_flux_hr = self.models_dict['gas_cell'].build(pars, templates_dict_chunked['gas_cell'], self.model_wave)
                     gas_cell_convolved = self.models_dict['lsf'].convolve_flux(gas_flux_hr, lsf=lsf)
-                    gas_flux_lr = np.interp(wave_data, self.model_wave, gas_cell_convolved, left=np.nan, right=np.nan)
+                    gas_flux_lr = cspline_interp(self.model_wave, gas_cell_convolved, wave_data)
                     axarr[ichunk].plot(wave_data / 10, gas_flux_lr - 1.1, label='Gas Cell', lw=0.8, color='green', alpha=0.8)
                 axarr[ichunk].set_ylim(-1.1, 1.1)
                 
                 # Residual lab flux
                 if 'residual_lab' in templates_dict:
                     res_hr = templates_dict['residual_lab'][:, 1]
-                    res_lr = np.interp(wave_data, self.model_wave, res_hr, left=np.nan, right=np.nan)
+                    res_lr = cspline_interp(self.model_wave, res_hr, wave_data)
                     ax.plot(wave_data / 10, res_lr - 0.1, label='Lab Frame Coherence', lw=0.8, color='darkred', alpha=0.8)
                     
                 axarr[ichunk].legend(prop={'size': 8}, loc='lower right')
@@ -905,7 +917,7 @@ class ForwardModel:
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, self.model_wave, model, left=np.nan, right=np.nan)
+        model_lr = cspline_interp(self.model_wave, model, wavelength_solution)
         
         if self.debug:
             breakpoint()
@@ -942,7 +954,7 @@ class ForwardModel:
         wavelength_solution = self.models_dict['wavelength_solution'].build(pars)
 
         # Interpolate high res model onto data grid
-        model_lr = np.interp(wavelength_solution, self.model_wave, model, left=np.nan, right=np.nan)
+        model_lr = cspline_interp(self.model_wave, model, wavelength_solution)
         
         if self.debug:
             breakpoint()
@@ -969,24 +981,9 @@ class MinervaAustralisForwardModel(ForwardModel):
 class MinervaNorthForwardModel(ForwardModel):
     pass
     
-    
 class NIRSPECForwardModel(ForwardModel):
     pass
     
 class SimulatedForwardModel(ForwardModel):
     pass
     
-    
-# Post init summary
-def print_init_summary(forward_model):
-    """Print a summary for this run.
-    """
-    # Print summary
-    print('***************************************', flush=True)
-    print('** Target: ' + forward_model.star_name, flush=True)
-    print('** Spectrograph: ' + forward_model.observatory['name'] + ' / ' + forward_model.spectrograph, flush=True)
-    print('** Observations: ' + str(forward_model.n_spec) + ' spectra, ' + str(forward_model.n_nights) + ' nights', flush=True)
-    print('** Echelle Order: ' + str(forward_model.order_num), flush=True)
-    print('** TAG: ' + forward_model.tag, flush=True)
-    print('** N Iterations: ' + str(forward_model.n_template_fits), flush=True)
-    print('***************************************', flush=True)

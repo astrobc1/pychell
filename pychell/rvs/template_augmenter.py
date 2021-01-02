@@ -24,7 +24,7 @@ try:
     import torch
 except:
     warnings.warn("Could not import pytorch!")
-import scipy.interpolate # Cubic interpolation, Akima interpolation
+import scipy.interpolate # Cubic spline LSQ fitting
 
 # llvm
 from numba import njit, jit, prange
@@ -32,6 +32,7 @@ from numba import njit, jit, prange
 # Pychell modules
 import pychell.config as pcconfig
 import pychell.maths as pcmath # mathy equations
+from pychell.maths import cspline_interp
 import pychell.rvs.forward_models as pcforwardmodels # the various forward model implementations
 import pychell.data as pcdata # the data objects
 import pychell.rvs.model_components as pcmodelcomponents # the data objects
@@ -274,7 +275,7 @@ def weighted_median(forward_models, iter_index=None):
             if iter_index == 0:
                 continuum_estim = pcmodelcomponents.ContinuumModel.estimate_splines(_wave, _res, cont_val=0.5, n_splines=int(sregion.pix_len() / 100), width=width)
                 _res -= continuum_estim
-            res_hr = scipy.interpolate.CubicSpline(_wave, _res, extrapolate=False)(star_wave_master_hr)
+            res_hr = cspline_interp(_wave, _res, star_wave_master_hr)
             chunk_match = sregion.wave_within(star_wave_master_hr)
             residuals_hr[ispec, ichunk, chunk_match] = res_hr[chunk_match]
 

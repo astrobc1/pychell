@@ -9,7 +9,6 @@ from scipy import constants as cs  # cs.c = speed of light in m/s
 import numpy as np  # Math, Arrays
 import sys
 from scipy.special import legendre
-import scipy.interpolate  # Cubic, Akima, Pchip interpolation
 
 # Graphics
 import matplotlib.pyplot as plt
@@ -20,12 +19,13 @@ import numba
 
 # User defined
 import pychell.maths as pcmath
+from pychell.maths import cspline_interp
 import pychell.rvs.template_augmenter as pcaugmenter
 import optimparameters.parameters as OptimParameters
 
 # NOTE: The idea is to first define crude "quasi abstract" classes
-# Then define a quasi abstract class for each sub type.
-# Then define a concrete class for particular models.
+# Then define a quasi abstract class for each sub type (continuum, star, gas cell, tellurics, etc).
+# Then define a concrete class for particular models (SplineContinuum, TAPASTellurics, etc).
 
 #### Quasi Abstract Classes ####
 
@@ -191,11 +191,10 @@ class TemplateMult(MultModelComponent):
     def normalize_template(self, forward_model, wave, flux, uniform=False):
         
         if not uniform:
-            good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
             dl = np.nanmedian(np.diff(wave))
             wave_min, wave_max = np.nanmin(wave), np.nanmax(wave)
             wave_lin = np.arange(wave_min, wave_max, dl)
-            flux_lin = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=False)(wave_lin)
+            flux_lin = cspline_interp(wave, flux, wave_lin)
         else:
             flux_lin = flux
         
@@ -251,8 +250,7 @@ class ContinuumModel(EmpiricalMult):
 
         good = np.where(np.isfinite(continuum_coarse))[0]
         inds = np.linspace(good[0], good[-1], num=n_knots).astype(int)
-        cspline = scipy.interpolate.CubicSpline(wave[inds], continuum_coarse[inds], extrapolate=False, bc_type='not-a-knot')
-        continuum = cspline(wave)
+        continuum = cspline_interp(wave[inds], continuum_coarse[inds], wave)
         return continuum
 
     @staticmethod
@@ -410,7 +408,7 @@ class SplineContinuum(ContinuumModel):
         spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_spline_pars)], dtype=np.float64)
 
         # Build
-        spline_cont = scipy.interpolate.CubicSpline(self.spline_wave_set_points, spline_pars, extrapolate=False, bc_type='not-a-knot')(wave_final)
+        spline_cont = cspline_interp(self.spline_wave_set_points, spline_pars, wave_final)
         
         return spline_cont
 
@@ -586,8 +584,7 @@ class AugmentedStar(Star):
             print('Loading in Synthetic Stellar Template', flush=True)
             template_raw = np.loadtxt(self.input_file, delimiter=',')
             wave, flux = template_raw[:, 0], template_raw[:, 1]
-            good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
-            flux_interp = scipy.interpolate.CubicSpline(wave[good], flux[good], extrapolate=False, bc_type='not-a-knot')(wave_uniform)
+            flux_interp = cspline_interp(wave, flux, wave_uniform)
             flux_interp /= pcmath.weighted_median(flux_interp, percentile=0.999)
             template = np.array([wave_uniform, flux_interp]).T
         else:
@@ -682,8 +679,7 @@ class TelluricsTAPAS(Tellurics):
             wave, _flux = tell['wave'], tell['flux']
             good = np.where((wave > forward_model.sregion_order.wavemin - pad) & (wave < forward_model.sregion_order.wavemax + pad))[0]
             wave, _flux = wave[good], _flux[good]
-            good = np.where(np.isfinite(wave) & np.isfinite(_flux))[0]
-            flux_airmass *= scipy.interpolate.CubicSpline(wave[good], _flux[good], extrapolate=False)(wave_water)
+            flux_airmass *= cspline_interp(wave, _flux, wave_water)
             
         templates[:, 2] = flux_airmass
             
@@ -1111,7 +1107,7 @@ class SplineWavelengthSolution(WavelengthSolution):
         spline_pars = np.array([pars[self.par_names[i]].value for i in range(self.n_spline_pars)], dtype=np.float64)
         
         # Build the spline model
-        spline_wave = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, spline_pars + self.spline_wave_set_points, extrapolate=False, bc_type='not-a-knot')(pixel_grid)
+        spline_wave = cspline_interp(self.spline_pixel_set_points, spline_pars + self.spline_wave_set_points, pixel_grid)
         
         return spline_wave
 
@@ -1176,7 +1172,7 @@ class HybridWavelengthSolution(WavelengthSolution):
         else:
             pixel_grid = np.arange(self.sregion.pixmin, self.sregion.pixmax + 1)
             splines = np.array([pars[self.par_names[i]].value for i in range(self.n_splines + 1)], dtype=np.float64)
-            wave_spline = scipy.interpolate.CubicSpline(self.spline_pixel_set_points, splines, bc_type='not-a-knot', extrapolate=False)(pixel_grid)
+            wave_spline = cspline_interp(self.spline_pixel_set_points, splines, piixel_grid)
             return self.default_wave_grid[self.sregion.data_inds] + wave_spline
 
     def build_fake(self):

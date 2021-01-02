@@ -162,6 +162,13 @@ def doppler_shift(wave, vel, wave_out=None, flux=None, interp='linear', kind='ex
     return flux_out
     
 
+def lin_interp(x, y, xnew):
+    return np.interp(xnew, x, y, left=np.nan, right=np.nan)
+
+def cspline_interp(x, y, xnew):
+    good = np.where(np.isfinite(x) & np.isfinite(y))[0]
+    return scipy.interpolate.CubicSpline(x[good], y[good], extrapolate=False)(xnew)
+
 @njit
 def _dop_shift_SR(wave, vel):
     z = vel / cs.c
