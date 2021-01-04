@@ -457,7 +457,7 @@ class DynamicGasCell(GasCell):
         wave, flux = template[:, 0], template[:, 1]
         wave = wave + pars[self.par_names[0]].value
         flux = flux ** pars[self.par_names[1]].value
-        return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+        return cspline_interp(wave, flux, wave_final)
 
     def init_parameters(self, forward_model):
         forward_model.initial_parameters.add_parameter(OptimParameters.Parameter(name=self.par_names[0], value=self.blueprint['shift'][1], minv=self.blueprint['shift'][0], maxv=self.blueprint['shift'][2], vary=True))
@@ -481,7 +481,7 @@ class CHIRONGasCell(DynamicGasCell):
         wave, flux = template[:, 0], template[:, 1]
         wave = wave + pars[self.par_names[0]].value
         flux = flux ** pars[self.par_names[1]].value
-        return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+        return cspline_interp(wave, flux, wave_final)
 
     def init_parameters(self, forward_model):
         shift = self.blueprint['shifts'][self.order_num - 1]
@@ -506,7 +506,7 @@ class PerfectGasCell(GasCell):
 
     def build(self, pars, template, wave_final):
         wave, flux = template[:, 0], template[:, 1]
-        return np.interp(wave_final, wave, flux, left=flux[0], right=flux[-1])
+        return cspline_interp(wave, flux, wave_final)
 
 #### Star ####
 class Star(TemplateMult):
@@ -571,7 +571,7 @@ class AugmentedStar(Star):
 
     def build(self, pars, template, wave_final):
         wave, flux = template[:, 0], template[:, 1]
-        flux_shifted_interp = pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=wave_final, flux=flux, interp='cubic')
+        flux_shifted_interp = pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=wave_final, flux=flux, interp='cspline')
         return flux_shifted_interp
 
     def init_parameters(self, forward_model):
@@ -631,9 +631,9 @@ class TelluricsTAPAS(Tellurics):
         if self.airmass_enabled:
             flux *= self.build_component(pars, templates, 'airmass')
         if vel != 0:
-            flux = pcmath.doppler_shift(templates[:, 0], wave_out=wave_final, vel=vel, flux=flux, interp='linear')
+            flux = pcmath.doppler_shift(templates[:, 0], wave_out=wave_final, vel=vel, flux=flux, interp='cspline')
         else:
-            flux = np.interp(wave_final, templates[:, 0], flux, left=np.nan, right=np.nan)
+            flux = cspline_interp(templates[:, 0], flux, wave_final)
         return flux
 
     def build_component(self, pars, templates, component):
@@ -698,16 +698,20 @@ class TelluricsTAPAS(Tellurics):
         yrange_airmass = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 2],  sregion)
         if yrange_water > self.flag_thresh[0]:
             self.has_water_features = True
-            self.enable(forward_model, "water")
+            if self.enabled:
+                self.enable(forward_model, "water")
         else:
             self.has_water_features = False
-            self.disable(forward_model, "water")
+            if self.enabled:
+                self.disable(forward_model, "water")
         if yrange_airmass > self.flag_thresh[0]:
             self.has_airmass_features = True
-            self.enable(forward_model, "airmass")
+            if self.enabled:
+                self.enable(forward_model, "airmass")
         else:
             self.has_airmass_features = False
-            self.disable(forward_model, "airmass")
+            if self.enabled:
+                self.disable(forward_model, "airmass")
             
         if self.flag_and_ignore:
             self.flag_tellurics(forward_model, templates_dict)
@@ -720,13 +724,13 @@ class TelluricsTAPAS(Tellurics):
         yrange_water = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 1], forward_model.sregion_order)
         yrange_airmass = self.template_yrange(forward_model, templates_dict["tellurics"][:, 0], templates_dict["tellurics"][:, 2], forward_model.sregion_order)
         
-        if yrange_water > self.flag_thresh[0]:
+        if yrange_water > self.flag_thresh[0] and self.enabled:
             self.has_water_features = True
             self.enable(forward_model, "water")
         else:
             self.has_water_features = False
             self.disable(forward_model, "water")
-        if yrange_airmass > self.flag_thresh[0]:
+        if yrange_airmass > self.flag_thresh[0] and self.enabled:
             self.has_airmass_features = True
             self.enable(forward_model, "airmass")
         else:
@@ -750,6 +754,7 @@ class TelluricsTAPAS(Tellurics):
         if self.water_enabled or self.airmass_enabled:
             self.enabled = True
             forward_model.initial_parameters[self.par_names[0]].vary = True
+            
         
     def disable(self, forward_model, component):
         if component == "water":
@@ -765,9 +770,9 @@ class TelluricsTAPAS(Tellurics):
     def flag_tellurics(self, forward_model, templates_dict):
         tell_flux_hr = self.build(forward_model.initial_parameters, templates_dict["tellurics"], forward_model.model_wave)
         wave_data = forward_model.models_dict["wavelength_solution"].build(forward_model.initial_parameters)
-        tell_flux_lr = np.interp(wave_data, forward_model.model_wave, tell_flux_hr, left=np.nan, right=np.nan)
+        tell_flux_lr = cspline_interp(forward_model.model_wave, tell_flux_hr, wave_final)
         tell_flux_lr / pcmath.weighted_median(tell_flux_lr, percentile=0.999)
-        bad = np.where(tell_flux_lr < 1 - self.thresh)[0]
+        bad = np.where(tell_flux_lr < self.thresh[1])[0]
         if bad.size > 0:
             forward_model.data.flux[forward_model.sregion_order.data_inds[bad]] = np.nan
             forward_model.data.flux_unc[forward_model.sregion_order.data_inds[bad]] = np.nan

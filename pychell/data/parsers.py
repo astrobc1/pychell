@@ -405,7 +405,35 @@ class iSHELLParser(DataParser):
         data.flux = data.flux[::-1]
         data.mask = data.mask[::-1]
         data.flux_unc = data.flux_unc[::-1]
+     
+     
+class SimulatedParser(DataParser):
         
+    def parse_target(self, data):
+        return "GJ_699"
+        
+    def parse_time(self, data):
+        data.time_obs_start = Time(float(data.header['JD']), scale='utc', format='jd')
+        return data.time_obs_start
+    
+    def get_n_orders(self, data):
+        return 1
+    
+    def parse_itime(self, data):
+        return 0
+    
+    def compute_midpoint(self, data):
+        return data.time_obs_start
+        
+    def parse_spec1d(self, data):
+        
+        # Load the flux, flux unc, and bad pix arrays
+        fits_data = fits.open(data.input_file)[0]
+        fits_data.verify('fix')
+        data.header = fits_data.header
+        data.default_wave_grid, data.flux, data.mask = fits_data.data[:, 0].astype(np.float64), fits_data.data[:, 1].astype(np.float64), fits_data.data[:, 2].astype(np.float64)
+        data.flux_unc = np.ones_like(data.flux)
+   
         
 class MinervaNorthParser(DataParser):
     

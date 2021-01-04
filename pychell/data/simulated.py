@@ -47,20 +47,22 @@ forward_model_blueprints = {
     
     # The star
     'star': {
-        'name': 'star',
-        'class_name': 'Star',
+        'class': 'AugmentedStar',
+        'augmenter': 'weighted_median',
         'input_file': None,
-        'vel': [-1000 * 300, 10, 1000 * 300]
+        'vel': [-1000 * 400, 10, 1000 * 400]
     },
     
     # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'kband_tellurics',
-        'class_name': 'TelluricsTAPAS',
-        'vel': [0, 0, 0],
-        'water_depth': [1, 1, 1],
-        'airmass_depth': [1, 1, 1],
+        'class': 'TelluricsTAPAS',
+        'vel': [-500, -100, 500],
+        'water_depth': [0.01, 1.2, 5.0],
+        'airmass_depth': [0.8, 1.2, 4.0],
         'min_range': 0.01,
+        'flag_thresh': [0.05, 0.98], # below this level of norm flux is flagged
+        'flag_and_ignore': 0,
         'input_files': {
             'water': 'telluric_water_tapas_maunakea.npz',
             'methane': 'telluric_methane_tapas_maunakea.npz',
@@ -71,33 +73,33 @@ forward_model_blueprints = {
         }
     },
     
-    'blaze': {
+    'continuum': {
         'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class_name': 'PolyBlaze',
-        'n_splines': 0,
+        'class': 'SplineContinuum',
+        'n_splines': 8,
         'poly_order': 2,
         'poly_2': [0, 0, 0],
         'poly_1': [-0.0001, 1E-5, 0.0001],
         'poly_0': [0.99, 1.0, 1.01],
-        'spline': [-0.135, 0.01, 0.135],
+        'spline': [0.3, 0.95, 1.1],
         'n_delay': 0
     },
     
     # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
-        'class_name': 'HermiteLSF',
+        'class': 'HermiteLSF',
         'hermdeg': 0,
         'n_delay': 0,
-        'width': [0.055, 0.12, 0.2], # LSF width, in angstroms
+        'width': [0.028, 0.04, 0.072], # LSF width, in angstroms
         'ak': [-0.03, 0.001, 0.2] # Hermite polynomial coefficients
     },
     
     # Determined by splines
     'wavelength_solution': {
         
-        'name': 'wavelength_sol_known',
-        'class_name': 'HybridWavelengthSolution',
+        'name': 'wls_known',
+        'class': 'HybridWavelengthSolution',
         
         'n_splines': 0,
         'n_delay_splines': 0,

@@ -95,8 +95,12 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         tell_flux_hrc = forward_model.models_dict['lsf'].convolve_flux(tell_flux_hr, pars=pars)
         tell_flux_lr = np.interp(forward_model.models_dict['wavelength_solution'].build(pars), templates_dict['star'][:, 0], tell_flux_hrc, left=0, right=0)
         tell_weights = tell_flux_lr**2
+        bad = np.where(tell_flux_lr < 0.99)
+        tell_weights = np.ones_like(weights_init)
+        tell_weights[bad] = 0
         # Combine weights
         weights_init *= tell_weights
+        
     
     # Star weights depend on the information content.
     rvc, _ = compute_rv_content(templates_dict['star'][:, 0], templates_dict['star'][:, 1], snr=100, blaze=False, ron=0, width=pars[forward_model.models_dict['lsf'].par_names[0]].value)
@@ -114,7 +118,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         wave_lr, model_lr = forward_model.build_full(pars, templates_dict)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        star_weights_shifted = pcmath.doppler_shift(templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='linear', wave_out=wave_lr)
+        star_weights_shifted = pcmath.doppler_shift(templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='spline', wave_out=wave_lr)
         weights *= star_weights_shifted
         
         # Construct the RMS

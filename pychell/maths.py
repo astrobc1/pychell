@@ -138,7 +138,7 @@ def rolling_clip(x, y, weights=None, width=None, method='median', nsigma=3, perc
                 
     return mask
 
-def doppler_shift(wave, vel, wave_out=None, flux=None, interp='linear', kind='exp'):
+def doppler_shift(wave, vel, wave_out=None, flux=None, interp='cspline', kind='exp'):
     
     if wave_out is None:
         wave_out = wave
@@ -151,8 +151,8 @@ def doppler_shift(wave, vel, wave_out=None, flux=None, interp='linear', kind='ex
     if interp is None and flux is None:
         return wave_shifted
     good = np.where(np.isfinite(wave_shifted) & np.isfinite(flux))[0]
-    if interp == 'cubic':
-        flux_out = scipy.interpolate.CubicSpline(wave_shifted[good], flux[good], extrapolate=False)(wave_out)
+    if interp == 'cspline':
+        flux_out = cspline_interp(wave_shifted, flux, wave_out)
     elif interp == 'akima':
         flux_out = scipy.interpolate.Akima1DInterpolator(wave_shifted[good], flux[good])(wave_out)
     elif interp == 'pchip':

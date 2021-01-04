@@ -211,7 +211,7 @@ class ForwardModels(list):
     
     def init_optimize(self):
         if self[0].models_dict['star'].from_synthetic:
-            self.get_init_stellar_vel_ccf()
+            self.get_init_star_vel_ccf()
         for fwm in self:
             fwm.init_optimize(self.templates_dict)
 
@@ -418,7 +418,7 @@ class ForwardModels(list):
             plt.close()
     
         
-    def get_init_stellar_vel_ccf(self):
+    def get_init_star_vel_ccf(self):
         """Cross correlation wrapper for all spectra.
 
         Args:
@@ -445,7 +445,10 @@ class ForwardModels(list):
             ccf_results = [ccf_method(fwm, self.templates_dict, fwm.sregion_order) for fwm in tqdm.tqdm(self)]
             
         for ispec, fwm in enumerate(self):
-            fwm.initial_parameters[fwm.models_dict['star'].par_names[0]].value = ccf_results[ispec]
+            if ccf_results[ispec] != 0:
+                fwm.initial_parameters[fwm.models_dict['star'].par_names[0]].value = ccf_results[ispec]
+            else:
+                fwm.initial_parameters[fwm.models_dict['star'].par_names[0]].value = ccf_results[ispec] + 10
                 
         print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
 
