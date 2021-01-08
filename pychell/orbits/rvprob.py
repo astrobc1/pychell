@@ -257,7 +257,7 @@ class ExoProblem(optframeworks.OptProblem):
                 
                 # For each instrument, plot
                 for data in like.data.values():
-                    data_arr_offset = data.rv - pars['gamma_' + data.label].value
+                    data_arr_offset = like.model.apply_offsets(data.rv, pars, instname=data.label)
                     _errors = errors[like.model.data_inds[data.label]]
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
                     _yerr = dict(array=_errors)
@@ -508,9 +508,7 @@ class ExoProblem(optframeworks.OptProblem):
         return periods, persearch_results
     
     def sample(self, *args, **kwargs):
-        self.scorer.redchi2s = []
         sampler_result = super().sample(*args, **kwargs)
-        sampler_result["redchi2s"] = self.scorer.redchi2s
         return sampler_result
     
     def corner_plot(self, sampler_result):

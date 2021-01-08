@@ -32,7 +32,6 @@ class RVLikelihood(optscore.Likelihood):
                 return -np.inf
         else:
             lnL = 0
-
         # Copy the rvs for this likelihood
         data_arr = np.copy(self.data_rv)
         
@@ -50,7 +49,6 @@ class RVLikelihood(optscore.Likelihood):
 
         # Compute the determiniant and inverse of K
         try:
-        
             # Reduce the cov matrix and solve for KX = residuals
             alpha = cho_solve(cho_factor(K), residuals)
 

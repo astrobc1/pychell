@@ -100,16 +100,8 @@ class RVModel(optmodels.Model):
     
     def _builder(self, pars, t):
         
-        # Planets
+        # All planets
         _model = self.build_planets(pars, t)
-        
-        # Linear trend
-        if pars['gamma_dot'].vary:
-            _model += pars['gamma_dot'].value * (t - self.time_base)
-        
-        # Quadratic trend
-        if pars['gamma_ddot'].vary:
-            _model += pars['gamma_ddot'].value * (t - self.time_base)**2
         
         # Return model
         return _model
@@ -126,7 +118,7 @@ class RVModel(optmodels.Model):
         _model = self._builder(pars, self.data_t)
         return _model
 
-    def apply_offsets(self, rv_vec, pars):
+    def apply_offsets(self, rv_vec, pars, instname=None):
         """Apply gamma offsets (zero points only) to the data. Linear and quadratic terms are applied to the model.
 
         Args:
@@ -134,8 +126,24 @@ class RVModel(optmodels.Model):
             rv_vec (np.ndarray): The RV data vector for all data
             pars (Parameters): The parameters.
         """
-        for instname in self.data:
-            rv_vec[self.data_inds[instname]] -= pars["gamma_" + instname].value
+        
+        # Remove the per-instrument effective zero points.
+        if instname is None:
+            for instname in self.data:
+                if "gamma_" + instname in pars:
+                    rv_vec[self.data_inds[instname]] -= pars["gamma_" + instname].value
+        else:
+            if "gamma_" + instname in pars:
+                    rv_vec -= pars["gamma_" + instname].value
+                
+        # Linear trend
+        if 'gamma_dot' in pars and pars['gamma_dot'].value != 0:
+            rv_vec -= pars['gamma_dot'].value * (t - self.time_base)
+        
+        # Quadratic trend
+        if pars['gamma_ddot'].vary:
+            rv_vec -= pars['gamma_ddot'].value * (t - self.time_base)**2
+            
         return rv_vec
 
     def __repr__(self):
@@ -149,14 +157,14 @@ class RVModel(optmodels.Model):
         
     
 
-@njit
+#@njit
 def solve_kepler(mas, ecc):
     eas = np.zeros_like(mas)
     for i in range(mas.size):
         eas[i] = _solve_kepler(mas[i], ecc)
     return eas
 
-@njit
+#@njit
 def _solve_kepler(ma, ecc):
     """Solve Kepler's Equation for one planet.
     Args:
@@ -167,7 +175,7 @@ def _solve_kepler(ma, ecc):
     """
 
     # Convergence criterion
-    conv = 1.0E-12
+    conv = 1E-12
     k = 0.85
     
     # First guess for ea
@@ -187,10 +195,10 @@ def _solve_kepler(ma, ecc):
         fip = 1 - ecc * np.cos(ea)
         fipp = ecc * np.sin(ea)
         fippp = 1 - fip
-        d1 = -1 * fi / fip
-        d1 = -1 * fi / (fip + d1 * fipp / 2.0)
-        d1 = -1 * fi / (fip + d1 * fipp / 2.0 + d1 * d1 * fippp / 6.0)
-        ea_new = ea + d1
+        d1 = -fi / fip
+        d2 = -fi / (fip + d1 * fipp / 2.0)
+        d3 = -fi / (fip + d2 * fipp / 2.0 + d2 * d2 * fippp / 6.0)
+        ea_new = ea + d3
         
         # Check convergence
         fi = ea_new - ecc * np.sin(ea_new) - ma
@@ -200,7 +208,7 @@ def _solve_kepler(ma, ecc):
     
     return ea_new
 
-@njit
+#@njit
 def true_anomaly(t, tp, per, ecc):
     """
     Calculate the true anomaly for a given time, period, eccentricity.
@@ -214,17 +222,16 @@ def true_anomaly(t, tp, per, ecc):
     Returns:
         np.ndarray: true anomoly at each time
     """
-
-    # f in Murray and Dermott p. 27
+    
     m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
-    e1 = solve_kepler(m, ecc)
+    ea1 = solve_kepler(m, ecc)
     n1 = 1.0 + ecc
     n2 = 1.0 - ecc
-    nu = 2.0 * np.arctan((n1 / n2)**0.5 * np.tan(e1 / 2.0))
+    nu = 2.0 * np.arctan((n1 / n2)**0.5 * np.tan(ea1 / 2.0))
 
     return nu
 
-@njit
+#@njit
 def planet_signal(t, per, tp, ecc, w, k):
     """Computes the RV signal of one planet for a given time vector.
 
@@ -241,26 +248,33 @@ def planet_signal(t, per, tp, ecc, w, k):
         np.ndarray: The rv signal for this planet.
     """
 
-    # Circular orbits are easy
+    # Circular orbit
     if ecc == 0.0:
         m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
         return k * np.cos(m + w)
 
+    # Let a negative period be zero
     if per < 0:
         per = 1E-4
+        
+    # Force circular orbit if ecc is negative
     if ecc < 0:
         ecc = 0
+        m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
+        return k * np.cos(m + w)
+    
+    # Force bounded orbit if ecc > 1
     if ecc > 0.99:
         ecc = 0.99
         
-    # Calculate the approximate eccentric anomaly, E1, via the mean anomaly  M.
-    nu = true_anomaly(t, tp, per, ecc)
-    rv = k * (np.cos(nu + w) + ecc * np.cos(w))
+    # Calculate the eccentric anomaly (ea) from the mean anomaly (ma).
+    ta = true_anomaly(t, tp, per, ecc)
+    rv = k * (np.cos(ta + w) + ecc * np.cos(w))
 
     # Return rv
     return rv
 
-@njit
+#@njit
 def tc_to_tp(tc, per, ecc, w):
     """
     Convert Time of Transit (time of conjunction) to Time of Periastron Passage
@@ -286,7 +300,7 @@ def tc_to_tp(tc, per, ecc, w):
 
     return tp
 
-@njit
+#@njit
 def tp_to_tc(tp, per, ecc, w):
     """
     Convert Time of Periastron to Time of Transit (time of conjunction).
