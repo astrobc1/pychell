@@ -152,7 +152,7 @@ class RVModel(optmodels.Model):
 @njit
 def solve_kepler(mas, ecc):
     eas = np.zeros_like(mas)
-    for i in prange(mas.size):
+    for i in range(mas.size):
         eas[i] = _solve_kepler(mas[i], ecc)
     return eas
 

@@ -7,6 +7,32 @@ import plotly
 def make_title(title):
     return st.title(title)
 
+ 
+class SessionState:
+    
+    def __init__(self, fname, data=None):
+        if data is not None:
+            self.data = data
+            self.fname = fname
+        if os.path.exists(fname) and data is None:
+            self = self.load(fname)
+        
+    def save(self):
+        with open(self.fname, 'wb') as f:
+            pickle.dump(self, f)
+            
+    def load(self):
+        with open(self.fname, 'wb') as f:
+            return pickle.load(f)
+    
+    def __getitem__(self, key):
+        if key == "fname":
+            return self.fname
+        if key in self.data:
+            return self.data[key]
+        else:
+            return super().__getitem__(key)
+
 class StreamlitComponent:
     
     def __init__(self, comps, label="", *args, **kwargs):
@@ -82,22 +108,24 @@ class MaxLikeResult(StreamlitComponent):
     def write(self):
     
         # Display Results
-        st.markdown('# Optimize Results')
+        st.markdown('# Max Likelihood Results')
         st.text(repr(self.opt_result['pbest']))
         st.markdown('## Function calls: ' + str(self.opt_result['fcalls']))
         st.markdown('## ln(L): ' + str(-1 * self.opt_result['fbest']))
     
         # Full RV plot
         st.markdown('## Full RV Plot')
-        plotly_fig = self.optprob.rv_plot(opt_result=self.opt_result, n_model_pts=5000)
-        self.comps["rvfigfull_maxlike"] = st.plotly_chart(plotly_fig)
+        self.full_fig = self.optprob.rv_plot(opt_result=self.opt_result, n_model_pts=5000)
+        self.comps["rvfigfull_maxlike"] = st.plotly_chart(self.full_fig)
     
         # Phased rv plot
         st.markdown('## Phased Planets')
+        self.planet_figs = []
         for planet_index in self.optprob.planets_dict:
             name = "figplanet_" + str(planet_index) + "_maxlike"
             plotly_fig = self.optprob.rv_phase_plot(planet_index=planet_index, opt_result=self.opt_result)
             self.comps[name] = st.plotly_chart(plotly_fig)
+            self.planet_figs.append(plotly_fig)
             
         return self.comps
     
@@ -134,20 +162,22 @@ class MCMCResult(StreamlitComponent):
     
         # Full RV plot
         st.markdown('## Full RV Plot')
-        plotly_fig = self.optprob.rv_plot(opt_result=self.sampler_result, n_model_pts=5000)
-        self.comps["rvfigfull_mcmc"] = st.plotly_chart(plotly_fig)
+        self.full_fig = self.optprob.rv_plot(opt_result=self.sampler_result, n_model_pts=5000)
+        self.comps["rvfigfull_mcmc"] = st.plotly_chart(self.full_fig)
     
         # Phased rv plot
         st.markdown('## Phased Planets')
+        self.planet_figs = []
         for planet_index in self.optprob.planets_dict:
             name = "figplanet_" + str(planet_index) + "_mcmc"
             plotly_fig = self.optprob.rv_phase_plot(planet_index=planet_index, opt_result=self.sampler_result)
             self.comps[name] = st.plotly_chart(plotly_fig)
+            self.planet_figs.append(plotly_fig)
     
         # Corner plot
         st.markdown('## Corner Plot')
-        corner_plot = self.optprob.corner_plot(sampler_result=self.sampler_result)
-        self.comps["corner_plot"] = st.pyplot(corner_plot)
+        self.corner_plot = self.optprob.corner_plot(sampler_result=self.sampler_result)
+        self.comps["corner_plot"] = st.pyplot(self.corner_plot)
       
 class GLSResult(StreamlitComponent):
     

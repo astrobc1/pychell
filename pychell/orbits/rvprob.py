@@ -23,6 +23,7 @@ import pychell.utils as pcutils
 PLOTLY_COLORS = pcutils.PLOTLY_COLORS
 import os
 import pychell
+import pychell.utils as pcutils
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 class ExoProblem(optframeworks.OptProblem):
@@ -33,6 +34,15 @@ class ExoProblem(optframeworks.OptProblem):
         self.scorer = likes
         self.output_path = output_path
         gen_latex_labels(self.p0, self.planets_dict)
+        
+    def _generate_report(self, opt_result, n_model_pts=5000, time_offset=2450000, kernel_sampling=50):
+            
+        # Full rv plot
+        full_plot = self.rv_plot(opt_result, n_model_pts=n_model_pts, time_offset=time_offset, kernel_sampling=kernel_sampling)
+        
+        for planet_index in self.planets_dict:
+            self.rv_phase_plot(planet_index, opt_result=opt_result)
+            
     
     def rv_phase_plot(self, planet_index, opt_result=None):
         """Creates a phased rv plot for a given planet with the model on top.
@@ -88,7 +98,7 @@ class ExoProblem(optframeworks.OptProblem):
 
         # Plot the model on top
         ss = np.argsort(phases_hr)
-        fig.add_trace(plotly.graph_objects.Scatter(x=phases_hr[ss], y=planet_model_phased[ss], line=dict(color='black', width=2)))
+        fig.add_trace(plotly.graph_objects.Scatter(x=phases_hr[ss], y=planet_model_phased[ss], line=dict(color='black', width=2), name="<b>Keplerian Model</b>"))
         
         # Labels
         fig.update_xaxes(title_text='<b>Phase</b>')
@@ -96,6 +106,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
         fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(per) + ', e = ' + str(ecc) + '</b>')
         fig.update_layout(template="ggplot2")
+        fig.update_layout(font=dict(family="Courier New, monospace", size=24))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + self.planets_dict[planet_index]["label"] + '_rvs_phased_' + pcutils.gendatestr(True) + '.html')
@@ -103,7 +114,7 @@ class ExoProblem(optframeworks.OptProblem):
         # Return fig
         return fig
 
-    def rv_plot(self, opt_result, n_model_pts=5000, time_offset=2450000, kernel_sampling=30):
+    def rv_plot(self, opt_result, n_model_pts=5000, time_offset=2450000, kernel_sampling=100):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
@@ -136,7 +147,7 @@ class ExoProblem(optframeworks.OptProblem):
         model_arr_hr = like0.model._builder(pars, t_hr)
 
         # Plot the planet model
-        fig.add_trace(plotly.graph_objects.Scatter(x=t_hr - time_offset, y=model_arr_hr, line=dict(color='black', width=2)), row=1, col=1)
+        fig.add_trace(plotly.graph_objects.Scatter(x=t_hr - time_offset, y=model_arr_hr, line=dict(color='black', width=2), name="<b>Keplerian Model</b>"), row=1, col=1)
         
         # Add a zero line for the residuals
         fig.add_shape(type='line', x0=0, y0=0, x1=1, y1=0, line=dict(color='Black'), xref='paper', yref='paper', row=2, col=1)
@@ -157,35 +168,58 @@ class ExoProblem(optframeworks.OptProblem):
                 residuals_with_noise = like.residuals_before_kernel(pars)
                 residuals_no_noise = like.residuals_after_kernel(pars)
                 
+                s = pars["gp_per"].value
+                
                 # Plot a GP for each instrument
-                for data in like.data.values():
+                for wavelength in like.model.kernel.unique_wavelengths:
                     
-                    # Time array
+                    # Smartly sample gp
+                    inds = like.model.kernel.get_wave_inds(wavelength)
                     t_hr_gp = np.array([], dtype=float)
-                    gpmu = np.array([], dtype=float)
-                    for i in range(data.t.size):
-                        _t_hr_gp = np.linspace(data.t[i] - 2*pars['gp_per'].value, data.t[i] + 2*pars['gp_per'].value, num=60)
-                        _gpmu, _gpstddev = like.model.kernel.realize(pars, residuals=residuals_with_noise[like.model.data_inds[data.label]], xpred=t_hr_gp, return_unc=True, instname=data.label)
+                    gpmu_hr = np.array([], dtype=float)
+                    gpstddev_hr = np.array([], dtype=float)
+                    tvec = like.data.get_vec('t')
+                    for i in range(tvec.size):
+                        _t_hr_gp = np.linspace(tvec[i] - s, tvec[i] + s, num=kernel_sampling)
+                        _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals=residuals_with_noise, return_unc=True, wavelength=wavelength)
                         t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
-                        gpmu = np.concatenate((gpmu, _gpmu))
-                        gpstddev = np.concatenate((gpstddev, _gpstddev))
-                    
+                        gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
+                        gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
+
                     ss = np.argsort(t_hr_gp)
                     t_hr_gp = t_hr_gp[ss]
-                    gpmus = gpmus[ss]
-                    gpmu = gpmu[ss]
-                    gpstddev= gpstddev[ss]
+                    gpmu_hr = gpmu_hr[ss]
+                    gpstddev_hr = gpstddev_hr[ss]
                     
                     # Plot the GP
-                    fig.add_trace(plotly.graph_objects.Scatter(x=t_hr_gp - time_offset, y=gpmu, line=dict(width=1, color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), name='GP ' + data.label), row=1, col=1)
+                    tt = t_hr_gp - time_offset
+                    gp_lower, gp_upper = gpmu_hr - gpstddev_hr, gpmu_hr + gpstddev_hr
+                    instnames = like.model.kernel.get_instnames_for_wave(wavelength)
+                    label = '<b>GP ' + '&#x3BB;' + ' = ' + str(wavelength) + ' nm ' + '['
+                    for instname in instnames:
+                        label += instname + ', '
+                    label = label[0:-2]
+                    label += ']</b>'
+                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=0.8, color='black'), name=label, showlegend=False), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
+                                             y=np.concatenate([gp_upper, gp_lower[::-1]]),
+                                             fill='toself',
+                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.2),
+                                             name=label))
                     
-                    # Plot the data and residuals
-                    data_arr_offset = data.rv - pars['gamma_' + data.label].value
+                # Plot the data on top of the GPs, and the residuals
+                residuals = like.residuals_after_kernel(pars)
+                data_arr = np.copy(like.data.get_vec('rv', sort=True))
+                data_arr = like.model.apply_offsets(data_arr, pars)
+                for data in like.data.values():
+                    _data = data_arr[like.model.data_inds[data.label]]
                     _errors = errors[like.model.data_inds[data.label]]
-                    _residuals = residuals_no_noise[like.model.data_inds[data.label]]
+                    _residuals = residuals[like.model.data_inds[data.label]]
                     _yerr = dict(array=_errors)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
+                    # Data
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
+                    # Residuals
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
                     color_index += 1
                     
             # Standard GP
@@ -204,7 +238,7 @@ class ExoProblem(optframeworks.OptProblem):
                 gpstddev = np.array([], dtype=float)
                 residuals_with_noise = like.residuals_before_kernel(pars)
                 for i in range(like.data_t.size):
-                    _t_hr_gp = np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=80)
+                    _t_hr_gp = np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=kernel_sampling)
                     _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals=residuals_with_noise, return_unc=True)
                     t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
                     gpmu = np.concatenate((gpmu, _gpmu))
@@ -246,10 +280,10 @@ class ExoProblem(optframeworks.OptProblem):
                     color_index += 1
                 
         # Labels
-        fig.update_xaxes(title_text='BJD - ' + str(time_offset), row=2, col=1)
-        fig.update_yaxes(title_text='RVs [m/s]', row=1, col=1)
-        fig.update_yaxes(title_text='Residual RVs [m/s]', row=2, col=1)
-        fig.update_yaxes(title_text=self.star_name + ' RVs', row=1, col=1)
+        fig.update_xaxes(title_text='<b>BJD - ' + str(time_offset) + '</b>', row=2, col=1)
+        fig.update_yaxes(title_text='<b>RVs [m/s]</b>', row=1, col=1)
+        fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>', row=2, col=1)
+        fig.update_yaxes(title_text='<b>' + self.star_name + ' RVs</b>', row=1, col=1)
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
             
@@ -257,6 +291,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=1, col=1)
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=2, col=1)
         fig.update_layout(template="ggplot2")
+        fig.update_layout(font=dict(family="Courier New, monospace", size=24))
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(True) + '.html')
         
         # Return the figure for stremlit
@@ -595,32 +630,6 @@ class ExoProblem(optframeworks.OptProblem):
         optprob.set_pars(p0)
         opt_result = optprob.optimize()
         return opt_result
-    
-    
-class SessionState:
-    
-    def __init__(self, fname, data=None):
-        if data is not None:
-            self.data = data
-            self.fname = fname
-        if os.path.exists(fname) and data is None:
-            self = self.load(fname)
-        
-    def save(self):
-        with open(self.fname, 'wb') as f:
-            pickle.dump(self, f)
-            
-    def load(self):
-        with open(self.fname, 'wb') as f:
-            return pickle.load(f)
-    
-    def __getitem__(self, key):
-        if key == "fname":
-            return self.fname
-        if key in self.data:
-            return self.data[key]
-        else:
-            return super().__getitem__(key)
 
 def gen_latex_labels(pars, planets_dict):
     """Default Settings for latex labels for orbit fitting. Any GP parameters must be set manually via parameter.latex_str = "$latexname$"

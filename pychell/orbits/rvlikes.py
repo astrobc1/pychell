@@ -122,9 +122,10 @@ class RVChromaticLikelihood(RVLikelihood):
             np.ndarray: The residuals.
         """
         residuals = self.residuals_before_kernel(pars)
-        for data in self.data.values():
-            gp_mean = self.model.kernel.realize(pars, residuals=residuals[self.data_inds[data.label]], xres=data.t, instname=data.label, return_unc=False)
-            residuals[self.model.data_inds[data.label]] -= gp_mean
+        for wavelength in self.model.kernel.unique_wavelengths:
+            inds = self.model.kernel.get_wave_inds(wavelength)
+            gp_mean = self.model.kernel.realize(pars, residuals=residuals, xpred=self.model.kernel.t[inds], wavelength=wavelength, return_unc=False)
+            residuals[inds] -= gp_mean
         return residuals
     
     
@@ -144,7 +145,6 @@ class MixedRVLikelihood(optscore.MixedLikelihood):
         Returns:
             float: The log likelihood, ln(L).
         """
-        #self.redchi2s.append(self.compute_redchi2(pars))
         lnL = 0
         if apply_priors:
             lnL += self.compute_logL_priors(pars)
