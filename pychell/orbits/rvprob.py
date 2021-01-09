@@ -106,7 +106,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
         fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(per) + ', e = ' + str(ecc) + '</b>')
         fig.update_layout(template="ggplot2")
-        fig.update_layout(font=dict(family="Courier New, monospace", size=24))
+        fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + self.planets_dict[planet_index]["label"] + '_rvs_phased_' + pcutils.gendatestr(True) + '.html')
@@ -291,7 +291,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=1, col=1)
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=2, col=1)
         fig.update_layout(template="ggplot2")
-        fig.update_layout(font=dict(family="Courier New, monospace", size=24))
+        fig.update_layout(font=dict(size=16))
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(True) + '.html')
         
         # Return the figure for stremlit

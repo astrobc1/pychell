@@ -129,9 +129,10 @@ class RVModel(optmodels.Model):
         
         # Remove the per-instrument effective zero points.
         if instname is None:
-            for instname in self.data:
-                if "gamma_" + instname in pars:
-                    rv_vec[self.data_inds[instname]] -= pars["gamma_" + instname].value
+            for data in self.data.values():
+                pname = "gamma_" + data.label
+                if pname in pars:
+                    rv_vec[self.data_inds[data.label]] -= pars[pname].value
         else:
             if "gamma_" + instname in pars:
                     rv_vec -= pars["gamma_" + instname].value
@@ -141,7 +142,7 @@ class RVModel(optmodels.Model):
             rv_vec -= pars['gamma_dot'].value * (t - self.time_base)
         
         # Quadratic trend
-        if pars['gamma_ddot'].vary:
+        if 'gamma_ddot' in pars and pars['gamma_ddot'].value != 0:
             rv_vec -= pars['gamma_ddot'].value * (t - self.time_base)**2
             
         return rv_vec
@@ -157,14 +158,14 @@ class RVModel(optmodels.Model):
         
     
 
-#@njit
+@njit
 def solve_kepler(mas, ecc):
     eas = np.zeros_like(mas)
     for i in range(mas.size):
         eas[i] = _solve_kepler(mas[i], ecc)
     return eas
 
-#@njit
+@njit
 def _solve_kepler(ma, ecc):
     """Solve Kepler's Equation for one planet.
     Args:
@@ -208,7 +209,7 @@ def _solve_kepler(ma, ecc):
     
     return ea_new
 
-#@njit
+@njit
 def true_anomaly(t, tp, per, ecc):
     """
     Calculate the true anomaly for a given time, period, eccentricity.
@@ -231,7 +232,6 @@ def true_anomaly(t, tp, per, ecc):
 
     return nu
 
-#@njit
 def planet_signal(t, per, tp, ecc, w, k):
     """Computes the RV signal of one planet for a given time vector.
 
@@ -274,7 +274,7 @@ def planet_signal(t, per, tp, ecc, w, k):
     # Return rv
     return rv
 
-#@njit
+@njit
 def tc_to_tp(tc, per, ecc, w):
     """
     Convert Time of Transit (time of conjunction) to Time of Periastron Passage
@@ -300,7 +300,7 @@ def tc_to_tp(tc, per, ecc, w):
 
     return tp
 
-#@njit
+@njit
 def tp_to_tc(tp, per, ecc, w):
     """
     Convert Time of Periastron to Time of Transit (time of conjunction).

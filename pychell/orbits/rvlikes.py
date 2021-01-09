@@ -32,17 +32,9 @@ class RVLikelihood(optscore.Likelihood):
                 return -np.inf
         else:
             lnL = 0
-        # Copy the rvs for this likelihood
-        data_arr = np.copy(self.data_rv)
-        
-        # Compute the model (consistent across all data sets for this likelihood).
-        model_arr = self.model.build(pars)
-        
-        # Apply offsets
-        data_arr = self.model.apply_offsets(data_arr, pars)
-
-        # Compute the residuals for this data group
-        residuals = data_arr - model_arr
+            
+        # Get residuals
+        residuals = self.residuals_before_kernel(pars)
 
         # Compute the cov matrix
         K = self.model.kernel.compute_cov_matrix(pars, apply_errors=True)
@@ -56,7 +48,7 @@ class RVLikelihood(optscore.Likelihood):
             _, lndetK = np.linalg.slogdet(K)
 
             # Compute the likelihood
-            n = len(data_arr)
+            n = len(residuals)
             lnL += -0.5 * (np.dot(residuals, alpha) + lndetK + n * np.log(2 * np.pi))
     
         except:
@@ -150,5 +142,4 @@ class MixedRVLikelihood(optscore.MixedLikelihood):
                 return -np.inf
         for like in self.values():
             lnL += like.compute_logL(pars, apply_priors=False)
-        
         return lnL

@@ -13,6 +13,7 @@ class RVColor(optkernels.GaussianProcess):
         super().__init__(data=data, par_names=par_names)
         self.n_data_points = len(self.data.get_vec('t'))
         self.wave_vec = self.make_wave_vec()
+        self.tel_vec = self.data.make_tel_vec()
         self.unique_wavelengths = self.make_wave_vec_unique()
         self.compute_dist_matrix()
         
@@ -35,9 +36,9 @@ class RVColor(optkernels.GaussianProcess):
         else:
             data_errors = None
             
-        lin_kernel = (eta1 * self.wave_matrix)**(2 * eta2)
+        lin_kernel = (eta1 * self.wave_matrix**eta2)**2
         decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta3)**2)
-        periodic_kernel = np.exp(-0.5 * np.sin(np.pi * self.dist_matrix / eta4)**2)
+        periodic_kernel = np.exp(-0.5 * (1 / eta5)**2 * np.sin(np.pi * self.dist_matrix / eta4)**2)
         
         # Construct full cov matrix
         cov_matrix = lin_kernel * decay_kernel * periodic_kernel
@@ -98,7 +99,7 @@ class RVColor(optkernels.GaussianProcess):
             wave_vec2 = self.wave_vec
             
         # Compute matrix
-        self.wave_matrix = self.wavelength0 / np.outer(wave_vec1, wave_vec2)**0.5
+        self.wave_matrix = self.wavelength0 / np.sqrt(np.outer(wave_vec1, wave_vec2))
 
     def make_wave_vec_unique(self):
         wave_vec = self.make_wave_vec()
