@@ -142,4 +142,21 @@ class MixedRVLikelihood(optscore.MixedLikelihood):
                 return -np.inf
         for like in self.values():
             lnL += like.compute_logL(pars, apply_priors=False)
+        #self.redchi2s.append(self.compute_redchi2(pars))
         return lnL
+    
+    def compute_redchi2(self, pars):
+        
+        residuals = np.array([], dtype=float)
+        errors = np.array([], dtype=float)
+        for like in self.values():
+            res = like.residuals_after_kernel(pars)
+            errs = like.model.kernel.compute_data_errors(pars)
+            residuals = np.concatenate((residuals, res))
+            errors = np.concatenate((errors, errs))
+        
+        # Compute red chi2
+        n_data = len(residuals)
+        n_pars_vary = pars.num_varied()
+        redchi2 = np.nansum((residuals / errors)**2) / (n_data - n_pars_vary)
+        return redchi2

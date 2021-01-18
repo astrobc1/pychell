@@ -73,10 +73,12 @@ class RVActions(StreamlitComponent):
         
         # Primary actions
         st.markdown('## Actions')
+        self.comps["full_analysis_button"] = st.button(label='Full Analysis')
         self.comps["max_like_button"] = st.button(label='Max Like')
         self.comps["sample_button"] = st.button(label='MCMC')
         self.comps["model_comp_button"] = st.button(label='Model Comparison')
         self.comps["per_search_button"] = st.button('Period Search')
+        self.comps["rvcolor_button"] = st.button('RV Color')
         self.comps["use_gp_input"] = st.checkbox(label="Use GP", value=True)
         
         # Period search options
@@ -146,7 +148,7 @@ class ModelCompResult(StreamlitComponent):
 class MCMCResult(StreamlitComponent):
     
     def __init__(self, comps, optprob, sampler_result):
-        super().__init__(comps=comps, label="Optimize Result")
+        super().__init__(comps=comps, label="MCMC Result")
         self.optprob = optprob
         self.sampler_result = sampler_result
         self.write()
@@ -222,3 +224,21 @@ class RVPeriodSearchResult(StreamlitComponent):
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         st.plotly_chart(fig)
         fig.write_html(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + '_brute_force_pgram_' + pcutils.gendatestr(time=True) + '.html')
+        
+        
+class RVColorResult(StreamlitComponent):
+    
+    def __init__(self, comps, optprob, rvcolor_result):
+        super().__init__(comps=comps, label="RV Color Result")
+        self.optprob = optprob
+        self.rvcolor_result = rvcolor_result
+        self.write()
+        
+    def write(self):
+    
+        # Display Results
+        st.markdown('# RV Color Results')
+        self.rvcolor_fig = self.optprob.plot_rvcolor(self.rvcolor_result)
+        self.comps["rvcolor_fig"] = st.plotly_chart(self.rvcolor_fig)
+        
+        return self.comps

@@ -1177,7 +1177,7 @@ class HybridWavelengthSolution(WavelengthSolution):
         else:
             pixel_grid = np.arange(self.sregion.pixmin, self.sregion.pixmax + 1)
             splines = np.array([pars[self.par_names[i]].value for i in range(self.n_splines + 1)], dtype=np.float64)
-            wave_spline = cspline_interp(self.spline_pixel_set_points, splines, piixel_grid)
+            wave_spline = cspline_interp(self.spline_pixel_set_points, splines, pixel_grid)
             return self.default_wave_grid[self.sregion.data_inds] + wave_spline
 
     def build_fake(self):

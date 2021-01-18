@@ -27,6 +27,15 @@ import numba
 import numba.types as nt
 from llc import jit_filter_function
 
+def outer_fun(x, y, fun):
+    n1 = len(x)
+    n2 = len(x)
+    out = np.zeros((n1, n2))
+    for i in range(n1):
+        for j in range(n2):
+            out[i, j] = fun(x[i], y[j])
+    return out
+
 def rms_loss_creator(func):
     
     def _rms_loss(pars, x, data):
