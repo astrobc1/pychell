@@ -29,7 +29,7 @@ class RVColor(optkernels.GaussianProcess):
         eta3 = pars[self.par_names[2]].value # decay
         eta4 = pars[self.par_names[3]].value # period
         eta5 = pars[self.par_names[4]].value # smoothing factor
-        eta6 = pars[self.par_names[5]].value # extra param
+        #eta6 = pars[self.par_names[5]].value # extra param
         
         # Data errors
         if apply_errors:
@@ -39,11 +39,11 @@ class RVColor(optkernels.GaussianProcess):
             
         lin_kernel = (eta1 * self.freq_matrix**eta2)**2
         decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta3)**2)
-        wave_kernel = np.exp(-0.5 * (self.wave_diffs / eta6)**2)
+        #wave_kernel = np.exp(-0.5 * (self.wave_diffs / eta6)**2)
         periodic_kernel = np.exp(-0.5 * (1 / eta5)**2 * np.sin(np.pi * self.dist_matrix / eta4)**2)
         
         # Construct full cov matrix
-        cov_matrix = lin_kernel * decay_kernel * periodic_kernel * wave_kernel
+        cov_matrix = lin_kernel * decay_kernel * periodic_kernel # * wave_kernel
         
         # Apply data errors
         if apply_errors:
