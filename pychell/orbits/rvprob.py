@@ -368,10 +368,7 @@ class ExoProblem(optframeworks.OptProblem):
                     color_index += 1
                     
         # Plot the light curve as well
-        #t1, y1 = np.loadtxt('/Users/gj_876/Research/pychell_orbit_results/AU_Mic/aumic_rvpred1.txt', delimiter=',', unpack=True)
-        t2, y2 = np.loadtxt('/Users/gj_876/Research/pychell_orbit_results/AU_Mic/aumic_rvpred2.txt', delimiter=',', unpack=True)
         #fig.add_trace(plotly.graph_objects.Scatter(x=t1 - time_offset, y=y1, line=dict(color='red'), showlegend=False), row=1, col=1)
-        fig.add_trace(plotly.graph_objects.Scatter(x=t2 - time_offset, y=-4*y2/100, line=dict(color='red'), showlegend=False), row=1, col=1)
         
                 
         # Labels
