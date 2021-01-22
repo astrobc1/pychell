@@ -231,7 +231,7 @@ def combine_rvs(parser, iter_indices=None):
                     weights = 1 / fit_metric[o, :, :, j + parser.index_offset]**2 * rv_mask[o, :, :, j]
                     rvs_dict['rvsxcdet_nightly'][o, :, j], rvs_dict['uncxdet_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsxcdet, weights, parser.n_obs_nights, flag_outliers=True)
                     
-                
+
     # Determine indices
     iter_indices = parser.resolve_iter_indices(iter_indices)
         
@@ -955,7 +955,8 @@ def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thre
     for o in range(parser.n_orders):
         for ichunk in range(parser.n_chunks):
             rvsfwm_single_iter[o, :, :] = parser.rvs_dict["rvsfwm"][o, :, :, iter_indices[o, 0]]
-            weights = 1 / parser.rvs_dict["uncfwm_nightly"][o, :, iter_indices[o, 0]]**2
+            #weights = 1 / parser.rvs_dict["uncfwm_nightly"][o, :, iter_indices[o, 0]]**2
+            weights = np.ones_like( parser.rvs_dict["uncfwm_nightly"][o, :, iter_indices[o, 0]])
             for ispec in range(parser.n_spec):
                 night_index = pcforwardmodels.ForwardModel.get_night_index(ispec, parser.rvs_dict["n_obs_nights"])
                 weights_single_iter[o, :, :] = weights[night_index] * mask[o, ispec, ichunk, iter_index]

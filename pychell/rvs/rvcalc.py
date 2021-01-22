@@ -217,7 +217,6 @@ def crude_brute_force(forward_model, templates_dict, sregion):
     return xcorr_star_vel
 
 
-
 def modifed_stddev(rvs, weights, mus, n_obs_nights):
     n_nights = mus.size
     unc = np.full(n_nights, fill_value=np.nan)
@@ -375,7 +374,6 @@ def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=No
         rvc_tot = np.nansum(1 / rvc_per_pix[good]**2)**-0.5
         return rvc_per_pix, rvc_tot
         
-
 def compute_bisector_span(cc_vels, ccf, v0, n_bs=1000):
     """Computes the Bisector inverse slope of a given cross-correlation (RMS brute force) function.
 
@@ -502,8 +500,7 @@ def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights, flag_outliers=F
             l += n_obs_nights[inight + 1]
             
     return rvs_nightly, unc_nightly
-             
-    
+                 
 def compute_nightly_rvs_from_all(rvs, weights, n_obs_nights, flag_outliers=False, thresh=5):
     """Computes nightly RVs for a single order.
 
@@ -553,8 +550,6 @@ def compute_nightly_rvs_from_all(rvs, weights, n_obs_nights, flag_outliers=False
             
     return rvs_nightly, unc_nightly
 
-
-
 def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points
 
@@ -594,7 +589,6 @@ def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_o
     unci = np.sqrt((1 / np.nansum(1 / uncli**2, axis=0)) / n_orders)
         
     return np.copy(rvs[0, :]), np.zeros(n_spec) + 10, rvi, unci
-
 
 def combine_relative_rvs(rvs, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points
