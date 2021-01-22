@@ -31,11 +31,13 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 
 class ExoProblem(optframeworks.OptProblem):
 
-    def __init__(self, output_path, *args, star_name=None, likes=None, **kwargs):
+    def __init__(self, output_path, *args, star_name=None, likes=None, mstar=None, mstar_unc=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.star_name = 'Star' if star_name is None else star_name
         self.scorer = likes
         self.output_path = output_path
+        self.mstar = mstar
+        self.mstar_unc = mstar_unc
         gen_latex_labels(self.p0, self.planets_dict)
         
     def generate_report(self, maxlike_result=None, model_comp_result=None, mcmc_result=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=50):
@@ -603,8 +605,7 @@ class ExoProblem(optframeworks.OptProblem):
         return periods, persearch_results
     
     def sample(self, *args, **kwargs):
-        sampler_result = super().sample(optprob=self, **kwargs)
-        sampler_result["redchi2s"] = self.scorer.redchi2s
+        sampler_result = super().sample(*args, **kwargs)
         return sampler_result
     
     def corner_plot(self, sampler_result):
@@ -620,7 +621,7 @@ class ExoProblem(optframeworks.OptProblem):
         pbest_vary_dict = sampler_result["pmed"].unpack(vary_only=True)
         truths = pbest_vary_dict["value"]
         labels = [par.latex_str for par in sampler_result["pbest"].values() if par.vary]
-        corner_plot = corner.corner(sampler_result["flat_chains"], labels=labels, truths=truths, show_titles=True)
+        corner_plot = corner.corner(sampler_result["chains"], labels=labels, truths=truths, show_titles=True)
         corner_plot.savefig(self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(time=True) + '.png')
         return corner_plot
         
@@ -684,7 +685,6 @@ class ExoProblem(optframeworks.OptProblem):
         
         return fig
 
-    
     def get_rvcolor_nights(self, jds, wave1, wave2, sep=0.3):
     
         # Number of spectra
@@ -828,6 +828,65 @@ class ExoProblem(optframeworks.OptProblem):
             pickle.dump(model_comp_results, f)
             
         return model_comp_results
+        
+    
+    def compute_planet_masses(self, sampler_result, mstar=None, mstar_unc=None):
+        """Computes the value of msini for each planet.
+
+        Args:
+            sampler_result (dict): The returned value from calling sample.
+            mstar (float): The mass of the star in solar units.
+            mstar (list): The uncertainty of the mass of the star in solar units, lower, upper.
+
+        Returns:
+            (dict): The mass, lower, and upper uncertainty of each planet in a dictionary.
+        """
+        if mstar is None:
+            mstar = self.mstar
+        if mstar_unc is None:
+            mstar_unc = self.mstar_unc
+        msiniplanets = {} # In jupiter masses
+        for planet_index in self.planets_dict:
+            perdist = []
+            tpdist = []
+            eccdist = []
+            wdist = []
+            kdist = []
+            mdist = []
+            pars = copy.deepcopy(sampler_result["pmed"])
+            for i in range(sampler_result["n_steps"]):
+                for pname in self.planets_dict[planet_index]["basis"].pnames:
+                    if pars[pname].vary:
+                        ii = pars.index_from_par(pname, rel_vary=True)
+                        pars[pname].value = sampler_result["chains"][i, ii]
+                per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
+                perdist.append(per)
+                tpdist.append(tp)
+                eccdist.append(ecc)
+                wdist.append(w)
+                kdist.append(k)
+                mdist.append(self.compute_planet_mass(per, ecc, k, mstar))
+            val, unc_low, unc_high = self.sampler.chain_uncertainty(mdist)
+            if self.mstar_unc is not None:
+                unc_low = np.sqrt(unc_low**2 + self.compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[0]**2)
+                unc_high = np.sqrt(unc_high**2 + self.compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[1]**2)
+                msiniplanets[planet_index] = (val, unc_low, unc_high)
+            else:
+                msiniplanets[planet_index] = (val, unc_low, unc_high)
+        return msiniplanets
+    
+    @staticmethod
+    def compute_planet_mass(per, ecc, k, mstar):
+        MJ = 317.82838 # mass of jupiter in earth masses
+        mass = k * np.sqrt(1 - ecc**2) / 28.4329 * (per / 365.25)**(1 / 3) * mstar**(2 / 3) * MJ
+        return mass
+    
+    @staticmethod
+    def compute_planet_mass_deriv_mstar(per, ecc, k, mstar):
+        MJ = 317.82838 # mass of jupiter in earth masses
+        alpha = k * np.sqrt(1 - ecc**2) / 28.4329 * (per / 365.25)**(1 / 3)
+        dMp_dMstar = (2 / 3) * alpha * mstar**(-1 / 3)
+        return dMp_dMstar
         
     @staticmethod
     def _rv_period_search_wrapper(optprob, period, planet_index):

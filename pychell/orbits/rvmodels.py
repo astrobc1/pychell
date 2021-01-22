@@ -332,6 +332,8 @@ class AbstractOrbitBasis:
     
     def __init__(self, planet_index):
         self.planet_index = planet_index
+        ii = str(self.planet_index)
+        self.pnames = [name + ii for name in self.names]
         
     def to_standard(self, pars):
         pass

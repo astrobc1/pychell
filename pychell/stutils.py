@@ -73,7 +73,6 @@ class RVActions(StreamlitComponent):
         
         # Primary actions
         st.markdown('## Actions')
-        self.comps["full_analysis_button"] = st.button(label='Full Analysis')
         self.comps["max_like_button"] = st.button(label='Max Like')
         self.comps["sample_button"] = st.button(label='MCMC')
         self.comps["model_comp_button"] = st.button(label='Model Comparison')
@@ -111,7 +110,8 @@ class MaxLikeResult(StreamlitComponent):
     
         # Display Results
         st.markdown('# Max Likelihood Results')
-        st.text(repr(self.opt_result['pbest']))
+        for par in self.opt_result['pbest'].values():
+            st.text(repr(par))
         st.markdown('## Function calls: ' + str(self.opt_result['fcalls']))
         st.markdown('## ln(L): ' + str(-1 * self.opt_result['fbest']))
     
@@ -157,9 +157,8 @@ class MCMCResult(StreamlitComponent):
     
         # Display Results
         st.markdown('# MCMC Results')
-        st.text(repr(self.sampler_result['pbest']))
-        st.text('Parameter Uncertainties: ')
-        st.text(self.sampler_result['punc'])
+        for par in self.sampler_result['pmed'].values():
+            st.text(repr(par))
         st.markdown('## ln(L): ' + str(self.sampler_result['lnL']))
     
         # Full RV plot
@@ -180,6 +179,30 @@ class MCMCResult(StreamlitComponent):
         st.markdown('## Corner Plot')
         self.corner_plot = self.optprob.corner_plot(sampler_result=self.sampler_result)
         self.comps["corner_plot"] = st.pyplot(self.corner_plot)
+        
+class PlanetsResults(StreamlitComponent):
+    
+    def __init__(self, comps, optprob, sampler_result):
+        super().__init__(comps=comps, label="Planets")
+        self.optprob = optprob
+        self.sampler_result = sampler_result
+        self.write()
+        
+    def write(self):
+    
+        # Display Results
+        st.markdown('# Planet Masses')
+        if len(self.optprob.planets_dict) > 0:
+            planet_masses = self.optprob.compute_planet_masses(self.sampler_result)
+            for planet_index in self.optprob.planets_dict:
+                s = self.optprob.star_name + " " + self.optprob.planets_dict[planet_index]["label"] + ": "
+                s += str(planet_masses[planet_index][0])
+                s += ", -" + str(planet_masses[planet_index][1])
+                s += " +" + str(planet_masses[planet_index][2])
+                s += " M Earth"
+                st.text(s)
+        else:
+            st.text("None")
       
 class GLSResult(StreamlitComponent):
     
