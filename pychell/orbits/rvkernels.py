@@ -216,8 +216,8 @@ class RVColor(optkernels.GaussianProcess):
         
     def make_wave_vec(self):
         wave_vec = np.array([], dtype=float)
-        x = self.data.get_vec('x', sort=False)
-        ss = np.argsort(x)
+        t = self.data.get_vec('t', sort=False)
+        ss = np.argsort(t)
         for data in self.data.values():
             wave_vec = np.concatenate((wave_vec, np.full(data.t.size, fill_value=data.wavelength)))
         wave_vec = wave_vec[ss]

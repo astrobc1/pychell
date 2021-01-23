@@ -103,10 +103,9 @@ class MixedRVData(optdata.MixedData):
         rvserr = self.get_vec('rverr', sort=True)
         tel_vec = self.make_tel_vec()
         out = np.array([times, rvs, rvserr, tel_vec], dtype=object).T
-        f = open(fname, 'w')
-        f.write('time,mnvel,errvel,tel\n')
-        np.savetxt(f, out, fmt='%f,%f,%f,%s')
-        f.close()
+        with open(fname, 'w') as f:
+            f.write('time,mnvel,errvel,tel\n')
+            np.savetxt(f, out, fmt='%f,%f,%f,%s')
         
     def make_tel_vec(self):
         tel_vec = np.array([], dtype='<U50')

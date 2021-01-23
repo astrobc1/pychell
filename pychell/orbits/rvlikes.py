@@ -111,12 +111,14 @@ class RVChromaticLikelihood(RVLikelihood):
         Returns:
             np.ndarray: The residuals.
         """
-        residuals = self.residuals_before_kernel(pars)
-        for wavelength in self.model.kernel.unique_wavelengths:
-            inds = self.model.kernel.get_wave_inds(wavelength)
-            gp_mean = self.model.kernel.realize(pars, residuals=residuals, xpred=self.model.kernel.t[inds], wavelength=wavelength, return_unc=False)
-            residuals[inds] -= gp_mean
-        return residuals
+        residuals_with_noise = self.residuals_before_kernel(pars)
+        residuals_no_noise = np.copy(residuals_with_noise)
+        for data in self.data.values():
+            inds = self.model.data_inds[data.label]
+            gp_mean = self.model.kernel.realize(pars, residuals=residuals_with_noise, xpred=self.data_t[inds], wavelength=data.wavelength, return_unc=False)
+            residuals_no_noise[inds] -= gp_mean
+            
+        return residuals_no_noise
     
     
 class MixedRVLikelihood(optscore.MixedLikelihood):

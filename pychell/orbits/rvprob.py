@@ -40,7 +40,7 @@ class ExoProblem(optframeworks.OptProblem):
         self.mstar_unc = mstar_unc
         gen_latex_labels(self.p0, self.planets_dict)
         
-    def generate_report(self, maxlike_result=None, model_comp_result=None, mcmc_result=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=50):
+    def generate_report(self, maxlike_result=None, model_comp_result=None, mcmc_result=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=5):
         
         # Which result to use for plots
         if maxlike_result is not None:
@@ -255,6 +255,8 @@ class ExoProblem(optframeworks.OptProblem):
                 # Plot a GP for each instrument
                 for wavelength in like.model.kernel.unique_wavelengths:
                     
+                    print("Plotting Wavelength = " + str(wavelength) + " nm")
+                    
                     # Smartly sample gp
                     inds = like.model.kernel.get_wave_inds(wavelength)
                     t_hr_gp = np.array([], dtype=float)
@@ -290,18 +292,23 @@ class ExoProblem(optframeworks.OptProblem):
                                              name=label))
                     
                 # Plot the data on top of the GPs, and the residuals
-                residuals = like.residuals_after_kernel(pars)
-                data_arr = np.copy(like.data.get_vec('rv', sort=True))
+                data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, pars)
                 for data in like.data.values():
-                    _data = data_arr[like.model.data_inds[data.label]]
+                    
+                    # Data errors for this instrument
                     _errors = errors[like.model.data_inds[data.label]]
-                    _residuals = residuals[like.model.data_inds[data.label]]
                     _yerr = dict(array=_errors)
-                    # Data
+                    
+                    # Data on top of the GP, only offset by gammas
+                    _data = data_arr[like.model.data_inds[data.label]]
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
-                    # Residuals
+                    
+                    # Residuals for this instrument after the noise kernel has been removed
+                    _residuals = residuals_no_noise[like.model.data_inds[data.label]]
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
+                    
+                    # Increase color index
                     color_index += 1
                     
             # Standard GP
@@ -828,6 +835,53 @@ class ExoProblem(optframeworks.OptProblem):
             pickle.dump(model_comp_results, f)
             
         return model_comp_results
+    
+    def compute_semimajor_axis(self, sampler_result, mstar=None, mstar_unc=None):
+        """Computes the semi-major axis of each planet.
+
+        Args:
+            sampler_result (dict): The returned value from calling sample.
+            mstar (float): The mass of the star in solar units.
+            mstar (list): The uncertainty of the mass of the star in solar units, lower, upper.
+
+        Returns:
+            (dict): The semi-major axis, lower, and upper uncertainty of each planet in a dictionary.
+        """
+        if mstar is None:
+            mstar = self.mstar
+        if mstar_unc is None:
+            mstar_unc = self.mstar_unc
+        aplanets = {} # In jupiter masses
+        for planet_index in self.planets_dict:
+            perdist = []
+            tpdist = []
+            eccdist = []
+            wdist = []
+            kdist = []
+            mdist = []
+            pars = copy.deepcopy(sampler_result["pmed"])
+            for i in range(sampler_result["n_steps"]):
+                for pname in self.planets_dict[planet_index]["basis"].pnames:
+                    if pars[pname].vary:
+                        ii = pars.index_from_par(pname, rel_vary=True)
+                        pars[pname].value = sampler_result["chains"][i, ii]
+                per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
+                perdist.append(per)
+                tpdist.append(tp)
+                eccdist.append(ecc)
+                wdist.append(w)
+                kdist.append(k)
+                G = scipy.constants.gravitational_constant
+                #a = G * 
+                adist.append(a)
+            val, unc_low, unc_high = self.sampler.chain_uncertainty(adist)
+            if self.mstar_unc is not None:
+                unc_low = np.sqrt(unc_low**2 + self.compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[0]**2)
+                unc_high = np.sqrt(unc_high**2 + self.compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[1]**2)
+                msiniplanets[planet_index] = (val, unc_low, unc_high)
+            else:
+                msiniplanets[planet_index] = (val, unc_low, unc_high)
+        return msiniplanets
         
     
     def compute_planet_masses(self, sampler_result, mstar=None, mstar_unc=None):

@@ -131,11 +131,10 @@ class RVModel(optmodels.Model):
         if instname is None:
             for data in self.data.values():
                 pname = "gamma_" + data.label
-                if pname in pars:
-                    rv_vec[self.data_inds[data.label]] -= pars[pname].value
+                rv_vec[self.data_inds[data.label]] -= pars[pname].value
         else:
-            if "gamma_" + instname in pars:
-                    rv_vec -= pars["gamma_" + instname].value
+            pname = "gamma_" + instname
+            rv_vec -= pars[pname].value
                 
         # Linear trend
         if 'gamma_dot' in pars and pars['gamma_dot'].value != 0:
