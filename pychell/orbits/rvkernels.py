@@ -300,12 +300,3 @@ class RVColor(optkernels.GaussianProcess):
                     + k * (2 * B - 2 * C * (D * (np.sin(D * self.dist_matrix)**2 - np.cos(D * self.dist_matrix)**2)))
                     
         return dk2_dtdtp
-        
-    def compute_rv_color(self, pars, residuals, wave1, wave2, xpred=None, xres=None):
-        gp_mean1, gp_stddev1 = self.realize(pars, residuals, xpred=xpred, xres=xres, return_unc=True, wavelength=wave1)
-        gp_mean2, gp_stddev2 = self.realize(pars, residuals, xpred=xpred, xres=xres, return_unc=True, wavelength=wave2)
-        rv_color = gp_mean1 - gp_mean2
-        #gp_mean1d = self.realized(pars, residuals, xpred=xpred, xres=None, wave1=wave1, wave2=wave2)
-        #gp_mean2d = self.realized(pars, residuals, xpred=xpred, xres=None, wave1=wave1, wave2=wave2)
-        rv_color_unc = np.sqrt(gp_stddev1**2 + gp_stddev2**2)
-        return rv_color, rv_color_unc

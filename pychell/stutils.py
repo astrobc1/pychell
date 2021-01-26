@@ -65,7 +65,7 @@ class DataSelector(StreamlitComponent):
 class RVActions(StreamlitComponent):
     
     def __init__(self, comps, optprob):
-        super().__init__(comps=comps, label="Data Selector")
+        super().__init__(comps=comps, label="RV Action")
         self.optprob = optprob
         self.write()
         
@@ -194,13 +194,25 @@ class PlanetsResults(StreamlitComponent):
         st.markdown('# Planet Masses')
         if len(self.optprob.planets_dict) > 0:
             planet_masses = self.optprob.compute_planet_masses(self.sampler_result)
+            planet_smas = self.optprob.compute_semimajor_axis(self.sampler_result)
             for planet_index in self.optprob.planets_dict:
+                
+                # Mass
                 s = self.optprob.star_name + " " + self.optprob.planets_dict[planet_index]["label"] + ": "
                 s += str(planet_masses[planet_index][0])
                 s += ", -" + str(planet_masses[planet_index][1])
                 s += " +" + str(planet_masses[planet_index][2])
                 s += " M Earth"
                 st.text(s)
+                
+                # a
+                s = self.optprob.star_name + " " + self.optprob.planets_dict[planet_index]["label"] + ": "
+                s += str(planet_smas[planet_index][0])
+                s += ", -" + str(planet_smas[planet_index][1])
+                s += " +" + str(planet_smas[planet_index][2])
+                s += " AU"
+                st.text(s)
+                
         else:
             st.text("None")
       

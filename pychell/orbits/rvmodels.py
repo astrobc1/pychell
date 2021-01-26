@@ -231,6 +231,7 @@ def true_anomaly(t, tp, per, ecc):
 
     return nu
 
+
 def planet_signal(t, per, tp, ecc, w, k):
     """Computes the RV signal of one planet for a given time vector.
 

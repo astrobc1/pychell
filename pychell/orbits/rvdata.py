@@ -4,37 +4,12 @@ import pandas as pd
 import warnings
 import matplotlib.pyplot as plt
 
-def group_vis_nir(data, cut=1000):
-    data_vis = MixedRVData()
-    data_nir = MixedRVData()
-    for _data in data.values():
-        if _data.wavelength < cut:
-            data_vis[_data.label] = _data
-        else:
-            data_nir[_data.label] = _data
-    return data_vis, data_nir
-
-def get_wavelength(instname):
-    try:
-        return WAVELENGTH_DEFAULTS[instname]
-    except:
-        warnings.warn("Wavelength not found.")
-        return None
-
-def gen_jitter_dict(data, value):
-    out = {}
-    for _data in data.values():
-        out[_data.label] = value
-    return out
-
 class RVData(optdata.Data):
     
     def __init__(self, t, rv, rverr, instname=None, **kwargs):
-        super().__init__(t, rv, yerr=rverr, mask=None, label=instname)
+        super().__init__(t, rv, yerr=rverr, label=instname)
         for key in kwargs:
             setattr(self, key, kwargs[key])
-        if not hasattr(self, 'wavelength'):
-            self.wavelength = get_wavelength(self.instname)
         
     @property
     def t(self):
@@ -51,14 +26,16 @@ class RVData(optdata.Data):
     @property
     def instname(self):
         return self.label
-        
-    def __repr__(self):
-        return "RVs from " + self.instname
     
     @property
     def time_baseline(self):
         t = self.get_vec('x')
-        return np.nanmedian(t)
+        return np.max(t) - np.min(t)
+        
+    def __repr__(self):
+        return str(len(self.t)) + " RVs from " + self.instname
+    
+
 
 class MixedRVData(optdata.MixedData):
     
@@ -85,12 +62,48 @@ class MixedRVData(optdata.MixedData):
         rverr_all = rvdf.errvel.to_numpy()
         for tel in tel_vec_unq:
             inds = np.where(tel_vec == tel)[0]
-            if wavelengths is not None and tel in wavelengths:
+            if wavelengths is not None:
                 wavelength = wavelengths[tel]
             else:
                 wavelength = None
             data[tel] = RVData(t_all[inds], rv_all[inds], rverr_all[inds], instname=tel, wavelength=wavelength)
         return data
+    
+    def get_vec(self, key, labels=None, sort=True):
+        """Combines a certain vector from all labels into one array, and can then sort it according to time.
+
+        Args:
+            key (str): The key to get (t, rv, rverr)
+            labels (list): A list of labels (dict keys).
+
+        Returns:
+            np.ndarray: The vector, sorted according to x.
+        """
+        if labels is None:
+            labels = list(self.keys())
+        out = np.array([], dtype=float)
+        if sort:
+            x = np.array([], dtype=float)
+        for label in labels:
+            out = np.concatenate((out, getattr(self[label], key)))
+            if sort:
+                x = np.concatenate((x, self[label].t))
+            
+        # Sort
+        if sort:
+            ss = np.argsort(x)
+            out = out[ss]
+
+        return out
+    
+    def get_wave_vec(self):
+        wave_vec = np.array([], dtype=float)
+        t = self.get_vec('t', sort=False)
+        ss = np.argsort(t)
+        for data in self.values():
+            wave_vec = np.concatenate((wave_vec, np.full(data.t.size, fill_value=data.wavelength)))
+        wave_vec = wave_vec[ss]
+        return wave_vec
     
     def to_radvel_file(self, fname):
         """Creates a radvel input file from an instance.
@@ -109,7 +122,7 @@ class MixedRVData(optdata.MixedData):
         
     def make_tel_vec(self):
         tel_vec = np.array([], dtype='<U50')
-        t_all = self.get_vec('x', sort=False)
+        t_all = self.get_vec('t', sort=False)
         for instname in self:
             tel_vec = np.concatenate((tel_vec, np.full(len(self[instname].t), fill_value=instname, dtype='<U50')))
         ss = np.argsort(t_all)
@@ -120,3 +133,25 @@ class MixedRVData(optdata.MixedData):
         tel_vec = self.make_tel_vec()
         inds = np.where(tel_vec == label)[0]
         return inds
+    
+    
+def group_vis_nir(data, cut=1000):
+    """Groups vis and nir data into two different dicts.
+
+    Args:
+        data (MixedRVData): The RV data.
+        cut (float, optional): The cut between vis and nir in nm. Defaults to 1000 nm.
+
+    Returns:
+        MixedRVData: The vis data.
+        MixedRVData: The nir data.
+    """
+    data_vis = MixedRVData()
+    data_nir = MixedRVData()
+    for _data in data.values():
+        if _data.wavelength < cut:
+            data_vis[_data.label] = _data
+        else:
+            data_nir[_data.label] = _data
+    return data_vis, data_nir
+

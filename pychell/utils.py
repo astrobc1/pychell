@@ -22,7 +22,7 @@ PLOTLY_COLORS = ['darkmagenta', 'mediumslateblue', 'orangered', 'sienna', 'darkb
 
 def csscolor_to_rgba(color, a=1.0):
     r, g, b = webcolors.name_to_rgb(color)
-    s = 'rgba(' + str(r) + ',' + str(g) + ',' + str(b) + str(a) + ')'
+    s = 'rgba(' + str(r) + ',' + str(g) + ',' + str(b) + ',' + str(a) + ')'
     return s
 
 # Helpful timer

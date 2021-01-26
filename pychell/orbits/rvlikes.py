@@ -120,7 +120,7 @@ class RVChromaticLikelihood(RVLikelihood):
             
         return residuals_no_noise
     
-    
+
 class MixedRVLikelihood(optscore.MixedLikelihood):
     
     def __init__(self, *args, **kwargs):

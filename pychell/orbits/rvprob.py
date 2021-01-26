@@ -4,9 +4,11 @@ import optimize.optimizers as optimizers
 import optimize.knowledge as optknow
 import pylatex
 import corner
+import scipy.constants
 import optimize.frameworks as optframeworks
 import plotly.subplots
 import pychell.orbits.gls as gls
+import itertools
 from sklearn.cluster import DBSCAN
 import tqdm
 import plotly.graph_objects
@@ -31,16 +33,15 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 
 class ExoProblem(optframeworks.OptProblem):
 
-    def __init__(self, output_path, *args, star_name=None, likes=None, mstar=None, mstar_unc=None, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, output_path=None, data=None, p0=None, optimizer=None, sampler=None, likes=None, star_name=None, mstar=None, mstar_unc=None):
+        super().__init__(p0=p0, data=data, optimizer=optimizer, sampler=sampler, scorer=likes)
         self.star_name = 'Star' if star_name is None else star_name
-        self.scorer = likes
         self.output_path = output_path
         self.mstar = mstar
         self.mstar_unc = mstar_unc
         gen_latex_labels(self.p0, self.planets_dict)
         
-    def generate_report(self, maxlike_result=None, model_comp_result=None, mcmc_result=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=5):
+    def generate_report(self, maxlike_result=None, model_comp_result=None, mcmc_result=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=100):
         
         # Which result to use for plots
         if maxlike_result is not None:
@@ -123,8 +124,7 @@ class ExoProblem(optframeworks.OptProblem):
         
         # Retusn doc
         return doc
-        
-    
+
     def rv_phase_plot(self, planet_index, opt_result=None, plot_width=1000, plot_height=600):
         """Creates a phased rv plot for a given planet with the model on top.
 
@@ -151,7 +151,7 @@ class ExoProblem(optframeworks.OptProblem):
         
         # Create the phased model, high res
         t_hr_one_period = np.linspace(tc, tc + per, num=500)
-        phases_hr_one_period = self.get_phases(t_hr_one_period, per, tc)
+        phases_hr_one_period = get_phases(t_hr_one_period, per, tc)
         like0 = next(iter(self.scorer.values()))
         planet_model_phased = like0.model.build_planet(pars, t_hr_one_period, planet_index)
         
@@ -172,7 +172,7 @@ class ExoProblem(optframeworks.OptProblem):
             for data in like.data.values():
                 _errors = errors[like.model.data_inds[data.label]]
                 _data = residuals[like.model.data_inds[data.label]] + like.model.build_planet(pars, data.t, planet_index)
-                phases_data = self.get_phases(data.t, per, tc)
+                phases_data = get_phases(data.t, per, tc)
                 _yerr = dict(array=_errors)
                 fig.add_trace(plotly.graph_objects.Scatter(x=phases_data, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])))
                 color_index += 1
@@ -187,7 +187,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
         fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(per) + ', e = ' + str(ecc) + '</b>')
         fig.update_layout(template="ggplot2")
-        fig.update_layout(font=dict(size=16))
+        fig.update_layout(font=dict(size=16), margin=dict(l=80, r=80, t=100, b=80))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_layout(width=plot_width, height=plot_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
@@ -230,9 +230,6 @@ class ExoProblem(optframeworks.OptProblem):
 
         # Plot the planet model
         fig.add_trace(plotly.graph_objects.Scatter(x=t_hr - time_offset, y=model_arr_hr, line=dict(color='black', width=2), name="<b>Keplerian Model</b>"), row=1, col=1)
-        
-        # Add a zero line for the residuals
-        fig.add_shape(type='line', x0=0, y0=0, x1=1, y1=0, line=dict(color='Black'), xref='paper', yref='paper', row=2, col=1)
         
         # Loop over likes and:
         # 1. Create high res GP
@@ -284,12 +281,14 @@ class ExoProblem(optframeworks.OptProblem):
                         label += instname + ', '
                     label = label[0:-2]
                     label += ']</b>'
-                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=0.8, color='black'), name=label, showlegend=False), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=1.2, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
                     fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                              y=np.concatenate([gp_upper, gp_lower[::-1]]),
                                              fill='toself',
-                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.2),
+                                             line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1),
+                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.6),
                                              name=label))
+                    color_index += 1
                     
                 # Plot the data on top of the GPs, and the residuals
                 data_arr = np.copy(like.data_rv)
@@ -342,11 +341,12 @@ class ExoProblem(optframeworks.OptProblem):
                 tt = t_hr_gp - time_offset
                 gp_lower, gp_upper = gpmu_hr - gpstddev_hr, gpmu_hr + gpstddev_hr
                 label = '<b>GP ' + like.label.replace('_', ' ') +  '</b>'
-                fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=0.8, color='black'), name=label, showlegend=False), row=1, col=1)
+                fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=0.8, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
                 fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                             y=np.concatenate([gp_upper, gp_lower[::-1]]),
                                             fill='toself',
-                                            fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.2),
+                                            line=dict(color='rgba(255,255,255,0)'),
+                                            fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.4),
                                             name=label))
             
                 # Generate the residuals without noise
@@ -375,11 +375,8 @@ class ExoProblem(optframeworks.OptProblem):
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
                     color_index += 1
-                    
-        # Plot the light curve as well
-        #fig.add_trace(plotly.graph_objects.Scatter(x=t1 - time_offset, y=y1, line=dict(color='red'), showlegend=False), row=1, col=1)
-        
-                
+
+
         # Labels
         fig.update_xaxes(title_text='<b>BJD - ' + str(time_offset) + '</b>', row=2, col=1)
         fig.update_yaxes(title_text='<b>RVs [m/s]</b>', row=1, col=1)
@@ -387,14 +384,14 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_yaxes(title_text='<b>' + self.star_name + ' RVs</b>', row=1, col=1)
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
-            
+
         # Limits
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=1, col=1)
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=2, col=1)
         
         # Appearance
         fig.update_layout(template="ggplot2")
-        fig.update_layout(font=dict(size=16))
+        fig.update_layout(font=dict(size=16), margin=dict(l=80, r=80, t=100, b=80))
         fig.update_layout(width=plot_width, height=plot_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + '.html')
         
@@ -565,14 +562,6 @@ class ExoProblem(optframeworks.OptProblem):
         pgram = gls.Gls((data_times, data_rvs, data_errors), Pbeg=pmin, Pend=pmax)
         
         return pgram
-    
-    @staticmethod
-    def disable_planet_pars(pars, planets_dict, planet_index):
-        for par in pars.values():
-            for planet_par_name in planets_dict[planet_index]["basis"].names:
-                if par.name == planet_par_name + str(planet_index):
-                    pars[par.name].vary = False
-        return pars
 
     def rv_period_search(self, pars=None, pmin=None, pmax=None, n_periods=None, n_cores=1, planet_index=None):
         
@@ -631,54 +620,70 @@ class ExoProblem(optframeworks.OptProblem):
         corner_plot = corner.corner(sampler_result["chains"], labels=labels, truths=truths, show_titles=True)
         corner_plot.savefig(self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(time=True) + '.png')
         return corner_plot
-        
-    def compute_rvcolor(self, pars, wave1=550, wave2=2350):
-        
-        # Compute difference between data < 0.3 days apart
-        data_times = self.data.get_vec('t')
-        data_rvs = self.data.get_vec('rv')
-        data_rvs = self.scorer.like0.model.apply_offsets(data_rvs, pars)
-        data_errors = self.scorer.like0.model.kernel.compute_data_errors(pars)
-        rvcolor_data_t = []
-        rvcolor_data_rv = []
-        rvcolor_data_unc = []
-        inds = self.get_rvcolor_nights(data_times, wave1, wave2)
-        for i in range(len(inds)):
-            rvcolor_data_t.append(np.mean(data_times[inds[i]]))
-            rvcolor_data_rv.append(data_rvs[inds[i][0]] - data_rvs[inds[i][1]])
-            rvcolor_data_unc.append(np.sqrt(data_errors[inds[i][0]]**2 + data_errors[inds[i][1]]**2))
-            
-        rvcolor_data_t = np.array(rvcolor_data_t)
-        rvcolor_data_rv = np.array(rvcolor_data_rv)
-        rvcolor_data_unc = np.array(rvcolor_data_unc)
-        # Compute GP diffs
-        residuals = self.scorer.like0.residuals_before_kernel(pars)
-        rvcolor_gp, rvcolor_gp_unc = self.scorer.like0.model.kernel.compute_rv_color(pars=pars, residuals=residuals, xpred=rvcolor_data_t, wave1=wave1, wave2=wave2)
-        rvcolor_result = dict(t=rvcolor_data_t, rvcolor_data_rv=rvcolor_data_rv, rvcolor_data_unc=rvcolor_data_unc, rvcolor_gp=rvcolor_gp, rvcolor_gp_unc=rvcolor_gp_unc)
-        
-        return rvcolor_result
     
-    def plot_rvcolor(self, rvcolor_result, time_offset=2450000, plot_width=1000, plot_height=500):
+    def full_rvcolor(self, pars=None, sep=0.3, time_offset=2450000, plot_width=1000, plot_height=500):
+        """Computes the RV Color for all possible wavelengths.
+
+        Args:
+            pars (Parameters, optional): The parameters to use. Defaults to self.p0.
+            sep (float, optional): The max separation to allow for. Defaults to 0.3.
+            time_offset (int, optional): The time offset. Defaults to 2450000.
+            plot_width (int, optional): The plot width in pixels. Defaults to 1000.
+            plot_height (int, optional): The plot height in pixels. Defaults to 500.
+        """
+        
+        if pars is None:
+            pars = self.p0
+            
+        wave_vec = self.data.get_wave_vec()
+        wave_pairs = self.generate_all_wave_pairs(wave_vec)
+        for wave_pair in wave_pairs:
+            rvcolor_result = self.compute_rvcolor(pars, wave_pair[0], wave_pair[1], sep=sep)
+            self.plot_rvcolor(wave_pair[0], wave_pair[1], rvcolor_result, time_offset=time_offset, plot_width=plot_width, plot_height=plot_height)
+    
+    def plot_rvcolor(self, wave1, wave2, rvcolor_result, time_offset=2450000, plot_width=1000, plot_height=500):
         
         # Figure
         fig = plotly.subplots.make_subplots(rows=1, cols=1)
         
-        # Time array
-        t = rvcolor_result["t"] - time_offset
+        # Offset coarse and dense time arrays
+        t = rvcolor_result["jds_avg"] - time_offset
+        t_hr = rvcolor_result["t_gp_hr"] - time_offset
         
-        # Plot data
+        # Plot data color
+        color_map = {}
+        label_map = {}
         color_index = 0
-        _yerr = dict(array=rvcolor_result["rvcolor_data_unc"])
-        fig.add_trace(plotly.graph_objects.Scatter(x=t, y=rvcolor_result["rvcolor_data_rv"], name="<b>Data Color</b>", error_y=_yerr, mode='markers', marker=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index], a=0.8))))
-        color_index += 1
+        for i in range(len(t)):
+            
+            # The yerr
+            yerr = dict(array=np.array(rvcolor_result["unccolor_data"][i]))
+            
+            # Check if this combo is in color_map
+            show_legend = False
+            if rvcolor_result["instnames"][i] not in color_map:
+                instname1, instname2 = rvcolor_result["instnames"][i]
+                color_map[rvcolor_result["instnames"][i]] = pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index], a=0.8)
+                label_map[rvcolor_result["instnames"][i]] = "<b>Data Color, " + instname1 + " - " + instname2 + "</b>"
+                show_legend = True
+                color_index += 1
+            fig.add_trace(plotly.graph_objects.Scatter(x=np.array(t[i]), y=np.array(rvcolor_result["rvcolor_data"][i]), name=label_map[rvcolor_result["instnames"][i]], error_y=yerr, mode='markers', marker=dict(color=color_map[rvcolor_result["instnames"][i]]), showlegend=show_legend))
         
         # Plot the difference of the GPs
-        _yerr = dict(array=rvcolor_result["rvcolor_gp_unc"])
-        fig.add_trace(plotly.graph_objects.Scatter(x=t, y=rvcolor_result["rvcolor_gp"], line=dict(color='black', width=2), name='<b>GP Color</b>', error_y=_yerr, mode='markers', marker=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index], a=0.5))))
+        yerr = dict(array=rvcolor_result["gpstddev_color_hr"])
+        fig.add_trace(plotly.graph_objects.Scatter(x=t_hr, y=rvcolor_result["gpmean_color_hr"], line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1.2), showlegend=False))
+        gp_lower = rvcolor_result["gpmean_color_hr"] - rvcolor_result["gpstddev_color_hr"]
+        gp_upper = rvcolor_result["gpmean_color_hr"] + rvcolor_result["gpstddev_color_hr"]
+        fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([t_hr, t_hr[::-1]]),
+                                    y=np.concatenate([gp_upper, gp_lower[::-1]]),
+                                    fill='toself',
+                                    line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.4)),
+                                    fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.4),
+                                    name="<b>GP Color</b>"))
         
         # Labels
-        title = "<b>GP RV Color (&#x3BB; [" + str(550) + "] - &#x3BB; [" + str(2350) + "])"
-        fig.update_layout(title_text=title)
+        title = "<b>GP RV Color (&#x3BB; [" + str(550) + "] - &#x3BB; [" + str(2350) + "])</b>"
+        fig.update_layout(title_text=title, margin=dict(l=80, r=80, t=10, b=80))
         fig.update_xaxes(title_text='<b>BJD - ' + str(time_offset) + '</b>')
         fig.update_yaxes(title_text='<b>RVs [m/s]</b>')
         fig.update_yaxes(title_text='<b>RV Color [m/s]</b>')
@@ -692,80 +697,212 @@ class ExoProblem(optframeworks.OptProblem):
         
         return fig
 
-    def get_rvcolor_nights(self, jds, wave1, wave2, sep=0.3):
-    
-        # Number of spectra
-        n = len(jds)
+    def plot_rvcolor_one_to_one(self, pars=None, plot_width=1000, plot_height=500, sep=0.3):
         
-        wave_vec = self.scorer.like0.model.kernel.make_wave_vec()
-
-        prev_i = 0
-        # Calculate mean JD date and number of observations per night for nightly
-        # coadded RV points; assume that observations on separate nights are
-        # separated by at least 0.3 days.
-        jds_nightly = []
-        n_obs_nights = []
-        inds = []
-        waves = []
-        instnamepairs = []
-        times_vec = self.data.get_vec('t')
-        for i in range(n-1):
-            if jds[i+1] - jds[i] > sep:
-                n_obs_night = i - prev_i + 1
-                if n_obs_night != 2:
-                    prev_i = i + 1
-                    continue
-                _inds = np.arange(prev_i, i+1).astype(int)
-                if wave_vec[_inds[0]] == wave_vec[_inds[1]]:
-                    prev_i = i + 1
-                    continue
-                if wave_vec[_inds[0]] == wave1:
-                    inds.append(_inds)
-                else:
-                    inds.append(_inds[::-1])
-                prev_i = i + 1
+        # Pars
+        if pars is None:
+            pars = self.p0
             
-        if n - prev_i == 2 and wave_vec[-1] != wave_vec[-2]:
-            _inds = inds.append(np.arange(prev_i, n).astype(int))
-            if wave_vec[_inds[0]] == wave1:
-                inds.append(_inds)
-            else:
-                inds.append(_inds[::-1])
+        # Figure
+        fig = plotly.subplots.make_subplots(rows=1, cols=1)
+            
+        # Compute all possible wave pairs
+        wave_vec = self.data.get_wave_vec()
+        wave_pairs = self.generate_all_wave_pairs(wave_vec)
+        
+        # Add a 1-1 line
+        x_line = np.arange(-150, 150, 1)
+        fig.add_trace(plotly.graph_objects.Scatter(x=x_line, y=x_line, line=dict(color='black', dash='dash'), showlegend=False))
+        
+        # Loop over wave pairs and
+        # 1. Compute data rv color
+        # 2. Compute GP color
+        color_index = 0
+        for wave_pair in wave_pairs:
+            
+            # Compute RV Color for this pair
+            rvcolor_result = self.compute_rvcolor(pars, wave_pair[0], wave_pair[1], sep=sep)
+        
+            # Loop over points for this pair and plot.
+            color_map = {}
+            label_map = {}
+            t = rvcolor_result["jds_avg"]
+            x = rvcolor_result["rvcolor_data"]
+            x_unc = rvcolor_result["unccolor_data"]
+            y = rvcolor_result["gp_color_data"]
+            y_unc = rvcolor_result["gp_color_unc_data"]
+            for i in range(len(t)):
+            
+                # The yerr for the data and GP
+                _x_unc = dict(array=np.array(x_unc[i]))
+                _y_unc = dict(array=np.array(y_unc[i]))
+            
+                # Check if this combo is in color_map
+                show_legend = False
+                if rvcolor_result["instnames"][i] not in color_map:
+                    instname1, instname2 = rvcolor_result["instnames"][i]
+                    color_map[rvcolor_result["instnames"][i]] = pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index], a=0.8)
+                    label_map[rvcolor_result["instnames"][i]] = "<b>RV Color, " + instname1 + " - " + instname2 + "</b>"
+                    show_legend = True
+                    color_index += 1
+                fig.add_trace(plotly.graph_objects.Scatter(x=np.array(x[i]), y=np.array(y[i]), name=label_map[rvcolor_result["instnames"][i]], error_x=_x_unc, error_y=_y_unc, mode='markers', marker=dict(color=color_map[rvcolor_result["instnames"][i]]), showlegend=show_legend))
                 
-        return inds
+        # Labels
+        title = "<b>RV Color (&#x3BB; [" + str(550) + "] - &#x3BB; [" + str(2350) + "])</b>"
+        fig.update_layout(title_text=title, margin=dict(l=80, r=80, t=10, b=80))
+        fig.update_xaxes(title_text='<b>Data Color [m/s]</b>')
+        fig.update_yaxes(title_text='<b>GP Color [m/s]</b>')
+        fig.update_layout(title='<b>' + self.star_name + ' Chromaticity')
+        fig.update_layout(template="ggplot2")
+        fig.update_layout(font=dict(size=16))
+        fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
+        fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
+        fig.update_layout(width=plot_width, height=plot_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
+        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvcolor_1_to_1_' + pcutils.gendatestr(time=True) + '.html')
+        
+        return fig
 
-    @staticmethod
-    def get_phases(t, per, tc):
-        """Given input times, a period, and time of conjunction, returns the phase [0, 1] at each time t.
+    def compute_rvcolor(self, pars, wave1, wave2, sep=0.3):
+        """Computes the "RV-color" for wavelengths 1 and 2.
 
         Args:
-            t (np.ndarray): The times.
-            per (float): The period of the planet
-            tc (float): The time of conjunction (time of transit).
+            wave1 (float): The first wavelength.
+            wave2 (float): The second wavelength.
+            sep (float, optional): The max separation allowed to consider for observations in days. Defaults to 0.3.
 
         Returns:
-            np.ndarray: The phases between 0 and 1
+            dict: A dictionary with the following keys:
+                jds_avg: The mean jds for the data.
+                rvcolor_data: The data RVs corresponding to this jd, RV1 - RV2.
+                unccolor_data: The corresponding data uncertainties, computed by adding in quadrature.
+                gp_color_data: The coarsely sampled GP-color.
+                gp_color_unc_data: The corresponding unc for the coarsely sampled GP-color, GP1 - GP2.
+                t_gp_hr: The densely sampled times for the GP.
+                gpmean1_hr: The densely sampled GP1 mean.
+                gpstddev1_hr: The densely sampled GP1 stddev.
+                gpmean1_hr: The densely sampled GP2 mean.
+                gpstddev2_hr: The densely sampled GP2 stddev.
+                gpmean_color_hr: The densely sampled GP-color, GP1 - GP2.
+                gpstddev_color_hr: The corresponding densely sampled GP-color unc, computed by adding in quadrature.
+                instnames: A list containing 2-tuples of the instruments of each night, [, ... (instname1, isntname2), ...].
         """
-        phases = (t - tc - per / 2) % per
-        phases /= per
-        return phases
+        
+        # Parameters
+        if pars is None:
+            pars = self.p0
+        
+        # Filter data to only consider each wavelength
+        wave_vec = self.scorer.like0.model.kernel.make_wave_vec()
+        times_vec = self.data.get_vec('t')
+        rv_vec = self.data.get_vec('rv')
+        rv_vec = self.like0.model.apply_offsets(rv_vec, pars)
+        unc_vec = self.like0.model.kernel.compute_data_errors(pars)
+        tel_vec = self.data.make_tel_vec()
+        inds1 = np.where((wave_vec == wave1) | (wave_vec == wave2))[0]
+        times_vec, rv_vec, unc_vec, wave_vec, tel_vec = times_vec[inds1], rv_vec[inds1], unc_vec[inds1], wave_vec[inds1], tel_vec[inds1]
+        n_inst = len(np.unique(tel_vec))
+        
+        # If only 1 instrument, nothing to compute
+        if n_inst < 2:
+            return None
+
+        # Loop over RVs and look for near-simultaneous RV color observations.
+        prev_i = 0
+        jds_avg = []
+        rvcolor_data = []
+        unccolor_data = []
+        instnames = []
+        n_data = len(times_vec)
+        for i in range(n_data - 1):
+            
+            # If dt > sep, we have moved to the next night.
+            # But first ook at all RVs from this night
+            if times_vec[i+1] - times_vec[i] > sep:
+                
+                # The number of RVs on this night for these two wavelengths.
+                n_obs_night = i - prev_i + 1
+                
+                # If only 1 observation for this night, skipi.
+                if n_obs_night < 2:
+                    prev_i = i + 1
+                    continue
+                
+                # The indices for this night, relative to the filtered arrays 
+                inds = np.arange(prev_i, i + 1).astype(int)
+                
+                # The number of unique wavelengths on this night. Will be either 1 or 2.
+                n_waves = len(np.unique(wave_vec[inds]))
+                
+                # If not exactly 2, skip.
+                if n_waves != 2:
+                    prev_i = i + 1
+                    continue
+                
+                # Determine which index is which, ensure they are different.
+                ind1 = np.where(wave_vec[inds] == wave1)[0][0]
+                ind2 = np.where(wave_vec[inds] == wave2)[0][0]
+                assert ind1 != ind2
+                
+                # Compute color from these two observations.
+                jds_avg.append(np.mean(times_vec[inds]))
+                rvcolor_data.append(rv_vec[inds][ind1] - rv_vec[inds][ind2])
+                unccolor_data.append(np.sqrt(unc_vec[inds][ind1]**2 + unc_vec[inds][ind2]**2))
+                instnames.append((tel_vec[inds][ind1], tel_vec[inds][ind2]))
+                
+                # Move on.
+                prev_i = i + 1
+        
+        # Check last night.
+        n_obs_night = n_data - prev_i
+        inds = np.arange(prev_i, n_data).astype(int)
+        if n_obs_night == 2 and len(np.unique(wave_vec[inds])) == 2:
+            ind1 = np.where(wave_vec[inds] == wave1)[0][0]
+            ind2 = np.where(wave_vec[inds] == wave2)[0][0]
+            assert ind1 != ind2
+            jds_avg.append(np.mean(times_vec[inds]))
+            rvcolor_data.append(rv_vec[inds][ind1] - rv_vec[inds][ind2])
+            unccolor_data.append(np.sqrt(unc_vec[inds][ind1]**2 + unc_vec[inds][ind2]**2))
+            instnames.append((tel_vec[inds][ind1], tel_vec[inds][ind2]))
+         
+        # Convert to numpy arrays
+        breakpoint()
+        jds_avg = np.array(jds_avg)
+        rvcolor_data = np.array(rvcolor_data)
+        unccolor_data = np.array(unccolor_data)
+         
+        # Now for the GP color.
+        # Residuals with noise
+        residuals_with_noise = self.like0.residuals_before_kernel(pars)
+        
+        # Compute the coarsely sampled GP for each wavelength.
+        gp_mean1_data, gp_stddev1_data = self.like0.model.kernel.realize(pars, residuals_with_noise, xpred=jds_avg, return_unc=True, wavelength=wave1)
+        gp_mean2_data, gp_stddev2_data = self.like0.model.kernel.realize(pars, residuals_with_noise, xpred=jds_avg, return_unc=True, wavelength=wave2)
+        
+        # Compute the coarsely sampled GP-color and unc
+        gp_color_data = gp_mean1_data - gp_mean2_data
+        gp_color_unc_data = np.sqrt(gp_stddev1_data**2 + gp_stddev2_data**2)
+        
+        # Compute the densely sampled GP-color
+        t_gp_hr, gpmean1_hr, gpstddev1_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value, t=jds_avg, residuals=residuals_with_noise, kernel_sampling=100, return_unc=True, wavelength=wave1)
+        _, gpmean2_hr, gpstddev2_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value, t=jds_avg, residuals=residuals_with_noise, kernel_sampling=100, return_unc=True, wavelength=wave2)
+        gpmean_color_hr = gpmean1_hr - gpmean2_hr
+        gpstddev_color_hr = np.sqrt(gpstddev1_hr**2 + gpstddev2_hr**2)
+                
+        # Return a mega dictionary
+        out = dict(jds_avg=jds_avg, rvcolor_data=rvcolor_data, unccolor_data=unccolor_data,
+                   gp_color_data=gp_color_data, gp_color_unc_data=gp_color_unc_data,
+                   t_gp_hr=t_gp_hr, gpmean1_hr=gpmean1_hr, gpstddev1_hr=gpstddev1_hr,
+                   gpmean2_hr=gpmean2_hr, gpstddev2_hr=gpstddev2_hr,
+                   gpmean_color_hr=gpmean_color_hr, gpstddev_color_hr=gpstddev_color_hr,
+                   instnames=instnames)
+        return out
     
-    @staticmethod
-    def generate_all_planet_dicts(planets_dict):
-        pset = pcutils.powerset(planets_dict.items())
-        planet_dicts = []
-        for item in pset:
-            pdict = {}
-            for subitem in item:
-                pdict[subitem[0]] = subitem[1]
-            planet_dicts.append(pdict)
-        return planet_dicts
-    
-    @property
-    def planets_dict(self):
-        return self.scorer.like0.model.planets_dict
-    
-    def model_comparison(self, do_planets=True, do_gp=False):
+    def model_comparison(self):
+        """Runs a model comparison for all combinations of planets.
+
+        Returns:
+            list: Each entry is a dict containing the model comp results for each case, and is sorted according to the small sample AIC.
+        """
         
         # Go through every permutation of planet dicts
         if do_planets:
@@ -794,7 +931,7 @@ class ExoProblem(optframeworks.OptProblem):
                 # Remove all other planets except this combo.
                 for planet_index in planets_dict_cp:
                     if planet_index not in planets_dict:
-                        p0 = self.disable_planet_pars(p0, planets_dict_cp, planet_index)
+                        self.disable_planet_pars(p0, planets_dict_cp, planet_index)
                 
                 # Set planets dict for each model
                 for like in _optprob.scorer.values():
@@ -851,14 +988,15 @@ class ExoProblem(optframeworks.OptProblem):
             mstar = self.mstar
         if mstar_unc is None:
             mstar_unc = self.mstar_unc
-        aplanets = {} # In jupiter masses
+        aplanets = {} # In AU
+        G = scipy.constants.G
         for planet_index in self.planets_dict:
             perdist = []
             tpdist = []
             eccdist = []
             wdist = []
             kdist = []
-            mdist = []
+            adist = []
             pars = copy.deepcopy(sampler_result["pmed"])
             for i in range(sampler_result["n_steps"]):
                 for pname in self.planets_dict[planet_index]["basis"].pnames:
@@ -871,21 +1009,20 @@ class ExoProblem(optframeworks.OptProblem):
                 eccdist.append(ecc)
                 wdist.append(w)
                 kdist.append(k)
-                G = scipy.constants.gravitational_constant
-                #a = G * 
+                a = (G / (4 * np.pi**2))**(1 / 3) * (mstar * 1.988435E30)**(1 / 3) * (per * 86400)**(2 / 3) / 1.496E11 # in AU
                 adist.append(a)
             val, unc_low, unc_high = self.sampler.chain_uncertainty(adist)
             if self.mstar_unc is not None:
-                unc_low = np.sqrt(unc_low**2 + self.compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[0]**2)
-                unc_high = np.sqrt(unc_high**2 + self.compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[1]**2)
-                msiniplanets[planet_index] = (val, unc_low, unc_high)
+                da_dMstar = (G / (4 * np.pi**2))**(1 / 3) * (mstar * 1.988435E30)**(-2 / 3) / 3 * (per * 86400)**(2 / 3)
+                unc_low = np.sqrt(unc_low**2 + da_dMstar**2 * mstar_unc[0]**2)
+                unc_high = np.sqrt(unc_high**2 + da_dMstar**2 * mstar_unc[1]**2)
+                aplanets[planet_index] = (val, unc_low, unc_high)
             else:
-                msiniplanets[planet_index] = (val, unc_low, unc_high)
-        return msiniplanets
-        
+                aplanets[planet_index] = (val, unc_low, unc_high)
+        return aplanets
     
     def compute_planet_masses(self, sampler_result, mstar=None, mstar_unc=None):
-        """Computes the value of msini for each planet.
+        """Computes the value of msini and uncertainty for each planet in units of Earth Masses.
 
         Args:
             sampler_result (dict): The returned value from calling sample.
@@ -919,36 +1056,125 @@ class ExoProblem(optframeworks.OptProblem):
                 eccdist.append(ecc)
                 wdist.append(w)
                 kdist.append(k)
-                mdist.append(self.compute_planet_mass(per, ecc, k, mstar))
+                mdist.append(compute_planet_mass(per, ecc, k, mstar))
             val, unc_low, unc_high = self.sampler.chain_uncertainty(mdist)
             if self.mstar_unc is not None:
-                unc_low = np.sqrt(unc_low**2 + self.compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[0]**2)
-                unc_high = np.sqrt(unc_high**2 + self.compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[1]**2)
+                unc_low = np.sqrt(unc_low**2 + compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[0]**2)
+                unc_high = np.sqrt(unc_high**2 + compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[1]**2)
                 msiniplanets[planet_index] = (val, unc_low, unc_high)
             else:
                 msiniplanets[planet_index] = (val, unc_low, unc_high)
         return msiniplanets
     
-    @staticmethod
-    def compute_planet_mass(per, ecc, k, mstar):
-        MJ = 317.82838 # mass of jupiter in earth masses
-        mass = k * np.sqrt(1 - ecc**2) / 28.4329 * (per / 365.25)**(1 / 3) * mstar**(2 / 3) * MJ
-        return mass
+    def gp_smart_sample(self, pars, like, s, t, residuals, kernel_sampling=100, return_unc=True, wavelength=None):
+        """Smartly samples the GP. Could be smarter.
+
+        Args:
+            like (RVLikelihood or RVChromaticLikelihood)
+            s ([type]): The window around each point in t to sample the GP in days.
+            t (np.ndarray): The times to consider.
+            residuals (np.ndarray): The residuals to use to realize the GP.
+            kernel_sampling (int): The number of points in each window.
+            return_unc (bool, optional): Whether or not to return the gpstddev. Defaults to True.
+            wavelength (float, optional): The wavelength to realize if relevant. Defaults to None.
+
+        Returns:
+            np.ndarray: The densley sampled times.
+            np.ndarray: The densley sampled GP.
+            np.ndarray: The densley sampled GP stddev if return_unc is True.
+        """
+        t_hr_gp = np.array([], dtype=float)
+        gpmu_hr = np.array([], dtype=float)
+        gpstddev_hr = np.array([], dtype=float)
+        for i in range(t.size):
+            _t_hr_gp = np.linspace(t[i] - s, t[i] + s, num=kernel_sampling)
+            if return_unc:
+                _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals=residuals, return_unc=return_unc, wavelength=wavelength)
+            else:
+                _gpmu = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals=residuals, return_unc=return_unc, wavelength=wavelength)
+            t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
+            gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
+            if return_unc:
+                gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
+
+        ss = np.argsort(t_hr_gp)
+        t_hr_gp = t_hr_gp[ss]
+        gpmu_hr = gpmu_hr[ss]
+        if return_unc:
+            gpstddev_hr = gpstddev_hr[ss]
+            
+        if return_unc:
+            return t_hr_gp, gpmu_hr, gpstddev_hr
+        else:
+            return t_hr_gp, gpmu_hr
+    
+    @property
+    def likes(self):
+        return self.scorer
+    
+    @property
+    def like0(self):
+        return self.scorer.like0
+    
+    @property
+    def planets_dict(self):
+        return self.like0.model.planets_dict
     
     @staticmethod
-    def compute_planet_mass_deriv_mstar(per, ecc, k, mstar):
-        MJ = 317.82838 # mass of jupiter in earth masses
-        alpha = k * np.sqrt(1 - ecc**2) / 28.4329 * (per / 365.25)**(1 / 3)
-        dMp_dMstar = (2 / 3) * alpha * mstar**(-1 / 3)
-        return dMp_dMstar
-        
-    @staticmethod
     def _rv_period_search_wrapper(optprob, period, planet_index):
+        """Internal function called by the brute force period search.
+
+        Args:
+            optprob (ExoProb): The optimize problem.
+            period (float): The period to test.
+            planet_index (int): The planet index.
+
+        Returns:
+            dict: The opt_result corresponding to this period.
+        """
         p0 = optprob.p0
         p0['per' + str(planet_index)].value = period
         optprob.set_pars(p0)
         opt_result = optprob.optimize()
         return opt_result
+
+    @staticmethod
+    def generate_all_wave_pairs(wave_vec):
+        wave_vec_unq = np.sort(np.unique(wave_vec))
+        return list(itertools.combinations(wave_vec_unq, 2))
+
+    @staticmethod
+    def generate_all_planet_dicts(planets_dict):
+        """Generates all possible planet dictionaries through a powerset.
+
+        Args:
+            planets_dict (dict): The planets dict.
+
+        Returns:
+            list: A list of all possible planet dicts.
+        """
+        pset = pcutils.powerset(planets_dict.items())
+        planet_dicts = []
+        for item in pset:
+            pdict = {}
+            for subitem in item:
+                pdict[subitem[0]] = subitem[1]
+            planet_dicts.append(pdict)
+        return planet_dicts
+
+    @staticmethod
+    def disable_planet_pars(pars, planets_dict, planet_index):
+        """Disables (sets vary=False) in-place for the planet parameters corresponding to planet_index.
+
+        Args:
+            pars (Parameters): The parameters.
+            planets_dict (dict): The planets dict.
+            planet_index (int): The index to disable.
+        """
+        for par in pars.values():
+            for planet_par_name in planets_dict[planet_index]["basis"].names:
+                if par.name == planet_par_name + str(planet_index):
+                    pars[par.name].vary = False
 
 def gen_latex_labels(pars, planets_dict):
     """Default Settings for latex labels for orbit fitting. Any GP parameters must be set manually via parameter.latex_str = "$latexname$"
@@ -993,3 +1219,49 @@ def gen_latex_labels(pars, planets_dict):
         # Jitter
         elif pname.startswith('jitter'):
             pars[pname].latex_str = "$\sigma_{" + pname.split('_')[-1] + "}$"
+            
+def compute_planet_mass(per, ecc, k, mstar):
+    """Computes the planet mass from the semi-amplitude equation.
+
+    Args:
+        per (float): The period of the orbit in days.
+        ecc (float): The eccentricity.
+        k (float): The RV semi-amplitude in m/s.
+        mstar (float): The mass of the star in solar units.
+
+    Returns:
+        float: The planet mass in units of Earth masses.
+    """
+    MJ = 317.82838 # mass of jupiter in earth masses
+    mass = k * np.sqrt(1 - ecc**2) / 28.4329 * (per / 365.25)**(1 / 3) * mstar**(2 / 3) * MJ
+    return mass
+
+def get_phases(t, per, tc):
+    """Given input times, a period, and time of conjunction, returns the phase [0, 1] at each time t.
+    Args:
+        t (np.ndarray): The times.
+        per (float): The period of the planet
+        tc (float): The time of conjunction (time of transit).
+    Returns:
+        np.ndarray: The phases between 0 and 1
+    """
+    phases = (t - tc - per / 2) % per
+    phases /= per
+    return phases
+
+def compute_planet_mass_deriv_mstar(per, ecc, k, mstar):
+    """Computes the derivative of the semi-amplitude equation inverted for mass, d(M_planet) / d(M_Star)
+
+    Args:
+        per (float): The period of the orbit in days.
+        ecc (float): The eccentricity.
+        k (float): The RV semi-amplitude in m/s.
+        mstar (float): The mass of the star in solar units.
+
+    Returns:
+        float: The derivative (unitless).
+    """
+    MJ = 317.82838 # mass of jupiter in earth masses
+    alpha = k * np.sqrt(1 - ecc**2) / 28.4329 * (per / 365.25)**(1 / 3)
+    dMp_dMstar = (2 / 3) * alpha * mstar**(-1 / 3)
+    return dMp_dMstar
