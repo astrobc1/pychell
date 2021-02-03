@@ -4,14 +4,14 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>pychell &#8212; pychell  documentation</title>
-    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
     <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
     <script src="_static/jquery.js"></script>
     <script src="_static/underscore.js"></script>
     <script src="_static/doctools.js"></script>
-    <script src="_static/language_data.js"></script>
     <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -36,11 +36,16 @@
 <h1>pychell<a class="headerlink" href="#pychell" title="Permalink to this headline">¶</a></h1>
 <p>The tldr; A environment to:</p>
 <ol class="arabic simple">
-<li><p>Reduce single trace multi-order echelle spectra via optimal extraction.</p></li>
-<li><p>Generate radial velocities for stellar sources via forward modeling reduced 1-dimensional spectra.</p></li>
+<li><p>Reduce single trace multi-order echelle spectra.</p></li>
+<li><p>Generate radial velocities for stellar sources.</p></li>
 </ol>
-<p><strong>Idea</strong>: The core idea of pychell is to modularize the core steps of processing echelle spectra for precise radial velocity work, and provide a simple yet powerful interface to interact with.</p>
-<p>Below is the remaining documentation, tutorials, API, and instructions on adding support for new spectrographs and data sets.</p>
+<p>The idea of pychell is to:</p>
+<ol class="arabic simple">
+<li><p>Separate out the core steps needed to obtain the above.</p></li>
+<li><p>Provide as many of the default routines needed to obtain the above.</p></li>
+<li><p>Provide a simple interace to modify these default methods.</p></li>
+</ol>
+<p>Below is the remaining documentation, tutorials, API, and instructions on adding support for new spectrographs.</p>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
@@ -143,7 +148,7 @@
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

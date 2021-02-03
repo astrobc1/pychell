@@ -3,21 +3,20 @@
 Quickstart
 **********
 
-pychell may be run in a modular sort of way, where the user executes each sub-command to run the analyses, or from a python script. The follwoing tutorials execute pre-generated scripts from the command line. To see more on running the code from the command line, see the API.
+For both reduction and RVs, a user config file is created containing 1-2 dictionaries defining variables specific to a given run. This file then calls and passes these dictionaries to the desired pychell routine.
 
 Reduction
 =========
 
-Below is a quick-start guide which reduces a single spectrum of Vega using raw spectra from the iSHELL spectrograph in Kgas mode (~2.3 microns). Flat division is performed. Neither dark or bias subtraction are performed. Copy the example folder Vega_reduction to a new location of your choice. Open a terminal window in this new location. Run:
+Below is a quick-start guide which reduces a single spectrum of Vega using raw spectra from the iSHELL spectrograph in Kgas mode (~2.3 microns). Flat division is performed, but neither dark or bias subtraction are performed. Copy the example folder Vega_reduction to a new location of your choice. Open a terminal window in this new location. Run:
 
 ``python vega_ishell_reduction_example.py``
 
-The code will print helpful messages as it processes the single image. An output directory will be created in an output folder ``reduce/Vega``. Each sub folder contains the following:
+An output directory will be created in an output folder ``reduce/Vega``. Each sub folder contains the following:
 
-1. **calib** - Master calibration images. Darks are named according to exposure times. Flats are named according to the individual image numbers it was created from.
-2. **previews** - Images of the full frame reduced spectra (all orders).
-3. **spectra** - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons.
-4. **trace_profiles** - Trace profiles (seeing profiles) for all full frame science images.
+1. **calib** - Any master calibration images.
+3. **spectra** - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_traces, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons, but may still contain blaze modulation.
+4. **trace** - Trace profiles (seeing profiles) and order map information for all relevant full frame science images.
 
 Radial Velocities
 =================
@@ -28,7 +27,7 @@ Copy the example folder GJ_699_rvs to a new location of your choice. Open a term
 
 ``python gj699_ishell_rvs_example.py``
 
-The code will immediately provide a summary of the run. Summaries of fits are printed after each fit. An output directory will also be created in an output folder ``GJ_699_default_test_run``. This folder contains the global parameters dictionary (stored in an .npz file) used throughout the code and sub folders for each order. Each sub folder contains the following:
+Summaries of fits are printed after each fit. An output directory will also be created in an output folder ``GJ_699_default_test_run``. This folder contains the global parameters dictionary (stored in an .npz file) used throughout the code and sub folders for each order. Each sub folder contains the following:
 
 1. **Fits** - Contains the forward model plots for each iteration. The spectral numbers are in chronological order. Also contains .npz files with the following keys:
     - *wave* : The wavelegnth solutions for this spectrum, np.ndarray, shape=(n_data_pix, n_template_fits)

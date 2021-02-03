@@ -109,6 +109,9 @@ def extract_full_image(data, config):
         stopwatch.lap(order_index)
         print('  Extracting Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' ...')
         
+        if order_index != 11:
+            continue
+        
         # Orders are composed of multiple traces
         if len(single_order_list) > 1:
             

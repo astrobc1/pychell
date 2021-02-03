@@ -6,6 +6,15 @@ import os
 from pdb import set_trace as stop
 
 class PostParser:
+    """A data parser for raw and 1d echelle spectra.
+    
+    Attributes:
+        output_path_root (str): The output path for any generated data.
+        do_orders (iterable): An iterable of which echelle orders to consider.
+        bad_rvs_dict (dict): A dictionary containing two keys (bad_spec, bad_nights) with values being iterables.
+        star_name (str): The name of the star.
+        rvs_out (str): Which rvs to use for outputs, forward modeled or cross-correlation. Possible keys are NM or XC. Defaults to NM.
+    """
     
     def __init__(self, output_path_root, do_orders=None, bad_rvs_dict=None, star_name='', rvs_out='NM', **kwargs):
         

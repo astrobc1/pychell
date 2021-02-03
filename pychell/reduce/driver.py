@@ -36,6 +36,11 @@ import pychell.reduce.order_map as pcomap
 import pychell.config as pcconfig
 
 def reduce_night(user_redux_settings):
+    """The main function to reduce a night of data.
+
+    Args:
+        user_redux_settings (dict): A dictionary with settings to reduce this night.
+    """
 
     # Start the main clock
     stopwatch = pcutils.StopWatch()
@@ -52,10 +57,8 @@ def reduce_night(user_redux_settings):
         
         print('Creating Master Bias ...', flush=True)
         
-        # Simple median combine, probably
+        # Create master bias image and save
         master_bias_image = pccalib.generate_master_bias(data['master_bias'].individuals)
-        
-        # Save the master bias image
         data['master_bias'].save_master_image(master_bias_image)
     
     # Create Master Darks for each unique exposure time
@@ -63,12 +66,9 @@ def reduce_night(user_redux_settings):
         
         print('Creating Master Dark(s) ...', flush=True)
         
+        # Create master dark image and save
         for master_dark in data['master_darks']:
-            
-            # Simple median combine, probably
             master_dark_image = pccalib.generate_master_dark(master_dark.individuals)
-            
-            # Save
             master_dark.save(master_dark_image)
             
     # Create Master Flats for each flats group
@@ -76,12 +76,9 @@ def reduce_night(user_redux_settings):
         
         print('Creating Master Flat(s) ...', flush=True)
         
+        # Create master flat image and save
         for master_flat in data['master_flats']:
-            
-            # Simple median combine, probably
             master_flat_image = pccalib.generate_master_flat(master_flat.individuals, bias_subtraction=config['bias_subtraction'], dark_subtraction=config['dark_subtraction'], flatfield_percentile=config['flatfield_percentile'])
-            
-            # Save
             master_flat.save(master_flat_image)
 
     #######################
@@ -115,17 +112,7 @@ def reduce_night(user_redux_settings):
             d.order_map = data['science'][0].order_map
     else:
         raise ValueError("Order Map options not recognized")
-        
-    # Correct master flats for any artifacts (fringing, remove blaze)
-    #if redux_settings['correct_flat_field_artifacts']:
     
-    
-    #if ('correct_fringing_in_flatfield' in redux_settings and redux_settings['correct_fringing_in_flatfield']) or ('correct_blaze_function_in_flatfield' in redux_settings and redux_settings['correct_blaze_function_in_flatfield']):
-        
-    #    print('Correcting artifacts in master flat(s) ...', flush=True)
-    #    for sci_data in raw_data['science']:
-    #        sci_data.correct_flat_artifacts(output_dir=general_settings['output_path_root'], calibration_settings=calib_settings)
-
     # Extraction of science spectra
     if config['n_cores'] > 1:
         

@@ -1,44 +1,35 @@
 # Python built in modules
 import copy
-import glob # File searching
-import os # Making directories
-import importlib.util # importing other modules from files
-import warnings # ignore warnings
-import sys # sys utils
-import pickle
-import dill
+import os
+import importlib.util
+import warnings
 from sys import platform # plotting backend
 
 # Graphics
-import matplotlib # to set the backend
-import matplotlib.pyplot as plt # Plotting
+import matplotlib
+import matplotlib.pyplot as plt
 import pychell
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # Science/math
-from scipy import constants as cs # cs.c = speed of light in m/s
 import numpy as np # Math, Arrays
-# Numpy warnings
 np.seterr(divide='ignore')
 warnings.filterwarnings('ignore')
-import scipy.interpolate # Cubic interpolation, Akima interpolation
 
-# llvm
-from numba import njit, jit, prange
-
-# Pychell modules
+# pychell
 import pychell.config as pcconfig
-import pychell.rvs.template_augmenter as pcaugmenter
-import pychell.maths as pcmath # mathy equations
-import pychell.rvs.forward_models as pcforwardmodels # the various forward model implementations
-import pychell.data as pcdata # the data objects
+import pychell.rvs.forward_models as pcforwardmodels
 import pychell.data.parsers as pcparsers
-import pychell.rvs.model_components as pcmodelcomponents # the data objects
-import pychell.utils as pcutils # random helpful functions
-import pychell.rvs.rvcalc as pcrvcalc
+import pychell.utils as pcutils
 
 # Main function
 def compute_rvs(user_forward_model_settings, user_model_blueprints):
+    """The main function to run for a given target to compute the RVs.
+
+    Args:
+        user_forward_model_settings (dict): A dictionary containing the user settings.
+        user_model_blueprints (dict): A dictionary containing the user blueprints.
+    """
 
     # Start the main clock!
     stopwatch = pcutils.StopWatch()
@@ -139,9 +130,8 @@ def compute_rvs(user_forward_model_settings, user_model_blueprints):
 
     # End the clock!
     print('ALL DONE! Runtime: ' + str(round(stopwatch.time_since(name='ti_main') / 3600, 2)) + ' hours', flush=True)
-                    
 
-# Initialize the pipeline based on input_options file
+# Init methods below to merge user passed settings with default settings.
 def init(user_forward_model_settings, user_model_blueprints):
 
     # Dictionaries
@@ -182,7 +172,6 @@ def init_config(config, user_forward_model_settings):
     # Add user settings to dictionary
     config.update(user_forward_model_settings)
     
-    
 def init_blueprints(config, model_blueprints, user_model_blueprints=None):
     
     # Default no user blueprints, use defaults
@@ -216,6 +205,3 @@ def init_templates(config):
     
     if config['force_download_templates']:
         pcutils.download_templates(config['templates_path'])
-
-
-################################################################################################################

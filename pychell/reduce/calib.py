@@ -1,16 +1,11 @@
 # Default Python modules
 import os
-import glob
-import sys
-from pdb import set_trace as stop
-
 
 # Graphics
 import matplotlib.pyplot as plt
 
 # Science/Math
 import numpy as np
-from astropy.coordinates import Angle, SkyCoord
 import astropy.units as units
 import scipy.interpolate
 from astropy.io import fits
@@ -22,19 +17,19 @@ import sklearn.cluster
 from numba import jit, njit, prange
 
 # Pychell modules
-import pychell.utils as pcutils
 import pychell.maths as pcmath
 import pychell.data as pcdata
 from robustneldermead.neldermead import NelderMead
 
 # Generate a master flat from a flat cube
-def generate_master_flat(individuals, bias_subtraction=False, dark_subtraction=False, flatfield_percentile=0.75):
+def generate_master_flat(individuals, bias_subtraction=False, dark_subtraction=False, norm=0.75):
     """Computes a median master flat field image from a subset of flat field images. Dark and bias subtraction is also performed if set.
 
         Args:
             individuals (list): The list of FlatFieldImages.
             bias_subtraction (bool): Whether or not to perform bias subtraction. If so, each flat must have a master_bias attribute.
             dark_subtraction (bool): Whether or not to perform dark subtraction. If so, each flat must have a master_dark attribute.
+            norm (float): The percentile to normalize the master flat field image to. Defaults to 0.75 (75 percent).
         Returns:
             master_flat (np.ndarray): The median combined and corrected master flat image
         """
@@ -126,7 +121,6 @@ def standard_calibration(data, data_image, bias_subtraction=False, dark_subtract
         data_image /= master_flat_image
 
     return data_image
-
 
 # Corrects fringing and / or the blaze transmission.
 def correct_flat_artifacts(flat, redux_settings):
@@ -347,77 +341,3 @@ def correct_flat_artifacts(flat, redux_settings):
     np.savetxt(out_file_fringing_model_text, fringing_best_pars, delimiter=',')
     
     return corrected_flat
-
-
-
-def plot_full_fringing_models(fringing_models, fringing_1d, out_file):
-    
-    n_orders = fringing_models.shape[1]
-    
-    n_cols = 3
-    n_rows = int(np.ceil(n_orders / n_cols))
-    
-    xarr = np.arange(0, fringing_models[:, 0].size)
-    
-    plot_width = 15
-    plot_height = 20
-    dpi = 300
-    
-    fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(plot_width, plot_height), dpi=dpi)
-    
-    for row in range(n_rows):
-        for col in range(n_cols):
-            o = n_cols * row + col
-            if o + 1 > n_orders:
-                continue
-            axarr[row, col].plot(xarr[200:-200], fringing_1d[200:-200, o], color='black', lw=1)
-            axarr[row, col].plot(xarr[200:-200], fringing_models[200:-200, o], color='red', lw=1)
-    
-    axarr[-1, 1].set_xlabel('X Pixels', fontweight='bold', fontsize=14)
-    axarr[int(n_rows / 2), 0].set_ylabel('Norm. Flux', fontweight='bold', fontsize=14)
-    plt.tight_layout()
-    plt.savefig(out_file)
-    plt.close()
-    
-
-def rectify_trace(order_image, ypositions):
-    """Rectifies (straightens) the flat field order.
-
-    Args:
-        order_image (np.ndarray): The non-straightened image.
-        ypositions (np.ndarray): The (approximate) locations of the trace on the detector, y(x).
-    """
-    
-    # Image dimensions
-    ny, nx = order_image.shape
-    
-    # A dummy y array
-    yarr = np.arange(ny)
-    
-    # Arbitrarily choose the fiducial center to be the middle of the detector.
-    fiducial_center_y = int(ny / 2)
-    
-    # Init the straightened image
-    rectified_image = np.full(shape=(ny, nx), fill_value=np.nan)
-    
-    # Rectify
-    for x in range(nx):
-        good = np.where(np.isfinite(order_image[:, x]))[0]
-        if good.size <= 3:
-            continue
-        rectified_image[:, x] = scipy.interpolate.CubicSpline(yarr[good] - ypositions[x], order_image[good, x], extrapolate=False)(yarr - fiducial_center_y)
-        
-    return rectified_image
-
-
-@njit
-def fringing_1d_compute(x, pars):
-    return pars[0] * np.sin((2 * np.pi) / (pars[2] + pars[3] * x) * x + pars[1]) + 1
-
-@njit
-def fringing_1d_solver(pars, x, data):
-    model = fringing_1d_compute(x, pars)
-    res2 = (data - model)**2
-    n_good = np.where(np.isfinite(res2))[0].size
-    rms = np.sqrt(np.nansum(res2) / n_good)
-    return rms, 1

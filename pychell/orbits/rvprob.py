@@ -32,8 +32,23 @@ import pychell.utils as pcutils
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 class ExoProblem(optframeworks.OptProblem):
+    """The primary, top-level container for Exoplanet optimization problems. As of now, this only deals with RV data. Photometric modeling will be included in future updates, but will leverage existing libraries (Batman, etc.).
+    """
 
     def __init__(self, output_path=None, data=None, p0=None, optimizer=None, sampler=None, likes=None, star_name=None, mstar=None, mstar_unc=None):
+        """Constructs the primary exoplanet problem object.
+
+        Args:
+            output_path (The output path for plots and pickled objects, optional): []. Defaults to this current working direcrory.
+            data (MixedRVData, optional): The composite data object. Defaults to None.
+            p0 (Parameters, optional): The initial parameters. Defaults to None.
+            optimizer (Optimizer, optional): The max like optimizer. Defaults to None.
+            sampler (Sampler, optional): The MCMC sampler object. Defaults to None.
+            likes (MixedRVLikelihood, optional): The composite likelihood object. Defaults to None.
+            star_name (str, optional): The name of the star, may contain spaces. Defaults to None.
+            mstar (float, optional): The mass of the star in solar units. Defaults to None.
+            mstar_unc (list, optional): The uncertainty in mstar, same units. Defaults to None.
+        """
         super().__init__(p0=p0, data=data, optimizer=optimizer, sampler=sampler, scorer=likes)
         self.star_name = 'Star' if star_name is None else star_name
         self.output_path = output_path
@@ -41,106 +56,22 @@ class ExoProblem(optframeworks.OptProblem):
         self.mstar_unc = mstar_unc
         gen_latex_labels(self.p0, self.planets_dict)
         
-    def generate_report(self, maxlike_result=None, model_comp_result=None, mcmc_result=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=100):
-        
-        # Which result to use for plots
-        if maxlike_result is not None:
-            opt_result = maxlike_result
-        elif mcmc_result is not None:
-            opt_result = mcmc_result
-        else:
-            raise ValueError("Must provide either maxlike_result or mcmc_result")
-        
-        
-        doc.preamble.append(pylatex.Command('title', self.star_name + ' Radial Velocities'))
-        doc.append(pylatex.NoEscape(r'\maketitle'))
-        
-        # Model Comparison section
-        if model_comp_result is not None:
-            with doc.create(pylatex.LongTabu("X[r] X[r] X[r] X[r] X[r] X[r] X[r] X[r]")) as mctable:
-                header_row = ["Model", "N_{free}", "N_{data}", "\\lnL", "BIC", "AICc", "\\Delta AICC"]
-                mctable.add_row(header_row, mapper=[pylatex.utils.bold])
-                mctable.add_hline()
-                mctable.end_table_header()
-                row = ["PA", "9", "$100", "%10", "$1000", "Test"]
-                for mc_result in model_comp_result:
-                    _model = ""
-                    if len(mc_result["planets_dict"]) > 0:
-                        for planet_dict in mc_result["planets_dict"].values():
-                            _model += planets_dict["label"] + ", "
-                        _model = _model[0:-2]
-                    else:
-                        _model = "-"
-                    n_pars_vary = str(mc_result["pbest"].num_varied())
-                    n_data = str(len(self.data.get_vec('t')))
-                    lnL = str(round(mc_result["lnL"], 2))
-                    bic = str(mc_result["bic"])
-                    aicc = str(mc_result["aicc"])
-                    delta_aicc = str(mc_result["delta_aicc"])
-                    row = [_model, n_pars_vary, n_data, lnL, bic, aicc, delta_aicc]
-                    mctable.add_row(row)
-            
-        # Parameters
-        if mcmc_result is not None:
-            with doc.create(pylatex.Subsection("MCMC Results")):
-                doc.append(str(mcmc_result["pbest"]))
-        else:
-            with doc.create(pylatex.Subsection("Max Like Results")):
-                doc.append(str(maxlike_result["pbest"]))
-                
-        # Full rv plot
-        full_rv_plot = self.rv_plot(opt_result, n_model_pts=n_model_pts, time_offset=time_offset, kernel_sampling=kernel_sampling)
-        fname = self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + '.png'
-        full_rv_plot.write_image(fname)
-        with doc.create(pylatex.Subsection("Full RV Plot")):
-            with doc.create(pylatex.Figure(position='h!')) as _full_rv_plot:
-                _full_rv_plot.add_image(fname, width='120px')
-                _full_rv_plot.add_caption('Best-fit model for ' + self.star_name + ' from the maximum likelihood model. Error bars are computed by adding in quadrature the provided error bars with a per-instrument Gaussian jitter-term. The per-isntrument offsets and agnostic linear and quadratic trends are removed from the data.')
-        
-        # Phased planet plots
-        for planet_index in self.planets_dict:
-            phased_rv_plot = self.rv_phase_plot(planet_index, opt_result=opt_result)
-            label = self.planets_dict[planet_index]["label"]
-            fname = self.output_path + self.star_name.replace(' ', '_') + label + '_rvs_phased_' + pcutils.gendatestr(time=True) + '.png'
-            phased_rv_plot.write_image(fname)
-            with doc.create(pylatex.Subsection("Planets")):
-                with doc.create(pylatex.Figure(position='h!')) as _phased_rv_plot:
-                    _phased_rv_plot.add_image(fname, width='120px')
-                    _phased_rv_plot.add_caption('Best-fit Keplerian model for ' + self.star_name + label + ' from the maximum likelihood model. Error bars are computed by adding in quadrature the provided error bars with a per-instrument Gaussian jitter-term. The appropriate modified model has been subtracted off.')
-                    
-        # Corner plot
-        if mcmc_result is not None:
-            corner_plot = self.corner_plot(mcmc_result)
-            fname = self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(time=True) + '.png'
-            corner_plot.write_image(fname)
-            with doc.create(pylatex.Subsection("Corner plot")):
-                with doc.create(pylatex.Figure(position='h!')) as _corner_plot:
-                    _corner_plot.add_image(fname, width='120px')
-                    _corner_plot.add_caption('The posterior distributions for ' + self.star_name + '. Truth values (blue lines) correspond to the values in table 2.')
-
-        # Save doc
-        fname = self.output_path + self.star_name.replace(' ', '_') + "_report_" + pcutils.gendatestr(time=True)
-        doc.generate_pdf(fname, clean_tex=False)
-        
-        # Retusn doc
-        return doc
-
-    def rv_phase_plot(self, planet_index, opt_result=None, plot_width=1000, plot_height=600):
-        """Creates a phased rv plot for a given planet with the model on top.
+    def plot_phased_rvs(self, planet_index, pars=None, plot_width=1000, plot_height=600):
+        """Creates a phased rv plot for a given planet with the model on top. An html figure is saved with a unique filename.
 
         Args:
             planet_index (int): The planet index
-            opt_result (dict, optional): The optimization or sampler result to use. Defaults to None, and uses the initial parameters.
+            pars (Parameters, optional): The parameters to use. Defaults to self.p0.
+            plot_width (int, optional): The plot width, in pixels.
+            plot_height (int, optional): The plot height, in pixels.
 
         Returns:
             plotly.figure: A plotly figure containing the plot.
         """
         
         # Resolve which pars to use
-        if opt_result is None:
+        if pars is None:
             pars = self.p0
-        else:
-            pars = opt_result["pbest"]
             
         # Creat a figure
         fig = plotly.subplots.make_subplots(rows=1, cols=1)
@@ -154,6 +85,11 @@ class ExoProblem(optframeworks.OptProblem):
         phases_hr_one_period = get_phases(t_hr_one_period, per, tc)
         like0 = next(iter(self.scorer.values()))
         planet_model_phased = like0.model.build_planet(pars, t_hr_one_period, planet_index)
+        
+        # Store the data in order to bin the phased RVs.
+        phases_data_all = np.array([], dtype=float)
+        rvs_data_all = np.array([], dtype=float)
+        unc_data_all = np.array([], dtype=float)
         
         # Loop over likes
         color_index = 0
@@ -176,10 +112,21 @@ class ExoProblem(optframeworks.OptProblem):
                 _yerr = dict(array=_errors)
                 fig.add_trace(plotly.graph_objects.Scatter(x=phases_data, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])))
                 color_index += 1
+                
+                # Store for binning
+                phases_data_all = np.concatenate((phases_data_all, phases_data))
+                rvs_data_all = np.concatenate((rvs_data_all, _data))
+                unc_data_all = np.concatenate((unc_data_all, _errors))
 
         # Plot the model on top
         ss = np.argsort(phases_hr_one_period)
         fig.add_trace(plotly.graph_objects.Scatter(x=phases_hr_one_period[ss], y=planet_model_phased[ss], line=dict(color='black', width=2), name="<b>Keplerian Model</b>"))
+        
+        # Lastly, generate and plot the binned data.
+        ss = np.argsort(phases_data_all)
+        phases_data_all, rvs_data_all, unc_data_all = phases_data_all[ss], rvs_data_all[ss], unc_data_all[ss]
+        phases_binned, rvs_binned, unc_binned = self.bin_phased_rvs(phases_data_all, rvs_data_all, unc_data_all, window=0.1)
+        fig.add_trace(plotly.graph_objects.Scatter(x=phases_binned, y=rvs_binned, error_y=dict(array=unc_binned), mode='markers', marker=dict(color='Maroon', size=12, line=dict(width=2, color='DarkSlateGrey')), showlegend=False))
         
         # Labels
         fig.update_xaxes(title_text='<b>Phase</b>')
@@ -187,32 +134,54 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
         fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(per) + ', e = ' + str(ecc) + '</b>')
         fig.update_layout(template="ggplot2")
-        fig.update_layout(font=dict(size=16), margin=dict(l=80, r=80, t=100, b=80))
+        fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
-        fig.update_layout(width=plot_width, height=plot_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
+        fig.update_layout(width=plot_width, height=plot_height)
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + self.planets_dict[planet_index]["label"] + '_rvs_phased_' + pcutils.gendatestr(time=True) + '.html')
         
         # Return fig
         return fig
+    
+    def plot_phased_rvs_all(self, pars=None, plot_width=1000, plot_height=600):
+        """Wrapper to plot the phased RV model for all planets.
 
-    def rv_plot(self, opt_result, n_model_pts=5000, time_offset=2450000, kernel_sampling=100, plot_width=1200, plot_height=800):
+        Args:
+            pars (Parameters, optional): The parameters to use. Defaults to self.p0.
+        
+        Returns:
+            list: A list of Plotly figures.s
+        """
+        
+        # Default parameters
+        if pars is None:
+            pars = self.p0
+        
+        plots = []
+        for planet_index in self.planets_dict:
+            plot = self.plot_phased_rvs(planet_index, pars=pars, plot_width=plot_width, plot_height=plot_height)
+            plots.append(plot)
+        return plots      
+        
+    def plot_full_rvs(self, pars=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=100, plot_width=1800, plot_height=1200):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
-            opt_result (dict, optional): The optimization or sampler result to use. Defaults to None, and uses the initial parameters.
-            show (bool, optional): Whether to show or return the figure. Defaults to True.
+            pars (Parameters, optional): The parameters to use. Defaults to self.p0
             n_rows (int, optional): The number of rows to split the plot into. Defaults to 1.
+            n_model_pts (int, optional): The number of points for the densly sampled Keplerian model.
+            time_offset (float, optional): The time to subtract from the times.
+            kernel_sampling (int, optional): The number of points per period to sample for the principle GP period.
+            plot_width (int, optionel): The plot width in pixels. Defaults to 1800.
+            plot_height (int, optionel): The plot width in pixels. Defaults to 1200.
 
         Returns:
             plotly.figure: A Plotly figure.
         """
         
         # Resolve which pars to use
-        if opt_result is None:
+        if pars is None:
             pars = self.p0
-        else:
-            pars = opt_result["pbest"]
             
         # Create a figure
         fig = plotly.subplots.make_subplots(rows=2, cols=1)
@@ -301,11 +270,11 @@ class ExoProblem(optframeworks.OptProblem):
                     
                     # Data on top of the GP, only offset by gammas
                     _data = data_arr[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
                     
                     # Residuals for this instrument after the noise kernel has been removed
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
                     
                     # Increase color index
                     color_index += 1
@@ -358,8 +327,8 @@ class ExoProblem(optframeworks.OptProblem):
                     _errors = errors[like.model.data_inds[data.label]]
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
                     _yerr = dict(array=_errors)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
                     color_index += 1
                 
             # White noise
@@ -372,8 +341,8 @@ class ExoProblem(optframeworks.OptProblem):
                     _errors = errors[like.model.data_inds[data.label]]
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
                     _yerr = dict(array=_errors)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])), row=1, col=1)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)]), showlegend=False), row=2, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
                     color_index += 1
 
 
@@ -391,14 +360,51 @@ class ExoProblem(optframeworks.OptProblem):
         
         # Appearance
         fig.update_layout(template="ggplot2")
-        fig.update_layout(font=dict(size=16), margin=dict(l=80, r=80, t=100, b=80))
-        fig.update_layout(width=plot_width, height=plot_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
+        fig.update_layout(font=dict(size=20))
+        fig.update_layout(width=plot_width, height=plot_height)
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + '.html')
         
         # Return the figure for streamlit
         return fig
         
+    def get_data(self, pars=None):
+        """Grabs the data times, rvs, unc, and computes the corresponding error bars.
+
+        Args:
+            pars (Parameters): The parameters. Defaults to self.p0
+            
+        Returns:
+            np.ndarray: The data times.
+            np.ndarray: The data rvs.
+            np.ndarray: The data unc.
+        """
+        
+        if pars is None:
+            pars = self.p0
+        
+        # Time and rvs are easy
+        t = self.data.get_vec('t')
+        rvs = self.data.get_vec('rv')
+        
+        # Get unc
+        unc = np.array([], dtype=float)
+        for like in self.likes.values():
+            unc = np.concatenate((unc, like.model.kernel.compute_data_errors(pars)))
+            
+        return t, rvs, unc
+        
     def gls_periodogram(self, pmin=None, pmax=None, apply_gp=True, remove_planets=None):
+        """Creates a GLS periodogram through external routines.
+
+        Args:
+            pmin (float, optional): The min period to test in days. Defaults to 1.1.
+            pmax (float, optional): The max period to test in days. Defaults to the time baseline.
+            apply_gp (bool, optional): Whether or not to first remove thr best fit GP model with no planets to the data. Defaults to True.
+            remove_planets (list, optional): A list of indices (ints) to remove from the model. Defaults to None, empty list.
+
+        Returns:
+            GLSPeriodogramResults: The periodogram object results after calling Gls().
+        """
         
         if remove_planets is None:
             remove_planets = []
@@ -563,14 +569,28 @@ class ExoProblem(optframeworks.OptProblem):
         
         return pgram
 
-    def rv_period_search(self, pars=None, pmin=None, pmax=None, n_periods=None, n_cores=1, planet_index=None):
+    def rv_period_search(self, pars=None, pmin=None, pmax=None, n_periods=None, n_cores=1, planet_index=1):
+        """A brute force period search. A max like fit is run for many locked periods for a specified planet. The remaining model params are subject to what is passed, allowing for flexible brute force searches.
+
+        Args:
+            pars (Parameters, optional): The parameters to use. Defaults to None.
+            pmin (float, optional): The min period to test in days. Defaults to 1.1.
+            pmax (float, optional): The max period to test in days. Defaults to the time baseline.
+            n_periods (int, optional): The number of periods to test. Defaults to None.
+            n_cores (int, optional): The number of CPU cores to use. Defaults to 1.
+            planet_index (int, optional): The planet index to test. Defaults to 1.
+
+        Raises:
+            ValueError: [description]
+
+        Returns:
+            np.ndarray: The periods tested.
+            list: The results for each period tested.
+        """
         
         # Resolve parameters
         if pars is None:
             pars = self.p0
-            
-        if planet_index is None:
-            planet_index = 1
         
         # Resolve period min and period max
         if pmin is None:
@@ -600,28 +620,80 @@ class ExoProblem(optframeworks.OptProblem):
             
         return periods, persearch_results
     
-    def sample(self, *args, **kwargs):
-        sampler_result = super().sample(*args, **kwargs)
-        return sampler_result
+    def mcmc(self, *args, **kwargs):
+        """Alias for sample.
+
+        Args:
+            *args: Any args.
+            **kwargs: Any keyword args.
+            
+        Returns:
+            dict: A dictionary with the mcmc results.
+        """
+        return self.sample(*args, **kwargs)
     
-    def corner_plot(self, sampler_result):
+    def sample(self, *args, **kwargs):
+        """Runs the mcmc.
+
+        Returns:
+            *args: Any args.
+            **kwargs: Any keyword args.
+        
+        Returns:
+            dict: A dictionary with the mcmc results.
+        """
+        mcmc_result = super().sample(*args, **kwargs)
+        fname = self.output_path + self.star_name.replace(' ', '_') + '_mcmc_results_' + pcutils.gendatestr(time=True) + '.pkl'
+        with open(fname, 'wb') as f:
+            pickle.dump(mcmc_result, f)
+        return mcmc_result
+    
+    def optimize(self, *args, **kwargs):
+        """Runs the optimizer.
+
+        Args:
+            *args: Any args.
+            **kwargs: Any keyword args.
+            
+        Returns:
+            dict: A dictionary with the optimize results.
+        """
+        maxlike_result = super().optimize(*args, **kwargs)
+        fname = self.output_path + self.star_name.replace(' ', '_') + '_maxlike_results_' + pcutils.gendatestr(time=True) + '.pkl'
+        with open(fname, 'wb') as f:
+            pickle.dump(maxlike_result, f)
+        return maxlike_result
+    
+    def maxlikefit(self, *args, **kwargs):
+        """Alias for optimize.
+
+        Args:
+            *args: Any args.
+            **kwargs: Any keyword args.
+            
+        Returns:
+            dict: A dictionary with the optimize results.
+        """
+        return self.optimize(*args, **kwargs)
+    
+    def corner_plot(self, mcmc_result):
         """Constructs a corner plot.
 
         Args:
-            sampler_result (dict): The sampler result
+            mcmc_result (dict): The mcmc result
 
         Returns:
             fig: A matplotlib figure.
         """
         plt.clf()
-        pbest_vary_dict = sampler_result["pmed"].unpack(vary_only=True)
+        pbest_vary_dict = mcmc_result["pmed"].unpack(vary_only=True)
         truths = pbest_vary_dict["value"]
-        labels = [par.latex_str for par in sampler_result["pbest"].values() if par.vary]
-        corner_plot = corner.corner(sampler_result["chains"], labels=labels, truths=truths, show_titles=True)
+        labels = [par.latex_str for par in mcmc_result["pbest"].values() if par.vary]
+        corner_plot = corner.corner(mcmc_result["chains"], labels=labels, truths=truths, show_titles=True)
         corner_plot.savefig(self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(time=True) + '.png')
         return corner_plot
     
-    def full_rvcolor(self, pars=None, sep=0.3, time_offset=2450000, plot_width=1000, plot_height=500):
+    def full_rvcolor(self, pars=None, sep=0.3, time_offset=2450000, plot_width=1000, plot_height=600):
         """Computes the RV Color for all possible wavelengths.
 
         Args:
@@ -641,7 +713,7 @@ class ExoProblem(optframeworks.OptProblem):
             rvcolor_result = self.compute_rvcolor(pars, wave_pair[0], wave_pair[1], sep=sep)
             self.plot_rvcolor(wave_pair[0], wave_pair[1], rvcolor_result, time_offset=time_offset, plot_width=plot_width, plot_height=plot_height)
     
-    def plot_rvcolor(self, wave1, wave2, rvcolor_result, time_offset=2450000, plot_width=1000, plot_height=500):
+    def plot_rvcolor(self, wave1, wave2, rvcolor_result, time_offset=2450000, plot_width=1000, plot_height=600):
         
         # Figure
         fig = plotly.subplots.make_subplots(rows=1, cols=1)
@@ -667,7 +739,7 @@ class ExoProblem(optframeworks.OptProblem):
                 label_map[rvcolor_result["instnames"][i]] = "<b>Data Color, " + instname1 + " - " + instname2 + "</b>"
                 show_legend = True
                 color_index += 1
-            fig.add_trace(plotly.graph_objects.Scatter(x=np.array(t[i]), y=np.array(rvcolor_result["rvcolor_data"][i]), name=label_map[rvcolor_result["instnames"][i]], error_y=yerr, mode='markers', marker=dict(color=color_map[rvcolor_result["instnames"][i]]), showlegend=show_legend))
+            fig.add_trace(plotly.graph_objects.Scatter(x=np.array(t[i]), y=np.array(rvcolor_result["rvcolor_data"][i]), name=label_map[rvcolor_result["instnames"][i]], error_y=yerr, mode='markers', marker=dict(color=color_map[rvcolor_result["instnames"][i]], size=12), showlegend=show_legend))
         
         # Plot the difference of the GPs
         yerr = dict(array=rvcolor_result["gpstddev_color_hr"])
@@ -682,22 +754,32 @@ class ExoProblem(optframeworks.OptProblem):
                                     name="<b>GP Color</b>"))
         
         # Labels
-        title = "<b>GP RV Color (&#x3BB; [" + str(550) + "] - &#x3BB; [" + str(2350) + "])</b>"
-        fig.update_layout(title_text=title, margin=dict(l=80, r=80, t=10, b=80))
+        title = "<b>RV Color (&#x3BB; [" + str(wave1) + " nm] - &#x3BB; [" + str(wave2) + " nm])</b>"
+        fig.update_layout(title_text=title)
         fig.update_xaxes(title_text='<b>BJD - ' + str(time_offset) + '</b>')
         fig.update_yaxes(title_text='<b>RVs [m/s]</b>')
         fig.update_yaxes(title_text='<b>RV Color [m/s]</b>')
-        fig.update_layout(title='<b>' + self.star_name + ' Chromaticity')
         fig.update_layout(template="ggplot2")
         fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
-        fig.update_layout(width=plot_width, height=plot_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
+        fig.update_layout(width=plot_width, height=plot_height)
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvcolor_' + pcutils.gendatestr(time=True) + '.html')
         
         return fig
 
-    def plot_rvcolor_one_to_one(self, pars=None, plot_width=1000, plot_height=500, sep=0.3):
+    def plot_rvcolor_one_to_one(self, pars=None, plot_width=1000, plot_height=600, sep=0.3):
+        """Computes the RV color
+
+        Args:
+            pars ([type], optional): [description]. Defaults to None.
+            plot_width (int, optional): [description]. Defaults to 1000.
+            plot_height (int, optional): [description]. Defaults to 500.
+            sep (float, optional): [description]. Defaults to 0.3.
+
+        Returns:
+            [type]: [description]
+        """
         
         # Pars
         if pars is None:
@@ -745,11 +827,11 @@ class ExoProblem(optframeworks.OptProblem):
                     label_map[rvcolor_result["instnames"][i]] = "<b>RV Color, " + instname1 + " - " + instname2 + "</b>"
                     show_legend = True
                     color_index += 1
-                fig.add_trace(plotly.graph_objects.Scatter(x=np.array(x[i]), y=np.array(y[i]), name=label_map[rvcolor_result["instnames"][i]], error_x=_x_unc, error_y=_y_unc, mode='markers', marker=dict(color=color_map[rvcolor_result["instnames"][i]]), showlegend=show_legend))
+                fig.add_trace(plotly.graph_objects.Scatter(x=np.array(x[i]), y=np.array(y[i]), name=label_map[rvcolor_result["instnames"][i]], error_x=_x_unc, error_y=_y_unc, mode='markers', marker=dict(color=color_map[rvcolor_result["instnames"][i]], size=12), showlegend=show_legend))
                 
         # Labels
         title = "<b>RV Color (&#x3BB; [" + str(550) + "] - &#x3BB; [" + str(2350) + "])</b>"
-        fig.update_layout(title_text=title, margin=dict(l=80, r=80, t=10, b=80))
+        fig.update_layout(title_text=title)
         fig.update_xaxes(title_text='<b>Data Color [m/s]</b>')
         fig.update_yaxes(title_text='<b>GP Color [m/s]</b>')
         fig.update_layout(title='<b>' + self.star_name + ' Chromaticity')
@@ -757,7 +839,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
-        fig.update_layout(width=plot_width, height=plot_height, margin=dict(l=0, r=0, b=0, t=0, pad=0))
+        fig.update_layout(width=plot_width, height=plot_height)
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvcolor_1_to_1_' + pcutils.gendatestr(time=True) + '.html')
         
         return fig
@@ -865,7 +947,6 @@ class ExoProblem(optframeworks.OptProblem):
             instnames.append((tel_vec[inds][ind1], tel_vec[inds][ind2]))
          
         # Convert to numpy arrays
-        breakpoint()
         jds_avg = np.array(jds_avg)
         rvcolor_data = np.array(rvcolor_data)
         unccolor_data = np.array(unccolor_data)
@@ -903,74 +984,71 @@ class ExoProblem(optframeworks.OptProblem):
         Returns:
             list: Each entry is a dict containing the model comp results for each case, and is sorted according to the small sample AIC.
         """
+            
+        # Store results in a list
+        model_comp_results = []
         
-        # Go through every permutation of planet dicts
-        if do_planets:
+        # Alias like0
+        like0 = self.scorer.like0
+        
+        # Original planets dict
+        planets_dict_cp = copy.deepcopy(like0.model.planets_dict)
+        
+        # Get all combos
+        planet_dicts = self.generate_all_planet_dicts(like0.model.planets_dict)
+        
+        # Loop over combos
+        for i, planets_dict in enumerate(planet_dicts):
             
-            # Store results in a list
-            model_comp_results = []
+            # Copy self
+            _optprob = copy.deepcopy(self)
             
-            # Alias like0
-            like0 = self.scorer.like0
+            # Alias pars
+            p0 = _optprob.p0
             
-            # Original planets dict
-            planets_dict_cp = copy.deepcopy(like0.model.planets_dict)
+            # Remove all other planets except this combo.
+            for planet_index in planets_dict_cp:
+                if planet_index not in planets_dict:
+                    self.disable_planet_pars(p0, planets_dict_cp, planet_index)
             
-            # Get all combos
-            planet_dicts = self.generate_all_planet_dicts(like0.model.planets_dict)
+            # Set planets dict for each model
+            for like in _optprob.scorer.values():
+                like.model.planets_dict = planets_dict
             
-            # Loop over combos
-            for i, planets_dict in enumerate(planet_dicts):
-                
-                # Copy self
-                _optprob = copy.deepcopy(self)
-                
-                # Alias pars
-                p0 = _optprob.p0
-                
-                # Remove all other planets except this combo.
-                for planet_index in planets_dict_cp:
-                    if planet_index not in planets_dict:
-                        self.disable_planet_pars(p0, planets_dict_cp, planet_index)
-                
-                # Set planets dict for each model
-                for like in _optprob.scorer.values():
-                    like.model.planets_dict = planets_dict
-                
-                # Pars
-                _optprob.set_pars(p0)
+            # Pars
+            _optprob.set_pars(p0)
 
-                # Run the max like
-                opt_result = _optprob.optimize()
-                
-                # Alias best fit params
-                pbest = opt_result['pbest']
-                
-                # Recompute the max like to NOT include any priors to keep things consistent.
-                lnL = self.scorer.compute_logL(pbest, apply_priors=False)
-                
-                # Run the BIC
-                bic = _optprob.optimizer.scorer.compute_bic(pbest, apply_priors=False)
-                
-                # Run the AICc
-                aicc = _optprob.optimizer.scorer.compute_aicc(pbest, apply_priors=False)
-                
-                # Store
-                model_comp_results.append({'planets_dict': planets_dict, 'lnL': lnL, 'bic': bic, 'aicc': aicc, 'pbest': pbest})
-                
-                del _optprob
-                
-            aicc_vals = np.array([mcr['aicc'] for mcr in model_comp_results], dtype=float)
-            ss = np.argsort(aicc_vals)
-            model_comp_results = [model_comp_results[ss[i]] for i in range(len(ss))]
-            aicc_diffs = np.abs(aicc_vals[ss] - np.nanmin(aicc_vals))
-            for i, mcr in enumerate(model_comp_results):
-                mcr['delta_aicc'] = aicc_diffs[i]
-        
+            # Run the max like
+            opt_result = _optprob.optimize()
+            
+            # Alias best fit params
+            pbest = opt_result['pbest']
+            
+            # Recompute the max like to NOT include any priors to keep things consistent.
+            lnL = self.scorer.compute_logL(pbest, apply_priors=False)
+            
+            # Run the BIC
+            bic = _optprob.optimizer.scorer.compute_bic(pbest, apply_priors=False)
+            
+            # Run the AICc
+            aicc = _optprob.optimizer.scorer.compute_aicc(pbest, apply_priors=False)
+            
+            # Store
+            model_comp_results.append({'planets_dict': planets_dict, 'lnL': lnL, 'bic': bic, 'aicc': aicc, 'pbest': pbest})
+            
+            del _optprob
+            
+        aicc_vals = np.array([mcr['aicc'] for mcr in model_comp_results], dtype=float)
+        ss = np.argsort(aicc_vals)
+        model_comp_results = [model_comp_results[ss[i]] for i in range(len(ss))]
+        aicc_diffs = np.abs(aicc_vals[ss] - np.nanmin(aicc_vals))
+        for i, mcr in enumerate(model_comp_results):
+            mcr['delta_aicc'] = aicc_diffs[i]
+    
         # Save
         with open(self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(time=True) + '.pkl', 'wb') as f:
             pickle.dump(model_comp_results, f)
-            
+        
         return model_comp_results
     
     def compute_semimajor_axis(self, sampler_result, mstar=None, mstar_unc=None):
@@ -990,6 +1068,8 @@ class ExoProblem(optframeworks.OptProblem):
             mstar_unc = self.mstar_unc
         aplanets = {} # In AU
         G = scipy.constants.G
+        MSUN = 1.988435E30 # mass of sun in kg
+        AU = 1.496E11 # 1 AU in meters
         for planet_index in self.planets_dict:
             perdist = []
             tpdist = []
@@ -1009,11 +1089,11 @@ class ExoProblem(optframeworks.OptProblem):
                 eccdist.append(ecc)
                 wdist.append(w)
                 kdist.append(k)
-                a = (G / (4 * np.pi**2))**(1 / 3) * (mstar * 1.988435E30)**(1 / 3) * (per * 86400)**(2 / 3) / 1.496E11 # in AU
+                a = (G / (4 * np.pi**2))**(1 / 3) * (mstar * MSUN)**(1 / 3) * (per * 86400)**(2 / 3) / AU # in AU
                 adist.append(a)
             val, unc_low, unc_high = self.sampler.chain_uncertainty(adist)
             if self.mstar_unc is not None:
-                da_dMstar = (G / (4 * np.pi**2))**(1 / 3) * (mstar * 1.988435E30)**(-2 / 3) / 3 * (per * 86400)**(2 / 3)
+                da_dMstar = (G / (4 * np.pi**2))**(1 / 3) * (mstar * MSUN)**(-2 / 3) / 3 * (per * 86400)**(2 / 3) * (MSUN / AU) # in AU / M_SUN
                 unc_low = np.sqrt(unc_low**2 + da_dMstar**2 * mstar_unc[0]**2)
                 unc_high = np.sqrt(unc_high**2 + da_dMstar**2 * mstar_unc[1]**2)
                 aplanets[planet_index] = (val, unc_low, unc_high)
@@ -1071,7 +1151,7 @@ class ExoProblem(optframeworks.OptProblem):
 
         Args:
             like (RVLikelihood or RVChromaticLikelihood)
-            s ([type]): The window around each point in t to sample the GP in days.
+            s (float): The window around each point in t to sample the GP in days.
             t (np.ndarray): The times to consider.
             residuals (np.ndarray): The residuals to use to realize the GP.
             kernel_sampling (int): The number of points in each window.
@@ -1119,6 +1199,38 @@ class ExoProblem(optframeworks.OptProblem):
     @property
     def planets_dict(self):
         return self.like0.model.planets_dict
+    
+    @staticmethod
+    def bin_phased_rvs(phases, rvs, unc, window=0.1):
+        """Bins the phased RVs.
+
+        Args:
+            phases (np.ndarray): The phases, [0, 1).
+            rvs (np.ndarray): The data rvs.
+            unc (np.ndarray): The corresponding data uncertainties.
+            window (float): The bin size.
+
+        Returns:
+            np.ndarray: The binned phases.
+            np.ndarray: The binned RVs.
+            np.ndarray: The binned uncertainties.
+        """
+        
+        binned_phases = []
+        binned_rvs = []
+        binned_unc = []
+        i = 0
+        while i < len(phases):
+            inds = np.where((phases >= phases[i]) & (phases < phases[i] + window))[0]
+            n = len(inds)
+            w = 1 / unc[inds]**2
+            w /= np.nansum(w)
+            binned_phases.append(np.mean(phases[inds])) # unlike radvel, just use unweighted mean for time.
+            binned_rvs.append(np.sum(w * rvs[inds]))
+            binned_unc.append(1 / np.sqrt(np.sum(1 / unc[inds]**2)))
+            i += n
+
+        return binned_phases, binned_rvs, binned_unc
     
     @staticmethod
     def _rv_period_search_wrapper(optprob, period, planet_index):
@@ -1175,6 +1287,7 @@ class ExoProblem(optframeworks.OptProblem):
             for planet_par_name in planets_dict[planet_index]["basis"].names:
                 if par.name == planet_par_name + str(planet_index):
                     pars[par.name].vary = False
+
 
 def gen_latex_labels(pars, planets_dict):
     """Default Settings for latex labels for orbit fitting. Any GP parameters must be set manually via parameter.latex_str = "$latexname$"

@@ -2,7 +2,6 @@
 #### A helper file containing math routines
 # Default python modules
 # Debugging
-from pdb import set_trace as stop
 import warnings
 import sys
 

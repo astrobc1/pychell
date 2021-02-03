@@ -1,23 +1,12 @@
-# Python built in modules
-from collections import OrderedDict
-from abc import ABC, abstractmethod  # Abstract classes
-import inspect
-import glob
-
 # Science/math
 from scipy import constants as cs  # cs.c = speed of light in m/s
 import numpy as np  # Math, Arrays
-import sys
 from scipy.special import legendre
 
 # Graphics
 import matplotlib.pyplot as plt
 
-# llvm
-from numba import njit, jit, jitclass
-import numba
-
-# User defined
+# pychell
 import pychell.maths as pcmath
 from pychell.maths import cspline_interp
 import pychell.rvs.template_augmenter as pcaugmenter
@@ -28,7 +17,6 @@ import optimparameters.parameters as OptimParameters
 # Then define a concrete class for particular models (SplineContinuum, TAPASTellurics, etc).
 
 #### Quasi Abstract Classes ####
-
 class SpectralComponent:
     """Base class for a general spectral component model.
 

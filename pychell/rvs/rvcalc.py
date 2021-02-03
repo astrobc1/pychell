@@ -1,5 +1,5 @@
+# Default python modules
 import os
-from pdb import set_trace as stop
 
 # Multiprocessing
 from joblib import Parallel, delayed
@@ -11,7 +11,7 @@ import scipy.stats
 import scipy.constants as cs
 
 # LLVM
-from numba import jit, njit, prange
+from numba import jit
 
 # Graphics
 import matplotlib.pyplot as plt
@@ -19,22 +19,20 @@ import pychell
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 from robustneldermead.neldermead import NelderMead
 import pychell.maths as pcmath
-import pychell.utils as pcutils
 import copy
 
 # Optimization
 from robustneldermead.neldermead import NelderMead
 
-
 def get_nightly_jds(jds, sep=0.5):
-    """Computes nightly (average) JDs (or BJDs) for a time-series observation over several nights.
+    """Computes nightly (average) JDs (or BJDs) for a time-series observation over many nights. Average times are computed from the mean of the considered times.
 
     Args:
         jds (np.ndarray): An array of sorted JDs (or BJDs).
-        sep (float): The minimum separation in days between two different nights of data, defaults to 0.5.
+        sep (float): The minimum separation in days between two different nights of data, defaults to 0.5 (half a day).
     Returns:
-        (np.ndarray): The average nightly jds.
-        (np.ndarray): The number of observations each night.
+        np.ndarray: The average nightly jds.
+        np.ndarray: The number of observations each night with data, of length n_nights.
     """
     
     # Number of spectra
@@ -155,7 +153,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
 
     return ccf_result
 
-# Super silly and crude but moderately sensible.
+# Silly and crude but moderately sensible.
 def ccf_uncertainty(cc_vels, ccf, v0, n):
     
     # First normalize the RMS function

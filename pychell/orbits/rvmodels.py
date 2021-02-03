@@ -155,6 +155,9 @@ class RVModel(optmodels.Model):
 #     def __init__(self, planets_dict=None, data=None, p0=None, kernel=None, time_base=None):
 #         RVModel.__init__(planets_dict=planets_dict, data=data, p0=None, kernel=None, time_base=None)
         
+#     def __repr__(self):
+#         return 'An RV Model utilizing Theano tensors'
+        
     
 
 @njit

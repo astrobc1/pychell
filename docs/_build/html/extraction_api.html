@@ -4,14 +4,14 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>pychell API reference &#8212; pychell  documentation</title>
-    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
     <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
     <script src="_static/jquery.js"></script>
     <script src="_static/underscore.js"></script>
     <script src="_static/doctools.js"></script>
-    <script src="_static/language_data.js"></script>
     <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -39,7 +39,7 @@
 <span id="spectral-extraction"></span><h2>Spectral Extraction<a class="headerlink" href="#module-pychell.reduce.extract" title="Permalink to this headline">¶</a></h2>
 <dl class="py function">
 <dt id="pychell.reduce.extract.boxcar_extraction">
-<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">boxcar_extraction</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">trace_image</span></em>, <em class="sig-param"><span class="n">y_positions</span></em>, <em class="sig-param"><span class="n">trace_profile_cspline</span></em>, <em class="sig-param"><span class="n">pixel_fractions</span></em>, <em class="sig-param"><span class="n">badpix_mask</span></em>, <em class="sig-param"><span class="n">height</span></em>, <em class="sig-param"><span class="n">redux_settings</span></em>, <em class="sig-param"><span class="n">detector_props</span></em>, <em class="sig-param"><span class="n">exp_time</span></em>, <em class="sig-param"><span class="n">sky</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">n_sky_rows</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.boxcar_extraction" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">boxcar_extraction</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">trace_image</span></em>, <em class="sig-param"><span class="n">y_positions</span></em>, <em class="sig-param"><span class="n">trace_profile_cspline</span></em>, <em class="sig-param"><span class="n">pixel_fractions</span></em>, <em class="sig-param"><span class="n">badpix_mask</span></em>, <em class="sig-param"><span class="n">height</span></em>, <em class="sig-param"><span class="n">config</span></em>, <em class="sig-param"><span class="n">detector_props</span></em>, <em class="sig-param"><span class="n">exp_time</span></em>, <em class="sig-param"><span class="n">sky</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">n_sky_rows</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.boxcar_extraction" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs a boxcar extraction on the nonrectified data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -49,7 +49,7 @@
 <li><p><strong>trace_profile_cspline</strong> (<em>CubicSpline</em>) – The trace profile defined by a CubicSpline object.</p></li>
 <li><p><strong>pixel_fractions</strong> (<em>np.ndarray</em>) – The fractions of each pixel to use.</p></li>
 <li><p><strong>height</strong> (<em>int</em>) – The height of the trace.</p></li>
-<li><p><strong>redux_settings</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
+<li><p><strong>config</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
 <li><p><strong>detector_props</strong> (<em>list</em>) – List of detector properties to properly calculate read noise.</p></li>
 <li><p><strong>exp_time</strong> (<em>float</em>) – The exposure time.</p></li>
 <li><p><strong>badpix_mask</strong> (<em>np.ndarray</em>) – The bad pixel image mask (1=good, 0=bad).</p></li>
@@ -115,13 +115,13 @@ np.ndarray: The corresponding uncertainty.</p>
 
 <dl class="py function">
 <dt id="pychell.reduce.extract.crop_image">
-<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">crop_image</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data_image</span></em>, <em class="sig-param"><span class="n">redux_settings</span></em>, <em class="sig-param"><span class="n">cval</span><span class="o">=</span><span class="default_value">nan</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.crop_image" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">crop_image</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data_image</span></em>, <em class="sig-param"><span class="n">config</span></em>, <em class="sig-param"><span class="n">cval</span><span class="o">=</span><span class="default_value">nan</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.crop_image" title="Permalink to this definition">¶</a></dt>
 <dd><p>Masks the image according to left right, top, and bottom values.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>data_image</strong> (<em>np.ndarray</em>) – [description]</p></li>
-<li><p><strong>redux_settings</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
+<li><p><strong>config</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
 <li><p><strong>cval</strong> (<em>float</em><em>, </em><em>optional</em>) – The value to mask with. Defaults to np.nan.</p></li>
 </ul>
 </dd>
@@ -217,13 +217,13 @@ np.ndarray: The corresponding uncertainty.</p>
 
 <dl class="py function">
 <dt id="pychell.reduce.extract.extract_full_image">
-<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">extract_full_image</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">redux_settings</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.extract_full_image" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">extract_full_image</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">config</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.extract_full_image" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs calibration and extracts a full frame image.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<a class="reference internal" href="data2d_api.html#pychell.reduce.data2d.SpecDataImage" title="pychell.reduce.data2d.SpecDataImage"><em>SpecDataImage</em></a>) – The data to reduce and extract.</p></li>
-<li><p><strong>redux_settings</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
+<li><p><strong>data</strong> (<em>SpecDataImage</em>) – The data to reduce and extract.</p></li>
+<li><p><strong>config</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
 </ul>
 </dd>
 </dl>
@@ -231,14 +231,14 @@ np.ndarray: The corresponding uncertainty.</p>
 
 <dl class="py function">
 <dt id="pychell.reduce.extract.extract_full_image_wrapper">
-<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">extract_full_image_wrapper</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data_all</span></em>, <em class="sig-param"><span class="n">index</span></em>, <em class="sig-param"><span class="n">redux_settings</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.extract_full_image_wrapper" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">extract_full_image_wrapper</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data_all</span></em>, <em class="sig-param"><span class="n">index</span></em>, <em class="sig-param"><span class="n">config</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.extract_full_image_wrapper" title="Permalink to this definition">¶</a></dt>
 <dd><p>A wrapper to extract a full frame image for printing purposes.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>data_all</strong> (<em>list</em>) – A list of SpecDataImage objects.</p></li>
 <li><p><strong>index</strong> (<em>int</em>) – The index of the image in data_all to extract.</p></li>
-<li><p><strong>redux_settings</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
+<li><p><strong>config</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
 </ul>
 </dd>
 </dl>
@@ -246,16 +246,16 @@ np.ndarray: The corresponding uncertainty.</p>
 
 <dl class="py function">
 <dt id="pychell.reduce.extract.extract_single_trace">
-<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">extract_single_trace</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">data_image</span></em>, <em class="sig-param"><span class="n">trace_map_image</span></em>, <em class="sig-param"><span class="n">trace_dict</span></em>, <em class="sig-param"><span class="n">redux_settings</span></em>, <em class="sig-param"><span class="n">refine_trace_pos</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.extract_single_trace" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">extract_single_trace</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">data_image</span></em>, <em class="sig-param"><span class="n">trace_map_image</span></em>, <em class="sig-param"><span class="n">trace_dict</span></em>, <em class="sig-param"><span class="n">config</span></em>, <em class="sig-param"><span class="n">refine_trace_pos</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.extract_single_trace" title="Permalink to this definition">¶</a></dt>
 <dd><p>Extract a single trace.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<a class="reference internal" href="data2d_api.html#pychell.reduce.data2d.SpecDataImage" title="pychell.reduce.data2d.SpecDataImage"><em>SpecDataImage</em></a>) – The data to extract.</p></li>
+<li><p><strong>data</strong> (<em>SpecDataImage</em>) – The data to extract.</p></li>
 <li><p><strong>data_image</strong> (<em>np.ndarray</em>) – The corresponding image.</p></li>
 <li><p><strong>trace_map_image</strong> (<em>np.ndarray</em>) – The image trace map image containing labels of each individual trace.</p></li>
 <li><p><strong>trace_dict</strong> (<em>dict</em>) – The dictionary containing location information for this trace</p></li>
-<li><p><strong>redux_settings</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
+<li><p><strong>config</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
 <li><p><strong>refine_trace_pos</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to refine the trace position. Defaults to True.</p></li>
 </ul>
 </dd>
@@ -344,7 +344,7 @@ y_positions_refined: The refined trace positions.</p>
 
 <dl class="py function">
 <dt id="pychell.reduce.extract.optimal_extraction_pmassey">
-<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">optimal_extraction_pmassey</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">trace_image</span></em>, <em class="sig-param"><span class="n">y_positions</span></em>, <em class="sig-param"><span class="n">trace_profile_cspline</span></em>, <em class="sig-param"><span class="n">pixel_fractions</span></em>, <em class="sig-param"><span class="n">badpix_mask</span></em>, <em class="sig-param"><span class="n">height</span></em>, <em class="sig-param"><span class="n">redux_settings</span></em>, <em class="sig-param"><span class="n">detector_props</span></em>, <em class="sig-param"><span class="n">exp_time</span></em>, <em class="sig-param"><span class="n">sky</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">n_sky_rows</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.optimal_extraction_pmassey" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">optimal_extraction_pmassey</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">trace_image</span></em>, <em class="sig-param"><span class="n">y_positions</span></em>, <em class="sig-param"><span class="n">trace_profile_cspline</span></em>, <em class="sig-param"><span class="n">pixel_fractions</span></em>, <em class="sig-param"><span class="n">badpix_mask</span></em>, <em class="sig-param"><span class="n">height</span></em>, <em class="sig-param"><span class="n">config</span></em>, <em class="sig-param"><span class="n">detector_props</span></em>, <em class="sig-param"><span class="n">exp_time</span></em>, <em class="sig-param"><span class="n">sky</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">n_sky_rows</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.optimal_extraction_pmassey" title="Permalink to this definition">¶</a></dt>
 <dd><p>Performs optimal extraction on the nonrectified data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -355,7 +355,7 @@ y_positions_refined: The refined trace positions.</p>
 <li><p><strong>pixel_fractions</strong> (<em>np.ndarray</em>) – The fractions of each pixel to use.</p></li>
 <li><p><strong>badpix_mask</strong> (<em>np.ndarray</em>) – The bad pixel image mask (1=good, 0=bad).</p></li>
 <li><p><strong>height</strong> (<em>int</em>) – The height of the order.</p></li>
-<li><p><strong>redux_settings</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
+<li><p><strong>config</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
 <li><p><strong>detector_props</strong> (<em>list</em>) – List of detector properties to properly calculate read noise.</p></li>
 <li><p><strong>exp_time</strong> (<em>float</em>) – The exposure time.</p></li>
 <li><p><strong>sky</strong> (<em>np.ndarray</em>) – The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).</p></li>
@@ -379,7 +379,7 @@ spec_unc (np.ndarray): The corresponding uncertainty.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<a class="reference internal" href="data2d_api.html#pychell.reduce.data2d.SpecDataImage" title="pychell.reduce.data2d.SpecDataImage"><em>SpecDataImage</em></a>) – The corresponding data object.</p></li>
+<li><p><strong>data</strong> (<em>SpecDataImage</em>) – The corresponding data object.</p></li>
 <li><p><strong>trace_profile_csplines</strong> (<em>list</em>) – The list of CubicSpline objects.</p></li>
 </ul>
 </dd>
@@ -388,19 +388,19 @@ spec_unc (np.ndarray): The corresponding uncertainty.</p>
 
 <dl class="py function">
 <dt id="pychell.reduce.extract.pmassey_wrapper">
-<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">pmassey_wrapper</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">trace_image</span></em>, <em class="sig-param"><span class="n">y_positions</span></em>, <em class="sig-param"><span class="n">trace_profile_cspline</span></em>, <em class="sig-param"><span class="n">pixel_fractions</span></em>, <em class="sig-param"><span class="n">badpix_mask</span></em>, <em class="sig-param"><span class="n">height</span></em>, <em class="sig-param"><span class="n">redux_settings</span></em>, <em class="sig-param"><span class="n">sky</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.pmassey_wrapper" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">pmassey_wrapper</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">trace_image</span></em>, <em class="sig-param"><span class="n">y_positions</span></em>, <em class="sig-param"><span class="n">trace_profile_cspline</span></em>, <em class="sig-param"><span class="n">pixel_fractions</span></em>, <em class="sig-param"><span class="n">badpix_mask</span></em>, <em class="sig-param"><span class="n">height</span></em>, <em class="sig-param"><span class="n">config</span></em>, <em class="sig-param"><span class="n">sky</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.pmassey_wrapper" title="Permalink to this definition">¶</a></dt>
 <dd><p>A wrapper for Philip Massey extraction.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<a class="reference internal" href="data2d_api.html#pychell.reduce.data2d.SpecDataImage" title="pychell.reduce.data2d.SpecDataImage"><em>SpecDataImage</em></a>) – The SpecData Image</p></li>
+<li><p><strong>data</strong> (<em>SpecDataImage</em>) – The SpecData Image</p></li>
 <li><p><strong>trace_image</strong> (<em>np.ndarray</em>) – The corresponding masked trace_image to extract.</p></li>
 <li><p><strong>y_positions</strong> (<em>np.ndarray</em>) – The trace positions for each column.</p></li>
 <li><p><strong>trace_profile_cspline</strong> (<em>[</em><em>type</em><em>]</em>) – [description]</p></li>
 <li><p><strong>pixel_fractions</strong> (<em>np.ndarray</em>) – The fractions of each pixel to use.</p></li>
 <li><p><strong>badpix_mask</strong> (<em>[</em><em>type</em><em>]</em>) – [description]</p></li>
 <li><p><strong>height</strong> (<em>[</em><em>type</em><em>]</em>) – [description]</p></li>
-<li><p><strong>redux_settings</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
+<li><p><strong>config</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
 <li><p><strong>sky</strong> (<em>np.ndarray</em>) – The sky background as a function of detector x-pixels (1-dimensional), defaults to None (no sky subtraction).</p></li>
 </ul>
 </dd>
@@ -437,18 +437,18 @@ np.ndarray: The 1d flux uncertainty in units of PE</p>
 
 <dl class="py function">
 <dt id="pychell.reduce.extract.refine_trace_position">
-<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">refine_trace_position</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">trace_image</span></em>, <em class="sig-param"><span class="n">y_positions</span></em>, <em class="sig-param"><span class="n">trace_profile_cspline</span></em>, <em class="sig-param"><span class="n">badpix_mask</span></em>, <em class="sig-param"><span class="n">height</span></em>, <em class="sig-param"><span class="n">redux_settings</span></em>, <em class="sig-param"><span class="n">trace_pos_polyorder</span><span class="o">=</span><span class="default_value">2</span></em>, <em class="sig-param"><span class="n">M</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.refine_trace_position" title="Permalink to this definition">¶</a></dt>
+<code class="sig-prename descclassname">pychell.reduce.extract.</code><code class="sig-name descname">refine_trace_position</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">trace_image</span></em>, <em class="sig-param"><span class="n">y_positions</span></em>, <em class="sig-param"><span class="n">trace_profile_cspline</span></em>, <em class="sig-param"><span class="n">badpix_mask</span></em>, <em class="sig-param"><span class="n">height</span></em>, <em class="sig-param"><span class="n">config</span></em>, <em class="sig-param"><span class="n">trace_pos_polyorder</span><span class="o">=</span><span class="default_value">2</span></em>, <em class="sig-param"><span class="n">M</span><span class="o">=</span><span class="default_value">1</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.extract.refine_trace_position" title="Permalink to this definition">¶</a></dt>
 <dd><p>Refines the trace positions via cross-correlating the current trace profile with the data.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<a class="reference internal" href="data2d_api.html#pychell.reduce.data2d.SpecDataImage" title="pychell.reduce.data2d.SpecDataImage"><em>SpecDataImage</em></a>) – The corresponding data object.</p></li>
+<li><p><strong>data</strong> (<em>SpecDataImage</em>) – The corresponding data object.</p></li>
 <li><p><strong>trace_image</strong> (<em>np.ndarray</em>) – The masked data image.</p></li>
 <li><p><strong>y_positions</strong> (<em>np.ndarray</em>) – The trace positions for each column.</p></li>
 <li><p><strong>trace_profile_cspline</strong> (<em>CubicSpline</em>) – The trace profile defined by a CubicSpline object.</p></li>
 <li><p><strong>badpix_mask</strong> (<em>np.ndarray</em>) – The bad pixel image mask (1=good, 0=bad).</p></li>
 <li><p><strong>height</strong> (<em>int</em>) – The height of the trace.</p></li>
-<li><p><strong>redux_settings</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
+<li><p><strong>config</strong> (<em>dict</em>) – The reduction settings dictionary.</p></li>
 <li><p><strong>trace_pos_polyorder</strong> (<em>int</em><em>, </em><em>optional</em>) – The polynomial to model the trace positions. Defaults to 2.</p></li>
 <li><p><strong>M</strong> (<em>int</em><em>, </em><em>optional</em>) – The desired oversample factor. Defaults to 1.</p></li>
 </ul>
@@ -537,7 +537,7 @@ np.ndarray: The 1d flux uncertainty in units of PE</p>
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

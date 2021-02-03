@@ -4,14 +4,14 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Overview &#8212; pychell  documentation</title>
-    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
     <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
     <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
     <script src="_static/jquery.js"></script>
     <script src="_static/underscore.js"></script>
     <script src="_static/doctools.js"></script>
-    <script src="_static/language_data.js"></script>
     <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
@@ -37,32 +37,37 @@
 <span id="id1"></span><h1>Overview<a class="headerlink" href="#overview" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="reduction">
 <h2>Reduction<a class="headerlink" href="#reduction" title="Permalink to this headline">¶</a></h2>
-<p>As of now, reduction can be performed on well-behaved spectrographs with an assumed a single trace per echelle order.  Orders are traced with a density clustering algorithm (sklearn.cluster.DBSCAN). Flats are grouped together according to their “density” (metric ~ angular separation + time separation). Objects are mapped to a master flat according to the closest flat in space and time.</p>
+<p>As of now, reduction can be performed on well-behaved spectrographs with a single trace per echelle order.</p>
+<div class="section" id="order-tracing">
+<h3>Order Tracing<a class="headerlink" href="#order-tracing" title="Permalink to this headline">¶</a></h3>
+<p>By default, orders are traced with a density clustering algorithm (sklearn.cluster.DBSCAN) on either the flat fields (preferred) or data, but hard-coded maps may be used if the order locations on the detector are known to be relatively stable. If order locations must be uniquely determined from the data, tweaking the dbscan algorithm will likely be necessary. The precise order locations may still be refined for a unique exposure via iteratively cross-correlating an estimated trace profile (seeing profile) with the unrectified 2d image, so estimated order map algorithms are both sufficient and preferred, except in the case of crowded orders.</p>
+</div>
 <div class="section" id="calibration">
 <h3>Calibration<a class="headerlink" href="#calibration" title="Permalink to this headline">¶</a></h3>
-<p>Flat, bias, and dark calibration is performed when provided. Wavelength calibartion via ThAr lamps or LFC’s are not currently provided.</p>
+<p>Flat, bias, and dark calibration are performed when provided and set. Telluric calibration (flat star observations) Wavelength calibartion via ThAr lamps or LFC’s are not currently supported, but intended to be in the future if enough desired. Wavelength telluric calibration would be performed post-extraction.</p>
 </div>
 <div class="section" id="extraction">
 <h3>Extraction<a class="headerlink" href="#extraction" title="Permalink to this headline">¶</a></h3>
-<p>The trace profile (seeing profile) is estimated by rectifying the order and taking a median crunch in the spectral direction on a high resolution grid. The background sky, <em>sky(x)</em> is computed by considering regions of low flux within the trace profile. The profile is then interpolated back into 2d space according to the order locations, <em>y(x)</em>. An optimal extraction is iteratively performed on the non-rectified data. Depending on the nature of the user’s work, this may not be suitable and one should rely on using an instrument specific reduction package.</p>
-<p>Tested Support Status:</p>
+<p>The trace profile (seeing profile) is estimated by rectifying the order and taking a median crunch in the spectral direction on a high resolution grid (tuneable parameter). The background sky, <em>sky(x)</em> is computed by considering regions of low flux (&lt; 5 percent) within a given column. By default, an optimal extraction is iteratively performed on the non-rectified data, although the trace profile is interpolated for each column via cubic splines from it’s pre-defined fiducial grid according to the trace positions. Depending on the nature of the user’s work, this <em>may</em> not be suitable and one should rely on using an instrument specific reduction package or implementing one’s own optimal extraction algorithm(s).</p>
+<p>Support Status:</p>
 <ol class="arabic simple">
-<li><p>iSHELL (Kgas, K2, J2 modes, empirical and flat field order tracing)</p></li>
-<li><p>CHIRON (highres mode, R~136k, <em>under development</em>)</p></li>
-<li><p>NIRSPEC (K band, <em>under development</em>)</p></li>
-<li><p>Generic (single trace per order, minimal support)</p></li>
+<li><p>iSHELL / IRTF (Kgas, K2, J2 modes via flat field order tracing)</p></li>
+<li><p>CHIRON / SMARTS 1.5 m (highres mode, R~136k, <em>under development</em>)</p></li>
+<li><p>NIRSPEC / Keck (K band, <em>under development</em>)</p></li>
 </ol>
 </div>
 </div>
 <div class="section" id="radial-velocities">
 <h2>Radial Velocities<a class="headerlink" href="#radial-velocities" title="Permalink to this headline">¶</a></h2>
-<p>Computes radial velocities from reduced echelle spectra by forward modeling the individual orders. Only certain instruments are supported, however adding support for a new instrument is relatively straightforward (see below).</p>
-<p>Tested Support Status:</p>
+<p>Radial velocities are computed from reduced echelle spectra by forward modeling the individual orders (and optional cross-correlation).</p>
+<p>Support Status:</p>
 <ol class="arabic simple">
-<li><p>iSHELL (Kgas mode, methane gas cell)</p></li>
+<li><p>iSHELL (<em>Kgas</em> mode, methane gas cell calibrated)</p></li>
 <li><p>CHIRON (highres mode, R~136k, iodine gas cell)</p></li>
-<li><p>Minerva-Australis (ThAr Lamp calibrated, soon iodine gas cell)</p></li>
-<li><p>NIRSPEC (K band, <em>under development</em>)</p></li>
+<li><p>Minerva-North (iodine gas cell calibrated)</p></li>
+<li><p>Minerva-Australis (Pre-wavelength-calibrated via ThAr lamp, soon iodine gas cell)</p></li>
+<li><p>NIRSPEC (K band, telluric calibrated, <em>under development</em>)</p></li>
+<li><p>PARVI (Pre-wavelength-calibrated via LFC, <em>under development</em>)</p></li>
 </ol>
 </div>
 </div>
@@ -134,7 +139,7 @@
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.0.4</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

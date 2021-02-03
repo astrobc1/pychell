@@ -2,6 +2,7 @@ import streamlit as st
 import numpy as np
 import importlib
 import pychell.utils as pcutils
+import pandas as pd
 import plotly
 
 def make_title(title):
@@ -100,34 +101,32 @@ class RVActions(StreamlitComponent):
     
 class MaxLikeResult(StreamlitComponent):
     
-    def __init__(self, comps, optprob, opt_result):
+    def __init__(self, comps, optprob, maxlike_result):
         super().__init__(comps=comps, label="Optimize Result")
         self.optprob = optprob
-        self.opt_result = opt_result
+        self.maxlike_result = maxlike_result
         self.write()
         
     def write(self):
     
         # Display Results
         st.markdown('# Max Likelihood Results')
-        for par in self.opt_result['pbest'].values():
+        for par in self.maxlike_result['pbest'].values():
             st.text(repr(par))
-        st.markdown('## Function calls: ' + str(self.opt_result['fcalls']))
-        st.markdown('## ln(L): ' + str(-1 * self.opt_result['fbest']))
+        st.markdown('## Function calls: ' + str(self.maxlike_result['fcalls']))
+        st.markdown('## ln(L): ' + str(-1 * self.maxlike_result['fbest']))
     
         # Full RV plot
         st.markdown('## Full RV Plot')
-        self.full_fig = self.optprob.rv_plot(opt_result=self.opt_result, n_model_pts=5000)
+        self.full_fig = self.optprob.plot_full_rvs(pars=self.maxlike_result["pbest"], n_model_pts=5000)
         self.comps["rvfigfull_maxlike"] = st.plotly_chart(self.full_fig)
     
         # Phased rv plot
         st.markdown('## Phased Planets')
-        self.planet_figs = []
-        for planet_index in self.optprob.planets_dict:
+        self.planet_figs = self.optprob.plot_phased_rvs_all(pars=self.maxlike_result["pbest"])
+        for i, planet_index in enumerate(self.optprob.planets_dict):
             name = "figplanet_" + str(planet_index) + "_maxlike"
-            plotly_fig = self.optprob.rv_phase_plot(planet_index=planet_index, opt_result=self.opt_result)
-            self.comps[name] = st.plotly_chart(plotly_fig)
-            self.planet_figs.append(plotly_fig)
+            self.comps[name] = st.plotly_chart(self.planet_figs[i])
             
         return self.comps
     
@@ -141,44 +140,57 @@ class ModelCompResult(StreamlitComponent):
         
     def write(self):
         st.markdown('# Model Comparison')
-        for i in range(len(self.mc_result)):
-            self.comps["mc_result_" + str(i+1)] = st.write(self.mc_result[i])
+        df = pd.DataFrame()
+        n_models = len(self.mc_result)
+        df["Planets"] = [""]*n_models
+        df["ln \u2112"] = [1]*n_models
+        df["\u0394 AICc"] = [1]*n_models
+        for i in range(n_models):
+            s = ""
+            for planet_index in self.mc_result[i]["planets_dict"]:
+                s += self.mc_result[i]["planets_dict"][planet_index]["label"] + ", "
+            if len(s) > 0:
+                s = s[0:-2]
+            df["Planets"][i] = s
+            df["ln \u2112"][i] = self.mc_result[i]["lnL"]
+            df["\u0394 AICc"][i] = self.mc_result[i]["delta_aicc"]
+        st.table(df)
         return self.comps
     
 class MCMCResult(StreamlitComponent):
     
-    def __init__(self, comps, optprob, sampler_result):
+    def __init__(self, comps, optprob, mcmc_result):
         super().__init__(comps=comps, label="MCMC Result")
         self.optprob = optprob
-        self.sampler_result = sampler_result
+        self.mcmc_result = mcmc_result
         self.write()
         
     def write(self):
     
         # Display Results
         st.markdown('# MCMC Results')
-        for par in self.sampler_result['pmed'].values():
+        for par in self.mcmc_result['pmed'].values():
             st.text(repr(par))
-        st.markdown('## ln(L): ' + str(self.sampler_result['lnL']))
+        st.markdown('## ln(L): ' + str(self.mcmc_result['lnL']))
     
         # Full RV plot
         st.markdown('## Full RV Plot')
-        self.full_fig = self.optprob.rv_plot(opt_result=self.sampler_result, n_model_pts=5000)
+        self.full_fig = self.optprob.plot_full_rvs(pars=self.mcmc_result["pbest"], n_model_pts=5000)
         self.comps["rvfigfull_mcmc"] = st.plotly_chart(self.full_fig)
     
         # Phased rv plot
         st.markdown('## Phased Planets')
-        self.planet_figs = []
-        for planet_index in self.optprob.planets_dict:
+        self.planet_figs = self.optprob.plot_phased_rvs_all(pars=self.mcmc_result["pbest"])
+        for i, planet_index in enumerate(self.optprob.planets_dict):
             name = "figplanet_" + str(planet_index) + "_mcmc"
-            plotly_fig = self.optprob.rv_phase_plot(planet_index=planet_index, opt_result=self.sampler_result)
-            self.comps[name] = st.plotly_chart(plotly_fig)
-            self.planet_figs.append(plotly_fig)
+            self.comps[name] = st.plotly_chart(self.planet_figs[i])
     
         # Corner plot
         st.markdown('## Corner Plot')
-        self.corner_plot = self.optprob.corner_plot(sampler_result=self.sampler_result)
+        self.corner_plot = self.optprob.corner_plot(mcmc_result=self.mcmc_result)
         self.comps["corner_plot"] = st.pyplot(self.corner_plot)
+        
+        return self.comps
         
 class PlanetsResults(StreamlitComponent):
     
@@ -191,7 +203,7 @@ class PlanetsResults(StreamlitComponent):
     def write(self):
     
         # Display Results
-        st.markdown('# Planet Masses')
+        st.markdown('# Planets')
         if len(self.optprob.planets_dict) > 0:
             planet_masses = self.optprob.compute_planet_masses(self.sampler_result)
             planet_smas = self.optprob.compute_semimajor_axis(self.sampler_result)
@@ -215,6 +227,8 @@ class PlanetsResults(StreamlitComponent):
                 
         else:
             st.text("None")
+            
+        return self.comps
       
 class GLSResult(StreamlitComponent):
     
@@ -234,6 +248,7 @@ class GLSResult(StreamlitComponent):
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         st.plotly_chart(fig)
         fig.write_html(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + '_glspgram_' + pcutils.gendatestr(time=True) + '.html')
+        return self.comps
         
         
 class RVPeriodSearchResult(StreamlitComponent):
@@ -259,6 +274,7 @@ class RVPeriodSearchResult(StreamlitComponent):
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         st.plotly_chart(fig)
         fig.write_html(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + '_brute_force_pgram_' + pcutils.gendatestr(time=True) + '.html')
+        return self.comps
         
         
 class RVColorResult(StreamlitComponent):
