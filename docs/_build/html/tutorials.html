@@ -217,10 +217,168 @@
 <p>The corner plot from mcmc sampling.</p>
 <img alt="_images/KELT-24_corner_20210211_150814.png" src="_images/KELT-24_corner_20210211_150814.png" />
 </div>
+<div class="section" id="example-2">
+<h3>Example 2<a class="headerlink" href="#example-2" title="Permalink to this headline">¶</a></h3>
+<p>Here we perform the same Bayesian inference on KELT-24but use the webpage GUI.</p>
+<p>First we modify our Python script. The majority of the code is identicical. Note we also import pychell.stutils.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Base Python libraries</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="c1"># Import numpy</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="c1"># Import optimize sub modules</span>
+<span class="kn">import</span> <span class="nn">optimize.knowledge</span> <span class="k">as</span> <span class="nn">optknow</span>
+<span class="kn">import</span> <span class="nn">optimize.optimizers</span> <span class="k">as</span> <span class="nn">optimizers</span>
+<span class="kn">import</span> <span class="nn">optimize.kernels</span> <span class="k">as</span> <span class="nn">optkernels</span>
+<span class="kn">import</span> <span class="nn">optimize.samplers</span> <span class="k">as</span> <span class="nn">optsamplers</span>
+
+<span class="c1"># Import pychell sub modules</span>
+<span class="kn">import</span> <span class="nn">pychell.orbits.rvprob</span> <span class="k">as</span> <span class="nn">pcrvprob</span>
+<span class="kn">import</span> <span class="nn">pychell.orbits.rvdata</span> <span class="k">as</span> <span class="nn">pcrvdata</span>
+<span class="kn">import</span> <span class="nn">pychell.orbits.rvlikes</span> <span class="k">as</span> <span class="nn">pcrvlikes</span>
+<span class="kn">import</span> <span class="nn">pychell.orbits.rvmodels</span> <span class="k">as</span> <span class="nn">pcrvmodels</span>
+<span class="kn">import</span> <span class="nn">pychell.stutils</span> <span class="k">as</span> <span class="nn">pcstutils</span>
+
+<span class="c1"># Path to input rv file and outputs</span>
+<span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="vm">__file__</span><span class="p">))</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span>
+<span class="n">fname</span> <span class="o">=</span> <span class="s1">&#39;kelt24_rvs.txt&#39;</span>
+
+<span class="c1"># The name of the star for plots</span>
+<span class="n">star_name</span> <span class="o">=</span> <span class="s1">&#39;KELT-24&#39;</span>
+
+<span class="c1"># Mass and uncertainty of star for mass determination</span>
+<span class="n">mstar</span> <span class="o">=</span> <span class="mf">1.460</span>
+<span class="n">mstar_unc</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.059</span><span class="p">,</span> <span class="mf">0.055</span><span class="p">]</span>
+
+<span class="c1"># Starting jitter values for each instrument.</span>
+<span class="n">jitter_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;SONG&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;TRES&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+
+<span class="c1"># All data in one dictionary</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pcrvdata</span><span class="o">.</span><span class="n">MixedRVData</span><span class="o">.</span><span class="n">from_radvel_file</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span>
+
+<span class="c1"># Streamlit components</span>
+<span class="n">comps</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="c1"># Make web page title</span>
+<span class="n">pcstutils</span><span class="o">.</span><span class="n">make_title</span><span class="p">(</span><span class="n">title</span><span class="o">=</span><span class="n">star_name</span><span class="p">)</span>
+
+<span class="c1"># Make a data selector</span>
+<span class="n">pcstutils</span><span class="o">.</span><span class="n">DataSelector</span><span class="p">(</span><span class="n">comps</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+
+<span class="c1"># Init parameters and planets dictionary</span>
+<span class="n">pars</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameters</span><span class="p">()</span>
+<span class="n">planets_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="c1"># Define parameters for planet 1</span>
+<span class="c1"># Other bases are available.</span>
+<span class="n">planets_dict</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;basis&quot;</span><span class="p">:</span> <span class="n">pcrvmodels</span><span class="o">.</span><span class="n">TCOrbitBasis</span><span class="p">(</span><span class="mi">1</span><span class="p">)}</span>
+
+<span class="c1"># Values from Rodriguez et al. 2019 for KELT-24 b</span>
+<span class="n">per1</span> <span class="o">=</span> <span class="mf">5.5514926</span>
+<span class="n">per1_unc</span> <span class="o">=</span> <span class="mf">0.0000081</span>
+<span class="n">tc1</span> <span class="o">=</span>  <span class="mf">2457147.0529</span>
+<span class="n">tc1_unc</span> <span class="o">=</span> <span class="mf">0.002</span>
+<span class="n">ecc1</span> <span class="o">=</span> <span class="mf">0.077</span>
+<span class="n">ecc1_unc</span> <span class="o">=</span> <span class="mf">0.024</span>
+<span class="n">w1</span> <span class="o">=</span> <span class="mi">55</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">180</span>
+<span class="n">w1_unc</span> <span class="o">=</span> <span class="mi">15</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">180</span>
+
+<span class="c1"># Period</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;per1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">per1</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;per1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">optknow</span><span class="o">.</span><span class="n">Gaussian</span><span class="p">(</span><span class="n">per1</span><span class="p">,</span> <span class="n">per1_unc</span><span class="p">))</span>
+
+<span class="c1"># Time of conjunction</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;tc1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">tc1</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;tc1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">optknow</span><span class="o">.</span><span class="n">Gaussian</span><span class="p">(</span><span class="n">tc1</span><span class="p">,</span> <span class="n">tc1_unc</span><span class="p">))</span>
+
+<span class="c1"># Eccentricity</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;ecc1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">ecc1</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;ecc1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">optknow</span><span class="o">.</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">1E-10</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;ecc1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">optknow</span><span class="o">.</span><span class="n">Gaussian</span><span class="p">(</span><span class="n">ecc1</span><span class="p">,</span> <span class="n">ecc1_unc</span><span class="p">))</span>
+
+<span class="c1"># Angle of periastron</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;w1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">w1</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;w1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">optknow</span><span class="o">.</span><span class="n">Gaussian</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">w1_unc</span><span class="p">))</span>
+
+<span class="c1"># RV semi-amplitude</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;k1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mi">462</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;k1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">optknow</span><span class="o">.</span><span class="n">Positive</span><span class="p">())</span>
+
+<span class="c1"># Per instrument gamma offsets</span>
+<span class="c1"># Additional small offset is to avoid cases where the median is already subtracted off.</span>
+<span class="k">for</span> <span class="n">instname</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+    <span class="n">pname</span> <span class="o">=</span> <span class="s2">&quot;gamma_&quot;</span> <span class="o">+</span> <span class="n">instname</span>
+    <span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nanmedian</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">instname</span><span class="p">]</span><span class="o">.</span><span class="n">rv</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">100</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">optknow</span><span class="o">.</span><span class="n">Uniform</span><span class="p">(</span><span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">-</span> <span class="mi">200</span><span class="p">,</span> <span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span><span class="o">.</span><span class="n">value</span> <span class="o">+</span> <span class="mi">200</span><span class="p">))</span>
+    
+<span class="c1"># Linear and quadratic trends</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;gamma_dot&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;gamma_ddot&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+<span class="c1"># Per-instrument jitter</span>
+<span class="k">for</span> <span class="n">instname</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+    <span class="n">pname</span> <span class="o">=</span> <span class="s2">&quot;jitter_&quot;</span> <span class="o">+</span> <span class="n">instname</span>
+    <span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span> <span class="o">=</span> <span class="n">optknow</span><span class="o">.</span><span class="n">Parameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">jitter_dict</span><span class="p">[</span><span class="n">instname</span><span class="p">],</span> <span class="n">vary</span><span class="o">=</span><span class="n">jitter_dict</span><span class="p">[</span><span class="n">instname</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span><span class="o">.</span><span class="n">vary</span><span class="p">:</span>
+        <span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">optknow</span><span class="o">.</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">1E-10</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
+
+<span class="c1"># Initiate a composite likelihood object</span>
+<span class="n">likes</span> <span class="o">=</span> <span class="n">pcrvlikes</span><span class="o">.</span><span class="n">MixedRVLikelihood</span><span class="p">()</span>
+
+<span class="c1"># Define a single kernel and model, add to likelihoods</span>
+<span class="n">kernel</span> <span class="o">=</span> <span class="n">optkernels</span><span class="o">.</span><span class="n">WhiteNoise</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">pcrvmodels</span><span class="o">.</span><span class="n">RVModel</span><span class="p">(</span><span class="n">planets_dict</span><span class="o">=</span><span class="n">planets_dict</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">p0</span><span class="o">=</span><span class="n">pars</span><span class="p">,</span> <span class="n">kernel</span><span class="o">=</span><span class="n">kernel</span><span class="p">)</span>
+<span class="n">likes</span><span class="p">[</span><span class="s2">&quot;rvs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pcrvlikes</span><span class="o">.</span><span class="n">RVLikelihood</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">)</span>
+
+<span class="c1"># Define max like optimizer (iterative Nelder-Mead) and emcee MCMC sampler</span>
+<span class="n">optimizer</span> <span class="o">=</span> <span class="n">optimizers</span><span class="o">.</span><span class="n">NelderMead</span><span class="p">(</span><span class="n">scorer</span><span class="o">=</span><span class="n">likes</span><span class="p">)</span>
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">optsamplers</span><span class="o">.</span><span class="n">AffInv</span><span class="p">(</span><span class="n">scorer</span><span class="o">=</span><span class="n">likes</span><span class="p">,</span> <span class="n">options</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+<span class="c1"># Define top-level exoplanet &quot;problem&quot; (Really an RV problem for now)</span>
+<span class="n">optprob</span> <span class="o">=</span> <span class="n">pcrvprob</span><span class="o">.</span><span class="n">ExoProblem</span><span class="p">(</span><span class="n">output_path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span> <span class="n">star_name</span><span class="o">=</span><span class="n">star_name</span><span class="p">,</span> <span class="n">p0</span><span class="o">=</span><span class="n">pars</span><span class="p">,</span> <span class="n">optimizer</span><span class="o">=</span><span class="n">optimizer</span><span class="p">,</span> <span class="n">sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">likes</span><span class="o">=</span><span class="n">likes</span><span class="p">,</span> <span class="n">mstar</span><span class="o">=</span><span class="n">mstar</span><span class="p">,</span> <span class="n">mstar_unc</span><span class="o">=</span><span class="n">mstar_unc</span><span class="p">)</span>
+
+<span class="c1"># Perform max like fit</span>
+<span class="c1"># Results are saved to a pickle file.</span>
+<span class="n">maxlike_result</span> <span class="o">=</span> <span class="n">optprob</span><span class="o">.</span><span class="n">maxlikefit</span><span class="p">()</span>
+
+<span class="c1"># Plots</span>
+<span class="c1"># All plots are automatically saved with a unique timestamp in the filename.</span>
+<span class="n">optprob</span><span class="o">.</span><span class="n">plot_phased_rvs_all</span><span class="p">(</span><span class="n">maxlike_result</span><span class="p">[</span><span class="s2">&quot;pbest&quot;</span><span class="p">])</span>
+<span class="n">optprob</span><span class="o">.</span><span class="n">plot_full_rvs</span><span class="p">(</span><span class="n">maxlike_result</span><span class="p">[</span><span class="s2">&quot;pbest&quot;</span><span class="p">])</span>
+
+<span class="c1"># Set parameters from max like fit</span>
+<span class="n">optprob</span><span class="o">.</span><span class="n">set_pars</span><span class="p">(</span><span class="n">maxlike_result</span><span class="p">[</span><span class="s2">&quot;pbest&quot;</span><span class="p">])</span>
+
+<span class="c1"># Remaining Components.</span>
+<span class="c1"># You can also append your own streamlit code before or after this block.</span>
+
+<span class="n">comps</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">pcstutils</span><span class="o">.</span><span class="n">RVActions</span><span class="p">(</span><span class="n">comps</span><span class="p">,</span> <span class="n">optprob</span><span class="p">,</span> <span class="n">has_gp</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">comps</span><span class="p">[</span><span class="s2">&quot;max_like_button&quot;</span><span class="p">]:</span>
+    <span class="n">opt_result</span> <span class="o">=</span> <span class="n">optprob</span><span class="o">.</span><span class="n">optimize</span><span class="p">()</span>
+    <span class="n">pcstutils</span><span class="o">.</span><span class="n">MaxLikeResult</span><span class="p">(</span><span class="n">comps</span><span class="p">,</span> <span class="n">optprob</span><span class="p">,</span> <span class="n">opt_result</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">comps</span><span class="p">[</span><span class="s2">&quot;model_comp_button&quot;</span><span class="p">]:</span>
+    <span class="n">mc_result</span> <span class="o">=</span> <span class="n">optprob</span><span class="o">.</span><span class="n">model_comparison</span><span class="p">()</span>
+    <span class="n">pcstutils</span><span class="o">.</span><span class="n">ModelCompResult</span><span class="p">(</span><span class="n">comps</span><span class="p">,</span> <span class="n">optprob</span><span class="p">,</span> <span class="n">mc_result</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">comps</span><span class="p">[</span><span class="s2">&quot;sample_button&quot;</span><span class="p">]:</span>
+    <span class="n">sampler_result</span> <span class="o">=</span> <span class="n">optprob</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_min_steps</span><span class="o">=</span><span class="mi">3000</span><span class="p">)</span>
+    <span class="n">pcstutils</span><span class="o">.</span><span class="n">MCMCResult</span><span class="p">(</span><span class="n">comps</span><span class="p">,</span> <span class="n">optprob</span><span class="p">,</span> <span class="n">sampler_result</span><span class="p">)</span>
+    <span class="n">pcstutils</span><span class="o">.</span><span class="n">PlanetsResults</span><span class="p">(</span><span class="n">comps</span><span class="p">,</span> <span class="n">optprob</span><span class="p">,</span> <span class="n">sampler_result</span><span class="p">)</span>
+<span class="k">if</span> <span class="n">comps</span><span class="p">[</span><span class="s2">&quot;per_search_button&quot;</span><span class="p">]:</span>
+    <span class="k">if</span>  <span class="n">comps</span><span class="p">[</span><span class="s2">&quot;persearch_kind_input&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;Brute Force&quot;</span><span class="p">:</span>
+        <span class="n">periods</span><span class="p">,</span> <span class="n">persearch_result</span> <span class="o">=</span> <span class="n">optprob</span><span class="o">.</span><span class="n">rv_period_search</span><span class="p">(</span><span class="n">pmin</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">comps</span><span class="p">[</span><span class="s2">&quot;persearch_min_input&quot;</span><span class="p">]),</span> <span class="n">pmax</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">comps</span><span class="p">[</span><span class="s2">&quot;persearch_max_input&quot;</span><span class="p">]),</span> <span class="n">planet_index</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">n_periods</span><span class="o">=</span><span class="mi">750</span><span class="p">,</span> <span class="n">n_cores</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+        <span class="n">pcstutils</span><span class="o">.</span><span class="n">RVPeriodSearchResult</span><span class="p">(</span><span class="n">comps</span><span class="p">,</span> <span class="n">optprob</span><span class="p">,</span> <span class="n">periods</span><span class="p">,</span> <span class="n">persearch_result</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">gls_result</span> <span class="o">=</span> <span class="n">optprob</span><span class="o">.</span><span class="n">gls_periodogram</span><span class="p">(</span><span class="n">apply_gp</span><span class="o">=</span><span class="n">comps</span><span class="p">[</span><span class="s2">&quot;use_gp_input&quot;</span><span class="p">],</span> <span class="n">remove_planets</span><span class="o">=</span><span class="n">comps</span><span class="p">[</span><span class="s2">&quot;remove_planet_inputs&quot;</span><span class="p">],</span> <span class="n">pmin</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">comps</span><span class="p">[</span><span class="s2">&quot;persearch_min_input&quot;</span><span class="p">]),</span> <span class="n">pmax</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">comps</span><span class="p">[</span><span class="s2">&quot;persearch_max_input&quot;</span><span class="p">]))</span>
+        <span class="n">pcstutils</span><span class="o">.</span><span class="n">GLSResult</span><span class="p">(</span><span class="n">comps</span><span class="p">,</span> <span class="n">optprob</span><span class="p">,</span> <span class="n">gls_result</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>This file is saved as kelt24_example_streamlit.py. We run it as streamlit run <code class="docutils literal notranslate"><span class="pre">kelt24_example_streamlit.py</span></code>. This will open a webpage that looks like the following:</p>
+<img alt="_images/kelt24_streamlit_interface.png" src="_images/kelt24_streamlit_interface.png" />
+<p>From here one can perform the desired actions. Here, the starting parameters are always what the user specifies in the script. All results are still saved to files, and interactive plots are shown in the browser.</p>
 </div>
 </div>
-<div class="section" id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
 </div>
 
 
@@ -251,7 +409,6 @@
 <li class="toctree-l2"><a class="reference internal" href="#rv-fitting">RV Fitting</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="#indices-and-tables">Indices and tables</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
 </ul>

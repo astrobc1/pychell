@@ -68,5 +68,19 @@ The corner plot from mcmc sampling.
 
 .. image:: ../examples/KELT-24_rv_fitting/KELT-24_corner_20210211_150814.png
 
-Indices and tables
-==================
+
+Example 2
++++++++++
+
+Here we perform the same Bayesian inference on KELT-24but use the webpage GUI.
+
+First we modify our Python script. The majority of the code is identicical. Note we also import pychell.stutils.
+
+.. literalinclude:: ../examples/KELT-24_rv_fitting/kelt24_example_streamlit.py
+    :language: python
+
+This file is saved as kelt24_example_streamlit.py. We run it as streamlit run ``kelt24_example_streamlit.py``. This will open a webpage that looks like the following:
+
+.. image:: ../examples/KELT-24_rv_fitting/kelt24_streamlit_interface.png
+
+From here one can perform the desired actions. Here, the starting parameters are always what the user specifies in the script. All results are still saved to files, and interactive plots are shown in the browser.
