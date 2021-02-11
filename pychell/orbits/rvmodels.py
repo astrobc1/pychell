@@ -169,17 +169,20 @@ def solve_kepler(mas, ecc):
 
 @njit
 def _solve_kepler(ma, ecc):
-    """Solve Kepler's Equation for one planet.
+    """Solve Kepler's equation for one planet and one time. This code is nearly identical to the RadVel implemenation (BJ Fulton et al. 2018). Kepler's equation is solved using a higher order Newton's method.
+    
     Args:
-        ma (float): mean anomaly
-        eccarr (float): eccentricity
+        ma (float): mean anomaly.
+        eccarr (float): eccentricity.
+        
     Returns:
         float: The eccentric anomaly.
     """
 
     # Convergence criterion
-    conv = 1E-12
+    conv = 1E-10
     k = 0.85
+    max_iters = 200
     
     # First guess for ea
     ea = ma + np.sign(np.sin(ma)) * k * ecc
@@ -189,7 +192,7 @@ def _solve_kepler(ma, ecc):
     count = 0
     
     # Break when converged
-    while True:
+    while True and count < max_iters:
         
         # Increase counter
         count += 1
@@ -214,7 +217,7 @@ def _solve_kepler(ma, ecc):
 @njit
 def true_anomaly(t, tp, per, ecc):
     """
-    Calculate the true anomaly for a given time, period, eccentricity.
+    Calculate the true anomaly for a given time, period, eccentricity. This requires solving Kepler's equation.
 
     Args:
         t (np.ndarray): The times.
@@ -227,12 +230,12 @@ def true_anomaly(t, tp, per, ecc):
     """
     
     m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
-    ea1 = solve_kepler(m, ecc)
+    ea = solve_kepler(m, ecc)
     n1 = 1.0 + ecc
     n2 = 1.0 - ecc
-    nu = 2.0 * np.arctan((n1 / n2)**0.5 * np.tan(ea1 / 2.0))
+    ta = 2.0 * np.arctan((n1 / n2)**0.5 * np.tan(ea / 2.0))
 
-    return nu
+    return ta
 
 
 def planet_signal(t, per, tp, ecc, w, k):
@@ -280,7 +283,7 @@ def planet_signal(t, per, tp, ecc, w, k):
 @njit
 def tc_to_tp(tc, per, ecc, w):
     """
-    Convert Time of Transit (time of conjunction) to Time of Periastron Passage
+    Convert Time of Transit (time of conjunction) to Time of Periastron Passage.
 
     Args:
         tc (float): time of transit
@@ -298,8 +301,8 @@ def tc_to_tp(tc, per, ecc, w):
         return tc
 
     f = np.pi / 2 - w
-    ee = 2 * np.arctan(np.tan(f / 2) * np.sqrt((1 - ecc) / (1 + ecc)))  # eccentric anomaly (ee = f for ecc=0)
-    tp = tc - per / (2 * np.pi) * (ee - ecc * np.sin(ee)) # time of periastron
+    ee = 2 * np.arctan(np.tan(f / 2) * np.sqrt((1 - ecc) / (1 + ecc)))
+    tp = tc - per / (2 * np.pi) * (ee - ecc * np.sin(ee))
 
     return tp
 
@@ -312,11 +315,10 @@ def tp_to_tc(tp, per, ecc, w):
         tp (float): time of periastron
         per (float): period [days]
         ecc (float): eccentricity
-        w (float): argument of periastron (radians)
-        secondary (bool): calculate time of secondary eclipse instead
+        w (float): argument of periastron (radians).
 
     Returns:
-        float: time of inferior conjunction (time of transit if system is transiting)
+        float: The time of conjunction.
     """
     
     # If ecc >= 1, no tc exists.
@@ -329,7 +331,6 @@ def tp_to_tc(tp, per, ecc, w):
     tc = tp + per / (2 * np.pi) * (ee - ecc * np.sin(ee))         # time of conjunction
 
     return tc
-
 
 class AbstractOrbitBasis:
     """An abstract orbit basis class, not useful on its own. Each method must define to_standard and from_standard below.
@@ -375,7 +376,6 @@ class AbstractOrbitBasis:
             tuple: The basis parameters. See the class attribute names for each.
         """
         pass
-        
         
 class StandardOrbitBasis(AbstractOrbitBasis):
     """The standard orbit basis: per, tp, ecc, w, k.
@@ -467,7 +467,7 @@ class TCSQEOrbitBasis(AbstractOrbitBasis):
                           (sqew_unc / (sqecosw_unc**2 + sqesinw_unc**2))**2 * sqesinw_unc**2)
         
         return (per_unc, tp_unc, ecc_unc, w_unc, k_unc)
-    
+
 class TCEOrbitBasis(AbstractOrbitBasis):
     
     names = ["per", "tc", "cosw", "sinw", "k"]
@@ -511,6 +511,3 @@ class TCEOrbitBasis(AbstractOrbitBasis):
                           (sqew_unc / (sqecosw_unc**2 + sqesinw_unc**2))**2 * sqesinw_unc**2)
         
         return (per_unc, tp_unc, ecc_unc, w_unc, k_unc)
-        
-
-        
