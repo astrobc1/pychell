@@ -1,0 +1,274 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pychell API reference &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="spectrographs_api.html" />
+    <link rel="prev" title="pychell API reference" href="orbits_models.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="pychell-api-reference">
+<h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-pychell.orbits.rvlikes">
+<span id="likelihoods"></span><h2>Likelihoods<a class="headerlink" href="#module-pychell.orbits.rvlikes" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="pychell.orbits.rvlikes.MixedRVLikelihood">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvlikes.</code><code class="sig-name descname">MixedRVLikelihood</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvlikes.MixedRVLikelihood" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.scores.MixedLikelihood</span></code></p>
+<dl class="py method">
+<dt id="pychell.orbits.rvlikes.MixedRVLikelihood.compute_logL">
+<code class="sig-name descname">compute_logL</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">apply_priors</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvlikes.MixedRVLikelihood.compute_logL" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the log of the likelihood.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use.</p></li>
+<li><p><strong>apply_priors</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to apply the priors. Defaults to True.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The log likelihood, ln(L).</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvlikes.MixedRVLikelihood.compute_redchi2">
+<code class="sig-name descname">compute_redchi2</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvlikes.MixedRVLikelihood.compute_redchi2" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the reduced chi2 statistic (weighted MSE).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The reduced chi-squared statistic.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.orbits.rvlikes.RVChromaticLikelihood">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvlikes.</code><code class="sig-name descname">RVChromaticLikelihood</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">label</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">model</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvlikes.RVChromaticLikelihood" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.orbits.rvlikes.RVLikelihood" title="pychell.orbits.rvlikes.RVLikelihood"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.orbits.rvlikes.RVLikelihood</span></code></a></p>
+<p>Stores the basic requirements for a score function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>MixedData</em>) – A mixed dataset inheriting from optimize.data.MixedData.</p></li>
+<li><p><strong>model</strong> (<em>Model</em>) – A model inheriting from optimize.models.Model.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.orbits.rvlikes.RVChromaticLikelihood.residuals_after_kernel">
+<code class="sig-name descname">residuals_after_kernel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvlikes.RVChromaticLikelihood.residuals_after_kernel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the residuals after subtracting off the best fit noise kernel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The residuals.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.orbits.rvlikes.RVLikelihood">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvlikes.</code><code class="sig-name descname">RVLikelihood</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">label</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">model</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvlikes.RVLikelihood" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.scores.Likelihood</span></code></p>
+<p>Stores the basic requirements for a score function.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>MixedData</em>) – A mixed dataset inheriting from optimize.data.MixedData.</p></li>
+<li><p><strong>model</strong> (<em>Model</em>) – A model inheriting from optimize.models.Model.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.orbits.rvlikes.RVLikelihood.compute_logL">
+<code class="sig-name descname">compute_logL</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">apply_priors</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvlikes.RVLikelihood.compute_logL" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the log of the likelihood.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use.</p></li>
+<li><p><strong>apply_priors</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to apply the priors. Defaults to True.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The log likelihood, ln(L).</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvlikes.RVLikelihood.residuals_after_kernel">
+<code class="sig-name descname">residuals_after_kernel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvlikes.RVLikelihood.residuals_after_kernel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the residuals after subtracting off the best fit noise kernel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The residuals.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvlikes.RVLikelihood.residuals_before_kernel">
+<code class="sig-name descname">residuals_before_kernel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvlikes.RVLikelihood.residuals_before_kernel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the residuals without subtracting off the best fit noise kernel.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The residuals.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html#indices-and-tables">Indices and tables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="rvs_api.html">Radial Velocity Generation</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="orbits_api.html">Radial Velocity Fitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spectrographs_api.html">Spectrographs</a></li>
+</ul>
+</li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="orbits_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="orbits_models.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="spectrographs_api.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/orbits_likes.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

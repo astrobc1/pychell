@@ -15,7 +15,6 @@ import pychell.orbits.rvprob as pcrvprob
 import pychell.orbits.rvdata as pcrvdata
 import pychell.orbits.rvlikes as pcrvlikes
 import pychell.orbits.rvmodels as pcrvmodels
-import pychell.stutils as pcstutils
 
 # Path to input rv file and outputs
 path = os.path.dirname(os.path.abspath(__file__)) + os.sep
@@ -29,7 +28,7 @@ mstar = 1.460
 mstar_unc = [0.059, 0.055]
 
 # Starting jitter values for each instrument.
-jitter_dict = {'SONG': 30, 'TRES': 0}
+jitter_dict = {'SONG': 50, 'TRES': 0}
 
 # All data in one dictionary
 data = pcrvdata.MixedRVData.from_radvel_file(fname)
@@ -76,8 +75,9 @@ pars["k1"].add_prior(optknow.Positive())
 # Per instrument gamma offsets
 # Additional small offset is to avoid cases where the median is already subtracted off.
 for instname in data:
-    pars["gamma_" + instname] = optknow.Parameter(value=np.nanmedian(data[instname].rv) + np.pi / 1000, vary=True)
-    pars["gamma_" + instname].add_prior(optknow.Gaussian(pars["gamma_" + instname].value, 20))
+    pname = "gamma_" + instname
+    pars[pname] = optknow.Parameter(value=np.nanmedian(data[instname].rv) + np.pi / 100, vary=True)
+    pars[pname].add_prior(optknow.Uniform(pars[pname].value - 200, pars[pname].value + 200))
     
 # Linear and quadratic trends
 pars["gamma_dot"] = optknow.Parameter(value=0, vary=False)
@@ -88,7 +88,7 @@ for instname in data:
     pname = "jitter_" + instname
     pars[pname] = optknow.Parameter(value=jitter_dict[instname], vary=jitter_dict[instname] > 0)
     if pars[pname].vary:
-        pars[pname].add_prior(optknow.Uniform(1E-10, 50))
+        pars[pname].add_prior(optknow.Uniform(1E-10, 100))
 
 # Initiate a composite likelihood object
 likes = pcrvlikes.MixedRVLikelihood()
@@ -109,15 +109,21 @@ optprob = pcrvprob.ExoProblem(output_path=path, star_name=star_name, p0=pars, op
 # Results are saved to a pickle file.
 maxlike_result = optprob.maxlikefit()
 
+# Plots
+# All plots are automatically saved with a unique timestamp in the filename.
+optprob.plot_phased_rvs_all(maxlike_result["pbest"])
+optprob.plot_full_rvs(maxlike_result["pbest"])
+
 # Set parameters from max like fit
-# Results are saved to a pickle file
 optprob.set_pars(maxlike_result["pbest"])
 
 # Perform model comparison
 # Results are saved to a pickle file
 mc_result = optprob.model_comparison()
 
-# Perform mcmc and make corner plot
+# Perform mcmc. Here we expose several kwargs, which is not always necessary.
 # Results are saved to a pickle file
-mcmc_result = optprob.sample()
+mcmc_result = optprob.mcmc(n_burn_steps=500, check_every=200, n_steps=75_000, rel_tau_thresh=0.01, n_min_steps=1000, n_cores=8, n_taus_thresh=50)
+
+# Corner plot
 optprob.corner_plot(mcmc_result)

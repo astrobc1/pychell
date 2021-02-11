@@ -332,21 +332,54 @@ def tp_to_tc(tp, per, ecc, w):
 
 
 class AbstractOrbitBasis:
+    """An abstract orbit basis class, not useful on its own. Each method must define to_standard and from_standard below.
+    
+    Attributes:
+        planet_index (int): The index of this planet in the planets dictionary.
+        pnames (list[str]): A list of the parameter names for this planet and basis combination.
+    """
     
     def __init__(self, planet_index):
+        """Constructor for most bases.
+
+        Args:
+            planet_index (int): The index of this planet in the planets dictionary.
+        """
         self.planet_index = planet_index
         ii = str(self.planet_index)
         self.pnames = [name + ii for name in self.names]
         
     def to_standard(self, pars):
+        """Converts the parameters to the standard basis: per, tp, ecc, w, k.
+
+        Args:
+            pars (Parameters): The input parameters.
+            
+        Returns:
+            float: Period.
+            float: Time of periastron.
+            float: eccentricity.
+            float: Angle of periastron.
+            float: Semi-amplitude.
+        """
         pass
     
     @classmethod
     def from_standard(cls, pars):
+        """Converts the parameters to this basis from the standard basis: per, tp, ecc, w, k.
+
+        Args:
+            pars (Parameters): The input parameters.
+            
+        Returns:
+            tuple: The basis parameters. See the class attribute names for each.
+        """
         pass
         
         
 class StandardOrbitBasis(AbstractOrbitBasis):
+    """The standard orbit basis: per, tp, ecc, w, k.
+    """
     
     names = ["per", "tp", "ecc", "w", "k"]
     
@@ -363,6 +396,8 @@ class StandardOrbitBasis(AbstractOrbitBasis):
         return self.to_standard(pars)
     
 class TCOrbitBasis(AbstractOrbitBasis):
+    """A basis utilizing tc over tp: per, tc, ecc, w, k.
+    """
     
     names = ["per", "tc", "ecc", "w", "k"]
     
@@ -386,8 +421,9 @@ class TCOrbitBasis(AbstractOrbitBasis):
         tc = tp_to_tc(tp, per, ecc, w)
         return (per, tc, ecc, w, k)
     
-
 class TCSQEOrbitBasis(AbstractOrbitBasis):
+    """The preferred basis when the angle of periastron is unknown: per, tc, sqrt(ecc)*cos(w), sqrt(ecc)*sin(w), k.
+    """
     
     names = ["per", "tc", "sqecosw", "sqesinw", "k"]
     
@@ -431,7 +467,6 @@ class TCSQEOrbitBasis(AbstractOrbitBasis):
                           (sqew_unc / (sqecosw_unc**2 + sqesinw_unc**2))**2 * sqesinw_unc**2)
         
         return (per_unc, tp_unc, ecc_unc, w_unc, k_unc)
-    
     
 class TCEOrbitBasis(AbstractOrbitBasis):
     

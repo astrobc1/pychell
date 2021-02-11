@@ -1,10 +1,9 @@
 pychell API reference
 =====================
 
+Noise Kernels
++++++++++++++
 
-Data
-++++
-
-.. automodule:: pychell.reduce.data2d
+.. automodule:: pychell.orbits.rvkernels
     :members:
     :show-inheritance:

@@ -25,6 +25,7 @@ Below is the remaining documentation, tutorials, API, and instructions on adding
    Installation <installation>
    Overview <overview>
    Quickstart <quickstart>
+   Tutorials <tutorials>
    Extending pychell <extending>
    API <api>
 

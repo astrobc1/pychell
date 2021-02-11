@@ -132,7 +132,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_xaxes(title_text='<b>Phase</b>')
         fig.update_yaxes(title_text='<b>RVs [m/s]</b>')
         fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
-        fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(per) + ', e = ' + str(ecc) + '</b>')
+        fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(round(per, 6)) + ', e = ' + str(round(ecc, 5)) + '</b>')
         fig.update_layout(template="ggplot2")
         fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
@@ -446,7 +446,7 @@ class ExoProblem(optframeworks.OptProblem):
             self.set_pars(p0mod)
             
             # Perform max like fit
-            opt_result = self.optimize()
+            opt_result = self.maxlikefit(save=False)
             pbest = opt_result["pbest"]
                 
             # Construct the GP for each like and remove from the data
@@ -485,7 +485,7 @@ class ExoProblem(optframeworks.OptProblem):
             self.set_pars(p0mod)
 
             # Perform max like fit
-            opt_result = self.optimize()
+            opt_result = self.maxlikefit(save=False)
             pbest = opt_result["pbest"]
                 
             # Construct the GP for each like and remove from the data
@@ -529,7 +529,7 @@ class ExoProblem(optframeworks.OptProblem):
             self.set_pars(p0mod)
             
             # Perform max like fit
-            opt_result = self.optimize()
+            opt_result = self.maxlikefit(save=False)
             pbest = opt_result["pbest"]
                 
             for like in self.scorer.values():
@@ -632,7 +632,7 @@ class ExoProblem(optframeworks.OptProblem):
         """
         return self.sample(*args, **kwargs)
     
-    def sample(self, *args, **kwargs):
+    def sample(self, *args, save=True, **kwargs):
         """Runs the mcmc.
 
         Returns:
@@ -643,12 +643,13 @@ class ExoProblem(optframeworks.OptProblem):
             dict: A dictionary with the mcmc results.
         """
         mcmc_result = super().sample(*args, **kwargs)
-        fname = self.output_path + self.star_name.replace(' ', '_') + '_mcmc_results_' + pcutils.gendatestr(time=True) + '.pkl'
-        with open(fname, 'wb') as f:
-            pickle.dump(mcmc_result, f)
+        if save:
+            fname = self.output_path + self.star_name.replace(' ', '_') + '_mcmc_results_' + pcutils.gendatestr(time=True) + '.pkl'
+            with open(fname, 'wb') as f:
+                pickle.dump(mcmc_result, f)
         return mcmc_result
     
-    def optimize(self, *args, **kwargs):
+    def optimize(self, *args, save=True, **kwargs):
         """Runs the optimizer.
 
         Args:
@@ -659,9 +660,10 @@ class ExoProblem(optframeworks.OptProblem):
             dict: A dictionary with the optimize results.
         """
         maxlike_result = super().optimize(*args, **kwargs)
-        fname = self.output_path + self.star_name.replace(' ', '_') + '_maxlike_results_' + pcutils.gendatestr(time=True) + '.pkl'
-        with open(fname, 'wb') as f:
-            pickle.dump(maxlike_result, f)
+        if save:
+            fname = self.output_path + self.star_name.replace(' ', '_') + '_maxlike_results_' + pcutils.gendatestr(time=True) + '.pkl'
+            with open(fname, 'wb') as f:
+                pickle.dump(maxlike_result, f)
         return maxlike_result
     
     def maxlikefit(self, *args, **kwargs):
@@ -1019,7 +1021,7 @@ class ExoProblem(optframeworks.OptProblem):
             _optprob.set_pars(p0)
 
             # Run the max like
-            opt_result = _optprob.optimize()
+            opt_result = _optprob.maxlikefit(save=False)
             
             # Alias best fit params
             pbest = opt_result['pbest']
@@ -1046,7 +1048,8 @@ class ExoProblem(optframeworks.OptProblem):
             mcr['delta_aicc'] = aicc_diffs[i]
     
         # Save
-        with open(self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(time=True) + '.pkl', 'wb') as f:
+        fname = self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(time=True) + '.pkl'
+        with open(fname, 'wb') as f:
             pickle.dump(model_comp_results, f)
         
         return model_comp_results

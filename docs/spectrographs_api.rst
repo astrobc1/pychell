@@ -2,15 +2,12 @@ pychell API reference
 =====================
 
 
-The Spectroraphs Module
------------------------
+Spectrographs
++++++++++++++
 
-To extend new instruments, see the extending pychell section.
-
-.. toctree::
-    :maxdepth: 1
-
-    CHIRON <chiron.rst>
-    iSHELL <ishell.rst>
-    NIRSPEC <nirspec.rst>
-    PARVI <parvi.rst>
+iSHELL [reduce, rvs]
+CHIRON [rvs]
+MINERVA [rvs]
+MINERVA-Australis [rvs]
+NIRSPEC [rvs:development]
+PARVI [rvs]
