@@ -147,5 +147,5 @@ if comps["per_search_button"]:
         periods, persearch_result = optprob.rv_period_search(pmin=float(comps["persearch_min_input"]), pmax=float(comps["persearch_max_input"]), planet_index=2, n_periods=750, n_cores=8)
         pcstutils.RVPeriodSearchResult(comps, optprob, periods, persearch_result)
     else:
-        gls_result = optprob.gls_periodogram(apply_gp=comps["use_gp_input"], remove_planets=comps["remove_planet_inputs"], pmin=float(comps["persearch_min_input"]), pmax=float(comps["persearch_max_input"]))
+        gls_result = optprob.gls_periodogram(apply_gp=False, remove_planets=comps["remove_planet_inputs"], pmin=float(comps["persearch_min_input"]), pmax=float(comps["persearch_max_input"]))
         pcstutils.GLSResult(comps, optprob, gls_result)
