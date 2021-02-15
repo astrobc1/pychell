@@ -75,7 +75,6 @@ class Image(SpecData):
     def parse_image(self):
         return self.parser.parse_image(self)
     
-
 class RawImage(Image):
     
     def __init__(self, input_file=None, parser=None):
@@ -125,7 +124,6 @@ class RawImage(Image):
     
     def parse_header(self):
         return self.parser.parse_image_header(self)
-
 
 class MasterCalibImage(Image):
     
@@ -190,9 +188,6 @@ class ImageMap(Image):
         self.save_map_image(order_map_image)
         self.save_orders_list()
         
-        
-
-
 # Base class for a 1-dimensional echelle spectrum
 class SpecData1d(SpecData):
     

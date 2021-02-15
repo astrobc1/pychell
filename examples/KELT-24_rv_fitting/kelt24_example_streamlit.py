@@ -32,6 +32,7 @@ mstar_unc = [0.059, 0.055]
 jitter_dict = {'SONG': 50, 'TRES': 0}
 
 # All data in one dictionary
+# By default, all rvs are stored in a radvel formatted file.
 data = pcrvdata.MixedRVData.from_radvel_file(fname)
 
 # Streamlit components
@@ -128,9 +129,7 @@ optprob.plot_full_rvs(maxlike_result["pbest"])
 optprob.set_pars(maxlike_result["pbest"])
 
 # Remaining Components.
-# You can also append your own streamlit code before or after this block.
-
-comps = {}
+# You can also append your own streamlit code anywhere in this script.
 pcstutils.RVActions(comps, optprob, has_gp=False)
 if comps["max_like_button"]:
     opt_result = optprob.optimize()

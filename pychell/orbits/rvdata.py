@@ -6,10 +6,11 @@ import matplotlib.pyplot as plt
 
 class RVData(optdata.Data):
     
-    def __init__(self, t, rv, rverr, instname=None, **kwargs):
+    __slots__ = ['x', 'y', 'yerr', 'mask', 'label', 'wavelength']
+    
+    def __init__(self, t, rv, rverr, instname=None, wavelength=None):
         super().__init__(t, rv, yerr=rverr, label=instname)
-        for key in kwargs:
-            setattr(self, key, kwargs[key])
+        self.wavelength = wavelength
         
     @property
     def t(self):
@@ -35,9 +36,8 @@ class RVData(optdata.Data):
     def __repr__(self):
         return str(len(self.t)) + " RVs from " + self.instname
     
-
-
-class MixedRVData(optdata.MixedData):
+    
+class CompositeRVData(optdata.CompositeData):
     
     @property
     def instnames(self):
@@ -134,7 +134,26 @@ class MixedRVData(optdata.MixedData):
         inds = np.where(tel_vec == label)[0]
         return inds
     
+    def get_instruments(self, labels):
+        data_out = MixedRVData()
+        for label in labels:
+            data_out[label] = self[label]
+        return data_out
     
+    def get(self, instnames):
+        """Returns a view into sub data objects.
+
+        Args:
+            instnames (list): A list of instnmes (str).
+
+        Returns:
+            CompositeData: A view into the original data object.
+        """
+        data_view = self.__class__()
+        for label in instnames:
+            data_view[label] = self[label]
+        return data_view
+ 
 def group_vis_nir(data, cut=1000):
     """Groups vis and nir data into two different dicts.
 
@@ -154,4 +173,3 @@ def group_vis_nir(data, cut=1000):
         else:
             data_nir[_data.label] = _data
     return data_vis, data_nir
-

@@ -8,31 +8,31 @@ import plotly
 def make_title(title):
     return st.title(title)
 
- 
-class SessionState:
+# Not yet working
+# class SessionState:
     
-    def __init__(self, fname, data=None):
-        if data is not None:
-            self.data = data
-            self.fname = fname
-        if os.path.exists(fname) and data is None:
-            self = self.load(fname)
+#     def __init__(self, fname, data=None):
+#         if data is not None:
+#             self.data = data
+#             self.fname = fname
+#         if os.path.exists(fname) and data is None:
+#             self = self.load(fname)
         
-    def save(self):
-        with open(self.fname, 'wb') as f:
-            pickle.dump(self, f)
+#     def save(self):
+#         with open(self.fname, 'wb') as f:
+#             pickle.dump(self, f)
             
-    def load(self):
-        with open(self.fname, 'wb') as f:
-            return pickle.load(f)
+#     def load(self):
+#         with open(self.fname, 'wb') as f:
+#             return pickle.load(f)
     
-    def __getitem__(self, key):
-        if key == "fname":
-            return self.fname
-        if key in self.data:
-            return self.data[key]
-        else:
-            return super().__getitem__(key)
+#     def __getitem__(self, key):
+#         if key == "fname":
+#             return self.fname
+#         if key in self.data:
+#             return self.data[key]
+#         else:
+#             return super().__getitem__(key)
 
 class StreamlitComponent:
     
@@ -65,8 +65,9 @@ class DataSelector(StreamlitComponent):
     
 class RVActions(StreamlitComponent):
     
-    def __init__(self, comps, optprob):
+    def __init__(self, comps, optprob, has_gp=False):
         super().__init__(comps=comps, label="RV Action")
+        self.has_gp = has_gp
         self.optprob = optprob
         self.write()
         
@@ -78,8 +79,9 @@ class RVActions(StreamlitComponent):
         self.comps["sample_button"] = st.button(label='MCMC')
         self.comps["model_comp_button"] = st.button(label='Model Comparison')
         self.comps["per_search_button"] = st.button('Period Search')
-        self.comps["rvcolor_button"] = st.button('RV Color')
-        self.comps["use_gp_input"] = st.checkbox(label="Use GP", value=True)
+        if self.has_gp:
+            self.comps["rvcolor_button"] = st.button('RV Color')
+            self.comps["use_gp_input"] = st.checkbox(label="Use GP", value=True)
         
         # Period search options
         st.markdown('## Period Search Options:')
@@ -145,6 +147,8 @@ class ModelCompResult(StreamlitComponent):
         df["Planets"] = [""]*n_models
         df["ln \u2112"] = [1]*n_models
         df["\u0394 AICc"] = [1]*n_models
+        df["\u0394 BIC"] = [1]*n_models
+        df["N free"] = [1]*n_models
         for i in range(n_models):
             s = ""
             for planet_index in self.mc_result[i]["planets_dict"]:
@@ -154,6 +158,8 @@ class ModelCompResult(StreamlitComponent):
             df["Planets"][i] = s
             df["ln \u2112"][i] = self.mc_result[i]["lnL"]
             df["\u0394 AICc"][i] = self.mc_result[i]["delta_aicc"]
+            df["\u0394 BIC"][i] = self.mc_result[i]["delta_bic"]
+            df["N free"][i] = self.mc_result[i]["pbest"].num_varied()
         st.table(df)
         return self.comps
     
@@ -250,7 +256,6 @@ class GLSResult(StreamlitComponent):
         fig.write_html(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + '_glspgram_' + pcutils.gendatestr(time=True) + '.html')
         return self.comps
         
-        
 class RVPeriodSearchResult(StreamlitComponent):
         
     def __init__(self, comps, optprob, periods, persearch_result=None):
@@ -275,7 +280,6 @@ class RVPeriodSearchResult(StreamlitComponent):
         st.plotly_chart(fig)
         fig.write_html(self.optprob.output_path + self.optprob.star_name.replace(' ', '_') + '_brute_force_pgram_' + pcutils.gendatestr(time=True) + '.html')
         return self.comps
-        
         
 class RVColorResult(StreamlitComponent):
     

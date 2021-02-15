@@ -161,7 +161,7 @@ class RVModel(optmodels.Model):
     
 
 @njit
-def solve_kepler(mas, ecc):
+def solve_kepler_all_times(mas, ecc):
     eas = np.zeros_like(mas)
     for i in range(mas.size):
         eas[i] = _solve_kepler(mas[i], ecc)
@@ -230,13 +230,11 @@ def true_anomaly(t, tp, per, ecc):
     """
     
     m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
-    ea = solve_kepler(m, ecc)
+    ea = solve_kepler_all_times(m, ecc)
     n1 = 1.0 + ecc
     n2 = 1.0 - ecc
     ta = 2.0 * np.arctan((n1 / n2)**0.5 * np.tan(ea / 2.0))
-
     return ta
-
 
 def planet_signal(t, per, tp, ecc, w, k):
     """Computes the RV signal of one planet for a given time vector.

@@ -1041,11 +1041,14 @@ class ExoProblem(optframeworks.OptProblem):
             del _optprob
             
         aicc_vals = np.array([mcr['aicc'] for mcr in model_comp_results], dtype=float)
+        bic_vals = np.array([mcr['bic'] for mcr in model_comp_results], dtype=float)
         ss = np.argsort(aicc_vals)
         model_comp_results = [model_comp_results[ss[i]] for i in range(len(ss))]
         aicc_diffs = np.abs(aicc_vals[ss] - np.nanmin(aicc_vals))
+        bic_diffs = np.abs(bic_vals[ss] - np.nanmin(bic_vals))
         for i, mcr in enumerate(model_comp_results):
             mcr['delta_aicc'] = aicc_diffs[i]
+            mcr['delta_bic'] = bic_diffs[i]
     
         # Save
         fname = self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(time=True) + '.pkl'
@@ -1053,6 +1056,7 @@ class ExoProblem(optframeworks.OptProblem):
             pickle.dump(model_comp_results, f)
         
         return model_comp_results
+    
     
     def compute_semimajor_axis(self, sampler_result, mstar=None, mstar_unc=None):
         """Computes the semi-major axis of each planet.
