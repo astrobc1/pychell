@@ -78,7 +78,7 @@ def reduce_night(user_redux_settings):
         
         # Create master flat image and save
         for master_flat in data['master_flats']:
-            master_flat_image = pccalib.generate_master_flat(master_flat.individuals, bias_subtraction=config['bias_subtraction'], dark_subtraction=config['dark_subtraction'], flatfield_percentile=config['flatfield_percentile'])
+            master_flat_image = pccalib.generate_master_flat(master_flat.individuals, bias_subtraction=config['bias_subtraction'], dark_subtraction=config['dark_subtraction'], norm=config['flatfield_percentile'])
             master_flat.save(master_flat_image)
 
     #######################

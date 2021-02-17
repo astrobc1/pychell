@@ -47,14 +47,14 @@ def generate_master_flat(individuals, bias_subtraction=False, dark_subtraction=F
         if dark_subtraction:
             master_dark = individuals[i].master_dark.parse_image()
             flats_cube[i, :, :] -= master_dark
-        flats_cube[i, :, :] /= pcmath.weighted_median(flats_cube[i, :, :], percentile=flatfield_percentile)
-        bad = np.where((flats_cube[i, :, :] < 0) | (flats_cube[i, :, :] > flatfield_percentile*100))
+        flats_cube[i, :, :] /= pcmath.weighted_median(flats_cube[i, :, :], percentile=norm)
+        bad = np.where((flats_cube[i, :, :] < 0) | (flats_cube[i, :, :] > norm*100))
         if bad[0].size > 0:
             flats_cube[i, :, :][bad] = np.nan
     
     # Median crunch, flag one more time
     master_flat = np.nanmedian(flats_cube, axis=0)
-    bad = np.where((master_flat < 0) | (master_flat > flatfield_percentile*100))
+    bad = np.where((master_flat < 0) | (master_flat > norm*100))
     if bad[0].size > 0:
         master_flat[bad] = np.nan
         
