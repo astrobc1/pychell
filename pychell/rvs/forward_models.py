@@ -271,7 +271,8 @@ class ForwardModels(list):
                 iter_pass.append((self[ispec], self.templates_dict, iter_index, self.rvs_dict['xcorr_options']))
 
             # Cross Correlate in Parallel
-            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].cross_correlate_all_regions_wrapper)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
+            #ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].cross_correlate_all_regions_wrapper)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
+            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].cross_correlate_all_regions_wrapper)(*iter_pass[ispec]) for ispec in range(self.n_spec))
             
         else:
             ccf_results = [self[0].cross_correlate_all_regions_wrapper(self[ispec], self.templates_dict, iter_index, self.rvs_dict['xcorr_options']) for ispec in range(self.n_spec)]
@@ -408,7 +409,6 @@ class ForwardModels(list):
             fname = self.run_output_path + self.o_folder + 'RVs' + os.sep + self.tag + '_bisectorspans_ord' + str(self.order_num) + '_iter' + str(iter_index + 1) + '.png'
             plt.savefig(fname)
             plt.close()
-    
         
     def get_init_star_vel_ccf(self):
         """Cross correlation wrapper for all spectra.
@@ -432,9 +432,11 @@ class ForwardModels(list):
                 iter_pass.append((self[ispec], self.templates_dict, self[ispec].sregion_order))
 
             # Cross Correlate in Parallel
-            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
+            #ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
+            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in range(self.n_spec))
         else:
-            ccf_results = [ccf_method(fwm, self.templates_dict, fwm.sregion_order) for fwm in tqdm.tqdm(self)]
+            #ccf_results = [ccf_method(fwm, self.templates_dict, fwm.sregion_order) for fwm in tqdm.tqdm(self)]
+            ccf_results = [ccf_method(fwm, self.templates_dict, fwm.sregion_order) for fwm in self]
             
         for ispec, fwm in enumerate(self):
             if ccf_results[ispec] != 0:
@@ -443,6 +445,7 @@ class ForwardModels(list):
                 fwm.initial_parameters[fwm.models_dict['star'].par_names[0]].value = ccf_results[ispec] + 10
                 
         print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
+
 
 class ForwardModel:
     
@@ -484,7 +487,7 @@ class ForwardModel:
         # Storage arrays after each iteration
         # Each entry is a tuple for each iteration: (best_fit_pars, RMS, FCALLS)
         self.opt_results = []
-    
+
     def init_chunks(self, model_blueprints):
         good = np.where(self.data.mask)[0]
         order_pixmin, order_pixmax = good[0], good[-1]
@@ -498,7 +501,7 @@ class ForwardModel:
             pixmin, pixmax = stitch_points_pix[ichunk], stitch_points_pix[ichunk + 1]
             wavemin, wavemax = wave_estimate[pixmin], wave_estimate[pixmax]
             self.chunk_regions.append(pcutils.SpectralRegion(pixmin, pixmax, wavemin, wavemax, label=ichunk))
-        
+
     def init_models(self, config, model_blueprints):
         
         # A dictionary to store model components
@@ -528,18 +531,17 @@ class ForwardModel:
             model_class = getattr(pcmodels, model_blueprints[blueprint]['class'])
             self.models_dict[blueprint] = model_class(self, model_blueprints[blueprint])
 
-
     def init_parameters(self, sregion=None):
         self.initial_parameters = OptimParameters.Parameters()
         for model in self.models_dict:
             self.models_dict[model].init_parameters(self)
         self.initial_parameters.sanity_lock()
- 
+
     def init_optimize(self, templates_dict):
         templates_dict_chunked = self.init_chunk(templates_dict, self.sregion_order)
         for model in self.models_dict:
             self.models_dict[model].init_optimize(self, templates_dict_chunked)
-                
+
     # Prints the models and corresponding parameters after each fit if verbose_print=True
     def pretty_print(self):
         # Loop over models
@@ -555,7 +557,7 @@ class ForwardModel:
                     print(self.initial_parameters[pname], flush=True)
                 else:
                     print(self.opt_results[-1][-1]['xbest'][pname], flush=True)
-                
+
     def set_parameters(self, pars):
         self.initial_parameters.update(pars)
     
@@ -663,7 +665,7 @@ class ForwardModel:
         #plt.subplots_adjust(left=0.05, bottom=0.05, right=None, top=0.95, wspace=None, hspace=None)
         plt.savefig(fname)
         plt.close()
-        
+
     def init_chunk(self, templates_dict, sregion=None):
         
         if sregion is None:
@@ -696,11 +698,11 @@ class ForwardModel:
         fname = self.run_output_path + self.o_folder + 'ForwardModels' + os.sep + self.tag + '_forward_model_ord' + str(self.order_num) + '_spec' + str(self.spec_num) + '.pkl'
         with open(fname, 'wb') as f:
             pickle.dump(self, f)
-            
+
     # Gets the night which corresponds to the spec index
     def get_thisnight_index(self, n_obs_nights):
         return self.get_night_index(self.spec_index, n_obs_nights)
-    
+
     # Gets the night which corresponds to the spec index
     @staticmethod
     def get_night_index(spec_index, n_obs_nights):
@@ -711,8 +713,8 @@ class ForwardModel:
             if spec_index < running_spec_index:
                 return inight
             running_spec_index += n_obs_nights[inight+1]
-    
-    
+
+
     # Gets the indices of spectra for a certain night. (zero based)
     def get_all_spec_indices_from_thisnight(self, n_obs_nights):
         night_index = self.get_thisnight_index(n_obs_nights)
@@ -955,30 +957,23 @@ class ForwardModel:
 
         return wavelength_solution, model_lr
   
-
 class iSHELLForwardModel(ForwardModel):
     pass
-  
         
 class CHIRONForwardModel(ForwardModel):
     pass
 
-
 class PARVIForwardModel(ForwardModel):
     pass
 
-
 class MinervaAustralisForwardModel(ForwardModel):
     pass
-
     
 class MinervaNorthForwardModel(ForwardModel):
     pass
-
     
 class NIRSPECForwardModel(ForwardModel):
     pass
-
     
 class SimulatedForwardModel(ForwardModel):
     pass

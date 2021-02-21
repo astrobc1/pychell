@@ -51,7 +51,7 @@ class CompositeRVData(optdata.CompositeData):
             fname (str): The full path to the file.
 
         Returns:
-            MixedRVData: The MixedRVData set.
+            CompositeRVData: The CompositeRVData set.
         """
         data = cls()
         rvdf = pd.read_csv(fname, sep=',', comment='#')
@@ -135,7 +135,7 @@ class CompositeRVData(optdata.CompositeData):
         return inds
     
     def get_instruments(self, labels):
-        data_out = MixedRVData()
+        data_out = CompositeRVData()
         for label in labels:
             data_out[label] = self[label]
         return data_out
@@ -158,15 +158,15 @@ def group_vis_nir(data, cut=1000):
     """Groups vis and nir data into two different dicts.
 
     Args:
-        data (MixedRVData): The RV data.
+        data (CompositeRVData): The RV data.
         cut (float, optional): The cut between vis and nir in nm. Defaults to 1000 nm.
 
     Returns:
-        MixedRVData: The vis data.
-        MixedRVData: The nir data.
+        CompositeRVData: The vis data.
+        CompositeRVData: The nir data.
     """
-    data_vis = MixedRVData()
-    data_nir = MixedRVData()
+    data_vis = CompositeRVData()
+    data_nir = CompositeRVData()
     for _data in data.values():
         if _data.wavelength < cut:
             data_vis[_data.label] = _data

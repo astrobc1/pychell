@@ -232,7 +232,6 @@ def modifed_stddev(rvs, weights, mus, n_obs_nights):
             f += n_obs_nights[i]
             l += n_obs_nights[i+1]
     
- 
 # Wobble Method of combining RVs (Starting from single RVs)
 # pars[0:n] = rvs
 # pars[n:] = order offsets.
@@ -289,7 +288,7 @@ def rv_solver_fast(pars, rvs, weights, n_obs_nights):
     rms = np.sqrt(np.nansum(diffs)) # Technically not an rms
     
     return rms
- 
+
 # Computes the RV content per pixel.
 def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=None, sampling=None, wave_to_sample=None, lsf=None):
     """Computes the radial-velocity information content per pixel and for a whole swath.
@@ -437,7 +436,7 @@ def compute_bisector_span(cc_vels, ccf, v0, n_bs=1000):
     
     return line_bisectors, bis
 
-def detrend_rvs(rvs, vec, thresh=None):
+def detrend_rvs(rvs, vec, thresh=None, poly_order=1):
     
     if thresh is None:
         thresh = 0.5
@@ -446,7 +445,7 @@ def detrend_rvs(rvs, vec, thresh=None):
     if np.abs(pcc) < thresh:
         return rvs
     else:
-        pfit = np.polyfit(vec, rvs, 1)
+        pfit = np.polyfit(vec, rvs, poly_order)
         rvs_out = rvs - np.polyval(pfit, vec)
         return rvs_out
 
@@ -590,7 +589,6 @@ def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_o
 
 def combine_relative_rvs(rvs, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points
-
     Args:
         rvs (np.ndarray): RVs
         weights (np.ndarray): Corresponding uncertainties
@@ -674,6 +672,117 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
                 rvs_nightly_out[i] = pcmath.weighted_mean(rr[good], ww[good])
                 unc_nightly_out[i] = pcmath.weighted_stddev(rr[good], ww[good]) / np.sqrt(ng)
             
+        if i < n_nights - 1:
+            f += n_obs_nights[i]
+            l += n_obs_nights[i+1]
+            
+    rvs_out = {"rvs": rvs_single_out, "unc": unc_single_out, "rvs_nightly": rvs_nightly_out, "unc_nightly" : unc_nightly_out}
+        
+    return rvs_out
+
+
+def combine_rvs_tfa(rvs, weights, n_obs_nights):
+    """Combines RVs considering the differences between all the data points
+
+    Args:
+        rvs (np.ndarray): RVs, of shape=(n_orders, n_spec, n_chunks).
+        weights (np.ndarray): Corresponding uncertainties with the same shape.
+    """
+    
+    # Numbers
+    n_orders, n_spec, n_chunks = rvs.shape
+    n_nights = len(n_obs_nights)
+    
+    # Rephrase problem as n_quasi_orders = n_tot_chunks = n_orders * n_chunks
+    n_tot_chunks = n_orders * n_chunks
+    
+    # Reshape variables
+    rvs_nonans = np.copy(rvs)
+    rvscp = np.copy(rvs)
+    rvs_nonans -= np.nanmedian(rvs_nonans)
+    bad = np.where(~np.isfinite(rvs_nonans))
+    rvs_nonans[bad] = 0
+    S = rvs_nonans.reshape((n_tot_chunks, n_spec))
+    rvscp = rvscp.reshape((n_tot_chunks, n_spec))
+    w = weights.reshape((n_tot_chunks, n_spec))
+    
+    # Compute helper variables
+    Aj = np.einsum("oj,oj->j", w**2, S)
+    Bj = np.einsum("oj->j", w**2)
+    Cm = np.einsum("mi,mi->m", w**2, S)
+    Dm = np.einsum("mi->m", w**2)
+    Hj = np.einsum("oj,o->j", w**2, Cm / Dm)
+    bad = np.where(~np.isfinite(Hj))[0]
+    Hj[bad] = 0
+    Koij = np.zeros((n_tot_chunks, n_spec, n_spec))
+    for o in range(n_tot_chunks):
+        for i in range(n_spec):
+            for j in range(n_spec):
+                Koij[o, i, j] = w[o, j]**2 * w[o, i]**2 / Dm[o]
+    
+    bad = np.where(~np.isfinite(Koij))[0]
+    Koij[bad] = 0
+    
+    Pij = np.einsum("oij->ij", Koij)
+    Qj = Aj / Bj
+    Rj = Hj / Bj
+    Tj = 1 / Bj
+    bad = np.where(~np.isfinite(Qj) | ~np.isfinite(Rj) | ~np.isfinite(Tj))[0]
+    Qj[bad] = 0
+    Rj[bad] = 0
+    Tj[bad] = 0
+    Pij_twiddle = np.zeros((n_spec, n_spec))
+    for i in range(n_spec):
+        Pij_twiddle[i, :] = Tj * Pij[i, :]
+    
+    # The individual RVs
+    V = np.dot((Qj - Rj), np.linalg.inv(np.eye(n_spec) - Pij_twiddle.T))
+    
+    # Compute helper variables for the offsets
+    Lm = np.einsum("mi,i->m", w**2, Aj / Bj)
+    bad = np.where(~np.isfinite(Lm))[0]
+    Lm[bad] = 0
+    Zmoi = np.zeros((n_tot_chunks, n_tot_chunks, n_spec))
+    for m in range(n_tot_chunks):
+        for o in range(n_tot_chunks):
+            for i in range(n_spec):
+                Zmoi[m, o, i] = w[m, i]**2 * w[o, i]**2 / Bj[i]
+                
+    bad = np.where(~np.isfinite(Zmoi))[0]
+    Zmoi[bad] = 0
+    
+    Gmo = np.einsum("moi->mo", Zmoi)
+    deltam = Cm / Dm
+    pim = Lm / Dm
+    thetam = 1 / Dm
+    bad = np.where(~np.isfinite(deltam) | ~np.isfinite(pim) | ~np.isfinite(thetam))[0]
+    deltam[bad] = 0
+    pim[bad] = 0
+    thetam[bad] = 0
+    Gmo_twiddle = np.zeros((n_tot_chunks, n_tot_chunks))
+    for m in range(n_tot_chunks):
+        Gmo_twiddle[m, :] = thetam * Gmo[m, :]
+        
+    gamma = np.dot((deltam - pim), np.linalg.inv(np.eye(n_tot_chunks) - Gmo_twiddle))
+    
+    # With gamma, construct the offset RVs
+    rvs_offset = np.zeros((n_tot_chunks, n_spec))
+    for o in range(n_tot_chunks):
+        rvs_offset[o, :] = rvscp[o, :] - gamma[o]
+        
+    # With offset RVs, actually perform the offsets and compute weighted means & corresponding errors
+    rvs_single_out = np.zeros(n_spec)
+    unc_single_out = np.zeros(n_spec)
+    rvs_nightly_out = np.zeros(n_nights)
+    unc_nightly_out = np.zeros(n_nights)
+    
+    # For each observation, compute the coadded RVs
+    for i in range(n_spec):
+        rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rvs_offset[:, i], weights[:, i])
+        
+    f, l = 0, n_obs_nights[0]
+    for i in range(n_nights):
+        rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rvs_offset[:, f:l].flatten(), weights[:, f:l].flatten())
         if i < n_nights - 1:
             f += n_obs_nights[i]
             l += n_obs_nights[i+1]

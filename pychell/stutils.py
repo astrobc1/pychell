@@ -117,6 +117,7 @@ class MaxLikeResult(StreamlitComponent):
             st.text(repr(par))
         st.markdown('## Function calls: ' + str(self.maxlike_result['fcalls']))
         st.markdown('## ln(L): ' + str(-1 * self.maxlike_result['fbest']))
+        st.markdown('## Red Chi 2: ' + str(self.optprob.scorer.compute_redchi2(self.maxlike_result['pbest'])))
     
         # Full RV plot
         st.markdown('## Full RV Plot')

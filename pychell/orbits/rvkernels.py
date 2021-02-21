@@ -229,3 +229,66 @@ class RVColor2(RVColor):
         
         return cov_matrix
                     
+                    
+class RVColor3(RVColor):
+    
+    def compute_cov_matrix(self, pars, apply_errors=True):
+        
+        # Alias params
+        eta1 = pars[self.par_names[0]].value # amp linear wave scale
+        eta2 = pars[self.par_names[1]].value # amp power law wave scale
+        eta3 = pars[self.par_names[2]].value # decay
+        eta4 = pars[self.par_names[3]].value # period
+        eta5 = pars[self.par_names[4]].value # smoothing factor (C)
+        
+        # Data errors
+        if apply_errors:
+            data_errors = self.compute_data_errors(pars)
+        else:
+            data_errors = None
+            
+        lin_kernel = (eta1 * self.freq_matrix**eta2)**2 / (2 + eta5)
+        decay_kernel = np.exp(-1.0 * (self.dist_matrix / eta3))
+        periodic_kernel = np.cos(2 * np.pi * self.dist_matrix / eta4) + 1 + eta5
+        
+        # Construct full cov matrix
+        cov_matrix = lin_kernel * decay_kernel * periodic_kernel
+        
+        # Apply data errors
+        if apply_errors:
+            np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
+        
+        return cov_matrix
+                    
+                    
+class RVColor4(RVColor):
+    
+    def compute_cov_matrix(self, pars, apply_errors=True):
+        
+        # Alias params
+        eta1 = pars[self.par_names[0]].value # amp linear wave scale
+        eta2 = pars[self.par_names[1]].value # decay
+        eta3 = pars[self.par_names[2]].value # period
+        eta4 = pars[self.par_names[3]].value # smoothing factor
+        eta5 = pars[self.par_names[4]].value # wavlength decay
+        
+        # Data errors
+        if apply_errors:
+            data_errors = self.compute_data_errors(pars)
+        else:
+            data_errors = None
+            
+        lin_kernel = (eta1 * self.freq_matrix)**2
+        decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta2)**2)
+        periodic_kernel = np.exp(-0.5 * (1 / eta4) * np.sin(2 * np.pi * self.dist_matrix / eta3)**2)
+        wave_kernel = np.exp(-0.5 * (self.wave_diffs / eta5)**2)
+        
+        # Construct full cov matrix
+        cov_matrix = lin_kernel * decay_kernel * periodic_kernel * wave_kernel
+        
+        # Apply data errors
+        if apply_errors:
+            np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
+        
+        return cov_matrix
+                    

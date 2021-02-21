@@ -40,11 +40,11 @@ class ExoProblem(optframeworks.OptProblem):
 
         Args:
             output_path (The output path for plots and pickled objects, optional): []. Defaults to this current working direcrory.
-            data (MixedRVData, optional): The composite data object. Defaults to None.
+            data (CompositeRVData, optional): The composite data object. Defaults to None.
             p0 (Parameters, optional): The initial parameters. Defaults to None.
             optimizer (Optimizer, optional): The max like optimizer. Defaults to None.
             sampler (Sampler, optional): The MCMC sampler object. Defaults to None.
-            likes (MixedRVLikelihood, optional): The composite likelihood object. Defaults to None.
+            likes (CompositeRVLikelihood, optional): The composite likelihood object. Defaults to None.
             star_name (str, optional): The name of the star, may contain spaces. Defaults to None.
             mstar (float, optional): The mass of the star in solar units. Defaults to None.
             mstar_unc (list, optional): The uncertainty in mstar, same units. Defaults to None.
@@ -163,11 +163,12 @@ class ExoProblem(optframeworks.OptProblem):
             plots.append(plot)
         return plots      
         
-    def plot_full_rvs(self, pars=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=100, plot_width=1800, plot_height=1200):
+    def plot_full_rvs(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=100, plot_width=1800, plot_height=1200):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
             pars (Parameters, optional): The parameters to use. Defaults to self.p0
+            ffp (np.ndarray): The prediction from F(t)*F'(t) where F is the light curve. The axes are separate, so the scaling is irrelevant.
             n_rows (int, optional): The number of rows to split the plot into. Defaults to 1.
             n_model_pts (int, optional): The number of points for the densly sampled Keplerian model.
             time_offset (float, optional): The time to subtract from the times.
@@ -345,6 +346,10 @@ class ExoProblem(optframeworks.OptProblem):
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
                     color_index += 1
 
+
+        # Light curve plot
+        if ffp is not None:
+            fig.add_trace(plotly.graph_objects.Scatter(x=ffp[:, 0] - time_offset, y=ffp[:, 1], line=dict(color='red', width=2), name="<b>FF' Prediction</b>"), row=1, col=1, secondary_y=True)
 
         # Labels
         fig.update_xaxes(title_text='<b>BJD - ' + str(time_offset) + '</b>', row=2, col=1)
@@ -714,6 +719,8 @@ class ExoProblem(optframeworks.OptProblem):
         for wave_pair in wave_pairs:
             rvcolor_result = self.compute_rvcolor(pars, wave_pair[0], wave_pair[1], sep=sep)
             self.plot_rvcolor(wave_pair[0], wave_pair[1], rvcolor_result, time_offset=time_offset, plot_width=plot_width, plot_height=plot_height)
+            
+        self.plot_rvcolor_one_to_one(pars=pars, plot_width=plot_width, plot_height=plot_height, sep=sep)
     
     def plot_rvcolor(self, wave1, wave2, rvcolor_result, time_offset=2450000, plot_width=1000, plot_height=600):
         
@@ -1057,7 +1064,6 @@ class ExoProblem(optframeworks.OptProblem):
         
         return model_comp_results
     
-    
     def compute_semimajor_axis(self, sampler_result, mstar=None, mstar_unc=None):
         """Computes the semi-major axis of each planet.
 
@@ -1385,3 +1391,23 @@ def compute_planet_mass_deriv_mstar(per, ecc, k, mstar):
     alpha = k * np.sqrt(1 - ecc**2) / 28.4329 * (per / 365.25)**(1 / 3)
     dMp_dMstar = (2 / 3) * alpha * mstar**(-1 / 3)
     return dMp_dMstar
+
+def predict_from_ffprime(t, spots=True, cvbs=True, rstar=1.0, f=0.1):
+    """Presidcts the spot induced activity RV signature via the F*F' method using https://arxiv.org/pdf/1110.1034.pdf.
+
+    Args:
+        t (np.ndarray): The times for the light curve.
+        lc (np.ndarray): The light curve.
+        cvbs (bool): Whether or not to account for convective blueshift.
+        rstar (float): The radius of the star in solar units.
+        f (float): The relative flux drop for a spot at the disk center.
+        
+    Returns:
+        np.ndarray: The predicted RV signature from stellar spots.
+    """
+    cspline = pcmath.cspline_fit(t, f) # FIX THIS
+    rv_pred = -1.0 * f * cspline(t, 1) * rstar / f
+    if cvbs:
+        rv_pred += cspline(t)**2 / f
+        
+    return rv_pred

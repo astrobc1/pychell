@@ -194,7 +194,7 @@ class PostParser:
         for o in range(self.n_orders):
             stddevs = np.full(self.n_iters_rvs, fill_value=np.nan)
             for k in range(self.n_iters_rvs):
-                if self.rvs_out == 'XC':
+                if self.rvs_out.lower() == 'xc':
                     stddevs[k] = np.nanstd(self.rvs_dict['rvsxc_nightly'][o, :, k])
                 else:
                     stddevs[k] = np.nanstd(self.rvs_dict['rvsfwm_nightly'][o, :, k])

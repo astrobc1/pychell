@@ -575,7 +575,7 @@ def weighted_stddev_mumod(x, w, mu):
     return np.sqrt(var)
 
 # This calculates the weighted mean of array x with weights w
-@jit
+#@jit
 def weighted_mean(x, w):
     """Computes the weighted mean of a dataset.
 
@@ -587,6 +587,40 @@ def weighted_mean(x, w):
         float: The weighted mean.
     """
     return np.nansum(x * w) / np.nansum(w)
+
+def weighted_combine(y, w, yerr=None):
+    """Performs a weighted coadd.
+
+    Args:
+        y (np.ndarray): The data to coadd.
+        w (np.ndarray): The weights.
+        yerr (np.ndarray): The correspinding error bars. Defaults to None.
+    """
+    
+    # Determine how many good data points.
+    good = np.where(w > 0)[0]
+    n_good = len(good)
+
+    # If none are good, return nan
+    if n_good == 0:
+        yc, yc_unc = np.nan, np.nan
+    elif n_good == 1:
+        yc = y[good[0]]
+        if yerr is not None:
+            yc_unc = yerr[good[0]]
+        else:
+            yc_unc = np.nan
+    elif n_good == 2:
+        yc = weighted_mean(y[good].flatten(), w[good].flatten())
+        if yerr is not None:
+            yc_unc = np.nanmean(yerr[good].flatten()) / np.sqrt(2)
+        else:
+            yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
+    else:
+        yc = weighted_mean(y[good].flatten(), w[good].flatten())
+        yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
+        
+    return yc, yc_unc
 
 # Rolling function f over a window given w of y given the independent variable x
 def rolling_fun_true_window(f, x, y, w):

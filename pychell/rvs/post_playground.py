@@ -316,6 +316,133 @@ def combine_rvs(parser, iter_indices=None):
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([ts, rvss, uncs, telvec_single], dtype=object).T, fmt="%f,%f,%f,%s")
     
+    
+def combine_rvs2(parser, iter_indices=None):
+    """Combines RVs across orders.
+
+    Args:
+        parser: A parser.
+    Returns:
+        tuple: The results returned by the call to method.
+    """
+    
+    # Parse RVs
+    rvs_dict = parser.parse_rvs()
+    
+    # Mask rvs from user input
+    rv_mask = gen_rv_mask(parser)
+    
+    # Regenerate nightly rvs
+    fit_metric = parser.parse_fit_metric()
+    for o in range(parser.n_orders):
+        for j in range(parser.n_iters_rvs):
+            
+            # NM RVs
+            rvsfwm = parser.rvs_dict['rvsfwm'][o, :, :, j] # n_spec x n_chunks
+            weights = 1 / fit_metric[o, :, :, j + parser.index_offset]**2 * rv_mask[o, :, :, j]
+            rvs_dict['rvsfwm_nightly'][o, :, j], rvs_dict['uncfwm_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsfwm, weights, parser.n_obs_nights, flag_outliers=True)
+            
+            # Xcorr RVs
+            if parser.rvs_dict['do_xcorr']:
+                rvsxc = parser.rvs_dict['rvsxc'][o, :, :, j]
+                weights = 1 / fit_metric[o, :, :, j + parser.index_offset]**2 * rv_mask[o, :, :, j]
+                rvs_dict['rvsxc_nightly'][o, :, j], rvs_dict['uncxc_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsxc, weights, parser.n_obs_nights, flag_outliers=True)
+                
+                # Detrended RVs
+                if 'rvsxcdet' in parser.rvs_dict:
+                    rvsxcdet = parser.rvs_dict['rvsxcdet'][o, :, j]
+                    weights = 1 / fit_metric[o, :, :, j + parser.index_offset]**2 * rv_mask[o, :, :, j]
+                    rvs_dict['rvsxcdet_nightly'][o, :, j], rvs_dict['uncxdet_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsxcdet, weights, parser.n_obs_nights, flag_outliers=True)
+                    
+
+    # Determine indices
+    iter_indices = parser.resolve_iter_indices(iter_indices)
+        
+    # Summary of rvs
+    print_rv_summary(parser, iter_indices)
+
+    # Generate weights
+    weights = gen_rv_weights(parser)
+    
+    # Combine RVs for NM
+    rvsfwm_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+    weights_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+    for o in range(parser.n_orders):
+        for ichunk in range(parser.n_chunks):
+            rvsfwm_single_iter[o, :, :] = rvs_dict["rvsfwm"][o, :, :, iter_indices[o, ichunk]]
+            weights_single_iter[o, :, :] = weights[o, :, :, iter_indices[o, ichunk]]
+    result_nm = pcrvcalc.combine_rvs_tfa(rvsfwm_single_iter, weights_single_iter, parser.n_obs_nights)
+    #plt.errorbar(parser.rvs_dict["bjds"], result_nm["rvs"] - np.nanmedian(result_nm["rvs"]), yerr=result_nm["unc"], lw=0, elinewidth=1, marker='o'); plt.show()
+
+    # Combine RVs for XC
+    rvsxc_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+    weights_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+    for o in range(parser.n_orders):
+        for ichunk in range(parser.n_chunks):
+            rvsxc_single_iter[o, :, :] = rvs_dict["rvsxc"][o, :, :, iter_indices[o, ichunk]]
+            weights_single_iter[o, :, :] = weights[o, :, :, iter_indices[o, ichunk]]
+    result_xc = pcrvcalc.combine_rvs_tfa(rvsxc_single_iter, weights_single_iter, parser.n_obs_nights)
+    
+    # Combine RVs for Detrended
+    if 'rvsdet' in parser.rvs_dict:
+        rvsxcdet_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+        weights_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+        for o in range(parser.n_orders):
+            for ichunk in range(parser.n_chunks):
+                rvsxcdet_single_iter[o, :, :] = rvs_dict["rvsxcdet"][o, :, :, iter_indices[o, ichunk]]
+                weights_single_iter[o, :, :] = weights[o, :, :, iter_indices[o, ichunk]]
+        result_det = pcrvcalc.combine_rvs_tfa(rvsxcdet_single_iter, weights_single_iter, parser.n_obs_nights)
+    
+    # Add to dictionary
+    parser.rvs_dict['rvsfwm_out'] = result_nm['rvs']
+    parser.rvs_dict['uncfwm_out'] = result_nm['unc']
+    parser.rvs_dict['rvsfwm_nightly_out'] = result_nm['rvs_nightly']
+    parser.rvs_dict['uncfwm_nightly_out'] = result_nm['unc_nightly']
+    
+    
+    if 'rvsxc' in parser.rvs_dict:
+        parser.rvs_dict['rvsxc_out'] = result_xc['rvs']
+        parser.rvs_dict['uncxc_out'] = result_xc['unc']
+        parser.rvs_dict['rvsxc_nightly_out'] = result_xc['rvs_nightly']
+        parser.rvs_dict['uncxc_nightly_out'] = result_xc['unc_nightly']
+    
+    if 'rvsxcdet' in parser.rvs_dict:
+        parser.rvs_dict['rvsxcdet_out'] = result_det['rvs']
+        parser.rvs_dict['uncxcdet_out'] = result_det['unc']
+        parser.rvs_dict['rvsxcdet_nightly_out'] = result_det['rvs_nightly']
+        parser.rvs_dict['uncxcdet_nightly_out'] = result_det['unc_nightly']
+    
+    # Write to files for radvel
+    fname_nightly = parser.output_path_root + 'rvs_nightly_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '_' + datetime.date.today().strftime("%d%m%Y") + '.txt'
+    fname_single = parser.output_path_root + 'rvs_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '_' + datetime.date.today().strftime("%d%m%Y") + '.txt'
+    telvec_nightly = np.array([parser.spectrograph.replace(' ', '_')] * parser.n_nights, dtype='<U20')
+    telvec_single = np.array([parser.spectrograph.replace(' ', '_')] * parser.n_spec, dtype='<U20')
+    if parser.rvs_out == 'xc':
+        good = np.where(np.isfinite(parser.rvs_dict['rvsxc_nightly_out']))[0]
+        tn, rvsn, uncn, telvec_nightly = parser.rvs_dict['bjds_nightly'][good], parser.rvs_dict['rvsxc_nightly_out'][good], parser.rvs_dict['uncxc_nightly_out'][good], telvec_nightly[good]
+        good = np.where(np.isfinite(parser.rvs_dict['rvsxc_out']))[0]
+        ts, rvss, uncs, telvec_single = parser.rvs_dict['bjds'][good], parser.rvs_dict['rvsxc_out'][good], parser.rvs_dict['uncxc_out'][good], telvec_single[good]
+    elif parser.rvs_out == 'xcdet':
+        good = np.where(np.isfinite(parser.rvs_dict['rvsxcdet_nightly_out']))[0]
+        tn, rvsn, uncn, telvec_nightly = parser.rvs_dict['bjds_nightly'][good], parser.rvs_dict['rvsxcdet_nightly_out'][good], parser.rvs_dict['uncxcdet_nightly_out'][good], telvec_nightly[good]
+        good = np.where(np.isfinite(parser.rvs_dict['rvsxc_out']))[0]
+        ts, rvss, uncs, telvec_single = parser.rvs_dict['bjds'][good], parser.rvs_dict['rvsxcdet_out'][good], parser.rvs_dict['uncxcdet_out'][good], telvec_single[good]
+    else:
+        good = np.where(np.isfinite(parser.rvs_dict['rvsfwm_nightly_out']))[0]
+        tn, rvsn, uncn, telvec_nightly = parser.rvs_dict['bjds_nightly'][good], parser.rvs_dict['rvsfwm_nightly_out'][good], parser.rvs_dict['uncfwm_nightly_out'][good], telvec_nightly[good]
+        good = np.where(np.isfinite(parser.rvs_dict['rvsfwm_out']))[0]
+        ts, rvss, uncs, telvec_single = parser.rvs_dict['bjds'][good], parser.rvs_dict['rvsfwm_out'][good], parser.rvs_dict['uncfwm_out'][good], telvec_single[good]
+        
+    with open(fname_nightly, 'w+') as f:
+        f.write("time,mnvel,errvel,tel\n")
+        np.savetxt(f, np.array([tn, rvsn, uncn, telvec_nightly], dtype=object).T, fmt="%f,%f,%f,%s")
+    with open(fname_single, 'w+') as f:
+        f.write("time,mnvel,errvel,tel\n")
+        np.savetxt(f, np.array([ts, rvss, uncs, telvec_single], dtype=object).T, fmt="%f,%f,%f,%s")
+    
+    
+    
+    
 # Detrend RVs if applicable
 def detrend_rvs(parser: pcparser.PostParser, vec='bis', thresh=0.5):
     
@@ -630,9 +757,6 @@ def stellar_template_diffs(parser:pcparser.PostParser):
     
     #for o in range(parser.n_orders):
         
-        
-            
-            
             
 def plot_stellar_templates_single_iter(output_path_root, star_name, stellar_templates, do_orders, iter_indices, unit='Ang'):
     
@@ -716,7 +840,6 @@ def residual_coherence(parser, iter_indices=None, frame='star', nsample=1, templ
                     residuals = fwm.data.flux_chunk - model_lr
                 
                     # Interpolate so we don't store the unique wavelength grids
-                    breakpoint()
                     good = np.where(np.isfinite(residuals) & np.isfinite(wave_shifted))[0]
                     res[:, i] = scipy.interpolate.CubicSpline(wave_shifted[good], residuals[good], extrapolate=False)(templates_dict_chunked['star'][:, 0])
                     
@@ -772,7 +895,6 @@ def residual_coherence(parser, iter_indices=None, frame='star', nsample=1, templ
     fig.text(0.5, 0.97, parser.star_name, fontsize=10, verticalalignment='center', horizontalalignment='center')
     plt.savefig(parser.output_path_root + 'residuals_coherence_' + pcutils.gendatestr(time=False) + '_.png')
     plt.close()
-    
     
     
 def inspect_lsf(output_path_root, do_orders, bad_rvs_dict, iter_indices, debug=False, star_name=None, forward_models=None):
@@ -928,7 +1050,7 @@ def inspect_blaze(output_path_root, do_orders, bad_rvs_dict, iter_indices, star_
     
     return forward_models
             
-def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thresh=None, debug=False, kamp=None):
+def rvs_quicklook(parser, bad_rvs_dict, iter_indices=None, phase_to=None, tc=None, thresh=None, debug=False, kamp=None):
     
     if phase_to is None:
         _phase_to = 1E20  
@@ -944,33 +1066,40 @@ def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thre
     parser.parse_rvs()
     
     # Print summary
-    iter_indices = np.full(shape=(parser.n_orders, parser.n_chunks), fill_value=iter_index)
+    iter_indices = parser.resolve_iter_indices(iter_indices=iter_indices)
     print_rv_summary(parser, iter_indices)
     
     mask = gen_rv_mask(parser)
     
     # Combine RVs for NM
     rvsfwm_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
-    weights_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+    rvsxc_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+    weightsfwm_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
+    weightsxc_single_iter = np.full(shape=(parser.n_orders, parser.n_spec, parser.n_chunks), fill_value=np.nan)
     for o in range(parser.n_orders):
         for ichunk in range(parser.n_chunks):
-            rvsfwm_single_iter[o, :, :] = parser.rvs_dict["rvsfwm"][o, :, :, iter_indices[o, 0]]
-            #weights = 1 / parser.rvs_dict["uncfwm_nightly"][o, :, iter_indices[o, 0]]**2
-            weights = np.ones_like( parser.rvs_dict["uncfwm_nightly"][o, :, iter_indices[o, 0]])
+            rvsfwm_single_iter[o, :, :] = parser.rvs_dict["rvsfwm"][o, :, :, iter_indices[o, ichunk]]
+            rvsxc_single_iter[o, :, :] = parser.rvs_dict["rvsxc"][o, :, :, iter_indices[o, ichunk]]
+            weightsfwm = 1 / parser.rvs_dict["uncfwm_nightly"][o, :, iter_indices[o, ichunk]]**2
+            weightsxc = 1 / parser.rvs_dict["uncxc_nightly"][o, :, iter_indices[o, ichunk]]**2
             for ispec in range(parser.n_spec):
                 night_index = pcforwardmodels.ForwardModel.get_night_index(ispec, parser.rvs_dict["n_obs_nights"])
-                weights_single_iter[o, :, :] = weights[night_index] * mask[o, ispec, ichunk, iter_index]
-    result_nm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, parser.n_obs_nights)
-    rvs_final = result_nm["rvs"]
-    unc_final = result_nm["unc"]
-    rvs_nightly_final = result_nm["rvs_nightly"]
-    unc_nightly_final = result_nm["unc_nightly"]
+                weightsfwm_single_iter[o, :, :] = weightsfwm[night_index] * mask[o, ispec, ichunk, iter_indices[o, ichunk]]
+                weightsxc_single_iter[o, :, :] = weightsxc[night_index] * mask[o, ispec, ichunk, iter_indices[o, ichunk]]
+    #result_nm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, parser.n_obs_nights)
+    result_nm = pcrvcalc.combine_rvs_tfa(rvsfwm_single_iter, weightsfwm_single_iter, parser.n_obs_nights)
+    result_xc = pcrvcalc.combine_rvs_tfa(rvsxc_single_iter, weightsxc_single_iter, parser.n_obs_nights)
+    if parser.rvs_out.lower() == "fwm":
+        rvs_final = result_nm["rvs"]
+        unc_final = result_nm["unc"]
+        rvs_nightly_final = result_nm["rvs_nightly"]
+        unc_nightly_final = result_nm["unc_nightly"]
+    else:
+        rvs_final = result_xc["rvs"]
+        unc_final = result_xc["unc"]
+        rvs_nightly_final = result_xc["rvs_nightly"]
+        unc_nightly_final = result_xc["unc_nightly"]
     bjds, bjdsn = parser.rvs_dict["bjds"], parser.rvs_dict["bjds_nightly"]
-    
-    # Plot
-    #for o in range(parser.n_orders):
-    #    plt.errorbar((bjdsn - alpha)%_phase_to, rvsn_unpacked[o, :] - np.nanmedian(rvsn_unpacked[o, :]), yerr=uncn_unpacked[o, :], marker='o', markersize=6, lw=0, label='Order ' + str(parser.do_orders[o]), alpha=0.6)
-    
     plt.errorbar((bjdsn - alpha)%_phase_to, rvs_nightly_final - np.nanmedian(rvs_nightly_final), yerr=unc_nightly_final, marker='o', lw=0, elinewidth=1, label='Binned Nightly', c='black', markersize=10)
     if kamp is not None:
         modelx = np.linspace(0, _phase_to, num=300)
@@ -981,5 +1110,7 @@ def rvs_quicklook(parser, bad_rvs_dict, iter_index, phase_to=None, tc=None, thre
     
     if debug:
         breakpoint()
+        
+    return result_nm, result_xc
         
     

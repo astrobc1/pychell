@@ -118,7 +118,7 @@ class RVModel(optmodels.Model):
         _model = self._builder(pars, self.data_t)
         return _model
 
-    def apply_offsets(self, rv_vec, pars, instname=None):
+    def apply_offsets(self, rv_vec, pars, instname=None, t=None):
         """Apply gamma offsets (zero points only) to the data. Linear and quadratic terms are applied to the model.
 
         Args:
@@ -135,6 +135,10 @@ class RVModel(optmodels.Model):
         else:
             pname = "gamma_" + instname
             rv_vec -= pars[pname].value
+            
+        # Time grid
+        if t is None:
+            t = self.data_t
                 
         # Linear trend
         if 'gamma_dot' in pars and pars['gamma_dot'].value != 0:
