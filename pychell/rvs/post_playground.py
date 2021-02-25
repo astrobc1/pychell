@@ -441,6 +441,70 @@ def combine_rvs2(parser, iter_indices=None):
         np.savetxt(f, np.array([ts, rvss, uncs, telvec_single], dtype=object).T, fmt="%f,%f,%f,%s")
     
     
+def inspect_bis(parser, iter_indices=None):
+    """Coadds the individual BIS values across nights.
+
+    Args:
+        parser: A parser.
+        
+    Returns:
+        tuple: The results returned by the call to method.
+    """
+    
+    # Parse RVs
+    rvs_dict = parser.parse_rvs()
+    
+    # Generate weights
+    weights = gen_rv_weights(parser)
+    
+    # Determine indices
+    iter_indices = parser.resolve_iter_indices(iter_indices)
+    
+    # For each order, chunk, and night, compute the coadded BIS values.
+    parser.rvs_dict["bis_nightly"] = np.zeros(shape=(parser.n_orders, parser.n_nights, parser.n_chunks), dtype=float)
+    parser.rvs_dict["bis_nightly_unc"] = np.zeros(shape=(parser.n_orders, parser.n_nights, parser.n_chunks), dtype=float)
+    for o in range(parser.n_orders):
+        for ichunk in range(parser.n_chunks):
+            bis = parser.rvs_dict['bis'][o, :, ichunk, iter_indices[o] + parser.index_offset]
+            _weights = weights[o, :, ichunk, iter_indices[o] + parser.index_offset]
+            rvs_dict['bis_nightly'][o, :, ichunk], rvs_dict['bis_nightly_unc'][o, :, ichunk] = pcrvcalc.compute_nightly_rvs_single_chunk(bis.flatten(), _weights.flatten(), parser.n_obs_nights, flag_outliers=True)
+    
+    time_stamp = datetime.date.today().strftime("%d%m%Y")
+    for o in range(parser.n_orders):
+        for ichunk in range(parser.n_chunks):
+            fname = parser.output_path_root + 'bis_nightly_final_' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '_ord' + str(o + 1) + '_chunk' + str(ichunk + 1) + "_" + time_stamp + '.txt'
+            with open(fname, 'w+') as f:
+                t = parser.rvs_dict["bjds_nightly"]
+                bis = parser.rvs_dict["bis_nightly"][o, :, ichunk]
+                bis_unc = parser.rvs_dict["bis_nightly_unc"][o, :, ichunk]
+                f.write("time,mnvel,errvel,tel\n")
+                np.savetxt(f, np.array([t, bis, bis_unc], dtype=float).T)
+                
+                
+def plot_bis_vs_rv(parser:pcparser.PostParser, iter_indices=None):
+    
+    iter_indices = parser.resolve_iter_indices(iter_indices)
+    
+    # For each order and chunk, plot the BIS vs. RV
+    for o in range(parser.n_orders):
+        for ichunk in range(parser.n_chunks):
+            rvsxc = parser.rvs_dict["rvsxc_nightly"][o, :, ichunk]
+            uncxc = parser.rvs_dict["uncxc_nightly"][o, :, ichunk]
+            bis = parser.rvs_dict["bis_nightly"][o, :, ichunk]
+            uncbis = parser.rvs_dict["bis_nightly_unc"][o, :, ichunk]
+            # A figure
+            plt.figure(1, figsize=(14, 12), dpi=250)
+            plt.errorbar(rvsxc - np.nanmedian(rvsxc), bis, xerr=uncxc, yerr=uncbis, marker='o', lw=0, elinewidth=1.5, alpha=0.8, markersize=10)
+            plt.xlabel("RV via XC [m/s]", fontsize=22)
+            plt.ylabel("BIS [m/s]", fontsize=22)
+            plt.xticks(fontsize=22)
+            plt.yticks(fontsize=22)
+            time_stamp = datetime.date.today().strftime("%d%m%Y")
+            fname = parser.output_path_root + 'bis_vs_rvsxc' + parser.spectrograph.lower().replace(' ', '_') + '_' + parser.star_name.lower().replace(' ', '_') + '_ord' + str(parser.do_orders[o]) + '_chunk' + str(ichunk + 1) + time_stamp + '.png'
+            plt.tight_layout()
+            plt.savefig(fname)
+            plt.close()
+    
     
     
 # Detrend RVs if applicable

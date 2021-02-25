@@ -1,4 +1,3 @@
-
 #### A helper file containing math routines
 # Default python modules
 # Debugging
@@ -588,13 +587,14 @@ def weighted_mean(x, w):
     """
     return np.nansum(x * w) / np.nansum(w)
 
-def weighted_combine(y, w, yerr=None):
+def weighted_combine(y, w, yerr=None, err_type="Poisson"):
     """Performs a weighted coadd.
 
     Args:
         y (np.ndarray): The data to coadd.
         w (np.ndarray): The weights.
         yerr (np.ndarray): The correspinding error bars. Defaults to None.
+        err_type (str): The method to determine error bars. If "empirical", error bars are computed by considering the weighted stddev of the appropriate data points. If "poisson", error bars are computed by taking the mean of the appropriate data errors divided by the sqrt(N), where N is the number of data points. If there are only two data points, the poisson method is used regardless.
     """
     
     # Determine how many good data points.
@@ -604,21 +604,33 @@ def weighted_combine(y, w, yerr=None):
     # If none are good, return nan
     if n_good == 0:
         yc, yc_unc = np.nan, np.nan
+        
+    # If only one is good, the mean is the only good value, and the error is the only good error.
+    # If no error is provided, nan is returned.
     elif n_good == 1:
         yc = y[good[0]]
         if yerr is not None:
             yc_unc = yerr[good[0]]
         else:
             yc_unc = np.nan
+            
+    # If only two are good, the mean is the weighted mean.
+    # Error is computed from existing errors if provided, or empirically otherwise.
     elif n_good == 2:
         yc = weighted_mean(y[good].flatten(), w[good].flatten())
         if yerr is not None:
-            yc_unc = np.nanmean(yerr[good].flatten()) / np.sqrt(2)
+            yc_unc = np.nanmean(yerr[good].flatten()) /  np.sqrt(2)
         else:
-            yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
+            yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(2)
+    
+    # With >= 3 useful points, the mean is the weighted mean.
+    # Error is computed from err_type
     else:
         yc = weighted_mean(y[good].flatten(), w[good].flatten())
-        yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
+        if err_type.lower() == "poisson":
+            yc_unc = np.nanmean(yerr[good].flatten()) / np.sqrt(n_good)
+        else:
+            yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
         
     return yc, yc_unc
 

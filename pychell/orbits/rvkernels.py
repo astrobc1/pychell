@@ -33,7 +33,7 @@ class RVColor(optkernels.GaussianProcess):
         
         # Data errors
         if apply_errors:
-            data_errors = self.compute_data_errors(pars)
+            data_errors = self.compute_data_errors(pars, include_jitter=True, include_gp=False, gp_unc=None, residuals_after_kernel=None)
         else:
             data_errors = None
             
@@ -51,7 +51,7 @@ class RVColor(optkernels.GaussianProcess):
         
         return cov_matrix
                     
-    def compute_data_errors(self, pars):
+    def compute_data_errors(self, pars, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=None):
         """Computes the errors added in quadrature for all datasets corresponding to this kernel.
 
         Args:
@@ -60,11 +60,29 @@ class RVColor(optkernels.GaussianProcess):
         Returns:
             np.ndarray: The errors
         """
+        
+        # Get intrinsic data errors
         errors = self.get_data_errors()
-        errors **= 2
-        for label in self.data:
-            errors[self.data_inds[label]] += pars['jitter_' + label].value**2
-        errors **= 0.5
+        
+        # Square
+        errors = errors**2
+        
+        # Add per-instrument jitter terms in quadrature
+        if include_jitter:
+            for data in self.data.values():
+                inds = self.data_inds[data.label]
+                errors[inds] += pars['jitter_' + data.label].value**2
+            
+        # Compute GP error
+        if include_gp:
+            for data in self.data.values():
+                inds = self.data_inds[data.label]
+                if gp_unc is None:
+                    _, _gp_unc = self.realize(pars, residuals=residuals_after_kernel, xpred=data.t, wavelength=data.wavelength, return_unc=True)
+                errors[inds] += _gp_unc**2
+                    
+        # Square root
+        errors = errors**0.5
 
         return errors
     

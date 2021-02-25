@@ -32,6 +32,14 @@ class RVData(optdata.Data):
     def time_baseline(self):
         t = self.get_vec('x')
         return np.max(t) - np.min(t)
+    
+    @classmethod
+    def from_file(cls, fname, instname=None, delimiter=",", skiprows=0, usecols=None, wavelength=None):
+        if usecols is None:
+            usecols = (0, 1, 2)
+        t, rvs, rvs_unc = np.loadtxt(fname, delimiter=delimiter, usecols=usecols, unpack=True, skiprows=skiprows)
+        data = cls(t, rvs, rvs_unc, instname=instname, wavelength=wavelength)
+        return data
         
     def __repr__(self):
         return str(len(self.t)) + " RVs from " + self.instname
@@ -153,6 +161,7 @@ class CompositeRVData(optdata.CompositeData):
         for label in instnames:
             data_view[label] = self[label]
         return data_view
+ 
  
 def group_vis_nir(data, cut=1000):
     """Groups vis and nir data into two different dicts.

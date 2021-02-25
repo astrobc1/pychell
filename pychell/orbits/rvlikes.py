@@ -144,21 +144,22 @@ class CompositeRVLikelihood(optscore.CompositeLikelihood):
                 return -np.inf
         for like in self.values():
             lnL += like.compute_logL(pars, apply_priors=False)
-        #self.redchi2s.append(self.compute_redchi2(pars))
         return lnL
     
-    def compute_redchi2(self, pars):
+    def compute_redchi2(self, pars, include_kernel=True, kernel_unc=None, include_jitter=True):
         
         residuals = np.array([], dtype=float)
         errors = np.array([], dtype=float)
         for like in self.values():
-            res = like.residuals_after_kernel(pars)
-            errs = like.model.kernel.compute_data_errors(pars)
-            residuals = np.concatenate((residuals, res))
+            residuals_after_kernel = like.residuals_after_kernel(pars)
+            errs = like.model.kernel.compute_data_errors(pars, include_jitter=include_jitter, include_gp=include_kernel, gp_unc=kernel_unc, residuals_after_kernel=residuals_after_kernel)
+            residuals = np.concatenate((residuals, residuals_after_kernel))
             errors = np.concatenate((errors, errs))
         
-        # Compute red chi2
+        # Compute red chi2, no need to sort.
         n_data = len(residuals)
         n_pars_vary = pars.num_varied()
-        redchi2 = np.nansum((residuals / errors)**2) / (n_data - n_pars_vary)
+        n_dof = n_data - n_pars_vary
+        assert n_dof > 0
+        redchi2 = np.nansum((residuals / errors)**2) / n_dof
         return redchi2

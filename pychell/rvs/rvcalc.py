@@ -62,8 +62,27 @@ def get_nightly_jds(jds, sep=0.5):
     n_obs_nights = np.array(n_obs_nights).astype(int)
 
     return jds_nightly, n_obs_nights
+        
+def nighly_iteration(n_obs_nights):
+    """A generator for iterating over observations within a given night.
 
+    Args:
+        n_obs_nights (np.ndarray): The number of observations on each night.
 
+    Yields:
+        int: The night index.
+        int: The index of the first observation for this night.
+        int: The index of the last observation for this night + 1. The additional + 1 is so one can index the array via array[f:l].
+    """
+    n_nights = len(n_obs_nights)
+    f, l = 0, n_obs_nights[0]
+    for i in range(n_nights):
+        yield i, f, l
+        if i < n_nights - 1:
+            f += n_obs_nights[i]
+            l += n_obs_nights[i+1]
+        
+        
 def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xcorr_options):
     """Performs a pseudo weighted cross-correlation via brute force RMS minimization and estimating the minumum with a quadratic.
 
@@ -213,82 +232,7 @@ def crude_brute_force(forward_model, templates_dict, sregion):
     xcorr_star_vel = vels[np.nanargmin(rmss)]
     
     return xcorr_star_vel
-
-
-def modifed_stddev(rvs, weights, mus, n_obs_nights):
-    n_nights = mus.size
-    unc = np.full(n_nights, fill_value=np.nan)
-    n_orders, n_spec = rvs.shape
-    f, l = 0, n_obs_nights[0]
-    for i in range(n_nights):
-        rr, ww = rvs[:, f:l].flatten(), weights[:, f:l].flatten()
-        ng = np.where(ww > 0)[0].size
-        if ng in (0, 1):
-            unc[i] = np.nan
-        else:
-            unc[i] = pcmath.weighted_stddev_mumod(rr, ww, mus[i]) / np.sqrt(ng)
-            
-        if i < n_nights - 1:
-            f += n_obs_nights[i]
-            l += n_obs_nights[i+1]
     
-# Wobble Method of combining RVs (Starting from single RVs)
-# pars[0:n] = rvs
-# pars[n:] = order offsets.
-@jit
-def rv_solver(pars, rvs, weights, n_obs_nights):
-    """Internal function to optimize the rv offsets between orders.
-    """
-    
-    n_ord = rvs.shape[0]
-    n_spec = rvs.shape[1]
-    n_nights = n_obs_nights.size
-    rvs_individual = pars[:n_spec]
-    order_offsets = pars[n_spec:]
-    term = np.empty(shape=(n_ord, n_spec), dtype=np.float64)
-    
-    for o in range(n_ord):
-        for i in range(n_spec):
-            term[o, i] = weights[o, i]**2 * (rvs_individual[i] - rvs[o, i] + order_offsets[o])**2
-            
-    rms = np.sqrt(np.nansum(term)) # Technically not an rms
-    
-    bad = np.where(term > 5*rms)
-    if bad[0].size > 0:
-        term[bad] = 0
-    rms = np.sqrt(np.nansum(term))
-    
-    return rms
-
-# Wobble Method of combining RVs (Starting from single RVs)
-# pars[0:n] = rvs
-# pars[n:] = order offsets.
-@jit
-def rv_solver_fast(pars, rvs, weights, n_obs_nights):
-    
-    n_ord, n_spec = rvs.shape
-    n_tot = n_ord * n_spec
-    n_nights = len(n_obs_nights)
-    rvs_nightly = pars[:n_nights]
-    order_offsets = pars[n_nights:]
-    diffs = np.zeros(shape=(n_ord, n_spec), dtype=np.float64)
-    
-    for o in range(n_ord):
-        f, l = 0, n_obs_nights[0]
-        for i in range(n_nights):
-            diffs[o, f:l] = weights[o, f:l]**2 * (rvs_nightly[i] - rvs[o, f:l] + order_offsets[o])**2
-            if i < n_nights - 1:
-                f += n_obs_nights[i]
-                l += n_obs_nights[i+1]
-    
-    good = np.where(weights > 0)
-    diffs  = diffs[good].flatten()
-    ss = np.argsort(diffs)
-    diffs[ss[-int(0.05 * n_tot):]] = 0
-    rms = np.sqrt(np.nansum(diffs)) # Technically not an rms
-    
-    return rms
-
 # Computes the RV content per pixel.
 def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=None, sampling=None, wave_to_sample=None, lsf=None):
     """Computes the radial-velocity information content per pixel and for a whole swath.
@@ -461,43 +405,72 @@ def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights, flag_outliers=F
     n_spec = len(rvs)
     n_nights = len(n_obs_nights)
     
-    # Will hold the start and end index for each night.
-    f, l = 0, n_obs_nights[0]
+    # Initialize the nightly rvs and uncertainties
+    rvs_nightly = np.full(n_nights, np.nan)
+    unc_nightly = np.full(n_nights, np.nan)
+    
+    for i, f, l in nightly_iterable(n_obs_nights):
+        rr = rvs[f:l, :].flatten()
+        ww = weights[f:l, :].flatten()
+        rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
+            
+    return rvs_nightly, unc_nightly
+
+def compute_nightly_rvs_single_chunk(rvs, weights, n_obs_nights):
+    """Computes nightly RVs for a single order.
+
+    Args:
+        rvs (np.ndarray): The individual rvs array of shape (n_spec,).
+        weights (np.ndarray): The weights, also of shape (n_spec,).
+        n_obs_nights (np.ndarray): The array of length n_nights containing the number of observations on each night.
+    """
+    
+    # The number of spectra and nights
+    n_spec = len(rvs)
+    n_nights = len(n_obs_nights)
     
     # Initialize the nightly rvs and uncertainties
     rvs_nightly = np.full(n_nights, np.nan)
     unc_nightly = np.full(n_nights, np.nan)
     
-    for inight in range(n_nights):
-        r = rvs[f:l, :].flatten()
-        w = weights[f:l, :].flatten()
-        good = np.where(w > 0)[0]
-        ng = good.size
-        if ng == 0:
-            rvs_nightly[inight] = np.nan
-            unc_nightly[inight] = np.nan
-        elif ng == 1:
-            rvs_nightly[inight] = r[good[0]]
-            unc_nightly[inight] = np.nan
-        else:
-            if flag_outliers:
-                wavg = pcmath.weighted_mean(r, w)
-                wstddev = pcmath.weighted_stddev(r, w)
-                bad = np.where(np.abs(r - wavg) > thresh*wstddev)[0]
-                n_bad = bad.size
-                if n_bad > 0:
-                    w[bad] = 0
-            else:
-                n_bad = 0
-            rvs_nightly[inight] = pcmath.weighted_mean(r, w)
-            unc_nightly[inight] = pcmath.weighted_stddev(r, w) / np.sqrt(ng - n_bad)
-            
-        if inight < n_nights - 1:
-            f += n_obs_nights[inight]
-            l += n_obs_nights[inight + 1]
+    for i, f, l in nightly_iterable(n_obs_nights):
+        rr = rvs[f:l].flatten()
+        ww = weights[f:l].flatten()
+        rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
             
     return rvs_nightly, unc_nightly
-                 
+   
+def bin_rvs_to_nights(jds, rvs, unc, err_type="empirical"):
+    """A separate function to bin RVs to 1 per night, primarily for use by external users for now.
+
+    Args:
+        jds (np.ndarray): The individual BJDs of length n_obs.
+        rvs (np.ndarray): The individual RVs of length n_obs.
+        unc (np.ndarray): The corresponding RV errors of length n_obs.
+        
+    Returns:
+        np.ndarray: The nightly BJDs.
+        np.ndarray: The nightly RVs.
+        np.ndarray: The nightly RV errors.
+    """
+    
+    # Get nightly JDs
+    jds_nightly, n_obs_nights = get_nightly_jds(jds, sep=0.5)
+    
+    # Number of nights
+    n_nights = len(n_obs_nights)
+    
+    # Initialize nightly rvs and errors
+    rvs_nightly = np.zeros(n_nights, dtype=float)
+    unc_nightly = np.zeros(n_nights, dtype=float)
+    
+    # For each night, coadd RVs
+    for i, f, l in nighly_iteration(n_obs_nights):
+        rr, uncc = rvs[f:l].flatten(), unc[f:l].flatten()
+        ww = 1 / uncc**2
+        rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=uncc, err_type="empirical")
+    return jds_nightly, rvs_nightly, unc_nightly
+             
 def compute_nightly_rvs_from_all(rvs, weights, n_obs_nights, flag_outliers=False, thresh=5):
     """Computes nightly RVs for a single order.
 
@@ -510,41 +483,14 @@ def compute_nightly_rvs_from_all(rvs, weights, n_obs_nights, flag_outliers=False
     n_orders, n_spec = rvs.shape
     n_nights = len(n_obs_nights)
     
-    # Will hold the start and end index for each night.
-    f, l = 0, n_obs_nights[0]
-    
     # Initialize the nightly rvs and uncertainties
-    rvs_nightly = np.zeros(n_nights)
-    unc_nightly = np.zeros(n_nights)
+    rvs_nightly = np.full(n_nights, np.nan)
+    unc_nightly = np.full(n_nights, np.nan)
     
-    for inight in range(n_nights):
-        r = rvs[:, f:l].flatten()
-        w = weights[:, f:l].flatten()
-        good = np.where(w > 0)[0]
-        ng = good.size
-        if ng == 0:
-            rvs_nightly[inight] = np.nan
-            unc_nightly[inight] = np.nan
-        elif ng == 1:
-            rvs_nightly[inight] = r[good[0]]
-            unc_nightly[inight] = np.nan
-        else:
-            if flag_outliers:
-                wavg = pcmath.weighted_mean(r, w)
-                wstddev = pcmath.weighted_stddev(r, w)
-                bad = np.where(np.abs(r - wavg) > thresh*wstddev)[0]
-                n_bad = bad.size
-                if n_bad > 0:
-                    w[bad] = 0
-            else:
-                n_bad = 0
-            rvs_nightly[inight] = pcmath.weighted_mean(r, w)
-            unc_nightly[inight] = pcmath.weighted_stddev(r, w) / np.sqrt(ng - n_bad)
-            
-        if inight < n_nights - 1:
-            f += n_obs_nights[inight]
-            l += n_obs_nights[inight + 1]
-            
+    for i, f, l in nightly_iterable(n_obs_nights):
+        rr = rvs[:, f:l].flatten()
+        ww = weights[:, f:l].flatten()
+        rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
     return rvs_nightly, unc_nightly
 
 def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
@@ -588,10 +534,11 @@ def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_o
     return np.copy(rvs[0, :]), np.zeros(n_spec) + 10, rvi, unci
 
 def combine_relative_rvs(rvs, weights, n_obs_nights):
-    """Combines RVs considering the differences between all the data points
+    """Combines RVs considering the differences between all the data points.
+    
     Args:
-        rvs (np.ndarray): RVs
-        weights (np.ndarray): Corresponding uncertainties
+        rvs (np.ndarray): RVs of shape n_orders, n_spec, n_chunks
+        weights (np.ndarray): Corresponding uncertainties of the same shape.
     """
     
     # Numbers
@@ -602,8 +549,8 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
     n_tot_chunks = n_orders * n_chunks
     
     # Determine differences and weights tensors
-    rvlij = np.zeros((n_tot_chunks, n_spec, n_spec))
-    wlij = np.zeros((n_tot_chunks, n_spec, n_spec))
+    rvlij = np.full((n_tot_chunks, n_spec, n_spec), np.nan)
+    wlij = np.full((n_tot_chunks, n_spec, n_spec), np.nan)
     for l in range(n_orders):
         for ichunk in range(n_chunks):
             i_quasi_chunk = l * n_chunks + ichunk
@@ -617,19 +564,14 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
     uncli = np.full(shape=(n_tot_chunks, n_spec), fill_value=np.nan)
     for l in range(n_tot_chunks):
         for i in range(n_spec):
-            good = np.where(wlij[l, i, :] > 0)[0]
-            ng = good.size
-            if ng == 0:
-                continue
-            elif ng == 1:
-                rvli[l, i] = rvlij[l, i, good[0]]
-                uncli[l, i] = np.nan
-            else:
-                rvli[l, i] = pcmath.weighted_mean(rvlij[l, i, :], wlij[l, i, :])
-                uncli[l, i] = pcmath.weighted_stddev(rvlij[l, i, :], wlij[l, i, :]) / np.sqrt(ng)
+            rr = rvlij[l, i, :]
+            ww = wlij[l, i, :]
+            rvli[l, i], uncli[l, i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
     
+    # Weights
     wli = (1 / uncli**2) / np.nansum(1 / uncli**2, axis=0)
     
+    # Ourput arrays
     rvs_single_out = np.full(n_spec, fill_value=np.nan)
     unc_single_out = np.full(n_spec, fill_value=np.nan)
     rvs_nightly_out = np.full(n_nights, fill_value=np.nan)
@@ -652,34 +594,15 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
         
     f, l = 0, n_obs_nights[0]
 
-    for i in range(n_nights):
-        if n_obs_nights[i] == 1 and np.isfinite(rvs_single_out[f]):
-            rvs_nightly_out[i] = rvs_single_out[f]
-            unc_nightly_out[i] = unc_single_out[f]
-        else:
-            ww = 1 / unc_single_out[f:l]**2
-            rr = rvs_single_out[f:l]
-            unc_all = unc_single_out[f:l]
-            good = np.where(ww > 0)[0]
-            ng = good.size
-            if ng == 0:
-                rvs_nightly_out[i] = np.nan
-                unc_nightly_out[i] = np.nan
-            elif ng == 1:
-                rvs_nightly_out[i] = rr[good[0]]
-                unc_nightly_out[i] = unc_all[good[0]]
-            else:
-                rvs_nightly_out[i] = pcmath.weighted_mean(rr[good], ww[good])
-                unc_nightly_out[i] = pcmath.weighted_stddev(rr[good], ww[good]) / np.sqrt(ng)
-            
-        if i < n_nights - 1:
-            f += n_obs_nights[i]
-            l += n_obs_nights[i+1]
+    for i, f, l in nightly_iterable(n_nights):
+        rr = rvs_single_out[f:l]
+        uncc = unc_single_out[f:l]
+        ww = 1 / uncc**2
+        rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr, ww, yerr=uncc)
             
     rvs_out = {"rvs": rvs_single_out, "unc": unc_single_out, "rvs_nightly": rvs_nightly_out, "unc_nightly" : unc_nightly_out}
         
     return rvs_out
-
 
 def combine_rvs_tfa(rvs, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points

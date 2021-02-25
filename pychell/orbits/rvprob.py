@@ -102,7 +102,7 @@ class ExoProblem(optframeworks.OptProblem):
                 residuals = like.residuals_before_kernel(pars)
             
             # Compute error bars
-            errors = like.model.kernel.compute_data_errors(pars)
+            errors = like.model.kernel.compute_data_errors(pars, include_jitter=True, include_gp=True, residuals_after_kernel=residuals, gp_unc=None)
             
             # Loop over instruments and plot each
             for data in like.data.values():
@@ -133,7 +133,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_yaxes(title_text='<b>RVs [m/s]</b>')
         fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
         fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(round(per, 6)) + ', e = ' + str(round(ecc, 5)) + '</b>')
-        fig.update_layout(template="ggplot2")
+        fig.update_layout(template="plotly_white")
         fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
@@ -208,7 +208,8 @@ class ExoProblem(optframeworks.OptProblem):
         for like in self.scorer.values():
             
             # Data errors
-            errors = like.model.kernel.compute_data_errors(pars)
+            residuals_after_kernel = like.residuals_after_kernel(pars)
+            errors = like.model.kernel.compute_data_errors(pars, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=residuals_after_kernel)
             
             # RV Color
             if isinstance(like.model.kernel, pcrvkernels.RVColor):
@@ -364,7 +365,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_xaxes(range=[t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset], row=2, col=1)
         
         # Appearance
-        fig.update_layout(template="ggplot2")
+        fig.update_layout(template="plotly_white")
         fig.update_layout(font=dict(size=20))
         fig.update_layout(width=plot_width, height=plot_height)
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + '.html')
@@ -394,7 +395,7 @@ class ExoProblem(optframeworks.OptProblem):
         # Get unc
         unc = np.array([], dtype=float)
         for like in self.likes.values():
-            unc = np.concatenate((unc, like.model.kernel.compute_data_errors(pars)))
+            unc = np.concatenate((unc, like.model.kernel.compute_data_errors(pars, include_jitter=False, include_gp=False)))
             
         return t, rvs, unc
         
@@ -456,7 +457,7 @@ class ExoProblem(optframeworks.OptProblem):
                 
             # Construct the GP for each like and remove from the data
             for like in self.scorer.values():
-                errors = like.model.kernel.compute_data_errors(pbest)
+                errors = like.model.kernel.compute_data_errors(pbest, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=None)
                 residuals_no_noise = like.residuals_after_kernel(pbest)
                 for data in like.data.values():
                     inds = self.data.get_inds(data.label)
@@ -495,9 +496,11 @@ class ExoProblem(optframeworks.OptProblem):
                 
             # Construct the GP for each like and remove from the data
             for like in self.scorer.values():
-                errors = like.model.kernel.compute_data_errors(pbest)
-                residuals = like.residuals_before_kernel(pbest)
+                breakpoint()
                 gp_mean = like.model.kernel.realize(pbest, residuals, return_unc=False)
+                residuals_after_kernel = like.model.kernel.realize()
+                errors = like.model.kernel.compute_data_errors(pbest, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=residuals_after_kernel)
+                residuals = like.residuals_before_kernel(pbest)
                 data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, pbest)
                 for data in like.data.values():
@@ -538,7 +541,7 @@ class ExoProblem(optframeworks.OptProblem):
             pbest = opt_result["pbest"]
                 
             for like in self.scorer.values():
-                errors = like.model.kernel.compute_data_errors(pbest)
+                errors = like.model.kernel.compute_data_errors(pbest, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=None)
                 data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, pbest)
                 for data in like.data.values():
@@ -560,7 +563,7 @@ class ExoProblem(optframeworks.OptProblem):
         else:
             
             for like in self.scorer.values():
-                errors = like.model.kernel.compute_data_errors(self.p0)
+                errors = like.model.kernel.compute_data_errors(self.p0, include_jit=True, include_gp=True, gp_unc=None, residuals_after_kernel=None)
                 data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, self.p0)
                 for data in like.data.values():
@@ -768,7 +771,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_xaxes(title_text='<b>BJD - ' + str(time_offset) + '</b>')
         fig.update_yaxes(title_text='<b>RVs [m/s]</b>')
         fig.update_yaxes(title_text='<b>RV Color [m/s]</b>')
-        fig.update_layout(template="ggplot2")
+        fig.update_layout(template="plotly_white")
         fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
@@ -844,7 +847,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_xaxes(title_text='<b>Data Color [m/s]</b>')
         fig.update_yaxes(title_text='<b>GP Color [m/s]</b>')
         fig.update_layout(title='<b>' + self.star_name + ' Chromaticity')
-        fig.update_layout(template="ggplot2")
+        fig.update_layout(template="plotly_white")
         fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
@@ -887,7 +890,7 @@ class ExoProblem(optframeworks.OptProblem):
         times_vec = self.data.get_vec('t')
         rv_vec = self.data.get_vec('rv')
         rv_vec = self.like0.model.apply_offsets(rv_vec, pars)
-        unc_vec = self.like0.model.kernel.compute_data_errors(pars)
+        unc_vec = self.like0.model.kernel.compute_data_errors(pars, include_jitter=True, include_gp=False, residuals_after_kernel=None, gp_unc=None)
         tel_vec = self.data.make_tel_vec()
         inds1 = np.where((wave_vec == wave1) | (wave_vec == wave2))[0]
         times_vec, rv_vec, unc_vec, wave_vec, tel_vec = times_vec[inds1], rv_vec[inds1], unc_vec[inds1], wave_vec[inds1], tel_vec[inds1]
