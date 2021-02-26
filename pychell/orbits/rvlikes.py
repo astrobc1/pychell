@@ -34,10 +34,10 @@ class RVLikelihood(optscore.Likelihood):
             lnL = 0
             
         # Get residuals
-        residuals = self.residuals_before_kernel(pars)
+        residuals = self.residuals_with_noise(pars)
 
         # Compute the cov matrix
-        K = self.model.kernel.compute_cov_matrix(pars, apply_errors=True)
+        K = self.model.kernel.compute_cov_matrix(pars, include_white_error=True, include_kernel_error=False)
 
         # Compute the determiniant and inverse of K
         try:
@@ -58,7 +58,7 @@ class RVLikelihood(optscore.Likelihood):
         # Return the final ln(L)
         return lnL
     
-    def residuals_before_kernel(self, pars):
+    def residuals_with_noise(self, pars):
         """Computes the residuals without subtracting off the best fit noise kernel.
 
         Args:
@@ -73,7 +73,7 @@ class RVLikelihood(optscore.Likelihood):
         residuals = data_arr - model_arr
         return residuals
     
-    def residuals_after_kernel(self, pars):
+    def residuals_no_noise(self, pars):
         """Computes the residuals after subtracting off the best fit noise kernel.
 
         Args:
@@ -82,11 +82,12 @@ class RVLikelihood(optscore.Likelihood):
         Returns:
             np.ndarray: The residuals.
         """
-        residuals = self.residuals_before_kernel(pars)
-        if not self.model.kernel.is_diag:
-            kernel_mean = self.model.kernel.realize(pars, residuals, return_unc=False)
-            residuals -= kernel_mean
-        return residuals
+        residuals_with_noise = self.residuals_with_noise(pars)
+        residuals_no_noise = np.copy(residuals_with_noise)
+        if isinstance(self.model.kernel, optnoisekernels.CorrelatedNoiseKernel):
+            kernel_mean = self.model.kernel.realize(pars, residuals_with_noise, return_kernel_error=False, kernel_error=None)
+            residuals_no_noise -= kernel_mean
+        return residuals_no_noise
     
     @property
     def data_t(self):
@@ -102,7 +103,7 @@ class RVLikelihood(optscore.Likelihood):
     
 class RVChromaticLikelihood(RVLikelihood):
     
-    def residuals_after_kernel(self, pars):
+    def residuals_no_noise(self, pars):
         """Computes the residuals after subtracting off the best fit noise kernel.
 
         Args:
@@ -111,21 +112,19 @@ class RVChromaticLikelihood(RVLikelihood):
         Returns:
             np.ndarray: The residuals.
         """
-        residuals_with_noise = self.residuals_before_kernel(pars)
+        residuals_with_noise = self.residuals_with_noise(pars)
         residuals_no_noise = np.copy(residuals_with_noise)
         for data in self.data.values():
             inds = self.model.data_inds[data.label]
-            gp_mean = self.model.kernel.realize(pars, residuals=residuals_with_noise, xpred=self.data_t[inds], wavelength=data.wavelength, return_unc=False)
+            gp_mean = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, wavelength=data.wavelength, return_kernel_error=False)
             residuals_no_noise[inds] -= gp_mean
             
         return residuals_no_noise
     
 
-class CompositeRVLikelihood(optscore.CompositeLikelihood):
-    
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.redchi2s = []
+class RVPosterior(optscore.Posterior):
+    """Probably identical to Posterior.
+    """
     
     def compute_logL(self, pars, apply_priors=True):
         """Computes the log of the likelihood.
@@ -146,14 +145,15 @@ class CompositeRVLikelihood(optscore.CompositeLikelihood):
             lnL += like.compute_logL(pars, apply_priors=False)
         return lnL
     
-    def compute_redchi2(self, pars, include_kernel=True, kernel_unc=None, include_jitter=True):
+    def compute_redchi2(self, pars, include_white_error=True, include_kernel_error=True, kernel_error=None):
         
         residuals = np.array([], dtype=float)
         errors = np.array([], dtype=float)
         for like in self.values():
-            residuals_after_kernel = like.residuals_after_kernel(pars)
-            errs = like.model.kernel.compute_data_errors(pars, include_jitter=include_jitter, include_gp=include_kernel, gp_unc=kernel_unc, residuals_after_kernel=residuals_after_kernel)
-            residuals = np.concatenate((residuals, residuals_after_kernel))
+            residuals_with_noise = like.residuals_with_noise(pars)
+            residuals_no_noise = like.residuals_no_noise(pars)
+            errs = like.model.kernel.compute_data_errors(pars, include_white_error=include_white_error, include_kernel_error=include_kernel_error, kernel_error=kernel_error, residuals_with_noise=residuals_with_noise)
+            residuals = np.concatenate((residuals, residuals_no_noise))
             errors = np.concatenate((errors, errs))
         
         # Compute red chi2, no need to sort.

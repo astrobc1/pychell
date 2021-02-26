@@ -63,7 +63,7 @@ def get_nightly_jds(jds, sep=0.5):
 
     return jds_nightly, n_obs_nights
         
-def nighly_iteration(n_obs_nights):
+def nightly_iteration(n_obs_nights):
     """A generator for iterating over observations within a given night.
 
     Args:
@@ -409,7 +409,7 @@ def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights, flag_outliers=F
     rvs_nightly = np.full(n_nights, np.nan)
     unc_nightly = np.full(n_nights, np.nan)
     
-    for i, f, l in nightly_iterable(n_obs_nights):
+    for i, f, l in nightly_iteration(n_obs_nights):
         rr = rvs[f:l, :].flatten()
         ww = weights[f:l, :].flatten()
         rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
@@ -465,7 +465,7 @@ def bin_rvs_to_nights(jds, rvs, unc, err_type="empirical"):
     unc_nightly = np.zeros(n_nights, dtype=float)
     
     # For each night, coadd RVs
-    for i, f, l in nighly_iteration(n_obs_nights):
+    for i, f, l in nightly_iteration(n_obs_nights):
         rr, uncc = rvs[f:l].flatten(), unc[f:l].flatten()
         ww = 1 / uncc**2
         rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=uncc, err_type="empirical")
@@ -571,7 +571,7 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
     # Weights
     wli = (1 / uncli**2) / np.nansum(1 / uncli**2, axis=0)
     
-    # Ourput arrays
+    # Output arrays
     rvs_single_out = np.full(n_spec, fill_value=np.nan)
     unc_single_out = np.full(n_spec, fill_value=np.nan)
     rvs_nightly_out = np.full(n_nights, fill_value=np.nan)
@@ -581,20 +581,9 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
         wli[bad] = 0
         
     for i in range(n_spec):
-        good = np.where(wli[:, i] > 0)[0]
-        ng = good.size
-        if ng == 0:
-            continue
-        elif ng == 1:
-            rvs_single_out[i] = rvli[good[0], i]
-            unc_single_out[i] = uncli[good[0], i]
-        else:
-            rvs_single_out[i] = pcmath.weighted_mean(rvli[:, i], wli[:, i])
-            unc_single_out[i] = pcmath.weighted_stddev(rvli[:, i], wli[:, i]) / np.sqrt(ng)
+        rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rvli[:, i].flatten(), wli[:, i].flatten())
         
-    f, l = 0, n_obs_nights[0]
-
-    for i, f, l in nightly_iterable(n_nights):
+    for i, f, l in nightly_iteration(n_obs_nights):
         rr = rvs_single_out[f:l]
         uncc = unc_single_out[f:l]
         ww = 1 / uncc**2

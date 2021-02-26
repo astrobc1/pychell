@@ -2,6 +2,8 @@ import optimize.scores as optscore
 import optimize.kernels as optnoisekernels
 import optimize.optimizers as optimizers
 import optimize.knowledge as optknow
+import multiprocessing
+N_CPUS = multiprocessing.cpu_count()
 import pylatex
 import corner
 import scipy.constants
@@ -18,6 +20,7 @@ from joblib import Parallel, delayed
 import numpy as np
 from numba import jit, njit
 import pylatex.utils
+from joblib import Parallel, delayed
 import matplotlib.pyplot as plt
 import copy
 import abc
@@ -80,11 +83,19 @@ class ExoProblem(optframeworks.OptProblem):
         per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
         tc = pcrvmodels.tp_to_tc(tp, per, ecc, w)
         
-        # Create the phased model, high res
+        # A high res time grid with an arbitrary starting point [BJD]
         t_hr_one_period = np.linspace(tc, tc + per, num=500)
+        
+        # Convert grid to phases [0, 1]
         phases_hr_one_period = get_phases(t_hr_one_period, per, tc)
-        like0 = next(iter(self.scorer.values()))
-        planet_model_phased = like0.model.build_planet(pars, t_hr_one_period, planet_index)
+        
+        # Build high res model for this planet
+        planet_model_phased = self.like0.model.build_planet(pars, t_hr_one_period, planet_index)
+        
+        # Sort the phased model
+        ss = np.argsort(phases_hr_one_period)
+        phases_hr_one_period = phases_hr_one_period[ss]
+        planet_model_phased = planet_model_phased[ss]
         
         # Store the data in order to bin the phased RVs.
         phases_data_all = np.array([], dtype=float)
@@ -96,18 +107,16 @@ class ExoProblem(optframeworks.OptProblem):
         for like in self.scorer.values():
             
             # Create a data rv vector where everything is removed except this planet
-            if like.model.has_gp:
-                residuals = like.residuals_after_kernel(pars)
-            else:
-                residuals = like.residuals_before_kernel(pars)
+            residuals_with_noise = like.residuals_with_noise(pars)
+            residuals_no_noise = like.residuals_no_noise(pars)
             
             # Compute error bars
-            errors = like.model.kernel.compute_data_errors(pars, include_jitter=True, include_gp=True, residuals_after_kernel=residuals, gp_unc=None)
+            errors = like.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise, kernel_error=None)
             
             # Loop over instruments and plot each
             for data in like.data.values():
                 _errors = errors[like.model.data_inds[data.label]]
-                _data = residuals[like.model.data_inds[data.label]] + like.model.build_planet(pars, data.t, planet_index)
+                _data = residuals_no_noise[like.model.data_inds[data.label]] + like.model.build_planet(pars, data.t, planet_index)
                 phases_data = get_phases(data.t, per, tc)
                 _yerr = dict(array=_errors)
                 fig.add_trace(plotly.graph_objects.Scatter(x=phases_data, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])))
@@ -119,8 +128,7 @@ class ExoProblem(optframeworks.OptProblem):
                 unc_data_all = np.concatenate((unc_data_all, _errors))
 
         # Plot the model on top
-        ss = np.argsort(phases_hr_one_period)
-        fig.add_trace(plotly.graph_objects.Scatter(x=phases_hr_one_period[ss], y=planet_model_phased[ss], line=dict(color='black', width=2), name="<b>Keplerian Model</b>"))
+        fig.add_trace(plotly.graph_objects.Scatter(x=phases_hr_one_period, y=planet_model_phased, line=dict(color='black', width=2), name="<b>Keplerian Model</b>"))
         
         # Lastly, generate and plot the binned data.
         ss = np.argsort(phases_data_all)
@@ -132,7 +140,7 @@ class ExoProblem(optframeworks.OptProblem):
         fig.update_xaxes(title_text='<b>Phase</b>')
         fig.update_yaxes(title_text='<b>RVs [m/s]</b>')
         fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
-        fig.update_layout(title='<b>' + self.star_name + ' ' + like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(round(per, 6)) + ', e = ' + str(round(ecc, 5)) + '</b>')
+        fig.update_layout(title='<b>' + self.star_name + ' ' + self.like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(round(per, 6)) + ', e = ' + str(round(ecc, 5)) + '</b>')
         fig.update_layout(template="plotly_white")
         fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
@@ -208,15 +216,15 @@ class ExoProblem(optframeworks.OptProblem):
         for like in self.scorer.values():
             
             # Data errors
-            residuals_after_kernel = like.residuals_after_kernel(pars)
-            errors = like.model.kernel.compute_data_errors(pars, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=residuals_after_kernel)
+            residuals_with_noise = like.residuals_with_noise(pars)
+            errors = like.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
             
             # RV Color
             if isinstance(like.model.kernel, pcrvkernels.RVColor):
                 
                 # Generate the residuals
-                residuals_with_noise = like.residuals_before_kernel(pars)
-                residuals_no_noise = like.residuals_after_kernel(pars)
+                residuals_with_noise = like.residuals_with_noise(pars)
+                residuals_no_noise = like.residuals_no_noise(pars)
                 
                 s = pars["gp_per"].value
                 
@@ -233,7 +241,7 @@ class ExoProblem(optframeworks.OptProblem):
                     tvec = like.data.get_vec('t')
                     for i in range(tvec.size):
                         _t_hr_gp = np.linspace(tvec[i] - s, tvec[i] + s, num=kernel_sampling)
-                        _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals=residuals_with_noise, return_unc=True, wavelength=wavelength)
+                        _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals_with_noise=residuals_with_noise, return_kernel_error=True, wavelength=wavelength)
                         t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
                         gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
                         gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
@@ -295,10 +303,10 @@ class ExoProblem(optframeworks.OptProblem):
                 t_hr_gp = np.array([], dtype=float)
                 gpmu_hr = np.array([], dtype=float)
                 gpstddev_hr = np.array([], dtype=float)
-                residuals_with_noise = like.residuals_before_kernel(pars)
+                residuals_with_noise = like.residuals_with_noise(pars)
                 for i in range(like.data_t.size):
                     _t_hr_gp = np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=kernel_sampling)
-                    _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals=residuals_with_noise, return_unc=True)
+                    _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals_with_noise=residuals_with_noise, return_kernel_error=True)
                     t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
                     gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
                     gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
@@ -321,7 +329,7 @@ class ExoProblem(optframeworks.OptProblem):
                                             name=label))
             
                 # Generate the residuals without noise
-                residuals_no_noise = like.residuals_after_kernel(pars)
+                residuals_no_noise = like.residuals_no_noise(pars)
                 
                 # For each instrument, plot
                 for data in like.data.values():
@@ -335,7 +343,7 @@ class ExoProblem(optframeworks.OptProblem):
                 
             # White noise
             else:
-                residuals_no_noise = like.residuals_after_kernel(pars)
+                residuals_no_noise = like.residuals_no_noise(pars)
                 
                 # For each instrument, plot
                 for data in like.data.values():
@@ -373,7 +381,7 @@ class ExoProblem(optframeworks.OptProblem):
         # Return the figure for streamlit
         return fig
         
-    def get_data(self, pars=None):
+    def get_data(self, pars=None, include_white_error=False, include_kernel_error=False, kernel_error=None):
         """Grabs the data times, rvs, unc, and computes the corresponding error bars.
 
         Args:
@@ -395,7 +403,7 @@ class ExoProblem(optframeworks.OptProblem):
         # Get unc
         unc = np.array([], dtype=float)
         for like in self.likes.values():
-            unc = np.concatenate((unc, like.model.kernel.compute_data_errors(pars, include_jitter=False, include_gp=False)))
+            unc = np.concatenate((unc, like.model.kernel.compute_data_errors(pars, include_white_error=include_white_error, include_kernel_error=include_kernel_error, kernel_error=kernel_error)))
             
         return t, rvs, unc
         
@@ -423,11 +431,6 @@ class ExoProblem(optframeworks.OptProblem):
             pmax = np.max(times) - np.min(times)
         if pmax <= pmin:
             raise ValueError("Pmin is less than Pmax")
-            
-        # Get the data times. RVs and errors are created in each case below.
-        data_times = self.data.get_vec('t')
-        data_rvs = np.zeros_like(data_times)
-        data_errors = np.zeros_like(data_times)
         
         # Cases
         if apply_gp and len(remove_planets) > 0:
@@ -456,13 +459,18 @@ class ExoProblem(optframeworks.OptProblem):
             pbest = opt_result["pbest"]
                 
             # Construct the GP for each like and remove from the data
+            data_t = np.array([], dtype=float)
+            data_rvs = np.array([], dtype=float)
+            data_unc = np.array([], dtype=float)
             for like in self.scorer.values():
-                errors = like.model.kernel.compute_data_errors(pbest, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=None)
-                residuals_no_noise = like.residuals_after_kernel(pbest)
+                residuals_with_noise = like.residuals_with_noise(pbest)
+                residuals_no_noise = like.residuals_no_noise(pbest)
+                errors = like.model.kernel.compute_data_errors(pbest, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise, kernel_error=kernel_error)
                 for data in like.data.values():
-                    inds = self.data.get_inds(data.label)
-                    data_rvs[inds] = residuals_no_noise[like.model.data_inds[data.label]]
-                    data_errors[inds] = errors[like.model.data_inds[data.label]]
+                    inds = like.model.data_inds[data.label]
+                    data_t = np.concatenate((data_t, data.t))
+                    data_rvs = np.concatenate((data_rvs, residuals_no_noise[inds]))
+                    data_unc = np.concatenate((data_unc, errors[inds]))
                     
             # Reset parameters dict
             for like in self.scorer.values():
@@ -481,11 +489,11 @@ class ExoProblem(optframeworks.OptProblem):
             
             # Disable all planet parameters
             for planet_index in planets_dict_cp:
-                self.disable_planet_pars(p0mod, planets_dict_cp, planet_index)
+               self.disable_planet_pars(p0mod, planets_dict_cp, planet_index)
                     
             # Set the planets dict
             for like in self.scorer.values():
-                like.model.planets_dict = planets_dict_mod
+               like.model.planets_dict = planets_dict_mod
                 
             # Set the modified parameters
             self.set_pars(p0mod)
@@ -495,18 +503,19 @@ class ExoProblem(optframeworks.OptProblem):
             pbest = opt_result["pbest"]
                 
             # Construct the GP for each like and remove from the data
+            # Don't remove any planets.
+            data_t = np.array([], dtype=float)
+            data_rvs = np.array([], dtype=float)
+            data_unc = np.array([], dtype=float)
             for like in self.scorer.values():
-                breakpoint()
-                gp_mean = like.model.kernel.realize(pbest, residuals, return_unc=False)
-                residuals_after_kernel = like.model.kernel.realize()
-                errors = like.model.kernel.compute_data_errors(pbest, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=residuals_after_kernel)
-                residuals = like.residuals_before_kernel(pbest)
-                data_arr = np.copy(like.data_rv)
-                data_arr = like.model.apply_offsets(data_arr, pbest)
+                residuals_with_noise = like.residuals_with_noise(pbest)
+                residuals_no_noise = like.residuals_no_noise(pbest)
+                errors = like.model.kernel.compute_data_errors(pbest, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
                 for data in like.data.values():
-                    inds = self.data.get_inds(data.label)
-                    data_rvs[inds] = data_arr[like.model.data_inds[data.label]] - gp_mean[like.model.data_inds[data.label]]
-                    data_errors[inds] = errors[like.model.data_inds[data.label]]
+                    inds = like.model.data_inds[data.label]
+                    data_t = np.concatenate((data_t, data.t))
+                    data_rvs = np.concatenate((data_rvs, residuals_no_noise[inds]))
+                    data_unc = np.concatenate((data_unc, errors[inds]))
             
             # Reset parameters and planets_dict
             self.set_pars(p0cp)
@@ -541,7 +550,7 @@ class ExoProblem(optframeworks.OptProblem):
             pbest = opt_result["pbest"]
                 
             for like in self.scorer.values():
-                errors = like.model.kernel.compute_data_errors(pbest, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=None)
+                errors = like.model.kernel.compute_data_errors(pbest, include_white_error=True, include_kernel_error=True, kernel_error=None, residuals_with_noise=None)
                 data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, pbest)
                 for data in like.data.values():
@@ -563,17 +572,18 @@ class ExoProblem(optframeworks.OptProblem):
         else:
             
             for like in self.scorer.values():
-                errors = like.model.kernel.compute_data_errors(self.p0, include_jit=True, include_gp=True, gp_unc=None, residuals_after_kernel=None)
+                errors = like.model.kernel.compute_data_errors(self.p0, include_jit=True, include_gp=True, gp_unc=None, residuals_no_noise=None)
                 data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, self.p0)
                 for data in like.data.values():
                     inds = self.data.get_inds(data.label)
                     data_rvs[inds] = data_arr[like.model.data_inds[data.label]]
                     data_errors[inds] = errors[like.model.data_inds[data.label]]
-
         
         # Call GLS
-        pgram = gls.Gls((data_times, data_rvs, data_errors), Pbeg=pmin, Pend=pmax)
+        ss = np.argsort(data_t)
+        data_t, data_rvs, data_unc = data_t[ss], data_rvs[ss], data_unc[ss]
+        pgram = gls.Gls((data_t, data_rvs, data_unc), Pbeg=pmin, Pend=pmax)
         
         return pgram
 
@@ -890,7 +900,7 @@ class ExoProblem(optframeworks.OptProblem):
         times_vec = self.data.get_vec('t')
         rv_vec = self.data.get_vec('rv')
         rv_vec = self.like0.model.apply_offsets(rv_vec, pars)
-        unc_vec = self.like0.model.kernel.compute_data_errors(pars, include_jitter=True, include_gp=False, residuals_after_kernel=None, gp_unc=None)
+        unc_vec = self.like0.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=None, kernel_error=None)
         tel_vec = self.data.make_tel_vec()
         inds1 = np.where((wave_vec == wave1) | (wave_vec == wave2))[0]
         times_vec, rv_vec, unc_vec, wave_vec, tel_vec = times_vec[inds1], rv_vec[inds1], unc_vec[inds1], wave_vec[inds1], tel_vec[inds1]
@@ -965,19 +975,19 @@ class ExoProblem(optframeworks.OptProblem):
          
         # Now for the GP color.
         # Residuals with noise
-        residuals_with_noise = self.like0.residuals_before_kernel(pars)
+        residuals_with_noise = self.like0.residuals_with_noise(pars)
         
         # Compute the coarsely sampled GP for each wavelength.
-        gp_mean1_data, gp_stddev1_data = self.like0.model.kernel.realize(pars, residuals_with_noise, xpred=jds_avg, return_unc=True, wavelength=wave1)
-        gp_mean2_data, gp_stddev2_data = self.like0.model.kernel.realize(pars, residuals_with_noise, xpred=jds_avg, return_unc=True, wavelength=wave2)
+        gp_mean1_data, gp_stddev1_data = self.like0.model.kernel.realize(pars, residuals_with_noise, xpred=jds_avg, return_kernel_error=True, wavelength=wave1)
+        gp_mean2_data, gp_stddev2_data = self.like0.model.kernel.realize(pars, residuals_with_noise, xpred=jds_avg, return_kernel_error=True, wavelength=wave2)
         
         # Compute the coarsely sampled GP-color and unc
         gp_color_data = gp_mean1_data - gp_mean2_data
         gp_color_unc_data = np.sqrt(gp_stddev1_data**2 + gp_stddev2_data**2)
         
         # Compute the densely sampled GP-color
-        t_gp_hr, gpmean1_hr, gpstddev1_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value, t=jds_avg, residuals=residuals_with_noise, kernel_sampling=100, return_unc=True, wavelength=wave1)
-        _, gpmean2_hr, gpstddev2_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value, t=jds_avg, residuals=residuals_with_noise, kernel_sampling=100, return_unc=True, wavelength=wave2)
+        t_gp_hr, gpmean1_hr, gpstddev1_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value, t=jds_avg, residuals_with_noise=residuals_with_noise, kernel_sampling=100, return_kernel_error=True, wavelength=wave1)
+        _, gpmean2_hr, gpstddev2_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value, t=jds_avg, residuals_with_noise=residuals_with_noise, kernel_sampling=100, return_kernel_error=True, wavelength=wave2)
         gpmean_color_hr = gpmean1_hr - gpmean2_hr
         gpstddev_color_hr = np.sqrt(gpstddev1_hr**2 + gpstddev2_hr**2)
                 
@@ -1162,7 +1172,7 @@ class ExoProblem(optframeworks.OptProblem):
                 msiniplanets[planet_index] = (val, unc_low, unc_high)
         return msiniplanets
     
-    def gp_smart_sample(self, pars, like, s, t, residuals, kernel_sampling=100, return_unc=True, wavelength=None):
+    def gp_smart_sample(self, pars, like, s, t, residuals, kernel_sampling=100, return_kernel_error=True, wavelength=None):
         """Smartly samples the GP. Could be smarter.
 
         Args:
@@ -1171,35 +1181,47 @@ class ExoProblem(optframeworks.OptProblem):
             t (np.ndarray): The times to consider.
             residuals (np.ndarray): The residuals to use to realize the GP.
             kernel_sampling (int): The number of points in each window.
-            return_unc (bool, optional): Whether or not to return the gpstddev. Defaults to True.
+            return_kernel_error (bool, optional): Whether or not to return the gpstddev. Defaults to True.
             wavelength (float, optional): The wavelength to realize if relevant. Defaults to None.
 
         Returns:
             np.ndarray: The densley sampled times.
             np.ndarray: The densley sampled GP.
-            np.ndarray: The densley sampled GP stddev if return_unc is True.
+            np.ndarray: The densley sampled GP stddev if return_kernel_error is True.
         """
         t_hr_gp = np.array([], dtype=float)
         gpmu_hr = np.array([], dtype=float)
         gpstddev_hr = np.array([], dtype=float)
+        
+        iter_pass = []
         for i in range(t.size):
-            _t_hr_gp = np.linspace(t[i] - s, t[i] + s, num=kernel_sampling)
-            if return_unc:
-                _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals=residuals, return_unc=return_unc, wavelength=wavelength)
-            else:
-                _gpmu = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals=residuals, return_unc=return_unc, wavelength=wavelength)
-            t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
-            gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
-            if return_unc:
-                gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
+            iter_pass.append((pars, residuals, t, s, kernel_sampling, return_kernel_error, wavelength))
+        
+        gp = Parallel(n_jobs=N_CPUS, verbose=0, batch_size=1)(delayed(_gp_smart_sample)(*iter_pass[i]) for i in range(len(iter_pass)))
+        for i in range(t.size):
+            t_hr_gp = np.concatenate((t_hr_gp, gp[i][0]))
+            gpmu_hr = np.concatenate((gpmu_hr, gp[i][1]))
+            gpstddev_hr = np.concatenate((gpstddev_hr, gp[i][2]))
 
         ss = np.argsort(t_hr_gp)
         t_hr_gp = t_hr_gp[ss]
         gpmu_hr = gpmu_hr[ss]
-        if return_unc:
+        if return_kernel_error:
             gpstddev_hr = gpstddev_hr[ss]
             
-        if return_unc:
+        if return_kernel_error:
+            return t_hr_gp, gpmu_hr, gpstddev_hr
+        else:
+            return t_hr_gp, gpmu_hr
+        
+    @staticmethod
+    def _gp_smart_sample(pars, residuals, t, s, kernel_sampling, return_kernel_error, wavelength):
+        t_hr_gp = np.linspace(t[i] - s, t[i] + s, num=kernel_sampling)
+        if return_kernel_error:
+            gpmu_hr, gpstddev_hr = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals_with_noise=residuals, return_kernel_error=return_kernel_error, wavelength=wavelength)
+        else:
+            gpmu_hr = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals_with_noise=residuals, return_kernel_error=return_kernel_error, wavelength=wavelength)
+        if return_kernel_error:
             return t_hr_gp, gpmu_hr, gpstddev_hr
         else:
             return t_hr_gp, gpmu_hr

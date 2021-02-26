@@ -6,22 +6,16 @@ from numba import njit, prange
 
 class RVColor(optkernels.GaussianProcess):
     
-    is_diag = False
-    
     def __init__(self, data, par_names=None, wavelength0=550):
-        self.wavelength0 = wavelength0
         super().__init__(data=data, par_names=par_names)
-        self.n_data_points = len(self.data.get_vec('t'))
+        self.wavelength0 = wavelength0
         self.wave_vec = self.make_wave_vec()
+        self.compute_dist_matrix()
         self.tel_vec = self.data.make_tel_vec()
         self.unique_wavelengths = self.make_wave_vec_unique()
         self.compute_dist_matrix()
         
-    @property
-    def t(self):
-        return self.x
-    
-    def compute_cov_matrix(self, pars, apply_errors=True):
+    def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False, wavelength=None):
         
         # Alias params
         eta1 = pars[self.par_names[0]].value # amp linear wave scale
@@ -29,57 +23,52 @@ class RVColor(optkernels.GaussianProcess):
         eta3 = pars[self.par_names[2]].value # decay
         eta4 = pars[self.par_names[3]].value # period
         eta5 = pars[self.par_names[4]].value # smoothing factor
-        #eta6 = pars[self.par_names[5]].value # extra param
-        
-        # Data errors
-        if apply_errors:
-            data_errors = self.compute_data_errors(pars, include_jitter=True, include_gp=False, gp_unc=None, residuals_after_kernel=None)
-        else:
-            data_errors = None
             
+        # Construct individual kernels
         lin_kernel = (eta1 * self.freq_matrix**eta2)**2
         decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta3)**2)
-        #wave_kernel = np.exp(-0.5 * (self.wave_diffs / eta6)**2)
         periodic_kernel = np.exp(-0.5 * (1 / eta5)**2 * np.sin(np.pi * self.dist_matrix / eta4)**2)
         
         # Construct full cov matrix
-        cov_matrix = lin_kernel * decay_kernel * periodic_kernel # * wave_kernel
+        cov_matrix = lin_kernel * decay_kernel * periodic_kernel
         
-        # Apply data errors
-        if apply_errors:
+        # Apply intrinsic plus white noise data errors
+        if include_white_error:
+            data_errors = self.compute_data_errors(pars, include_white_error=include_white_error, include_kernel_error=False)
             np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
         
         return cov_matrix
                     
-    def compute_data_errors(self, pars, include_jitter=True, include_gp=True, gp_unc=None, residuals_after_kernel=None):
+    def compute_data_errors(self, pars, include_white_error=True, include_kernel_error=True, kernel_error=None, residuals_with_noise=None):
         """Computes the errors added in quadrature for all datasets corresponding to this kernel.
 
         Args:
             pars (Parameters): The parameters to use.
 
         Returns:
-            np.ndarray: The errors
+            np.ndarray: The data errors.
         """
         
         # Get intrinsic data errors
-        errors = self.get_data_errors()
+        errors = self.get_intrinsic_data_errors()
         
         # Square
         errors = errors**2
         
         # Add per-instrument jitter terms in quadrature
-        if include_jitter:
+        if include_white_error:
             for data in self.data.values():
                 inds = self.data_inds[data.label]
-                errors[inds] += pars['jitter_' + data.label].value**2
+                pname = "jitter_" + data.label
+                errors[inds] += pars[pname].value**2
             
         # Compute GP error
-        if include_gp:
+        if include_kernel_error:
             for data in self.data.values():
                 inds = self.data_inds[data.label]
-                if gp_unc is None:
-                    _, _gp_unc = self.realize(pars, residuals=residuals_after_kernel, xpred=data.t, wavelength=data.wavelength, return_unc=True)
-                errors[inds] += _gp_unc**2
+                if kernel_error is None:
+                    _, _kernel_error = self.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, wavelength=data.wavelength, return_kernel_error=True)
+                errors[inds] += _kernel_error**2
                     
         # Square root
         errors = errors**0.5
@@ -87,7 +76,7 @@ class RVColor(optkernels.GaussianProcess):
         return errors
     
     def compute_dist_matrix(self, x1=None, x2=None, wave1=None, wave2=None):
-        """Computes the distance matrix.
+        """Computes the distance matrix. The distance matrix is 
 
         Args:
             x1 (np.ndarray): [description]
@@ -135,7 +124,7 @@ class RVColor(optkernels.GaussianProcess):
         wave_vec_unique = np.sort(wave_vec_unique)
         return wave_vec_unique
         
-    def realize(self, pars, residuals, xpred=None, xres=None, return_unc=False, wavelength=None):
+    def realize(self, pars, residuals_with_noise, xpred=None, xres=None, return_kernel_error=False, wavelength=None):
         """Realize the GP (predict/ssample at arbitrary points). Meant to be the same as the predict method offered by other codes.
 
         Args:
@@ -159,21 +148,21 @@ class RVColor(optkernels.GaussianProcess):
         
         # Get K
         self.compute_dist_matrix(xres, xres, wave1=None, wave2=None)
-        K = self.compute_cov_matrix(pars, apply_errors=True)
+        K = self.compute_cov_matrix(pars, include_white_error=True)
         
         # Compute version of K without errorbars
         self.compute_dist_matrix(xpred, xres, wave1=wavelength, wave2=None)
-        Ks = self.compute_cov_matrix(pars, apply_errors=False)
+        Ks = self.compute_cov_matrix(pars, include_white_error=False)
 
         # Avoid overflow errors in det(K) by reducing the matrix.
         L = cho_factor(K)
-        alpha = cho_solve(L, residuals)
+        alpha = cho_solve(L, residuals_with_noise)
         mu = np.dot(Ks, alpha).flatten()
 
         # Compute the uncertainty in the GP fitting.
-        if return_unc:
+        if return_kernel_error:
             self.compute_dist_matrix(xpred, xpred, wave1=wavelength, wave2=wavelength)
-            Kss = self.compute_cov_matrix(pars, apply_errors=False)
+            Kss = self.compute_cov_matrix(pars, include_white_error=False)
             B = cho_solve(L, Ks.T)
             var = np.array(np.diag(Kss - np.dot(Ks, B))).flatten()
             unc = np.sqrt(var)
@@ -214,99 +203,6 @@ class RVColor(optkernels.GaussianProcess):
                 instnames.append(data.label)
         return instnames
     
-    
-class RVColor2(RVColor):
-    
-    def compute_cov_matrix(self, pars, apply_errors=True):
-        
-        # Alias params
-        eta1 = pars[self.par_names[0]].value # amp linear wave scale
-        eta2 = pars[self.par_names[1]].value # amp power law wave scale
-        eta3 = pars[self.par_names[2]].value # decay
-        eta4 = pars[self.par_names[3]].value # period
-        eta5 = pars[self.par_names[4]].value # smoothing factor
-        eta6 = pars[self.par_names[5]].value # wavelength decorrelation
-        
-        # Data errors
-        if apply_errors:
-            data_errors = self.compute_data_errors(pars)
-        else:
-            data_errors = None
-            
-        lin_kernel = (eta1 * self.freq_matrix**eta2)**2
-        decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta3)**2)
-        wave_kernel = np.exp(-0.5 * (self.wave_diffs / eta6)**2)
-        periodic_kernel = np.exp(-0.5 * (1 / eta5)**2 * np.sin(np.pi * self.dist_matrix / eta4)**2)
-        
-        # Construct full cov matrix
-        cov_matrix = lin_kernel * decay_kernel * periodic_kernel * wave_kernel
-        
-        # Apply data errors
-        if apply_errors:
-            np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
-        
-        return cov_matrix
-                    
-                    
-class RVColor3(RVColor):
-    
-    def compute_cov_matrix(self, pars, apply_errors=True):
-        
-        # Alias params
-        eta1 = pars[self.par_names[0]].value # amp linear wave scale
-        eta2 = pars[self.par_names[1]].value # amp power law wave scale
-        eta3 = pars[self.par_names[2]].value # decay
-        eta4 = pars[self.par_names[3]].value # period
-        eta5 = pars[self.par_names[4]].value # smoothing factor (C)
-        
-        # Data errors
-        if apply_errors:
-            data_errors = self.compute_data_errors(pars)
-        else:
-            data_errors = None
-            
-        lin_kernel = (eta1 * self.freq_matrix**eta2)**2 / (2 + eta5)
-        decay_kernel = np.exp(-1.0 * (self.dist_matrix / eta3))
-        periodic_kernel = np.cos(2 * np.pi * self.dist_matrix / eta4) + 1 + eta5
-        
-        # Construct full cov matrix
-        cov_matrix = lin_kernel * decay_kernel * periodic_kernel
-        
-        # Apply data errors
-        if apply_errors:
-            np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
-        
-        return cov_matrix
-                    
-                    
-class RVColor4(RVColor):
-    
-    def compute_cov_matrix(self, pars, apply_errors=True):
-        
-        # Alias params
-        eta1 = pars[self.par_names[0]].value # amp linear wave scale
-        eta2 = pars[self.par_names[1]].value # decay
-        eta3 = pars[self.par_names[2]].value # period
-        eta4 = pars[self.par_names[3]].value # smoothing factor
-        eta5 = pars[self.par_names[4]].value # wavlength decay
-        
-        # Data errors
-        if apply_errors:
-            data_errors = self.compute_data_errors(pars)
-        else:
-            data_errors = None
-            
-        lin_kernel = (eta1 * self.freq_matrix)**2
-        decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta2)**2)
-        periodic_kernel = np.exp(-0.5 * (1 / eta4) * np.sin(2 * np.pi * self.dist_matrix / eta3)**2)
-        wave_kernel = np.exp(-0.5 * (self.wave_diffs / eta5)**2)
-        
-        # Construct full cov matrix
-        cov_matrix = lin_kernel * decay_kernel * periodic_kernel * wave_kernel
-        
-        # Apply data errors
-        if apply_errors:
-            np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
-        
-        return cov_matrix
-                    
+    @property
+    def t(self):
+        return self.x
