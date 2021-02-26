@@ -27,6 +27,7 @@ import abc
 import pychell.orbits.rvmodels as pcrvmodels
 import optimize.kernels as optkernels
 import pychell.orbits.rvkernels as pcrvkernels
+import pychell.orbits.rvscores as pcrvscores
 import pychell.utils as pcutils
 PLOTLY_COLORS = pcutils.PLOTLY_COLORS
 import os
@@ -34,7 +35,7 @@ import pychell
 import pychell.utils as pcutils
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
-class ExoProblem(optframeworks.OptProblem):
+class RVProblem(optframeworks.OptProblem):
     """The primary, top-level container for Exoplanet optimization problems. As of now, this only deals with RV data. Photometric modeling will be included in future updates, but will leverage existing libraries (Batman, etc.).
     """
 
@@ -219,8 +220,8 @@ class ExoProblem(optframeworks.OptProblem):
             residuals_with_noise = like.residuals_with_noise(pars)
             errors = like.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
             
-            # RV Color
-            if isinstance(like.model.kernel, pcrvkernels.RVColor):
+            # RV Color 1
+            if type(like) is pcrvscores.RVChromaticLikelihood:
                 
                 # Generate the residuals
                 residuals_with_noise = like.residuals_with_noise(pars)
@@ -260,6 +261,70 @@ class ExoProblem(optframeworks.OptProblem):
                         label += instname + ', '
                     label = label[0:-2]
                     label += ']</b>'
+                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=1.2, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
+                                             y=np.concatenate([gp_upper, gp_lower[::-1]]),
+                                             fill='toself',
+                                             line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1),
+                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.6),
+                                             name=label))
+                    color_index += 1
+                    
+                # Plot the data on top of the GPs, and the residuals
+                data_arr = np.copy(like.data_rv)
+                data_arr = like.model.apply_offsets(data_arr, pars)
+                for data in like.data.values():
+                    
+                    # Data errors for this instrument
+                    _errors = errors[like.model.data_inds[data.label]]
+                    _yerr = dict(array=_errors)
+                    
+                    # Data on top of the GP, only offset by gammas
+                    _data = data_arr[like.model.data_inds[data.label]]
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
+                    
+                    # Residuals for this instrument after the noise kernel has been removed
+                    _residuals = residuals_no_noise[like.model.data_inds[data.label]]
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
+                    
+                    # Increase color index
+                    color_index += 1
+                    
+            # RV Color 2
+            elif type(like) is pcrvscores.RVChromaticLikelihood2:
+                
+                # Generate the residuals
+                residuals_with_noise = like.residuals_with_noise(pars)
+                residuals_no_noise = like.residuals_no_noise(pars)
+                
+                s = pars["gp_per"].value
+                
+                # Plot a GP for each instrument
+                for data in like.model.kernel.data.values():
+                    
+                    print("Plotting Instrument: " + data.label)
+                    
+                    # Smartly sample gp
+                    t_hr_gp = np.array([], dtype=float)
+                    gpmu_hr = np.array([], dtype=float)
+                    gpstddev_hr = np.array([], dtype=float)
+                    tvec = like.data.get_vec('t')
+                    for i in range(tvec.size):
+                        _t_hr_gp = np.linspace(tvec[i] - s, tvec[i] + s, num=kernel_sampling)
+                        _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals_with_noise=residuals_with_noise, return_kernel_error=True, instrument=data.label)
+                        t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
+                        gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
+                        gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
+
+                    ss = np.argsort(t_hr_gp)
+                    t_hr_gp = t_hr_gp[ss]
+                    gpmu_hr = gpmu_hr[ss]
+                    gpstddev_hr = gpstddev_hr[ss]
+                    
+                    # Plot the GP
+                    tt = t_hr_gp - time_offset
+                    gp_lower, gp_upper = gpmu_hr - gpstddev_hr, gpmu_hr + gpstddev_hr
+                    label = '<b>GP ' + '&#x3BB;' + data.label + '</b>'
                     fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=1.2, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
                     fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                              y=np.concatenate([gp_upper, gp_lower[::-1]]),

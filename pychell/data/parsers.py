@@ -111,6 +111,7 @@ class DataParser:
         
     def parse_time(self, data):
         data.time_obs_start = Time(float(data.header['TIME']), scale='utc', format='jd')
+        return data.time_obs_start
     
     def compute_barycenter_corrections(self, data, target=None):
         
@@ -156,7 +157,7 @@ class DataParser:
             forward_models[ispec].data.bc_vel = bc_vels[ispec]
     
     def compute_midpoint(self, data):
-        return self.parse_time(data) + self.parse_itime(data) / (2 * 86400)
+        return self.parse_time(data).jd + self.parse_itime(data) / (2 * 86400)
         
     def get_n_orders(self, data):
         raise NotImplementedError("Must implement get_n_orders")
@@ -422,7 +423,7 @@ class SimulatedParser(DataParser):
         return 0
     
     def compute_midpoint(self, data):
-        return data.time_obs_start
+        return data.time_obs_start.jd
         
     def parse_spec1d(self, data):
         
@@ -772,6 +773,7 @@ class PARVIParser(DataParser):
     def parse_itime(self, data):
         itime = data.header["EXPTIME"]
         data.itime = itime
+        return data.itime
         
     def parse_time(self, data):
         data.time_obs_start = Time(float(data.header["START"]) / 1E9, format="unix")
