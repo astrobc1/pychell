@@ -12,7 +12,6 @@ class RVColor(optkernels.GaussianProcess):
         self.wave_vec = self.make_wave_vec()
         self.tel_vec = self.data.make_tel_vec()
         self.unique_wavelengths = self.make_wave_vec_unique()
-        breakpoint()
         self.compute_dist_matrix()
         
     def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False, wavelength=None):
@@ -90,6 +89,7 @@ class RVColor(optkernels.GaussianProcess):
         super().compute_dist_matrix(x1=x1, x2=x2)
         self.wave1 = wave1
         self.wave2 = wave2
+        self.compute_wave_matrix(wave1=wave1, wave2=wave2)
         
     def compute_wave_matrix(self, wave1=None, wave2=None):
         """Generates a matrix for a linear kernel.
@@ -112,12 +112,13 @@ class RVColor(optkernels.GaussianProcess):
             
         # Compute matrices
         self.wave_diffs = np.zeros((n1, n2))
+        self.freq_matrix = np.zeros((n1, n2))
         for i in range(n1):
              for j in range(n2):
                  self.wave_diffs[i, j] = np.abs(wave_vec1[i] - wave_vec2[j])
+                 self.freq_matrix[i, j] = self.wavelength0 / np.sqrt(wave_vec1[i] * wave_vec2[j])
                     
-        self.freq_matrix = self.wavelength0 / np.sqrt(np.outer(wave_vec1, wave_vec2))
-        self.wave_matrix = 1 / self.freq_matrix
+        #self.wave_matrix = 1 / self.freq_matrix
 
     def make_wave_vec_unique(self):
         wave_vec = self.make_wave_vec()
@@ -167,10 +168,10 @@ class RVColor(optkernels.GaussianProcess):
             B = cho_solve(L, Ks.T)
             var = np.array(np.diag(Kss - np.dot(Ks, B))).flatten()
             unc = np.sqrt(var)
-            self.compute_dist_matrix(xres, xres, wave1=None, wave2=None)
+            self.compute_dist_matrix(wave1=None, wave2=None)
             return mu, unc
         else:
-            self.compute_dist_matrix(xres, xres, wave1=None, wave2=None)
+            self.compute_dist_matrix(wave1=None, wave2=None)
             return mu
         
     def make_wave_vec(self):
@@ -469,3 +470,32 @@ class RVColor3(RVColor):
     @property
     def t(self):
         return self.x
+    
+    
+class RVColorCBS(RVColor):
+        
+    def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False, wavelength=None):
+        
+        # Alias params
+        eta1 = pars[self.par_names[0]].value # amp linear wave scale
+        eta2 = pars[self.par_names[1]].value # amp power law wave scale
+        eta3 = pars[self.par_names[2]].value # decay
+        eta4 = pars[self.par_names[3]].value # period
+        eta5 = pars[self.par_names[4]].value # smoothing factor
+        eta6 = pars[self.par_names[5]].value # cbs
+            
+        # Construct individual kernels
+        lin_kernel = (eta1 * self.freq_matrix**eta2)**2
+        decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta3)**2)
+        periodic_kernel = np.exp(-0.5 * (1 / eta5)**2 * np.sin(np.pi * self.dist_matrix / eta4)**2)
+        cbs_kernel = np.cos(eta6 * self.wave_diffs)
+        
+        # Construct full cov matrix
+        cov_matrix = lin_kernel * decay_kernel * periodic_kernel * cbs_kernel
+        
+        # Apply intrinsic plus white noise data errors
+        if include_white_error:
+            data_errors = self.compute_data_errors(pars, include_white_error=include_white_error, include_kernel_error=False)
+            np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
+        
+        return cov_matrix

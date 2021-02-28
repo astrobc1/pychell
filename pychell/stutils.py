@@ -150,6 +150,7 @@ class ModelCompResult(StreamlitComponent):
         df["\u0394 AICc"] = [1]*n_models
         df["\u0394 BIC"] = [1]*n_models
         df["N free"] = [1]*n_models
+        df["Red. \u03C7 Sq."] = [1]*n_models
         for i in range(n_models):
             s = ""
             for planet_index in self.mc_result[i]["planets_dict"]:
@@ -161,6 +162,7 @@ class ModelCompResult(StreamlitComponent):
             df["\u0394 AICc"][i] = self.mc_result[i]["delta_aicc"]
             df["\u0394 BIC"][i] = self.mc_result[i]["delta_bic"]
             df["N free"][i] = self.mc_result[i]["pbest"].num_varied()
+            df["Red. \u03C7 Sq."] = self.mc_result[i]["redchi2"]
         st.table(df)
         return self.comps
     

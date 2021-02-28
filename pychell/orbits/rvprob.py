@@ -389,10 +389,9 @@ class RVProblem(optframeworks.OptProblem):
                 fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                             y=np.concatenate([gp_upper, gp_lower[::-1]]),
                                             fill='toself',
-                                            line=dict(color='rgba(255,255,255,0)'),
-                                            fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.4),
+                                            line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1),
+                                            fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.6),
                                             name=label))
-            
                 # Generate the residuals without noise
                 residuals_no_noise = like.residuals_no_noise(pars)
                 
@@ -965,7 +964,7 @@ class RVProblem(optframeworks.OptProblem):
         times_vec = self.data.get_vec('t')
         rv_vec = self.data.get_vec('rv')
         rv_vec = self.like0.model.apply_offsets(rv_vec, pars)
-        unc_vec = self.like0.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=None, kernel_error=None)
+        unc_vec = self.like0.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=False, residuals_with_noise=None, kernel_error=None)
         tel_vec = self.data.make_tel_vec()
         inds1 = np.where((wave_vec == wave1) | (wave_vec == wave2))[0]
         times_vec, rv_vec, unc_vec, wave_vec, tel_vec = times_vec[inds1], rv_vec[inds1], unc_vec[inds1], wave_vec[inds1], tel_vec[inds1]
@@ -1115,13 +1114,16 @@ class RVProblem(optframeworks.OptProblem):
             lnL = self.scorer.compute_logL(pbest, apply_priors=False)
             
             # Run the BIC
-            bic = _optprob.optimizer.scorer.compute_bic(pbest, apply_priors=False)
+            bic = _optprob.optimizer.scorer.compute_bic(pbest)
             
             # Run the AICc
-            aicc = _optprob.optimizer.scorer.compute_aicc(pbest, apply_priors=False)
+            aicc = _optprob.optimizer.scorer.compute_aicc(pbest)
+            
+            # Red chi 2
+            redchi2 = _optprob.optimizer.scorer.compute_redchi2(pbest)
             
             # Store
-            model_comp_results.append({'planets_dict': planets_dict, 'lnL': lnL, 'bic': bic, 'aicc': aicc, 'pbest': pbest})
+            model_comp_results.append({'planets_dict': planets_dict, 'lnL': lnL, 'bic': bic, 'aicc': aicc, 'pbest': pbest, 'redchi2': redchi2})
             
             del _optprob
             
