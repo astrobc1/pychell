@@ -146,11 +146,11 @@ class ModelCompResult(StreamlitComponent):
         df = pd.DataFrame()
         n_models = len(self.mc_result)
         df["Planets"] = [""]*n_models
-        df["ln \u2112"] = [1]*n_models
-        df["\u0394 AICc"] = [1]*n_models
-        df["\u0394 BIC"] = [1]*n_models
-        df["N free"] = [1]*n_models
-        df["Red. \u03C7 Sq."] = [1]*n_models
+        df["ln \u2112"] = [1.0]*n_models
+        df["\u0394 AICc"] = [1.0]*n_models
+        df["\u0394 BIC"] = [1.0]*n_models
+        df["N free"] = [1.0]*n_models
+        df["Red. \u03C7 Sq."] = [1.0]*n_models
         for i in range(n_models):
             s = ""
             for planet_index in self.mc_result[i]["planets_dict"]:
@@ -162,7 +162,7 @@ class ModelCompResult(StreamlitComponent):
             df["\u0394 AICc"][i] = self.mc_result[i]["delta_aicc"]
             df["\u0394 BIC"][i] = self.mc_result[i]["delta_bic"]
             df["N free"][i] = self.mc_result[i]["pbest"].num_varied()
-            df["Red. \u03C7 Sq."] = self.mc_result[i]["redchi2"]
+            df["Red. \u03C7 Sq."][i] = self.mc_result[i]["redchi2"]
         st.table(df)
         return self.comps
     
@@ -215,6 +215,7 @@ class PlanetsResults(StreamlitComponent):
         st.markdown('# Planets')
         if len(self.optprob.planets_dict) > 0:
             planet_masses = self.optprob.compute_planet_masses(self.sampler_result)
+            planet_rhos = self.optprob.compute_planet_densities(self.sampler_result)
             planet_smas = self.optprob.compute_semimajor_axis(self.sampler_result)
             for planet_index in self.optprob.planets_dict:
                 
@@ -224,6 +225,14 @@ class PlanetsResults(StreamlitComponent):
                 s += ", -" + str(planet_masses[planet_index][1])
                 s += " +" + str(planet_masses[planet_index][2])
                 s += " M Earth"
+                st.text(s)
+                
+                # rho
+                s = self.optprob.star_name + " " + self.optprob.planets_dict[planet_index]["label"] + ": "
+                s += str(planet_rhos[planet_index][0])
+                s += ", -" + str(planet_rhos[planet_index][1])
+                s += " +" + str(planet_rhos[planet_index][2])
+                s += " g/cm^3"
                 st.text(s)
                 
                 # a

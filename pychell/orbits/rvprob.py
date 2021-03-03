@@ -39,7 +39,7 @@ class RVProblem(optframeworks.OptProblem):
     """The primary, top-level container for Exoplanet optimization problems. As of now, this only deals with RV data. Photometric modeling will be included in future updates, but will leverage existing libraries (Batman, etc.).
     """
 
-    def __init__(self, output_path=None, data=None, p0=None, optimizer=None, sampler=None, likes=None, star_name=None, mstar=None, mstar_unc=None):
+    def __init__(self, output_path=None, data=None, p0=None, optimizer=None, sampler=None, likes=None, star_name=None, mstar=None, mstar_unc=None, rplanets=None):
         """Constructs the primary exoplanet problem object.
 
         Args:
@@ -52,12 +52,14 @@ class RVProblem(optframeworks.OptProblem):
             star_name (str, optional): The name of the star, may contain spaces. Defaults to None.
             mstar (float, optional): The mass of the star in solar units. Defaults to None.
             mstar_unc (list, optional): The uncertainty in mstar, same units. Defaults to None.
+            rplanets (dict, optional): The radius of the planet in Earth units. Defaults to None. Format is {planet_index: (val, lower, upper)}
         """
         super().__init__(p0=p0, data=data, optimizer=optimizer, sampler=sampler, scorer=likes)
         self.star_name = 'Star' if star_name is None else star_name
         self.output_path = output_path
         self.mstar = mstar
         self.mstar_unc = mstar_unc
+        self.rplanets = rplanets
         gen_latex_labels(self.p0, self.planets_dict)
         
     def plot_phased_rvs(self, planet_index, pars=None, plot_width=1000, plot_height=600):
@@ -139,8 +141,7 @@ class RVProblem(optframeworks.OptProblem):
         
         # Labels
         fig.update_xaxes(title_text='<b>Phase</b>')
-        fig.update_yaxes(title_text='<b>RVs [m/s]</b>')
-        fig.update_yaxes(title_text='<b>Residual RVs [m/s]</b>')
+        fig.update_yaxes(title_text='<b>RV [m/s]</b>')
         fig.update_layout(title='<b>' + self.star_name + ' ' + self.like0.model.planets_dict[planet_index]["label"] + '<br>' + 'P = ' + str(round(per, 6)) + ', e = ' + str(round(ecc, 5)) + '</b>')
         fig.update_layout(template="plotly_white")
         fig.update_layout(font=dict(size=16))
@@ -1194,21 +1195,17 @@ class RVProblem(optframeworks.OptProblem):
                 aplanets[planet_index] = (val, unc_low, unc_high)
         return aplanets
     
-    def compute_planet_masses(self, sampler_result, mstar=None, mstar_unc=None):
+    def compute_planet_masses(self, sampler_result):
         """Computes the value of msini and uncertainty for each planet in units of Earth Masses.
 
         Args:
             sampler_result (dict): The returned value from calling sample.
-            mstar (float): The mass of the star in solar units.
-            mstar (list): The uncertainty of the mass of the star in solar units, lower, upper.
 
         Returns:
             (dict): The mass, lower, and upper uncertainty of each planet in a dictionary.
         """
-        if mstar is None:
-            mstar = self.mstar
-        if mstar_unc is None:
-            mstar_unc = self.mstar_unc
+        mstar = self.mstar
+        mstar_unc = self.mstar_unc
         msiniplanets = {} # In jupiter masses
         for planet_index in self.planets_dict:
             perdist = []
@@ -1238,6 +1235,54 @@ class RVProblem(optframeworks.OptProblem):
             else:
                 msiniplanets[planet_index] = (val, unc_low, unc_high)
         return msiniplanets
+    
+    def compute_planet_densities(self, sampler_result):
+        """Computes the value of msini and uncertainty for each planet in units of Earth Masses.
+
+        Args:
+            sampler_result (dict): The returned value from calling sample.
+        Returns:
+            (dict): The density, lower, and upper uncertainty of each planet in a dictionary, in units of grams/cm^3.
+        """
+        mstar = self.mstar
+        mstar_unc = self.mstar_unc
+        rplanets = self.rplanets
+        mplanets = self.compute_planet_masses(sampler_result)
+        rhoplanets = {} # In jupiter masses
+        for planet_index in self.planets_dict:
+            perdist = []
+            tpdist = []
+            eccdist = []
+            wdist = []
+            kdist = []
+            mdist = []
+            rhodist = []
+            pars = copy.deepcopy(sampler_result["pmed"])
+            for i in range(sampler_result["n_steps"]):
+                for pname in self.planets_dict[planet_index]["basis"].pnames:
+                    if pars[pname].vary:
+                        ii = pars.index_from_par(pname, rel_vary=True)
+                        pars[pname].value = sampler_result["chains"][i, ii]
+                per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
+                perdist.append(per)
+                tpdist.append(tp)
+                eccdist.append(ecc)
+                wdist.append(w)
+                kdist.append(k)
+                mplanet = compute_planet_mass(per, ecc, k, mstar)
+                rplanet_val = rplanets[planet_index][0]
+                rplanet_unc_low = rplanets[planet_index][1]
+                rplanet_unc_high = rplanets[planet_index][2]
+                rhodist.append(compute_planet_density(mplanet, rplanet_val))
+            val, unc_low, unc_high = self.sampler.chain_uncertainty(rhodist)
+            if rplanets[planet_index] is not None:
+                mplanet = mplanets[planet_index][0]
+                unc_low = np.sqrt(unc_low**2 + compute_planet_density_deriv_rplanet(rplanet_val, mplanet)**2 * rplanet_unc_low**2)
+                unc_high = np.sqrt(unc_high**2 + compute_planet_density_deriv_rplanet(rplanet_val, mplanet)**2 * rplanet_unc_high**2)
+                rhoplanets[planet_index] = (val, unc_low, unc_high)
+            else:
+                rhoplanets[planet_index] = (val, unc_low, unc_high)
+        return rhoplanets
     
     def gp_smart_sample(self, pars, like, s, t, residuals, kernel_sampling=100, return_kernel_error=True, wavelength=None):
         """Smartly samples the GP. Could be smarter.
@@ -1280,6 +1325,40 @@ class RVProblem(optframeworks.OptProblem):
             return t_hr_gp, gpmu_hr, gpstddev_hr
         else:
             return t_hr_gp, gpmu_hr
+        
+    def build_components(self, pars):
+        if pars is None:
+            pars = self.p0
+            
+        # Init components
+        components = {}
+        
+        # Raw data
+        components["t"] = self.data.get_vec("t")
+        components["rvs"] = self.data.get_vec("rv")
+        components["rvs_unc"] = self.data.get_vec("rverr")
+        
+        # Per instrument zero points
+        rv_trend_zero = np.array([], dtype=float)
+        for like in self.likes:
+            rv_trend_zero = np.concatenate((rv_trend_zero, like.model.build_trend_zero(pars, like.data_t)))
+            
+        # Sort, pass
+        components["trend_zero"] = np.sort(rv_trend_zero)
+            
+        # Global trend
+        components["trend_global"] = self.like0.model.build_trend_global(pars, components["t"])
+        
+        # Planets
+        for planet_index in self.planets_dict:
+            components["planet" + str(planet_index)] = self.like0.model.build_planet(pars, components["t"])
+            
+        # Noise kernel
+        #for like in self.likes:
+        #    if isinstance(like, like.RVChroamticLikelihood):
+        #        like.model.kernel.realize()
+            
+            
         
     @staticmethod
     def _gp_smart_sample(pars, residuals, t, s, kernel_sampling, return_kernel_error, wavelength):
@@ -1483,6 +1562,27 @@ def compute_planet_mass_deriv_mstar(per, ecc, k, mstar):
     alpha = k * np.sqrt(1 - ecc**2) / 28.4329 * (per / 365.25)**(1 / 3)
     dMp_dMstar = (2 / 3) * alpha * mstar**(-1 / 3)
     return dMp_dMstar
+
+def compute_planet_density(mplanet, rplanet):
+    """Computes the planet density.
+
+    Args:
+        mplanet (float): The mass of the planet in earth units.
+        rplanet (float): The radius of the planet in earth units.
+
+    Returns:
+        float: The density of the planet in cgs units.
+    """
+    mplanet_grams = mplanet * 5.9722E27 # convert mass of planet to grams from earth masses
+    rplanet_cm = rplanet * 6.371E8 # convert radius of planet to cm from earth radii
+    rho_cgs = (3 * mplanet_grams) / (4 * np.pi * rplanet_cm**3)
+    return rho_cgs
+
+def compute_planet_density_deriv_rplanet(mplanet, rplanet):
+    mplanet_grams = mplanet * 5.9722E27 # convert mass of planet to grams from earth masses
+    rplanet_cm = rplanet * 6.371E8 # convert radius of planet to cm from earth radii
+    d_rho_d_rplanet = (9 * mplanet_grams) / (4 * np.pi * rplanet_cm**4)
+    return d_rho_d_rplanet
 
 def predict_from_ffprime(t, spots=True, cvbs=True, rstar=1.0, f=0.1):
     """Presidcts the spot induced activity RV signature via the F*F' method using https://arxiv.org/pdf/1110.1034.pdf.

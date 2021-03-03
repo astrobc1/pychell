@@ -98,6 +98,39 @@ class RVModel(optmodels.Model):
         planet_signal = self.build_planet(pars, t, planet_index)
         return model_arr_full - planet_signal
     
+    def build_trend_zero(self, pars, t, instname=None):
+        
+        # Zeros
+        trend_zero = np.zeros(t.size)
+        
+        # Per-instrument zero points
+        if instname is None:
+            for data in self.data.values():
+                pname = "gamma_" + data.label
+                inds = self.data_inds[data.label]
+                trend_zero[inds] = pars[pname].value
+        else:
+            pname = "gamma_" + instname
+            trend_zero += pars[pname].value
+        
+        return trend_zero
+
+    def build_trend_global(self, pars, t):
+        
+        # Zeros
+        trend_global = np.zeros(t.size)
+                
+        # Linear trend
+        if 'gamma_dot' in pars and pars['gamma_dot'].value != 0:
+            trend_global += pars['gamma_dot'].value * (t - self.time_base)
+        
+        # Quadratic trend
+        if 'gamma_ddot' in pars and pars['gamma_ddot'].value != 0:
+            trend_global += pars['gamma_ddot'].value * (t - self.time_base)**2
+            
+        return trend_global
+        
+        
     def _builder(self, pars, t):
         
         # All planets
@@ -118,7 +151,7 @@ class RVModel(optmodels.Model):
         _model = self._builder(pars, self.data_t)
         return _model
 
-    def apply_offsets(self, rv_vec, pars, instname=None, t=None):
+    def apply_offsets(self, rv_vec, pars, t=None, instname=None):
         """Apply gamma offsets (zero points only) to the data. Linear and quadratic terms are applied to the model.
 
         Args:
@@ -126,28 +159,13 @@ class RVModel(optmodels.Model):
             rv_vec (np.ndarray): The RV data vector for all data
             pars (Parameters): The parameters.
         """
-        
-        # Remove the per-instrument effective zero points.
-        if instname is None:
-            for data in self.data.values():
-                pname = "gamma_" + data.label
-                rv_vec[self.data_inds[data.label]] -= pars[pname].value
-        else:
-            pname = "gamma_" + instname
-            rv_vec -= pars[pname].value
-            
-        # Time grid
-        if t is None:
+        if t is None and instname is None:
             t = self.data_t
-                
-        # Linear trend
-        if 'gamma_dot' in pars and pars['gamma_dot'].value != 0:
-            rv_vec -= pars['gamma_dot'].value * (t - self.time_base)
-        
-        # Quadratic trend
-        if 'gamma_ddot' in pars and pars['gamma_ddot'].value != 0:
-            rv_vec -= pars['gamma_ddot'].value * (t - self.time_base)**2
-            
+        if t is None and instname is not None:
+            t = self.data[instname].t
+        trend_zero = self.build_trend_zero(pars, t=t)
+        trend_global = self.build_trend_global(pars, t=t)
+        rv_vec -= (trend_zero + trend_global)
         return rv_vec
 
     def __repr__(self):
