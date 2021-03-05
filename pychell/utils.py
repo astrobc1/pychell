@@ -25,6 +25,11 @@ def csscolor_to_rgba(color, a=1.0):
     s = 'rgba(' + str(r) + ',' + str(g) + ',' + str(b) + ',' + str(a) + ')'
     return s
 
+def csscolor_to_rgba2(color, a=1.0):
+    r, g, b = webcolors.name_to_rgb(color)
+    s = 'rgba(' + str(r) + ',' + str(g) + ',' + str(b) + ',' + str(a) + ')'
+    return s
+
 # Helpful timer
 class StopWatch:
     

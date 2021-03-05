@@ -8,9 +8,8 @@ class RVColor(optkernels.GaussianProcess):
     
     def __init__(self, data, par_names=None, wavelength0=550):
         super().__init__(data=data, par_names=par_names)
-        self.wavelength0 = wavelength0
-        self.wave_vec = self.make_wave_vec()
         self.tel_vec = self.data.make_tel_vec()
+        self.wavelength0 = wavelength0
         self.unique_wavelengths = self.make_wave_vec_unique()
         self.compute_dist_matrix()
         
@@ -89,6 +88,7 @@ class RVColor(optkernels.GaussianProcess):
         super().compute_dist_matrix(x1=x1, x2=x2)
         self.wave1 = wave1
         self.wave2 = wave2
+        self.wave_vec = self.data.get_wave_vec()
         self.compute_wave_matrix(wave1=wave1, wave2=wave2)
         
     def compute_wave_matrix(self, wave1=None, wave2=None):

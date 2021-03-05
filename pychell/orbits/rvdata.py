@@ -4,7 +4,7 @@ import pandas as pd
 import warnings
 import matplotlib.pyplot as plt
 
-class RVData(optdata.Data):
+class RVData(optdata.Data1d):
     
     __slots__ = ['x', 'y', 'yerr', 'mask', 'label', 'wavelength']
     
@@ -49,7 +49,7 @@ class CompositeRVData(optdata.CompositeData):
     
     @property
     def instnames(self):
-        return [d.instname for d in self.items()]
+        return np.array(list(self.keys()), dtype="<U50")
 
     @classmethod
     def from_radvel_file(cls, fname, wavelengths=None):
@@ -77,33 +77,6 @@ class CompositeRVData(optdata.CompositeData):
             data[tel] = RVData(t_all[inds], rv_all[inds], rverr_all[inds], instname=tel, wavelength=wavelength)
         return data
     
-    def get_vec(self, key, labels=None, sort=True):
-        """Combines a certain vector from all labels into one array, and can then sort it according to time.
-
-        Args:
-            key (str): The key to get (t, rv, rverr)
-            labels (list): A list of labels (dict keys).
-
-        Returns:
-            np.ndarray: The vector, sorted according to x.
-        """
-        if labels is None:
-            labels = list(self.keys())
-        out = np.array([], dtype=float)
-        if sort:
-            x = np.array([], dtype=float)
-        for label in labels:
-            out = np.concatenate((out, getattr(self[label], key)))
-            if sort:
-                x = np.concatenate((x, self[label].t))
-            
-        # Sort
-        if sort:
-            ss = np.argsort(x)
-            out = out[ss]
-
-        return out
-    
     def get_wave_vec(self):
         wave_vec = np.array([], dtype=float)
         t = self.get_vec('t', sort=False)
@@ -129,13 +102,7 @@ class CompositeRVData(optdata.CompositeData):
             np.savetxt(f, out, fmt='%f,%f,%f,%s')
         
     def make_tel_vec(self):
-        tel_vec = np.array([], dtype='<U50')
-        t_all = self.get_vec('t', sort=False)
-        for instname in self:
-            tel_vec = np.concatenate((tel_vec, np.full(len(self[instname].t), fill_value=instname, dtype='<U50')))
-        ss = np.argsort(t_all)
-        tel_vec = tel_vec[ss]
-        return tel_vec
+        return self.make_label_vec()
     
     def get_inds(self, label):
         tel_vec = self.make_tel_vec()
@@ -157,10 +124,11 @@ class CompositeRVData(optdata.CompositeData):
         Returns:
             CompositeData: A view into the original data object.
         """
-        data_view = self.__class__()
-        for label in instnames:
-            data_view[label] = self[label]
-        return data_view
+        return super().get(labels=isntnames)
+    
+    @property
+    def tel_vec(self):
+        return self.label_vec
  
  
 def group_vis_nir(data, cut=1000):
