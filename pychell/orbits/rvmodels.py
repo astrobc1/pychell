@@ -163,7 +163,7 @@ class RVModel(optmodels.Model):
             t = self.data_t
         if t is None and instname is not None:
             t = self.data[instname].t
-        trend_zero = self.build_trend_zero(pars, t=t)
+        trend_zero = self.build_trend_zero(pars, t=t, instname=instname)
         trend_global = self.build_trend_global(pars, t=t)
         rv_vec -= (trend_zero + trend_global)
         return rv_vec

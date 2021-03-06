@@ -41,7 +41,7 @@ class RVProblem(optframeworks.OptProblem):
     """The primary, top-level container for Exoplanet optimization problems. As of now, this only deals with RV data. Photometric modeling will be included in future updates, but will leverage existing libraries (Batman, etc.).
     """
 
-    def __init__(self, output_path=None, data=None, p0=None, optimizer=None, sampler=None, likes=None, star_name=None, mstar=None, mstar_unc=None, rplanets=None):
+    def __init__(self, output_path=None, data=None, p0=None, optimizer=None, sampler=None, likes=None, star_name=None, mstar=None, mstar_unc=None, rplanets=None, tag=None):
         """Constructs the primary exoplanet problem object.
 
         Args:
@@ -63,6 +63,7 @@ class RVProblem(optframeworks.OptProblem):
         self.mstar_unc = mstar_unc
         self.rplanets = rplanets
         gen_latex_labels(self.p0, self.planets_dict)
+        self.tag = "" if tag is None else tag
         
     def plot_phased_rvs(self, planet_index, pars=None, plot_width=1000, plot_height=600):
         """Creates a phased rv plot for a given planet with the model on top. An html figure is saved with a unique filename.
@@ -150,7 +151,7 @@ class RVProblem(optframeworks.OptProblem):
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_layout(width=plot_width, height=plot_height)
-        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + self.planets_dict[planet_index]["label"] + '_rvs_phased_' + pcutils.gendatestr(time=True) + '.html')
+        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + self.planets_dict[planet_index]["label"] + '_rvs_phased_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.html')
         
         # Return fig
         return fig
@@ -720,7 +721,7 @@ class RVProblem(optframeworks.OptProblem):
         fig.update_layout(template="plotly_white")
         fig.update_layout(font=dict(size=20))
         fig.update_layout(width=plot_width, height=plot_height)
-        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + '.html')
+        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.html')
         
         # Return the figure for streamlit
         return fig
@@ -977,7 +978,7 @@ class RVProblem(optframeworks.OptProblem):
         persearch_results = Parallel(n_jobs=n_cores, verbose=0, batch_size=2)(delayed(self._rv_period_search_wrapper)(*args_pass[i]) for i in tqdm.tqdm(range(n_periods)))
         
         # Save
-        with open(self.output_path + self.star_name.replace(' ', '_') + '_persearch_results_' + pcutils.gendatestr(time=True) + '.pkl', 'wb') as f:
+        with open(self.output_path + self.star_name.replace(' ', '_') + '_persearch_results_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl', 'wb') as f:
             pickle.dump({"periods": periods, "persearch_results": persearch_results}, f)
             
         return periods, persearch_results
@@ -1006,7 +1007,7 @@ class RVProblem(optframeworks.OptProblem):
         """
         mcmc_result = super().sample(*args, **kwargs)
         if save:
-            fname = self.output_path + self.star_name.replace(' ', '_') + '_mcmc_results_' + pcutils.gendatestr(time=True) + '.pkl'
+            fname = self.output_path + self.star_name.replace(' ', '_') + '_mcmc_results_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl'
             with open(fname, 'wb') as f:
                 pickle.dump(mcmc_result, f)
         return mcmc_result
@@ -1023,7 +1024,7 @@ class RVProblem(optframeworks.OptProblem):
         """
         maxlike_result = super().optimize(*args, **kwargs)
         if save:
-            fname = self.output_path + self.star_name.replace(' ', '_') + '_maxlike_results_' + pcutils.gendatestr(time=True) + '.pkl'
+            fname = self.output_path + self.star_name.replace(' ', '_') + '_maxlike_results_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl'
             with open(fname, 'wb') as f:
                 pickle.dump(maxlike_result, f)
         return maxlike_result
@@ -1054,7 +1055,7 @@ class RVProblem(optframeworks.OptProblem):
         truths = pbest_vary_dict["value"]
         labels = [par.latex_str for par in mcmc_result["pbest"].values() if par.vary]
         corner_plot = corner.corner(mcmc_result["chains"], labels=labels, truths=truths, show_titles=True)
-        corner_plot.savefig(self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(time=True) + '.png')
+        corner_plot.savefig(self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.png')
         return corner_plot
     
     def full_rvcolor(self, pars=None, sep=0.3, time_offset=2450000, plot_width=1000, plot_height=600):
@@ -1130,7 +1131,7 @@ class RVProblem(optframeworks.OptProblem):
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_layout(width=plot_width, height=plot_height)
-        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvcolor_' + pcutils.gendatestr(time=True) + '.html')
+        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvcolor_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.html')
         
         return fig
 
@@ -1206,7 +1207,7 @@ class RVProblem(optframeworks.OptProblem):
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_layout(width=plot_width, height=plot_height)
-        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvcolor_1_to_1_' + pcutils.gendatestr(time=True) + '.html')
+        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvcolor_1_to_1_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.html')
         
         return fig
 
@@ -1419,7 +1420,7 @@ class RVProblem(optframeworks.OptProblem):
             mcr['delta_bic'] = bic_diffs[i]
     
         # Save
-        fname = self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(time=True) + '.pkl'
+        fname = self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl'
         with open(fname, 'wb') as f:
             pickle.dump(model_comp_results, f)
         
