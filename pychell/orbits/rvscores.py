@@ -137,7 +137,7 @@ class RVChromaticLikelihood2(RVLikelihood):
         residuals_no_noise = np.copy(residuals_with_noise)
         for data in self.data.values():
             inds = self.model.data_inds[data.label]
-            gp_mean = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, wavelength=data.wavelength, return_kernel_error=False)
+            gp_mean = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, return_kernel_error=False, instrument=data.label)
             residuals_no_noise[inds] -= gp_mean
             
         return residuals_no_noise

@@ -1712,7 +1712,7 @@ class RVProblem(optframeworks.OptProblem):
         p0 = optprob.p0
         p0['per' + str(planet_index)].value = period
         optprob.set_pars(p0)
-        opt_result = optprob.optimize()
+        opt_result = optprob.optimize(save=False)
         return opt_result
 
     @staticmethod

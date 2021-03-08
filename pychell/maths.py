@@ -176,6 +176,14 @@ def cspline_interp(x, y, xnew):
     good = np.where(np.isfinite(x) & np.isfinite(y))[0]
     return scipy.interpolate.CubicSpline(x[good], y[good], extrapolate=False)(xnew)
 
+def cspline_fit(x, y, knots, weights=None):
+    if weights is None:
+        weights = np.ones_like(y)
+    good = np.where(np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights > 0))[0]
+    xx, yy, ww = x[good], y[good], weights[good]
+    _cspline_fit = scipy.interpolate.UnivariateSpline(x, y, w=ww, k=3, s=None, ext=0, check_finite=False)
+    return _cspline_fit
+
 @njit
 def _dop_shift_SR(wave, vel):
     z = vel / cs.c
