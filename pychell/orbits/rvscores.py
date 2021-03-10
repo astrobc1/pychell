@@ -89,6 +89,31 @@ class RVLikelihood(optscore.Likelihood):
             residuals_no_noise -= kernel_mean
         return residuals_no_noise
     
+    def get_components(self, pars):
+        
+        comps = {}
+        
+        # Data times
+        t = np.copy(self.data_t)
+        
+        # Data RVs - offsets
+        rvs = np.copy(self.data_y)
+        rvs -= self.model.build_trend_zero(pars, t, instname=None)
+        
+        # Data errrors
+        rvs_error = np.copy(self.data_t)
+        
+        # Store in comps
+        comps[self.label + "_data_t"] = t
+        comps[self.label + "_data_rvs"] = rvs
+        comps[self.label + "_data_rvs_error"] = rvs_error
+        
+        # GP
+        if isinstance(self.model.kernel, optnoisekernels.CorrelatedNoiseKernel):
+            kernel_mean = self.model.kernel.realize()
+        
+        return comps
+    
     @property
     def data_t(self):
         return self.data_x

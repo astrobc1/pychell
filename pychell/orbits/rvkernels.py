@@ -98,8 +98,7 @@ class RVColor(optkernels.GaussianProcess):
             wave1 (float, optional): [description]. Defaults to the data wavelengths.
             wave2 (float, optional): The wavelength for the second axis. Defaults to the data wavelengths.
         """
-        n1 = self.dist_matrix.shape[0]
-        n2 = self.dist_matrix.shape[1]
+        n1, n2 = self.dist_matrix.shape
         if wave1 is not None:
             wave_vec1 = np.full(n1, fill_value=wave1)
         else:
@@ -242,9 +241,9 @@ class RVColor2(RVColor):
             x1 = self.t
         if x2 is None:
             x2 = self.t
-        optkernels.CorrelatedNoiseKernel.compute_dist_matrix(self, x1=x1, x2=x2)
         self.instname1 = instname1
         self.instname2 = instname2
+        optkernels.CorrelatedNoiseKernel.compute_dist_matrix(self, x1=x1, x2=x2)
     
     def make_amp_matrix(self, pars):
         n1, n2 = self.dist_matrix.shape

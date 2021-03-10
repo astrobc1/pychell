@@ -771,8 +771,7 @@ class PARVIParser(DataParser):
         return data.skycoord
     
     def parse_itime(self, data):
-        itime = data.header["EXPTIME"]
-        data.itime = itime
+        data.itime = data.header["EXPTIME"]
         return data.itime
         
     def parse_time(self, data):

@@ -1210,6 +1210,8 @@ class RVProblem(optframeworks.OptProblem):
         fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvcolor_1_to_1_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.html')
         
         return fig
+    
+    #def plot_rvcolor_hysteresis(self, pars):
 
     def compute_rvcolor(self, pars, wave1, wave2, sep=0.3):
         """Computes the "RV-color" for wavelengths 1 and 2.
@@ -1606,39 +1608,6 @@ class RVProblem(optframeworks.OptProblem):
             return t_hr_gp, gpmu_hr, gpstddev_hr
         else:
             return t_hr_gp, gpmu_hr
-        
-    def build_components(self, pars):
-        if pars is None:
-            pars = self.p0
-            
-        # Init components
-        components = {}
-        
-        # Raw data
-        components["t"] = self.data.get_vec("t")
-        components["rvs"] = self.data.get_vec("rv")
-        components["rvs_unc"] = self.data.get_vec("rverr")
-        
-        # Per instrument zero points
-        rv_trend_zero = np.array([], dtype=float)
-        for like in self.likes:
-            rv_trend_zero = np.concatenate((rv_trend_zero, like.model.build_trend_zero(pars, like.data_t)))
-            
-        # Sort, pass
-        components["trend_zero"] = np.sort(rv_trend_zero)
-            
-        # Global trend
-        components["trend_global"] = self.like0.model.build_trend_global(pars, components["t"])
-        
-        # Planets
-        for planet_index in self.planets_dict:
-            components["planet" + str(planet_index)] = self.like0.model.build_planet(pars, components["t"])
-            
-        # Noise kernel
-        #for like in self.likes:
-        #    if isinstance(like, like.RVChroamticLikelihood):
-        #        like.model.kernel.realize()
-            
             
         
     @staticmethod
