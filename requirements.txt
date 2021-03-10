@@ -1,6 +1,6 @@
 astropy>=4.0
 llc>=0.2
-barycorrpy==0.3.4
+barycorrpy>=0.4.1
 tqdm>=4.48.2
 numba>=0.48
 numpy>=1.18
