@@ -915,15 +915,18 @@ class RVProblem(optframeworks.OptProblem):
             self.set_pars(p0cp)
             
         else:
-            
+            data_t = np.array([], dtype=float)
+            data_rvs = np.array([], dtype=float)
+            data_unc = np.array([], dtype=float)
             for like in self.scorer.values():
                 errors = like.model.kernel.compute_data_errors(self.p0, include_jit=True, include_gp=True, gp_unc=None, residuals_no_noise=None)
                 data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, self.p0)
                 for data in like.data.values():
+                    data_t = np.concatenate((data_t, data.t))
                     inds = self.data.get_inds(data.label)
-                    data_rvs[inds] = data_arr[like.model.data_inds[data.label]]
-                    data_errors[inds] = errors[like.model.data_inds[data.label]]
+                    data_rvs = np.concatenate((data_rvs, data_arr[like.model.data_inds[data.label]]))
+                    data_unc = np.concatenate((data_unc, errors[like.model.data_inds[data.label]]))
         
         # Call GLS
         ss = np.argsort(data_t)

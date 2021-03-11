@@ -116,13 +116,13 @@ def extract_full_image(data, config):
                 stopwatch.lap(sub_trace_index)
                 print('    Extracting Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(len(single_order_list)) + ' ...')
                 
-                reduced_orders[order_index, sub_trace_index, :, :], boxcar_spectra[order_index, sub_trace_index, :], trace_profile_csplines[order_index, sub_trace_index], y_positions[order_index, sub_trace_index, :] = extract_single_trace2(data, data_image, trace_map_image, single_trace_dict, config)
+                reduced_orders[order_index, sub_trace_index, :, :], boxcar_spectra[order_index, sub_trace_index, :], trace_profile_csplines[order_index, sub_trace_index], y_positions[order_index, sub_trace_index, :] = extract_single_trace(data, data_image, trace_map_image, single_trace_dict, config)
                 
                 print('    Extracted Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(len(single_order_list)) + ' in ' + str(round(stopwatch.time_since(sub_trace_index), 3)) + ' min ')
                 
         # Orders are composed of single trace
         else:
-            reduced_orders[order_index, 0, :, :], boxcar_spectra[order_index, 0, :], trace_profile_csplines[order_index, 0], y_positions[order_index, 0, :] = extract_single_trace2(data, data_image, trace_map_image, single_order_list[0], config)
+            reduced_orders[order_index, 0, :, :], boxcar_spectra[order_index, 0, :], trace_profile_csplines[order_index, 0], y_positions[order_index, 0, :] = extract_single_trace(data, data_image, trace_map_image, single_order_list[0], config)
             
         print('  Extracted Order ' + str(order_index + 1) + ' of ' + str(n_orders) + ' in ' + str(round(stopwatch.time_since(order_index) / 60, 3)) + ' min ')
 
