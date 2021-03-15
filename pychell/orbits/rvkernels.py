@@ -347,30 +347,22 @@ class RVColor2(RVColor):
             return mu
         
         
-class RVColor3(RVColor):
+class RVColor3(RVColor2):
     
-    def __init__(self, data, par_names=None):
-        optkernels.GaussianProcess.__init__(self, data=data, par_names=par_names)
-        self.tel_vec = self.data.make_tel_vec()
-        self.wave_vec = self.make_wave_vec()
-        self.compute_dist_matrix()
-        self.unique_wavelengths = np.unique(self.make_wave_vec())
-        self.n_wavelengths = len(self.unique_wavelengths)
-        
     def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False):
         
         # Alias params
         amp_matrix = self.make_amp_matrix(pars)
-        eta2 = pars[self.par_names[self.n_wavelengths]].value # decay
-        eta3 = pars[self.par_names[self.n_wavelengths + 1]].value # period
-        eta4 = pars[self.par_names[self.n_wavelengths + 2]].value # smoothing factor
+        eta2 = pars[self.par_names[self.n_instruments]].value # decay
+        eta3 = pars[self.par_names[self.n_instruments + 1]].value # period
+        eta4 = pars[self.par_names[self.n_instruments + 2]].value # smoothing factor
             
         # Construct individual kernels
         decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta2)**2)
-        periodic_kernel = np.exp(-0.5 * (1 / eta4)**2 * np.sin(np.pi * self.dist_matrix / eta3)**2)
+        periodic_kernel = np.cos(2 * np.pi * self.dist_matrix / eta3) + 1 + eta4
         
         # Construct full cov matrix
-        cov_matrix = amp_matrix * decay_kernel * periodic_kernel
+        cov_matrix = (amp_matrix / (2 + eta4)) * decay_kernel * periodic_kernel
         
         # Apply intrinsic plus white noise data errors
         if include_white_error:
@@ -378,97 +370,6 @@ class RVColor3(RVColor):
             np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
         
         return cov_matrix
-        
-    def realize(self, pars, residuals_with_noise, xpred=None, xres=None, return_kernel_error=False, wavelength=None):
-        """Realize the GP (predict/ssample at arbitrary points). Meant to be the same as the predict method offered by other codes.
-
-        Args:
-            pars (Parameters): The parameters to use.
-            residuals (np.ndarray): The residuals before the GP is subtracted.
-            xpred (np.ndarray): The vector to realize the GP on.
-            xres (np.ndarray): The vector the data is on.
-            errors (np.ndarray): The errorbars, already added in quadrature.
-            wavelength (float): The wavelength to realize the GP for.
-            return_unc (bool, optional): Whether or not to compute the uncertainty in the GP. If True, both the mean and stddev are returned in a tuple. Defaults to False.
-
-        Returns:
-            np.ndarray OR tuple: If stddev is False, only the mean GP is returned. If stddev is True, the uncertainty in the GP is computed and returned as well. The mean GP is computed through a linear optimization.
-        """
-        
-        # Resolve grids
-        if xres is None:
-            xres = self.data.get_vec('t')
-        if xpred is None:
-            xpred = xres
-        
-        # Get K
-        self.compute_dist_matrix(xres, xres, wave1=None, wave2=None)
-        K = self.compute_cov_matrix(pars, include_white_error=True)
-        
-        # Compute version of K without errorbars
-        self.compute_dist_matrix(xpred, xres, wave1=wavelength, wave2=None)
-        Ks = self.compute_cov_matrix(pars, include_white_error=False)
-
-        # Avoid overflow errors in det(K) by reducing the matrix.
-        L = cho_factor(K)
-        alpha = cho_solve(L, residuals_with_noise)
-        mu = np.dot(Ks, alpha).flatten()
-
-        # Compute the uncertainty in the GP fitting.
-        if return_kernel_error:
-            self.compute_dist_matrix(xpred, xpred, wave1=wavelength, wave2=wavelength)
-            Kss = self.compute_cov_matrix(pars, include_white_error=False)
-            B = cho_solve(L, Ks.T)
-            var = np.array(np.diag(Kss - np.dot(Ks, B))).flatten()
-            unc = np.sqrt(var)
-            self.compute_dist_matrix(xres, xres, wave1=None, wave2=None)
-            return mu, unc
-        else:
-            self.compute_dist_matrix(xres, xres, wave1=None, wave2=None)
-            return mu
-        
-    def make_wave_vec(self):
-        wave_vec = np.array([], dtype=float)
-        t = self.data.get_vec('t', sort=False)
-        ss = np.argsort(t)
-        for data in self.data.values():
-            wave_vec = np.concatenate((wave_vec, np.full(data.t.size, fill_value=data.wavelength)))
-        wave_vec = wave_vec[ss]
-        return wave_vec
-    
-    def get_wave_inds(self, wavelength):
-        inds = np.where(self.wave_vec == wavelength)[0]
-        return inds
-    
-    def get_instnames_for_wave(self, wavelength):
-        instnames = []
-        for data in self.data.values():
-            if data.wavelength == wavelength:
-                instnames.append(data.label)
-        return instnames
-    
-    def make_amp_matrix(self, pars):
-        n1, n2 = self.dist_matrix.shape
-        amp_vec1 = np.zeros(n1)
-        amp_vec2 = np.zeros(n2)
-        if self.wave1 is not None:
-            amp_vec1 = np.zeros(n1)
-            amp_vec1[:] = pars["gp_amp_" + str(int(self.wave1))].value
-        else:
-            for i in range(n1):
-                amp_vec1[i] = pars["gp_amp_" + str(int(self.wave_vec[i]))].value
-        if self.wave2 is not None:
-            amp_vec2 = np.zeros(n2)
-            amp_vec2[:] = pars["gp_amp_" + str(int(self.wave2))].value
-        else:
-            for i in range(n2):
-                amp_vec2[i] = pars["gp_amp_" + str(int(self.wave_vec[i]))].value
-        amp_matrix = np.outer(amp_vec1, amp_vec2)
-        return amp_matrix
-    
-    @property
-    def t(self):
-        return self.x
     
     
 class RVColorCBS(RVColor):

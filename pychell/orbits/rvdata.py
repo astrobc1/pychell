@@ -45,7 +45,7 @@ class RVData(optdata.Data1d):
         return str(len(self.t)) + " RVs from " + self.instname
     
     
-class CompositeRVData(optdata.CompositeData):
+class CompositeRVData(optdata.CompositeData1d):
     
     @property
     def instnames(self):
@@ -109,12 +109,6 @@ class CompositeRVData(optdata.CompositeData):
         inds = np.where(tel_vec == label)[0]
         return inds
     
-    def get_instruments(self, labels):
-        data_out = CompositeRVData()
-        for label in labels:
-            data_out[label] = self[label]
-        return data_out
-    
     def get(self, instnames):
         """Returns a view into sub data objects.
 
@@ -124,7 +118,7 @@ class CompositeRVData(optdata.CompositeData):
         Returns:
             CompositeData: A view into the original data object.
         """
-        return super().get(labels=isntnames)
+        return super().get(labels=instnames)
     
     @property
     def tel_vec(self):

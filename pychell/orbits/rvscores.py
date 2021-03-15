@@ -10,12 +10,11 @@ class RVLikelihood(optscore.Likelihood):
     
     def __init__(self, label=None, data=None, model=None):
         super().__init__(label=label, data=data, model=model)
-        self.p0 = model.p0
         self.data_inds = {}
         for data in self.data.values():
             self.data_inds[data.label] = self.data.get_inds(data.label)
     
-    def compute_logL(self, pars, apply_priors=True):
+    def compute_logL(self, pars, apply_priors=False):
         """Computes the log of the likelihood.
     
         Args:
@@ -97,20 +96,25 @@ class RVLikelihood(optscore.Likelihood):
         t = np.copy(self.data_t)
         
         # Data RVs - offsets
-        rvs = np.copy(self.data_y)
+        rvs = np.copy(self.data_rv)
         rvs -= self.model.build_trend_zero(pars, t, instname=None)
         
+        # Get residuals
+        residuals_with_noise = self.residuals_with_noise(pars)
+        
         # Data errrors
-        rvs_error = np.copy(self.data_t)
+        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
         
         # Store in comps
-        comps[self.label + "_data_t"] = t
-        comps[self.label + "_data_rvs"] = rvs
-        comps[self.label + "_data_rvs_error"] = rvs_error
+        comps[self.label + "_data_t"] = data_t
+        comps[self.label + "_data_rvs"] = data_rvs
+        comps[self.label + "_data_rvs_error"] = data_rvs_error
         
-        # GP
+        # Standard GP
         if isinstance(self.model.kernel, optnoisekernels.CorrelatedNoiseKernel):
-            kernel_mean = self.model.kernel.realize()
+            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=None, xres=None, return_kernel_error=True)
+            comps[self.label + "_kernel_mean"] = kernel_mean
+            comps[self.label + "_kernel_unc"] = kernel_unc
         
         return comps
     
@@ -146,6 +150,36 @@ class RVChromaticLikelihood(RVLikelihood):
             
         return residuals_no_noise
     
+    def get_components(self, pars):
+        
+        comps = {}
+        
+        # Data times
+        t = np.copy(self.data_t)
+        
+        # Data RVs - offsets
+        rvs = np.copy(self.data_rv)
+        rvs -= self.model.build_trend_zero(pars, t, instname=None)
+        
+        # Get residuals
+        residuals_with_noise = self.residuals_with_noise(pars)
+        
+        # Data errrors
+        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        
+        # Store in comps
+        comps[self.label + "_data_t"] = data_t
+        comps[self.label + "_data_rvs"] = data_rvs
+        comps[self.label + "_data_rvs_error"] = data_rvs_error
+        
+        # Standard GP
+        for wavelength in self.model.kernel.unique_wavelengths:
+            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=None, xres=None, return_kernel_error=True, wavelength=wavelength)
+            comps[self.label + "_kernel_mean_" + str(int(wavelength))] = kernel_mean
+            comps[self.label + "_kernel_unc" + str(int(wavelength))] = kernel_unc
+        
+        return comps
+    
     
 class RVChromaticLikelihood2(RVLikelihood):
     
@@ -166,6 +200,36 @@ class RVChromaticLikelihood2(RVLikelihood):
             residuals_no_noise[inds] -= gp_mean
             
         return residuals_no_noise
+    
+    def get_components(self, pars):
+        
+        comps = {}
+        
+        # Data times
+        data_t = np.copy(self.data_t)
+        
+        # Data RVs - offsets
+        data_rvs = np.copy(self.data_rv)
+        data_rvs = self.model.apply_offsets(data_rvs, pars)
+        
+        # Get residuals
+        residuals_with_noise = self.residuals_with_noise(pars)
+        
+        # Data errrors
+        data_rvs_error = self.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        
+        # Store in comps
+        comps[self.label + "_data_t"] = data_t
+        comps[self.label + "_data_rvs"] = data_rvs
+        comps[self.label + "_data_rvs_error"] = data_rvs_error
+        
+        # Standard GP
+        for data in self.data.values():
+            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, instrument=data.label)
+            comps[self.label + "_kernel_mean_" + data.label] = kernel_mean
+            comps[self.label + "_kernel_unc_" + data.label] = kernel_unc
+        
+        return comps
 
 
 class RVPosterior(optscore.Posterior):
@@ -209,3 +273,56 @@ class RVPosterior(optscore.Posterior):
         assert n_dof > 0
         redchi2 = np.nansum((residuals / errors)**2) / n_dof
         return redchi2
+    
+    def get_components(self, pars):
+        
+        # Components
+        comps = {}
+        
+        # Time vector for this likelihood
+        t_vec = np.copy(self.data_t)
+        
+        # Planets
+        for planet_index in self.like0.model.planets_dict:
+            planet_signal = self.like0.model.build_planet(pars, t_vec, planet_index)
+            comps["planet_" + str(planet_index) + "_rvs"] = planet_signal
+            
+        # Data and GP
+        for like in self.values():
+            _comps = like.get_components(pars)
+            comps.update(_comps)
+        
+        return comps
+    
+    @property
+    def data_t(self):
+        data_t = np.array([], dtype=float)
+        for like in self.values():
+            data_t = np.concatenate((data_t, like.data_t))
+        ss = np.argsort(data_t)
+        data_t = data_t[ss]
+        return data_t
+    
+    @property
+    def data_rv(self):
+        data_rv = np.array([], dtype=float)
+        for like in self.values():
+            data_rv = np.concatenate((data_rv, like.data_rv))
+        data_rv = data_rv[self.sorting_inds]
+        return data_rv
+    
+    @property
+    def data_rverr(self):
+        data_rverr = np.array([], dtype=float)
+        for like in self.values():
+            data_rverr = np.concatenate((data_rverr, like.data_rverr))
+        data_rverr = data_rverr[self.sorting_inds]
+        return data_rverr
+    
+    @property
+    def sorting_inds(self):
+        data_t = np.array([], dtype=float)
+        for like in self.values():
+            data_t = np.concatenate((data_t, like.data_t))
+        ss = np.argsort(data_t)
+        return ss

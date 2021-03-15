@@ -176,7 +176,7 @@ class RVProblem(optframeworks.OptProblem):
             plots.append(plot)
         return plots
     
-    def plot_full_rvs2(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=100, plot_width=12, plot_height=8):
+    def plot_full_rvs2(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=200, plot_width=12, plot_height=8):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
@@ -453,7 +453,7 @@ class RVProblem(optframeworks.OptProblem):
         # Return the figure for streamlit
         return fig
         
-    def plot_full_rvs(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=100, plot_width=1800, plot_height=1200):
+    def plot_full_rvs(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=200, plot_width=1800, plot_height=1200):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
@@ -508,7 +508,7 @@ class RVProblem(optframeworks.OptProblem):
                 residuals_with_noise = like.residuals_with_noise(pars)
                 residuals_no_noise = like.residuals_no_noise(pars)
                 
-                s = pars["gp_per"].value
+                s = 4 * pars["gp_per"].value
                 
                 # Plot a GP for each instrument
                 for wavelength in like.model.kernel.unique_wavelengths:
@@ -578,7 +578,7 @@ class RVProblem(optframeworks.OptProblem):
                 residuals_with_noise = like.residuals_with_noise(pars)
                 residuals_no_noise = like.residuals_no_noise(pars)
                 
-                s = pars["gp_per"].value
+                s = 4 * pars["gp_per"].value
                 
                 # Plot a GP for each instrument
                 for data in like.model.kernel.data.values():
@@ -640,7 +640,7 @@ class RVProblem(optframeworks.OptProblem):
                 
                 # Make hr array for GP
                 if 'gp_per' in pars:
-                    s = pars['gp_per'].value
+                    s = 4 * pars['gp_per'].value
                 elif 'gp_decay' in pars:
                     s = pars['gp_decay'].value / 10
                 else:
@@ -1336,8 +1336,8 @@ class RVProblem(optframeworks.OptProblem):
         gp_color_unc_data = np.sqrt(gp_stddev1_data**2 + gp_stddev2_data**2)
         
         # Compute the densely sampled GP-color
-        t_gp_hr, gpmean1_hr, gpstddev1_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value*2, t=jds_avg, residuals_with_noise=residuals_with_noise, kernel_sampling=100, return_kernel_error=True, wavelength=wave1)
-        _, gpmean2_hr, gpstddev2_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value*2, t=jds_avg, residuals_with_noise=residuals_with_noise, kernel_sampling=100, return_kernel_error=True, wavelength=wave2)
+        t_gp_hr, gpmean1_hr, gpstddev1_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value*2, t=jds_avg, residuals_with_noise=residuals_with_noise, kernel_sampling=200, return_kernel_error=True, wavelength=wave1)
+        _, gpmean2_hr, gpstddev2_hr = self.gp_smart_sample(pars, self.like0, s=pars["gp_per"].value*2, t=jds_avg, residuals_with_noise=residuals_with_noise, kernel_sampling=200, return_kernel_error=True, wavelength=wave2)
         
         gpmean_color_hr = gpmean1_hr - gpmean2_hr
         gpstddev_color_hr = np.sqrt(gpstddev1_hr**2 + gpstddev2_hr**2)
@@ -1398,7 +1398,7 @@ class RVProblem(optframeworks.OptProblem):
             pbest = opt_result['pbest']
             
             # Recompute the max like to NOT include any priors to keep things consistent.
-            lnL = self.scorer.compute_logL(pbest, apply_priors=False)
+            lnL = _optprob.scorer.compute_logL(pbest, apply_priors=False)
             
             # Run the BIC
             bic = _optprob.optimizer.scorer.compute_bic(pbest)
@@ -1414,12 +1414,22 @@ class RVProblem(optframeworks.OptProblem):
             
             del _optprob
             
+        # Get the aicc and bic vals for each model
         aicc_vals = np.array([mcr['aicc'] for mcr in model_comp_results], dtype=float)
-        bic_vals = np.array([mcr['bic'] for mcr in model_comp_results], dtype=float)
+        
+        # Sort according to aicc val (smaller is "better")
         ss = np.argsort(aicc_vals)
         model_comp_results = [model_comp_results[ss[i]] for i in range(len(ss))]
-        aicc_diffs = np.abs(aicc_vals[ss] - np.nanmin(aicc_vals))
-        bic_diffs = np.abs(bic_vals[ss] - np.nanmin(bic_vals))
+        
+        # Grab the aicc and bic vals again
+        aicc_vals = np.array([mcr['aicc'] for mcr in model_comp_results], dtype=float)
+        bic_vals = np.array([mcr['bic'] for mcr in model_comp_results], dtype=float)
+        
+        # Compute aicc and bic vals
+        aicc_diffs = np.abs(aicc_vals - np.nanmin(aicc_vals))
+        bic_diffs = np.abs(bic_vals - np.nanmin(bic_vals))
+        
+        # Store diffs
         for i, mcr in enumerate(model_comp_results):
             mcr['delta_aicc'] = aicc_diffs[i]
             mcr['delta_bic'] = bic_diffs[i]
@@ -1570,7 +1580,7 @@ class RVProblem(optframeworks.OptProblem):
                 rhoplanets[planet_index] = (val, unc_low, unc_high)
         return rhoplanets
     
-    def gp_smart_sample(self, pars, like, s, t, residuals_with_noise, kernel_sampling=100, return_kernel_error=True, wavelength=None):
+    def gp_smart_sample(self, pars, like, s, t, residuals_with_noise, kernel_sampling=200, return_kernel_error=True, wavelength=None):
         """Smartly samples the GP. Could be smarter.
 
         Args:
@@ -1612,7 +1622,9 @@ class RVProblem(optframeworks.OptProblem):
         else:
             return t_hr_gp, gpmu_hr
             
-        
+    def get_components(self, pars):
+        return self.scorer.get_components(pars)
+            
     @staticmethod
     def _gp_smart_sample(like, pars, residuals_with_noise, t, s, kernel_sampling, return_kernel_error, wavelength):
         t_hr_gp = np.linspace(t - s, t + s, num=kernel_sampling)
@@ -1724,7 +1736,6 @@ class RVProblem(optframeworks.OptProblem):
             for planet_par_name in planets_dict[planet_index]["basis"].names:
                 if par.name == planet_par_name + str(planet_index):
                     pars[par.name].vary = False
-
 
 def gen_latex_labels(pars, planets_dict):
     """Default Settings for latex labels for orbit fitting. Any GP parameters must be set manually via parameter.latex_str = "$latexname$"

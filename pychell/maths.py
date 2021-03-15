@@ -181,7 +181,7 @@ def cspline_fit(x, y, knots, weights=None):
         weights = np.ones_like(y)
     good = np.where(np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights > 0))[0]
     xx, yy, ww = x[good], y[good], weights[good]
-    _cspline_fit = scipy.interpolate.UnivariateSpline(x, y, w=ww, k=3, s=None, ext=0, check_finite=False)
+    _cspline_fit = scipy.interpolate.LSQUnivariateSpline(xx, yy, t=knots[1:-1], w=ww, k=3, ext=1)
     return _cspline_fit
 
 @njit
