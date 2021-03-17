@@ -636,7 +636,10 @@ def weighted_combine(y, w, yerr=None, err_type="Poisson"):
     else:
         yc = weighted_mean(y[good].flatten(), w[good].flatten())
         if err_type.lower() == "poisson":
-            yc_unc = np.nanmean(yerr[good].flatten()) / np.sqrt(n_good)
+            if yerr is not None:
+                yc_unc = np.nanmean(yerr[good].flatten()) / np.sqrt(n_good)
+            else:
+                yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
         else:
             yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
         
