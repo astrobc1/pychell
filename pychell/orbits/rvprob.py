@@ -1397,7 +1397,7 @@ class RVProblem(optframeworks.OptProblem):
             pbest = opt_result['pbest']
             
             # Recompute the max like to NOT include any priors to keep things consistent.
-            lnL = _optprob.scorer.compute_logL(pbest, apply_priors=False)
+            lnL = _optprob.scorer.compute_logL(pbest)
             
             # Run the BIC
             bic = _optprob.optimizer.scorer.compute_bic(pbest)
