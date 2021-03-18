@@ -14,7 +14,7 @@ class RVLikelihood(optscore.Likelihood):
         for data in self.data.values():
             self.data_inds[data.label] = self.data.get_inds(data.label)
     
-    def compute_logL(self, pars, apply_priors=False):
+    def compute_logL(self, pars):
         """Computes the log of the likelihood.
     
         Args:
@@ -24,13 +24,6 @@ class RVLikelihood(optscore.Likelihood):
         Returns:
             float: The log likelihood, ln(L).
         """
-        # Apply priors, see if we even need to compute the model
-        if apply_priors:
-            lnL = self.compute_logL_priors(pars)
-            if not np.isfinite(lnL):
-                return -np.inf
-        else:
-            lnL = 0
             
         # Get residuals
         residuals = self.residuals_with_noise(pars)
@@ -48,7 +41,7 @@ class RVLikelihood(optscore.Likelihood):
 
             # Compute the likelihood
             n = len(residuals)
-            lnL += -0.5 * (np.dot(residuals, alpha) + lndetK + n * np.log(2 * np.pi))
+            lnL = -0.5 * (np.dot(residuals, alpha) + lndetK + n * np.log(2 * np.pi))
     
         except:
             # If things fail (matrix decomp) return -inf
@@ -180,7 +173,6 @@ class RVChromaticLikelihood(RVLikelihood):
         
         return comps
     
-    
 class RVChromaticLikelihood2(RVLikelihood):
     
     def residuals_no_noise(self, pars):
@@ -235,25 +227,6 @@ class RVChromaticLikelihood2(RVLikelihood):
 class RVPosterior(optscore.Posterior):
     """Probably identical to Posterior.
     """
-    
-    def compute_logL(self, pars, apply_priors=True):
-        """Computes the log of the likelihood.
-    
-        Args:
-            pars (Parameters): The parameters to use.
-            apply_priors (bool, optional): Whether or not to apply the priors. Defaults to True.
-
-        Returns:
-            float: The log likelihood, ln(L).
-        """
-        lnL = 0
-        if apply_priors:
-            lnL += self.compute_logL_priors(pars)
-            if not np.isfinite(lnL):
-                return -np.inf
-        for like in self.values():
-            lnL += like.compute_logL(pars, apply_priors=False)
-        return lnL
     
     def compute_redchi2(self, pars, include_white_error=True, include_kernel_error=True, kernel_error=None):
         
