@@ -139,6 +139,7 @@ class DataParser:
         # Check if forward models have a barycorr file attribute
         if hasattr(forward_models, 'bary_corr_file') and forward_models.bary_corr_file is not None:
             bjds, bc_vels = np.loadtxt(forward_models.data_input_path + forward_models.bary_corr_file, delimiter=',', unpack=True)
+            bjds, bc_vels = np.atleast_1d(bjds), np.atleast_1d(bc_vels)
         else:
             bjds, bc_vels = np.zeros(forward_models.n_spec), np.zeros(forward_models.n_spec)
             for ispec in range(forward_models.n_spec):

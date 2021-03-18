@@ -605,7 +605,7 @@ class RVProblem(optframeworks.OptProblem):
                     # Plot the GP
                     tt = t_hr_gp - time_offset
                     gp_lower, gp_upper = gpmu_hr - gpstddev_hr, gpmu_hr + gpstddev_hr
-                    label = '<b>GP ' + '&#x3BB;' + data.label + '</b>'
+                    label = '<b>GP ' + data.label + '</b>'
                     fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=1.2, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
                     fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                              y=np.concatenate([gp_upper, gp_lower[::-1]]),
@@ -645,7 +645,6 @@ class RVProblem(optframeworks.OptProblem):
                     s = pars['gp_decay'].value / 10
                 else:
                     s = 10
-                    
                 t_hr_gp = np.array([], dtype=float)
                 gpmu_hr = np.array([], dtype=float)
                 gpstddev_hr = np.array([], dtype=float)
