@@ -491,6 +491,10 @@ class RVProblem(optframeworks.OptProblem):
         # Plot the planet model
         fig.add_trace(plotly.graph_objects.Scatter(x=t_hr - time_offset, y=model_arr_hr, line=dict(color='black', width=2), name="<b>Keplerian Model</b>"), row=1, col=1)
         
+        # Light curve plot
+        if ffp is not None:
+            fig.add_trace(plotly.graph_objects.Scatter(x=ffp[:, 0] - time_offset, y=300 * ffp[:, 1] / np.std(ffp[:, 1]), line=dict(color='red', width=2), name="<b>FF' Prediction</b>"), row=1, col=1)
+        
         # Loop over likes and:
         # 1. Create high res GP
         # 2. Plot high res GP and data
@@ -699,10 +703,6 @@ class RVProblem(optframeworks.OptProblem):
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
                     color_index += 1
 
-
-        # Light curve plot
-        if ffp is not None:
-            fig.add_trace(plotly.graph_objects.Scatter(x=ffp[:, 0] - time_offset, y=ffp[:, 1], line=dict(color='red', width=2), name="<b>FF' Prediction</b>"), row=1, col=1, secondary_y=True)
 
         # Labels
         fig.update_xaxes(title_text='<b>BJD - ' + str(time_offset) + '</b>', row=2, col=1)
@@ -1860,7 +1860,7 @@ def predict_from_ffprime(t, spots=True, cvbs=True, rstar=1.0, f=0.1):
     Returns:
         np.ndarray: The predicted RV signature from stellar spots.
     """
-    cspline = pcmath.cspline_fit(t, f) # FIX THIS
+    cspline = pcmath.cspline_fit(t, f)
     rv_pred = -1.0 * f * cspline(t, 1) * rstar / f
     if cvbs:
         rv_pred += cspline(t)**2 / f

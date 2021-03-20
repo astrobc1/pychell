@@ -356,6 +356,7 @@ class RVColor3(RVColor2):
         eta2 = pars[self.par_names[self.n_instruments]].value # decay
         eta3 = pars[self.par_names[self.n_instruments + 1]].value # period
         eta4 = pars[self.par_names[self.n_instruments + 2]].value # smoothing factor
+        eta5 = pars[self.par_names[self.n_instruments + 3]].value # smoothing factor
             
         # Construct individual kernels
         decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta2)**2)
