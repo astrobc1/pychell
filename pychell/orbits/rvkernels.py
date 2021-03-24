@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import optimize.kernels as optkernels
 from numba import njit, prange
 
+# Import optimize kernels into namespace
+from optimize.kernels import *
+
 class RVColor(optkernels.GaussianProcess):
     
     def __init__(self, data, par_names=None, wavelength0=550):

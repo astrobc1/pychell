@@ -966,6 +966,9 @@ class CHIRONForwardModel(ForwardModel):
 class PARVIForwardModel(ForwardModel):
     pass
 
+class IRDForwardModel(ForwardModel):
+    pass
+
 class MinervaAustralisForwardModel(ForwardModel):
     pass
     

@@ -32,6 +32,7 @@ import pychell.orbits.rvkernels as pcrvkernels
 import pychell.orbits.rvscores as pcrvscores
 import pychell.utils as pcutils
 PLOTLY_COLORS = pcutils.PLOTLY_COLORS
+COLORS_HEX_GADFLY = pcutils.COLORS_HEX_GADFLY
 import os
 import pychell
 import pychell.utils as pcutils
@@ -41,7 +42,7 @@ class RVProblem(optframeworks.OptProblem):
     """The primary, top-level container for Exoplanet optimization problems. As of now, this only deals with RV data. Photometric modeling will be included in future updates, but will leverage existing libraries (Batman, etc.).
     """
 
-    def __init__(self, output_path=None, data=None, p0=None, optimizer=None, sampler=None, likes=None, star_name=None, mstar=None, mstar_unc=None, rplanets=None, tag=None):
+    def __init__(self, output_path=None, data=None, p0=None, optimizer=None, sampler=None, scorer=None, star_name=None, mstar=None, mstar_unc=None, rplanets=None, tag=None):
         """Constructs the primary exoplanet problem object.
 
         Args:
@@ -56,14 +57,23 @@ class RVProblem(optframeworks.OptProblem):
             mstar_unc (list, optional): The uncertainty in mstar, same units. Defaults to None.
             rplanets (dict, optional): The radius of the planet in Earth units. Defaults to None. Format is {planet_index: (val, lower, upper)}
         """
-        super().__init__(p0=p0, data=data, optimizer=optimizer, sampler=sampler, scorer=likes)
+        super().__init__(p0=p0, data=data, optimizer=optimizer, sampler=sampler, scorer=scorer)
         self.star_name = 'Star' if star_name is None else star_name
         self.output_path = output_path
         self.mstar = mstar
         self.mstar_unc = mstar_unc
         self.rplanets = rplanets
         gen_latex_labels(self.p0, self.planets_dict)
+        self.make_color_map()
         self.tag = "" if tag is None else tag
+        
+    def make_color_map(self):
+        self.color_map = {}
+        color_index = 0
+        for data in self.data.values():
+            self.color_map[data.label] = COLORS_HEX_GADFLY[color_index % len(COLORS_HEX_GADFLY)]
+            color_index += 1
+        
         
     def plot_phased_rvs(self, planet_index, pars=None, plot_width=1000, plot_height=600):
         """Creates a phased rv plot for a given planet with the model on top. An html figure is saved with a unique filename.
@@ -125,7 +135,7 @@ class RVProblem(optframeworks.OptProblem):
                 _data = residuals_no_noise[like.model.data_inds[data.label]] + like.model.build_planet(pars, data.t, planet_index)
                 phases_data = get_phases(data.t, per, tc)
                 _yerr = dict(array=_errors)
-                fig.add_trace(plotly.graph_objects.Scatter(x=phases_data, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)])))
+                fig.add_trace(plotly.graph_objects.Scatter(x=phases_data, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.8))))
                 color_index += 1
                 
                 # Store for binning
@@ -197,8 +207,11 @@ class RVProblem(optframeworks.OptProblem):
         if pars is None:
             pars = self.p0
             
-        # Create a figure
-        fig, ax = plt.subplots(nrows=2, ncols=1, sharex=False, sharey=False, figsize=(plot_width, plot_height))
+        # Create a figure for the RVs
+        #fig, axarr = plt.subplots(nrows=1, ncols=1, sharex=False, sharey=False, figsize=(plot_width, plot_height))
+        fig = plt.figure(1)
+        axarr = plt.gca()
+        axarr = np.atleast_1d(axarr)
         
         # Create the full planet model, high res.
         # Use a different time grid for the gp since det(K)~ O(n^3)
@@ -212,7 +225,7 @@ class RVProblem(optframeworks.OptProblem):
         model_arr_hr = like0.model._builder(pars, t_hr)
 
         # Plot the planet model
-        ax[0].plot(t_hr - time_offset, model_arr_hr, lw=2, c="black")
+        axarr[0].plot(t_hr - time_offset, model_arr_hr, lw=2, c="black")
         
         # Loop over likes and:
         # 1. Create high res GP
@@ -307,6 +320,7 @@ class RVProblem(optframeworks.OptProblem):
                 s = pars["gp_per"].value
                 
                 # Plot a GP for each instrument
+                color_map = {}
                 for data in like.model.kernel.data.values():
                     
                     print("Plotting Instrument: " + data.label)
@@ -331,14 +345,11 @@ class RVProblem(optframeworks.OptProblem):
                     # Plot the GP
                     tt = t_hr_gp - time_offset
                     gp_lower, gp_upper = gpmu_hr - gpstddev_hr, gpmu_hr + gpstddev_hr
-                    label = '<b>GP ' + '&#x3BB;' + data.label + '</b>'
-                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=1.2, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
-                                             y=np.concatenate([gp_upper, gp_lower[::-1]]),
-                                             fill='toself',
-                                             line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1),
-                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.6),
-                                             name=label))
+                    label = 'GP ' + '&#x3BB;' + data.label
+                    
+                    axarr[0].plot(tt, gpmu_hr, lw=1.2, alpha=0.8, c=pcutils.COLORS_HEX_GADFLY[color_index])
+                    axarr[0].fill_between(tt, gp_upper, gp_lower)
+                    color_map[data.label] = pcutils.COLORS_HEX_GADFLY[color_index]
                     color_index += 1
                     
                 # Plot the data on top of the GPs, and the residuals
@@ -348,18 +359,15 @@ class RVProblem(optframeworks.OptProblem):
                     
                     # Data errors for this instrument
                     _errors = errors[like.model.data_inds[data.label]]
-                    _yerr = dict(array=_errors)
                     
                     # Data on top of the GP, only offset by gammas
                     _data = data_arr[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
+                    
+                    axarr[0].errorbar(data.t - time_offset, y=_data, yerr=_errors, marker='o', lw=0, c=color_map[data.label])
                     
                     # Residuals for this instrument after the noise kernel has been removed
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
-                    
-                    # Increase color index
-                    color_index += 1
+                    #axarr[1].errorbar(data.t - time_offset, y=_residuals, yerr=_errors, c=color_map[data.label], marker='o', lw=0, elinewidth=1)
                     
             # Standard GP
             elif isinstance(like.model.kernel, optkernels.GaussianProcess):
@@ -427,26 +435,29 @@ class RVProblem(optframeworks.OptProblem):
                     color_index += 1
         
         # Labels
-        ax[1].set_xlabel("BJD - " + str(time_offset))
-        ax[1].set_ylabel("RV [m/s]")
-        ax[1].set_ylabel("Residual RV [m/s]")
+        #axarr[1].set_xlabel("BJD - " + str(time_offset))
+        #axarr[1].set_ylabel("RV [m/s]")
+        #axarr[1].set_ylabel("Residual RV [m/s]")
         
         # Limits
-        ax[0].set_xlim(t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset)
-        ax[1].set_xlim(t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset)
-        
-        # Write html !
-        # self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + '.html'
+        axarr[0].set_xlim(t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset)
+        #axarr[1].set_xlim(t_start - dt / 10 - time_offset, t_end + dt / 10 - time_offset)
         
         # Get handles and labels for full RV plot
-        handles, labels = ax[0].get_legend_handles_labels()
+        handles, labels = axarr[0].get_legend_handles_labels()
         
         # Interactive legend
-        interactive_legend1 = plugins.InteractiveLegendPlugin(zip(handles, ax[0].collections), labels, alpha_unsel=0.5, alpha_over=1.5,  start_visible=True)
+        interactive_legend1 = plugins.InteractiveLegendPlugin(zip(handles, axarr[0].collections), labels, alpha_unsel=0.5, alpha_over=1.5,  start_visible=True)
         
         # Define and connect plugins
-        plugins.connect(fig, plugins.Reset(), plugins.Zoom(), interactive_legend1)
+        plugins.connect(fig, interactive_legend1)
         
+        # Write html !
+        fname = self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + '.html'
+        stupid_string = mpld3.fig_to_html(fig)
+        with open(fname, "w") as f:
+            f.write(stupid_string)
+
         # Show
         mpld3.show()
         
@@ -493,7 +504,7 @@ class RVProblem(optframeworks.OptProblem):
         
         # Light curve plot
         if ffp is not None:
-            fig.add_trace(plotly.graph_objects.Scatter(x=ffp[:, 0] - time_offset, y=300 * ffp[:, 1] / np.std(ffp[:, 1]), line=dict(color='red', width=2), name="<b>FF' Prediction</b>"), row=1, col=1)
+            fig.add_trace(plotly.graph_objects.Scatter(x=ffp[:, 0] - time_offset, y=200 * ffp[:, 1] / np.std(ffp[:, 1]), line=dict(color='red', width=2, dash='dot'), name="<b>FF' Spot Prediction</b>"), row=1, col=1)
         
         # Loop over likes and:
         # 1. Create high res GP
@@ -610,14 +621,13 @@ class RVProblem(optframeworks.OptProblem):
                     tt = t_hr_gp - time_offset
                     gp_lower, gp_upper = gpmu_hr - gpstddev_hr, gpmu_hr + gpstddev_hr
                     label = '<b>GP ' + data.label + '</b>'
-                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=1.2, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=1.2, color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.8)), name=label, showlegend=False), row=1, col=1)
                     fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                              y=np.concatenate([gp_upper, gp_lower[::-1]]),
                                              fill='toself',
-                                             line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1),
-                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.6),
-                                             name=label))
-                    color_index += 1
+                                             name=label,
+                                             line=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.5), width=1),
+                                             fillcolor=pcutils.hex_to_rgba(self.color_map[data.label], a=0.3)))
                     
                 # Plot the data on top of the GPs, and the residuals
                 data_arr = np.copy(like.data_rv)
@@ -630,14 +640,11 @@ class RVProblem(optframeworks.OptProblem):
                     
                     # Data on top of the GP, only offset by gammas
                     _data = data_arr[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.95), line=dict(width=2, color='DarkSlateGrey'), size=14)), row=1, col=1)
                     
                     # Residuals for this instrument after the noise kernel has been removed
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
-                    
-                    # Increase color index
-                    color_index += 1
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.95), line=dict(width=2, color='DarkSlateGrey'), size=14), showlegend=False), row=2, col=1)
                     
             # Standard GP
             elif isinstance(like.model.kernel, optkernels.GaussianProcess):
@@ -669,13 +676,14 @@ class RVProblem(optframeworks.OptProblem):
                 tt = t_hr_gp - time_offset
                 gp_lower, gp_upper = gpmu_hr - gpstddev_hr, gpmu_hr + gpstddev_hr
                 label = '<b>GP ' + like.label.replace('_', ' ') +  '</b>'
-                fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=0.8, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
+                fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=0.8, color=pcutils.hex_to_rgba(self.color_map[list(like.data.keys())[0]], a=0.8)), name=label, showlegend=False), row=1, col=1)
                 fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                             y=np.concatenate([gp_upper, gp_lower[::-1]]),
                                             fill='toself',
-                                            line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1),
-                                            fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.6),
+                                            line=dict(color=pcutils.hex_to_rgba(self.color_map[list(like.data.keys())[0]], a=0.5), width=1),
+                                            fillcolor=pcutils.hex_to_rgba(self.color_map[list(like.data.keys())[0]], a=0.3),
                                             name=label))
+                
                 # Generate the residuals without noise
                 residuals_no_noise = like.residuals_no_noise(pars)
                 
@@ -685,8 +693,8 @@ class RVProblem(optframeworks.OptProblem):
                     _errors = errors[like.model.data_inds[data.label]]
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
                     _yerr = dict(array=_errors)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14)), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14), showlegend=False), row=2, col=1)
                     color_index += 1
                 
             # White noise
@@ -699,8 +707,8 @@ class RVProblem(optframeworks.OptProblem):
                     _errors = errors[like.model.data_inds[data.label]]
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
                     _yerr = dict(array=_errors)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.95), line=dict(width=2, color='DarkSlateGrey'), size=12)), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.95), size=12, line=dict(width=2, color='DarkSlateGrey')), showlegend=False), row=2, col=1)
                     color_index += 1
 
 
@@ -1638,6 +1646,10 @@ class RVProblem(optframeworks.OptProblem):
     
     @property
     def likes(self):
+        return self.scorer
+    
+    @property
+    def post(self):
         return self.scorer
     
     @property

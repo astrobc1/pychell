@@ -20,6 +20,14 @@ import webcolors
 
 PLOTLY_COLORS = ['darkmagenta', 'mediumslateblue', 'orangered', 'sienna', 'darkblue', 'teal', 'springgreen', 'seagreen', 'darkseagreen', 'plum', 'indianred', 'lawngreen', 'mediumorchid', 'rosybrown', 'turquoise', 'lightgreen', 'cadetblue', 'mediumblue', 'darkorchid', 'olivedrab', 'darkgreen', 'royalblue', 'mediumspringgreen', 'darkviolet', 'yellowgreen', 'mediumturquoise', 'lightpink', 'mediumaquamarine', 'forestgreen', 'slateblue', 'blue', 'mediumpurple', 'burlywood', 'deepskyblue', 'palegreen', 'magenta', 'darkgoldenrod', 'goldenrod', 'cornflowerblue', 'salmon', 'wheat', 'lime', 'coral', 'chartreuse', 'darkturquoise', 'paleturquoise', 'fuchsia', 'purple', 'maroon', 'mediumvioletred', 'palevioletred', 'violet', 'darkkhaki', 'aquamarine', 'darkred', 'darksalmon', 'black', 'darkcyan', 'dodgerblue', 'gold', 'lightblue', 'moccasin', 'lightseagreen', 'orchid', 'palegoldenrod', 'aqua', 'chocolate', 'tan', 'powderblue', 'orange', 'navy', 'lightskyblue', 'darkorange', 'saddlebrown', 'greenyellow', 'green', 'hotpink', 'blueviolet', 'brown', 'limegreen', 'skyblue', 'firebrick', 'darkolivegreen', 'lightsteelblue', 'khaki', 'cyan', 'indigo', 'olive', 'linen', 'sandybrown', 'lightcyan', 'mediumseagreen', 'peru', 'steelblue', 'pink', 'red', 'midnightblue', 'deeppink', 'crimson', 'tomato']
 
+COLORS_HEX_GADFLY = ['#00BEFF', '#D4CA3A', '#FF6DAE', '#67E1B5', '#EBACFA', '#9E9E9E', '#F1988E', '#5DB15A', '#E28544', '#52B8AA']
+
+def hex_to_rgba(h, a=1.0):
+    h = h.strip("#")
+    r, g, b = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+    s = 'rgba(' + str(r) + ',' + str(g) + ',' + str(b) + ',' + str(a) + ')'
+    return s
+
 def csscolor_to_rgba(color, a=1.0):
     r, g, b = webcolors.name_to_rgb(color)
     s = 'rgba(' + str(r) + ',' + str(g) + ',' + str(b) + ',' + str(a) + ')'

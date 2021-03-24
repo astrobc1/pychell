@@ -182,14 +182,14 @@ class RVModel(optmodels.Model):
         
     
 
-@njit
+@njit(nogil=True)
 def solve_kepler_all_times(mas, ecc):
     eas = np.zeros_like(mas)
     for i in range(mas.size):
         eas[i] = _solve_kepler(mas[i], ecc)
     return eas
 
-@njit
+@njit(nogil=True)
 def _solve_kepler(ma, ecc):
     """Solve Kepler's equation for one planet and one time. This code is nearly identical to the RadVel implemenation (BJ Fulton et al. 2018). Kepler's equation is solved using a higher order Newton's method.
     
@@ -236,7 +236,7 @@ def _solve_kepler(ma, ecc):
     
     return ea_new
 
-@njit
+@njit(nogil=True)
 def true_anomaly(t, tp, per, ecc):
     """
     Calculate the true anomaly for a given time, period, eccentricity. This requires solving Kepler's equation.
@@ -300,7 +300,7 @@ def planet_signal(t, per, tp, ecc, w, k):
     # Return rv
     return rv
 
-@njit
+@njit(nogil=True)
 def tc_to_tp(tc, per, ecc, w):
     """
     Convert Time of Transit (time of conjunction) to Time of Periastron Passage.
@@ -326,7 +326,7 @@ def tc_to_tp(tc, per, ecc, w):
 
     return tp
 
-@njit
+@njit(nogil=True)
 def tp_to_tc(tp, per, ecc, w):
     """
     Convert Time of Periastron to Time of Transit (time of conjunction).
