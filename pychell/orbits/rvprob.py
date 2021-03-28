@@ -12,7 +12,6 @@ import optimize.frameworks as optframeworks
 import plotly.subplots
 import pychell.orbits.gls as gls
 import itertools
-from sklearn.cluster import DBSCAN
 from mpld3 import plugins
 import tqdm
 import plotly.graph_objects
@@ -22,10 +21,8 @@ from joblib import Parallel, delayed
 import numpy as np
 from numba import jit, njit
 import pylatex.utils
-from joblib import Parallel, delayed
 import matplotlib.pyplot as plt
 import copy
-import abc
 import pychell.orbits.rvmodels as pcrvmodels
 import optimize.kernels as optkernels
 import pychell.orbits.rvkernels as pcrvkernels
@@ -35,6 +32,7 @@ PLOTLY_COLORS = pcutils.PLOTLY_COLORS
 COLORS_HEX_GADFLY = pcutils.COLORS_HEX_GADFLY
 import os
 import pychell
+import pychell.maths as pcmath
 import pychell.utils as pcutils
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
@@ -73,7 +71,6 @@ class RVProblem(optframeworks.OptProblem):
         for data in self.data.values():
             self.color_map[data.label] = COLORS_HEX_GADFLY[color_index % len(COLORS_HEX_GADFLY)]
             color_index += 1
-        
         
     def plot_phased_rvs(self, planet_index, pars=None, plot_width=1000, plot_height=600):
         """Creates a phased rv plot for a given planet with the model on top. An html figure is saved with a unique filename.
@@ -660,6 +657,8 @@ class RVProblem(optframeworks.OptProblem):
                 gpmu_hr = np.array([], dtype=float)
                 gpstddev_hr = np.array([], dtype=float)
                 residuals_with_noise = like.residuals_with_noise(pars)
+                if like.label == "rvs_HIRES":
+                    continue
                 for i in range(like.data_t.size):
                     _t_hr_gp = np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=kernel_sampling)
                     _gpmu, _gpstddev = like.model.kernel.realize(pars, xpred=_t_hr_gp, residuals_with_noise=residuals_with_noise, return_kernel_error=True)
@@ -1084,11 +1083,17 @@ class RVProblem(optframeworks.OptProblem):
             
         wave_vec = self.data.get_wave_vec()
         wave_pairs = self.generate_all_wave_pairs(wave_vec)
+        rvcolor_results = []
+        plots_time = []
         for wave_pair in wave_pairs:
             rvcolor_result = self.compute_rvcolor(pars, wave_pair[0], wave_pair[1], sep=sep)
-            self.plot_rvcolor(wave_pair[0], wave_pair[1], rvcolor_result, time_offset=time_offset, plot_width=plot_width, plot_height=plot_height)
+            p = self.plot_rvcolor(wave_pair[0], wave_pair[1], rvcolor_result, time_offset=time_offset, plot_width=plot_width, plot_height=plot_height)
+            rvcolor_results.append(rvcolor_result)
+            plots_time.append(p)
             
-        self.plot_rvcolor_one_to_one(pars=pars, plot_width=plot_width, plot_height=plot_height, sep=sep)
+        plot_11 = self.plot_rvcolor_one_to_one(pars=pars, plot_width=plot_width, plot_height=plot_height, sep=sep)
+
+        return rvcolor_results, plots_time, plot_11
     
     def plot_rvcolor(self, wave1, wave2, rvcolor_result, time_offset=2450000, plot_width=1000, plot_height=600):
         
@@ -1200,6 +1205,10 @@ class RVProblem(optframeworks.OptProblem):
                 show_legend = False
                 if rvcolor_result["instnames"][i] not in color_map:
                     instname1, instname2 = rvcolor_result["instnames"][i]
+                    #if instname1 in ["CARM-Vis", "CARM-NIR"] and instname2 in ["CARM-Vis", "CARM-NIR"]:
+                    #    continue
+                    #if instname1 in ["iSHELL", "SPIRou"] and instname2 in ["iSHELL", "SPIRou"]:
+                    #    continue
                     color_map[rvcolor_result["instnames"][i]] = pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index], a=0.8)
                     label_map[rvcolor_result["instnames"][i]] = "<b>RV Color, " + instname1 + " - " + instname2 + "</b>"
                     show_legend = True
@@ -1221,7 +1230,51 @@ class RVProblem(optframeworks.OptProblem):
         
         return fig
     
-    #def plot_rvcolor_hysteresis(self, pars):
+    def plot_rvcolor_hysteresis(self, pars, instname_group1=None, instname_group2=None):
+        
+        # Idea: Create a single plot for all wavelengths by rescaling all data to a fiducial wavelength, one for each group
+        sim_obs = self.get_simult_obs(pars)
+        data_t = []
+        rvs_vec1 = []
+        rvs_vec2 = []
+        rvs_unc_vec1 = []
+        rvs_unc_vec2 = []
+        # {"waves_nights": waves_nights, "data_t_nights": data_t_nights, "data_rv_nights": data_rv_nights, "data_rv_unc_nights": data_rv_unc_nights, "data_rv_unc_nights": data_rv_unc_nights, "instnames_nights": instnames_nights}
+        n = len(sim_obs["instnames_nights"])
+        for i in range(n):
+            if np.intersect1d(sim_obs["instnames_nights"][i], instname_group1).size > 0 and np.intersect1d(sim_obs["instnames_nights"][i], instname_group2).size > 0:
+                nn = len(sim_obs["data_t_nights"][i])
+                t_group1 = np.array([sim_obs["data_t_nights"][i][j] for j in range(nn) if sim_obs["instnames_nights"][i][j] in instname_group1], dtype=float)
+                t_group2 = np.array([sim_obs["data_t_nights"][i][j] for j in range(nn) if sim_obs["instnames_nights"][i][j] in instname_group1], dtype=float)
+                rvs_group1 = np.array([sim_obs["data_rv_nights"][i][j] for j in range(nn) if sim_obs["instnames_nights"][i][j] in instname_group1], dtype=float)
+                rvs_group2 = np.array([sim_obs["data_rv_nights"][i][j] for j in range(nn) if sim_obs["instnames_nights"][i][j] in instname_group2], dtype=float)
+                rvs_unc_group1 = np.array([sim_obs["data_rv_unc_nights"][i][j] for j in range(nn) if sim_obs["instnames_nights"][i][j] in instname_group1], dtype=float)
+                rvs_unc_group2 = np.array([sim_obs["data_rv_unc_nights"][i][j] for j in range(nn) if sim_obs["instnames_nights"][i][j] in instname_group2], dtype=float)
+                _rvs1, _unc1 = pcmath.weighted_combine(rvs_group1, w=1/rvs_unc_group1**2, yerr=rvs_unc_group1, err_type="Poisson")
+                _rvs2, _unc2 = pcmath.weighted_combine(rvs_group2, w=1/rvs_unc_group2**2, yerr=rvs_unc_group2, err_type="Poisson")
+                data_t.append(np.mean(np.mean([np.mean(t_group1), np.mean(t_group2)])))
+                rvs_vec1.append(_rvs1)
+                rvs_vec2.append(_rvs2)
+                rvs_unc_vec1.append(_unc1)
+                rvs_unc_vec2.append(_unc2)
+
+        data_t = np.array(data_t)
+        data_t_hr = np.arange(data_t[0], data_t[-1], 0.01)
+        rvs_vec1 = np.array(rvs_vec1)
+        rvs_vec2 = np.array(rvs_vec2)
+        rvs_vec1_hr = pcmath.cspline_interp(data_t, rvs_vec1, data_t_hr)
+        rvs_vec2_hr = pcmath.cspline_interp(data_t, rvs_vec2, data_t_hr)
+        d = 0.01 / np.nanmean(np.diff(data_t))
+        
+        # Create a figure
+        plt.figure(1, figsize=(8, 8), dpi=100)
+        
+        plt.plot(rvs_vec1[0:4], rvs_vec2[0:4], marker='o', lw=0, c="maroon")
+        plt.plot(rvs_vec1_hr[0:int(4/d)], rvs_vec2_hr[0:int(4/d)], c="black", ls=":", alpha=0.4)
+        #plt.xlabel("RV $\lambda=" + str(int(wave1)) + "$ [m/s]")
+        #plt.ylabel("RV $\lambda=" + str(int(wave2)) + "$ [m/s]")
+        plt.show()
+        
 
     def compute_rvcolor(self, pars, wave1, wave2, sep=0.3):
         """Computes the "RV-color" for wavelengths 1 and 2.
@@ -1271,6 +1324,10 @@ class RVProblem(optframeworks.OptProblem):
         prev_i = 0
         jds_avg = []
         rvcolor_data = []
+        rv_data1 = []
+        rv_data2 = []
+        rv_unc_data1 = []
+        rv_unc_data2 = []
         unccolor_data = []
         instnames = []
         n_data = len(times_vec)
@@ -1305,6 +1362,10 @@ class RVProblem(optframeworks.OptProblem):
                 assert ind1 != ind2
                 
                 # Compute color from these two observations.
+                rv_data1.append(rv_vec[inds][ind1])
+                rv_data2.append(rv_vec[inds][ind2])
+                rv_unc_data1.append(unc_vec[inds][ind1])
+                rv_unc_data2.append(unc_vec[inds][ind2])
                 jds_avg.append(np.mean(times_vec[inds]))
                 rvcolor_data.append(rv_vec[inds][ind1] - rv_vec[inds][ind2])
                 unccolor_data.append(np.sqrt(unc_vec[inds][ind1]**2 + unc_vec[inds][ind2]**2))
@@ -1320,6 +1381,10 @@ class RVProblem(optframeworks.OptProblem):
             ind1 = np.where(wave_vec[inds] == wave1)[0][0]
             ind2 = np.where(wave_vec[inds] == wave2)[0][0]
             assert ind1 != ind2
+            rv_data1.append(rv_vec[inds][ind1])
+            rv_data2.append(rv_vec[inds][ind2])
+            rv_unc_data1.append(unc_vec[inds][ind1])
+            rv_unc_data2.append(unc_vec[inds][ind2])
             jds_avg.append(np.mean(times_vec[inds]))
             rvcolor_data.append(rv_vec[inds][ind1] - rv_vec[inds][ind2])
             unccolor_data.append(np.sqrt(unc_vec[inds][ind1]**2 + unc_vec[inds][ind2]**2))
@@ -1327,6 +1392,10 @@ class RVProblem(optframeworks.OptProblem):
          
         # Convert to numpy arrays
         jds_avg = np.array(jds_avg)
+        rv_data1 = np.array(rv_data1)
+        rv_data2 = np.array(rv_data2)
+        rv_unc_data1 = np.array(rv_unc_data1)
+        rv_unc_data2 = np.array(rv_unc_data2)
         rvcolor_data = np.array(rvcolor_data)
         unccolor_data = np.array(unccolor_data)
          
@@ -1350,13 +1419,68 @@ class RVProblem(optframeworks.OptProblem):
         gpstddev_color_hr = np.sqrt(gpstddev1_hr**2 + gpstddev2_hr**2)
                 
         # Return a mega dictionary
-        out = dict(jds_avg=jds_avg, rvcolor_data=rvcolor_data, unccolor_data=unccolor_data,
-                   gp_color_data=gp_color_data, gp_color_unc_data=gp_color_unc_data,
-                   t_gp_hr=t_gp_hr, gpmean1_hr=gpmean1_hr, gpstddev1_hr=gpstddev1_hr,
-                   gpmean2_hr=gpmean2_hr, gpstddev2_hr=gpstddev2_hr,
-                   gpmean_color_hr=gpmean_color_hr, gpstddev_color_hr=gpstddev_color_hr,
-                   instnames=instnames)
+        out = dict(jds_avg=jds_avg, rv_data1=rv_data1, rv_data2=rv_data2, rv_unc_data1=rv_unc_data1, rv_unc_data2=rv_unc_data2, rvcolor_data=rvcolor_data, unccolor_data=unccolor_data, gp_color_data=gp_color_data, gp_color_unc_data=gp_color_unc_data, t_gp_hr=t_gp_hr, gpmean1_hr=gpmean1_hr, gpstddev1_hr=gpstddev1_hr, gpmean2_hr=gpmean2_hr, gpstddev2_hr=gpstddev2_hr, gpmean_color_hr=gpmean_color_hr, gpstddev_color_hr=gpstddev_color_hr, instnames=instnames, wave1=wave1, wave2=wave2)
+        
         return out
+    
+    def get_simult_obs(self, pars, sep=0.3):
+        
+        # Parameters
+        if pars is None:
+            pars = self.p0
+            
+        # Filter data to only consider each wavelength
+        wave_vec = self.scorer.like0.model.kernel.make_wave_vec()
+        tel_vec = self.data.make_tel_vec()
+        data_t = self.data.get_vec('t')
+        data_rvs = self.data.get_vec('rv') # Offset rvs
+        data_rvs = self.like0.model.apply_offsets(data_rvs, pars)
+        data_rvs_unc = self.like0.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=False)
+        
+        # Loop over RVs and look for near-simultaneous RV color observations.
+        prev_i = 0
+        waves_nights = []
+        data_t_nights = []
+        data_rv_nights = []
+        data_rv_unc_nights = []
+        instnames_nights = []
+        for i in range(len(data_t) - 1):
+            
+            # If dt > sep, we have moved to the next night.
+            # But first ook at all RVs from this night
+            if data_t[i+1] - data_t[i] > sep:
+                
+                # The number of RVs on this night for these two wavelengths.
+                n_obs_night = i - prev_i + 1
+                
+                # If only 1 observation for this night, skipi.
+                if n_obs_night < 2:
+                    prev_i = i + 1
+                    continue
+                
+                # The indices for this night, relative to the filtered arrays 
+                inds = np.arange(prev_i, i + 1).astype(int)
+                
+                # Nightly info
+                waves_nights.append(wave_vec[inds])
+                instnames_nights.append(tel_vec[inds])
+                data_t_nights.append(data_t[inds])
+                data_rv_nights.append(data_rvs[inds])
+                data_rv_unc_nights.append(data_rvs_unc[inds])
+                
+                # Move on.
+                prev_i = i + 1
+                
+        # Last night.
+        inds = np.arange(prev_i, len(data_t)).astype(int)
+        waves_nights.append(wave_vec[inds])
+        instnames_nights.append(tel_vec[inds])
+        data_t_nights.append(data_t[inds])
+        data_rv_nights.append(data_rvs[inds])
+        data_rv_unc_nights.append(data_rvs_unc[inds])
+        
+        return {"waves_nights": waves_nights, "data_t_nights": data_t_nights, "data_rv_nights": data_rv_nights, "data_rv_unc_nights": data_rv_unc_nights, "data_rv_unc_nights": data_rv_unc_nights, "instnames_nights": instnames_nights}
+    
     
     def model_comparison(self):
         """Runs a model comparison for all combinations of planets.

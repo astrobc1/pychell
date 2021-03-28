@@ -16,7 +16,7 @@ class RVColor(optkernels.GaussianProcess):
         self.unique_wavelengths = self.make_wave_vec_unique()
         self.compute_dist_matrix()
         
-    def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False, wavelength=None):
+    def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False):
         
         # Alias params
         eta1 = pars[self.par_names[0]].value # amp linear wave scale
@@ -350,52 +350,26 @@ class RVColor2(RVColor):
             return mu
         
         
-class RVColor3(RVColor2):
+class RVColor3(RVColor):
     
+    # Alias params
     def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False):
         
-        # Alias params
-        amp_matrix = self.make_amp_matrix(pars)
-        eta2 = pars[self.par_names[self.n_instruments]].value # decay
-        eta3 = pars[self.par_names[self.n_instruments + 1]].value # period
-        eta4 = pars[self.par_names[self.n_instruments + 2]].value # smoothing factor
-        eta5 = pars[self.par_names[self.n_instruments + 3]].value # smoothing factor
-            
-        # Construct individual kernels
-        decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta2)**2)
-        periodic_kernel = np.cos(2 * np.pi * self.dist_matrix / eta3) + 1 + eta4
-        
-        # Construct full cov matrix
-        cov_matrix = (amp_matrix / (2 + eta4)) * decay_kernel * periodic_kernel
-        
-        # Apply intrinsic plus white noise data errors
-        if include_white_error:
-            data_errors = self.compute_data_errors(pars, include_white_error=include_white_error, include_kernel_error=False)
-            np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
-        
-        return cov_matrix
-    
-    
-class RVColorCBS(RVColor):
-        
-    def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False, wavelength=None):
-        
-        # Alias params
         eta1 = pars[self.par_names[0]].value # amp linear wave scale
         eta2 = pars[self.par_names[1]].value # amp power law wave scale
         eta3 = pars[self.par_names[2]].value # decay
         eta4 = pars[self.par_names[3]].value # period
         eta5 = pars[self.par_names[4]].value # smoothing factor
-        eta6 = pars[self.par_names[5]].value # cbs
+        eta6 = pars[self.par_names[5]].value # decorrelation factor to scale with difference in frequency (f2 - f1)
             
         # Construct individual kernels
         lin_kernel = (eta1 * self.freq_matrix**eta2)**2
         decay_kernel = np.exp(-0.5 * (self.dist_matrix / eta3)**2)
         periodic_kernel = np.exp(-0.5 * (1 / eta5)**2 * np.sin(np.pi * self.dist_matrix / eta4)**2)
-        cbs_kernel = np.cos(eta6 * self.wave_diffs)
+        decorr_kernel = np.exp(-0.5 * (self.freq_diffs / eta6)**2)
         
         # Construct full cov matrix
-        cov_matrix = lin_kernel * decay_kernel * periodic_kernel * cbs_kernel
+        cov_matrix = lin_kernel * decay_kernel * periodic_kernel * decorr_kernel
         
         # Apply intrinsic plus white noise data errors
         if include_white_error:
@@ -403,3 +377,33 @@ class RVColorCBS(RVColor):
             np.fill_diagonal(cov_matrix, np.diag(cov_matrix) + data_errors**2)
         
         return cov_matrix
+    
+    def compute_wave_matrix(self, wave1=None, wave2=None):
+        """Generates a matrix for a linear kernel.
+
+        Args:
+            wave1 (float, optional): [description]. Defaults to the data wavelengths.
+            wave2 (float, optional): The wavelength for the second axis. Defaults to the data wavelengths.
+        """
+        n1, n2 = self.dist_matrix.shape
+        if wave1 is not None:
+            wave_vec1 = np.full(n1, fill_value=wave1)
+        else:
+            wave_vec1 = np.copy(self.wave_vec)
+            
+        if wave2 is not None:
+            wave_vec2 = np.full(n2, fill_value=wave2)
+        else:
+            wave_vec2 = np.copy(self.wave_vec)
+            
+        # Compute matrices
+        self.wave_diffs = np.zeros((n1, n2))
+        self.freq_matrix = np.zeros((n1, n2))
+        self.freq_diffs = np.zeros((n1, n2))
+        for i in range(n1):
+             for j in range(n2):
+                 self.wave_diffs[i, j] = np.abs(wave_vec1[i] - wave_vec2[j])
+                 self.freq_diffs[i, j] = np.abs(1 / wave_vec1[i] - 1 / wave_vec2[j])
+                 self.freq_matrix[i, j] = self.wavelength0 / np.sqrt(wave_vec1[i] * wave_vec2[j])
+                    
+        #self.wave_matrix = 1 / self.freq_matrix

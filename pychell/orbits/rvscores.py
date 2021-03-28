@@ -86,17 +86,17 @@ class RVLikelihood(optscore.Likelihood):
         comps = {}
         
         # Data times
-        t = np.copy(self.data_t)
+        data_t = np.copy(self.data_t)
         
         # Data RVs - offsets
-        rvs = np.copy(self.data_rv)
-        rvs -= self.model.build_trend_zero(pars, t, instname=None)
+        data_rvs = np.copy(self.data_rv)
+        data_rvs -= self.model.build_trend_zero(pars, data_t, instname=None)
         
         # Get residuals
         residuals_with_noise = self.residuals_with_noise(pars)
         
         # Data errrors
-        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        data_rvs_error = self.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
         
         # Store in comps
         comps[self.label + "_data_t"] = data_t
@@ -105,10 +105,10 @@ class RVLikelihood(optscore.Likelihood):
         
         # Standard GP
         if isinstance(self.model.kernel, optnoisekernels.CorrelatedNoiseKernel):
-            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=None, xres=None, return_kernel_error=True)
+            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data_t, xres=None, return_kernel_error=True)
             comps[self.label + "_kernel_mean"] = kernel_mean
             comps[self.label + "_kernel_unc"] = kernel_unc
-        
+
         return comps
     
     @property
@@ -148,17 +148,17 @@ class RVChromaticLikelihood(RVLikelihood):
         comps = {}
         
         # Data times
-        t = np.copy(self.data_t)
+        data_t = np.copy(self.data_t)
         
         # Data RVs - offsets
-        rvs = np.copy(self.data_rv)
-        rvs -= self.model.build_trend_zero(pars, t, instname=None)
+        data_rvs = np.copy(self.data_rv)
+        data_rvs -= self.model.build_trend_zero(pars, data_t, instname=None)
         
         # Get residuals
         residuals_with_noise = self.residuals_with_noise(pars)
         
         # Data errrors
-        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        data_rvs_error = self.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
         
         # Store in comps
         comps[self.label + "_data_t"] = data_t
@@ -166,10 +166,10 @@ class RVChromaticLikelihood(RVLikelihood):
         comps[self.label + "_data_rvs_error"] = data_rvs_error
         
         # Standard GP
-        for wavelength in self.model.kernel.unique_wavelengths:
-            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=None, xres=None, return_kernel_error=True, wavelength=wavelength)
-            comps[self.label + "_kernel_mean_" + str(int(wavelength))] = kernel_mean
-            comps[self.label + "_kernel_unc" + str(int(wavelength))] = kernel_unc
+        for data in self.data.values():
+            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, wavelength=data.wavelength)
+            comps[self.label + "_kernel_mean_" + data.label] = kernel_mean
+            comps[self.label + "_kernel_unc_" + data.label] = kernel_unc
         
         return comps
     
@@ -222,7 +222,6 @@ class RVChromaticLikelihood2(RVLikelihood):
             comps[self.label + "_kernel_unc_" + data.label] = kernel_unc
         
         return comps
-
 
 class RVPosterior(optscore.Posterior):
     """Probably identical to Posterior.
