@@ -1239,7 +1239,6 @@ class RVProblem(optframeworks.OptProblem):
         rvs_vec2 = []
         rvs_unc_vec1 = []
         rvs_unc_vec2 = []
-        # {"waves_nights": waves_nights, "data_t_nights": data_t_nights, "data_rv_nights": data_rv_nights, "data_rv_unc_nights": data_rv_unc_nights, "data_rv_unc_nights": data_rv_unc_nights, "instnames_nights": instnames_nights}
         n = len(sim_obs["instnames_nights"])
         for i in range(n):
             if np.intersect1d(sim_obs["instnames_nights"][i], instname_group1).size > 0 and np.intersect1d(sim_obs["instnames_nights"][i], instname_group2).size > 0:
@@ -1269,13 +1268,12 @@ class RVProblem(optframeworks.OptProblem):
         # Create a figure
         plt.figure(1, figsize=(8, 8), dpi=100)
         
-        plt.plot(rvs_vec1[0:4], rvs_vec2[0:4], marker='o', lw=0, c="maroon")
+        plt.plot(rvs_vec1[0:10], rvs_vec2[0:10], marker='o', lw=0, c="maroon")
         plt.plot(rvs_vec1_hr[0:int(4/d)], rvs_vec2_hr[0:int(4/d)], c="black", ls=":", alpha=0.4)
         #plt.xlabel("RV $\lambda=" + str(int(wave1)) + "$ [m/s]")
         #plt.ylabel("RV $\lambda=" + str(int(wave2)) + "$ [m/s]")
         plt.show()
         
-
     def compute_rvcolor(self, pars, wave1, wave2, sep=0.3):
         """Computes the "RV-color" for wavelengths 1 and 2.
 
@@ -1481,7 +1479,6 @@ class RVProblem(optframeworks.OptProblem):
         
         return {"waves_nights": waves_nights, "data_t_nights": data_t_nights, "data_rv_nights": data_rv_nights, "data_rv_unc_nights": data_rv_unc_nights, "data_rv_unc_nights": data_rv_unc_nights, "instnames_nights": instnames_nights}
     
-    
     def model_comparison(self):
         """Runs a model comparison for all combinations of planets.
 
@@ -1572,11 +1569,11 @@ class RVProblem(optframeworks.OptProblem):
         
         return model_comp_results
     
-    def compute_semimajor_axis(self, sampler_result, mstar=None, mstar_unc=None):
+    def compute_semimajor_axis(self, mcmc_result, mstar=None, mstar_unc=None):
         """Computes the semi-major axis of each planet.
 
         Args:
-            sampler_result (dict): The returned value from calling sample.
+            mcmc_result (dict): The returned value from calling sample.
             mstar (float): The mass of the star in solar units.
             mstar (list): The uncertainty of the mass of the star in solar units, lower, upper.
 
@@ -1598,12 +1595,12 @@ class RVProblem(optframeworks.OptProblem):
             wdist = []
             kdist = []
             adist = []
-            pars = copy.deepcopy(sampler_result["pmed"])
-            for i in range(sampler_result["n_steps"]):
+            pars = copy.deepcopy(mcmc_result["pmed"])
+            for i in range(mcmc_result["n_steps"]):
                 for pname in self.planets_dict[planet_index]["basis"].pnames:
                     if pars[pname].vary:
                         ii = pars.index_from_par(pname, rel_vary=True)
-                        pars[pname].value = sampler_result["chains"][i, ii]
+                        pars[pname].value = mcmc_result["chains"][i, ii]
                 per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
                 perdist.append(per)
                 tpdist.append(tp)
@@ -1622,11 +1619,11 @@ class RVProblem(optframeworks.OptProblem):
                 aplanets[planet_index] = (val, unc_low, unc_high)
         return aplanets
     
-    def compute_planet_masses(self, sampler_result):
+    def compute_planet_masses(self, mcmc_result):
         """Computes the value of msini and uncertainty for each planet in units of Earth Masses.
 
         Args:
-            sampler_result (dict): The returned value from calling sample.
+            mcmc_result (dict): The returned value from calling sample.
 
         Returns:
             (dict): The mass, lower, and upper uncertainty of each planet in a dictionary.
@@ -1641,12 +1638,12 @@ class RVProblem(optframeworks.OptProblem):
             wdist = []
             kdist = []
             mdist = []
-            pars = copy.deepcopy(sampler_result["pmed"])
-            for i in range(sampler_result["n_steps"]):
+            pars = copy.deepcopy(mcmc_result["pmed"])
+            for i in range(mcmc_result["n_steps"]):
                 for pname in self.planets_dict[planet_index]["basis"].pnames:
                     if pars[pname].vary:
                         ii = pars.index_from_par(pname, rel_vary=True)
-                        pars[pname].value = sampler_result["chains"][i, ii]
+                        pars[pname].value = mcmc_result["chains"][i, ii]
                 per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
                 perdist.append(per)
                 tpdist.append(tp)
@@ -1663,18 +1660,18 @@ class RVProblem(optframeworks.OptProblem):
                 msiniplanets[planet_index] = (val, unc_low, unc_high)
         return msiniplanets
     
-    def compute_planet_densities(self, sampler_result):
+    def compute_planet_densities(self, mcmc_result):
         """Computes the value of msini and uncertainty for each planet in units of Earth Masses.
 
         Args:
-            sampler_result (dict): The returned value from calling sample.
+            mcmc_result (dict): The returned value from calling sample.
         Returns:
             (dict): The density, lower, and upper uncertainty of each planet in a dictionary, in units of grams/cm^3.
         """
         mstar = self.mstar
         mstar_unc = self.mstar_unc
         rplanets = self.rplanets
-        mplanets = self.compute_planet_masses(sampler_result)
+        mplanets = self.compute_planet_masses(mcmc_result)
         rhoplanets = {} # In jupiter masses
         for planet_index in self.planets_dict:
             perdist = []
@@ -1684,12 +1681,12 @@ class RVProblem(optframeworks.OptProblem):
             kdist = []
             mdist = []
             rhodist = []
-            pars = copy.deepcopy(sampler_result["pmed"])
-            for i in range(sampler_result["n_steps"]):
+            pars = copy.deepcopy(mcmc_result["pmed"])
+            for i in range(mcmc_result["n_steps"]):
                 for pname in self.planets_dict[planet_index]["basis"].pnames:
                     if pars[pname].vary:
                         ii = pars.index_from_par(pname, rel_vary=True)
-                        pars[pname].value = sampler_result["chains"][i, ii]
+                        pars[pname].value = mcmc_result["chains"][i, ii]
                 per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
                 perdist.append(per)
                 tpdist.append(tp)
@@ -1701,7 +1698,7 @@ class RVProblem(optframeworks.OptProblem):
                 rplanet_unc_low = rplanets[planet_index][1]
                 rplanet_unc_high = rplanets[planet_index][2]
                 rhodist.append(compute_planet_density(mplanet, rplanet_val))
-            val, unc_low, unc_high = self.sampler.chain_uncertainty(rhodist)
+            val, unc_low, unc_high = self.sampler.chain_uncertainty(rhodist, mcmc_result["acc"])
             if rplanets[planet_index] is not None:
                 mplanet = mplanets[planet_index][0]
                 unc_low = np.sqrt(unc_low**2 + compute_planet_density_deriv_rplanet(rplanet_val, mplanet)**2 * rplanet_unc_low**2)

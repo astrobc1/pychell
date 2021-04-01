@@ -337,6 +337,53 @@ def median_filter2d(x, width, preserve_nans=True):
         
     return out
 
+@njit
+def convolve1d(x, k, padleft, padright):
+
+    # Length of each
+    nx = len(x)
+    nk = len(k)
+
+    # The left and right padding
+    n_pad = numba.int64(nk / 2)
+
+    # Output vector
+    out = np.zeros(x.shape)
+
+    # Flip the kernel (just a view, no new vector is allocated)
+    kf = k[::-1]
+
+    # Left values
+    for i in range(n_pad):
+        s = 0.0
+        for j in range(nk):
+            ii = i - n_pad + j
+            if ii < 0:
+                s += padleft * kf[j]
+            else:
+                s += x[ii] * kf[j]
+        out[i] = s
+
+    # Middle values
+    for i in range(n_pad, nx-n_pad):
+        s = 0.0
+        for j in range(nk):
+            s += x[i - n_pad + j] * kf[j]
+        out[i] = s
+
+    # Right values
+    for i in range(nx-n_pad, nx):
+        s = 0.0
+        for j in range(nk):
+            ii = i - n_pad + j
+            if ii > nx - 1:
+                s += padleft * kf[j]
+            else:
+                s += x[ii] * kf[j]
+        out[i] = s
+
+    # Return out
+    return out
 
 def convolve_flux(wave, flux, R=None, width=None, interp=None, lsf=None, croplsf=False):
     """Convolves flux.
@@ -432,6 +479,7 @@ def convolve_flux(wave, flux, R=None, width=None, interp=None, lsf=None, croplsf
 
     # Convolve
     fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
+    #fluxlinc = convolve1d(fluxlin, lsf, fluxlin[0], fluxlin[-1])
     
     # Interpolate back to the default grid
     if interp:

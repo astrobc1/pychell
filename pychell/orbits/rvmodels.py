@@ -189,7 +189,7 @@ def solve_kepler_all_times(mas, ecc):
         eas[i] = _solve_kepler(mas[i], ecc)
     return eas
 
-@njit(nogil=True)
+@njit
 def _solve_kepler(ma, ecc):
     """Solve Kepler's equation for one planet and one time. This code is nearly identical to the RadVel implemenation (BJ Fulton et al. 2018). Kepler's equation is solved using a higher order Newton's method.
     
