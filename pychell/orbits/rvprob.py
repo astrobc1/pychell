@@ -1609,7 +1609,7 @@ class RVProblem(optframeworks.OptProblem):
                 kdist.append(k)
                 a = (G / (4 * np.pi**2))**(1 / 3) * (mstar * MSUN)**(1 / 3) * (per * 86400)**(2 / 3) / AU # in AU
                 adist.append(a)
-            val, unc_low, unc_high = self.sampler.chain_uncertainty(adist)
+            val, unc_low, unc_high = self.sampler.chain_uncertainty(adist, mcmc_result["acc"])
             if self.mstar_unc is not None:
                 da_dMstar = (G / (4 * np.pi**2))**(1 / 3) * (mstar * MSUN)**(-2 / 3) / 3 * (per * 86400)**(2 / 3) * (MSUN / AU) # in AU / M_SUN
                 unc_low = np.sqrt(unc_low**2 + da_dMstar**2 * mstar_unc[0]**2)
@@ -1651,7 +1651,7 @@ class RVProblem(optframeworks.OptProblem):
                 wdist.append(w)
                 kdist.append(k)
                 mdist.append(compute_planet_mass(per, ecc, k, mstar))
-            val, unc_low, unc_high = self.sampler.chain_uncertainty(mdist)
+            val, unc_low, unc_high = self.sampler.chain_uncertainty(mdist, mcmc_result["acc"])
             if self.mstar_unc is not None:
                 unc_low = np.sqrt(unc_low**2 + compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[0]**2)
                 unc_high = np.sqrt(unc_high**2 + compute_planet_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[1]**2)
