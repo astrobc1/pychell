@@ -1,4 +1,5 @@
 .gitnore
+.idea/
 build/
 dist/
 *egg*
