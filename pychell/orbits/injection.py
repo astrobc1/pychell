@@ -17,35 +17,42 @@ import pychell.orbits as pco
 
 class InjectionRecovery:
 
-    def __init__(self, data, p0, planets_dict, optimizer_type=pco.NelderMead, sampler_type=pco.AffInv, scorer_type=pco.RVPosterior,
+    def __init__(self, data=None, p0=None, planets_dict=None, optimizer_type=pco.NelderMead, sampler_type=pco.AffInv, scorer_type=pco.RVPosterior,
                  likelihood_type=pco.RVLikelihood, kernel_type=pco.WhiteNoise, model_type=pco.RVModel,
                  output_path=None, star_name=None, k_range=(1, 100), p_range=(1.1, 100), k_resolution=20, p_resolution=30, p_shift=0.12345,
-                 ecc_inj=0, w_inj=np.pi, tp_inj=None, scaling='log', slurm=False):
+                 ecc_inj=0, w_inj=np.pi, tp_inj=None, scaling='log', slurm=False, **internal_kwargs):
         """
-        A class for running injection and recovery tests on a specific kernel.
-
+        A class for running injection and recovery tests on a kernel.
         Args:
-            data:
-            p0:
-            planets_dict:
-            optimizer_type:
-            sampler_type:
-            scorer_type:
-            likelihood_type:
-            kernel_type:
-            model_type:
-            output_path:
-            star_name:
-            k_range:
-            p_range:
-            k_resolution:
-            p_resolution:
-            p_shift:
-            ecc_inj:
-            w_inj:
-            tp_inj:
-            scaling:
-            slurm:
+            data: pychell.orbits.RVData / CompositeRVData, the dataset to perform injections on.  Default is None.
+            p0: optimize.knowledge.Parameters, the initial prior probability distributions of the model in question.  Default is None.
+            planets_dict: dict, a dictionary containing information on planet labels and orbit bases, should be in the format:
+                {[numerical label]: {"label": [alphabetical label], "basis": [pychell.orbits.AbstractOrbitBasis]}
+                i.e. planets_dict[1] = {"label": "b", "basis": pco.TCObritBasis(1)}
+                Default is None.
+            optimizer_type: optimize.optimizers.Optimizer / Minimizer, the model optimizer class to be tested.  Default is
+                NelderMead.
+            sampler_type: optimize.samplers.Sampler, the MCMC sampler type to be tested.  Default is AffInv.
+            scorer_type: optimize.scores.Posterior, the posterior distribution type.  Default is RVPosterior.
+            likelihood_type: optimize.scores.Likelihood, the likelihood type.  Default is RVLikelihood.
+            kernel_type: optimize.kernels.NoiseKernel, the type of kernel to be tested.  Default is WhiteNoise.
+            model_type: optimize.models.Model, the type of model to be tested.  Default is RVModel.
+            output_path: str, the output directory for all files, in which subdirectories will be made.  Default is the current
+                directory.
+            star_name: str, the name of the star being tested.  Default is 'Star'.
+            k_range: tuple, the range of semiamplitudes to be tested.  Default is (1, 100).
+            p_range: tuple, the range of periods to be tested.  Default is (1.1, 100).
+            k_resolution: int, the number of semiamplitudes within k_range to be tested.  Default is 20.
+            p_resolution: int, the number of periods within p_range to be tested.  Default is 30.
+            p_shift: float, arbitrary offset to the periods to prevent clean integer values.  Default is 0.12345.
+            ecc_inj: float, the eccentricity of orbits to be injected.  Default is 0.
+            w_inj: float, the argument of periastron for orbits to be injected.  Default is pi.
+            tp_inj: float, the time of periastron for the orbits to be injected.  Defaults to the median of data timestamps with
+                some random offset.
+            scaling: str, 'log' for logarithmic or 'lin' for linear scaling in k and p.
+            slurm: bool, True if one is using slurm and wishes to sort runs using a job array task ID.
+            **internal_kwargs: arguments for creating an already-finished injection/recovery run via a previously saved
+                pickle file or some other dictionary.  Allows for definitions of all internal parameters for plotting and such.
         """
         self.data = data
         self.p0 = p0
@@ -68,25 +75,53 @@ class InjectionRecovery:
             assert (type(obj) in (int, float)) or (obj is None), "Currently only one eccentricity and angle of periastron is supported!"
         self.ecc = ecc_inj
         self.w = w_inj
-        if not tp_inj:
+        if not tp_inj and data:
             tp_inj = np.array([np.float(np.nanmedian(self.data.get_vec('t'))) * (np.random.rand() - 0.5) * p_inj for k_inj, p_inj in self.kp_array])
-        assert (type(tp_inj) in (list, tuple, np.ndarray)) and (len(tp_inj) == len(self.kp_array)), "If specified, a unique Tp must be given for each combination of k and p"
+        assert ((type(tp_inj) in (list, tuple, np.ndarray)) and (len(tp_inj) == len(self.kp_array))) or (tp_inj is None), "If specified, a unique Tp must be given for each combination of k and p"
         self.tp = tp_inj
 
         # Alias output path
         if output_path is None:
-            output_path = os.path.abspath(os.path.dirname(__name__))
+            output_path = os.path.abspath(os.path.dirname(__file__))
         self.path = output_path
 
         self.slurm = slurm
-        # Define instance attributes to not be used until later
-        self.priors = self.full_run_data = self.gp = self.gp_unc = self.maxlike_results_H = self.maxlike_results_L = \
-            self.maxlike_priors_H = self.maxlike_priors_L = self.fruntype = self.gptype = self.gpunctype = \
-            self.kbfrac = self.kbfrac_unc = self.kb_rec = self.kbfrac_unc_rec = self.pars_sorted = self.pars_likeH = \
-            self.pars_likeL = self.lnLH = self.lnLL = self.delta_lnL = self.aiccH = self.aiccL = self.delta_aicc = \
-            self.gp_sorted = self.gp_unc_sorted = self.periods = self.semiamps = None
+        # Define instance attributes to empty dictionaries or from a previous pickle file
+        self.fruntype = self.gptype = self.gpunctype = self.delta_lnL = self.delta_aicc = self.periods = self.semiamps = None
+
+        if internal_kwargs:
+            self.kbfrac = internal_kwargs['kbfrac']
+            self.kbfrac_unc = internal_kwargs['kbfrac_unc']
+            self.kb_rec = internal_kwargs['kb_rec']
+            self.kbfrac_unc_rec = internal_kwargs['kbfrac_unc_rec']
+            self.pars_sorted = internal_kwargs['pars_sorted']
+            self.gp_sorted = internal_kwargs['gp_sorted']
+            self.gp_unc_sorted = internal_kwargs['gp_unc_sorted']
+            self.pars_like = internal_kwargs['pars_like']
+            self.lnL = internal_kwargs['lnL']
+            self.aicc = internal_kwargs['aicc']
+            self.delta_lnL = internal_kwargs['delta_lnL']
+            self.delta_aicc = internal_kwargs['delta_aicc']
+            self.periods = internal_kwargs['periods']
+            self.semiamps = internal_kwargs['semiamps']
+            self.full_run_data, self.maxlike_results, self.maxlike_priors, self.priors, self.gp, self.gp_unc = ({} for _ in range(6))
+        else:
+            self.priors, self.full_run_data, self.gp, self.gp_unc, self.kbfrac, self.kbfrac_unc, self.kbfrac_unc_rec, \
+            self.kb_rec, self.pars_sorted, self.gp_sorted, self.gp_unc_sorted, self.maxlike_results, self.maxlike_priors,\
+            self.pars_like, self.lnL, self.aicc = ({} for _ in range(16))
 
     def inject_signal(self, k_inj, p_inj, tp_inj, folder_name):
+        """
+        Inject a signal into a copy of the data, and save it to a file.
+        Args:
+            k_inj: float, injected semiamplitude
+            p_inj: float, injected period
+            tp_inj: float, injected time of periastron
+            folder_name: str, the folder to save the new RV file to.
+
+        Returns:
+            data_mod: pychell.orbits.RVData / CompositeRVData, the injected data.
+        """
         # New data
         data_mod = copy.deepcopy(self.data)
 
@@ -101,6 +136,21 @@ class InjectionRecovery:
         return data_mod
 
     def create_rvproblem(self, k_inj, p_inj, folder_name, data, pars, remove_injected_planet=False):
+        """
+        Creates an RVProblem with the appropriate kernels, models, scorers, likelihoods, posteriors, etc. etc.
+        for a single injection.
+        Args:
+            k_inj: float, injected semiamplitude.
+            p_inj: float, injected period.
+            folder_name: str, the folder to save outputs for the new RVProblem to.
+            data: pychell.orbits.RVData / CompositeRVData, the ALREADY INJECTED data to use in the RV problem.
+            pars: pychell.orbits.Parameters, a copy of the initial p0 parameters to use in the new RVProblem.
+            remove_injected_planet: bool, True or False.  Used for maxlikelihood fitting to compare with models
+                that do not include the injected planet.
+
+        Returns:
+            rvprobi: pychell.orbits.RVProblem, the injected RVProblem.
+        """
         planets_dict = copy.deepcopy(self.planets_dict)
 
         # Adjust model parameters to the injected period and semiamplitude
@@ -117,10 +167,10 @@ class InjectionRecovery:
         pars["w" + str(injected_planet)].value = self.w
 
         if remove_injected_planet:
-            for key, val in pars.items():
+            for key in pars.copy().keys():
                 if str(injected_planet) in key:
-                    del pars[key]
-            del planets_dict[injected_planet]
+                    pars.pop(key)
+            planets_dict.pop(injected_planet)
 
         # Create kernels, models, scorers, and optimizers
         par_names_gp = [pname for pname in pars.keys() if "gp" in pname]
@@ -144,7 +194,7 @@ class InjectionRecovery:
             k_inj: Injected semiamplitude
             p_inj: Injected period
             tp_inj: Injected time of periastron
-            folder_name: Name of folder to save the MCMC output to
+            folder_name: Name of folder to save the MCMC output to.  Defaults to an appropriate name.
             injection: bool.  Whether or not to actually inject the planet.
             *args: Arguments for the MCMC function
             **kwargs: Keyword arguments for the MCMC function
@@ -166,7 +216,7 @@ class InjectionRecovery:
             data = copy.deepcopy(self.data)
         pars = copy.deepcopy(self.p0)
 
-        rvprobi = self.create_rvproblem(k_inj, p_inj, folder_name, data, pars)
+        rvprobi = self.create_rvproblem(k_inj, p_inj, folder_name + os.sep, data, pars)
 
         # Run the MCMC
         sampler_result = rvprobi.sample(save=False, *args, **kwargs)
@@ -186,6 +236,20 @@ class InjectionRecovery:
         return results_dict
 
     def injection_maxlikelihood(self, k_inj, p_inj, tp_inj, folder_names=None, *args, **kwargs):
+        """
+        Runs two maximum likelihood fits for the injected planet, using a model with and without the planet.
+        Args:
+            k_inj: float, injected semiamplitude.
+            p_inj: float, injected period.
+            tp_inj: float, injected time of periastron.
+            folder_names: list / tuple, the names of the two folders to save outputs to.  Defaults to an appropriate name.
+            *args: arguments for the optimize function.
+            **kwargs: keyword arguments for the optimize function.
+
+        Returns:
+            results_dict [dict], results_dict2 [dict]
+            The results for both runs, in dictionary form.
+        """
         # Set up output folder
         if not folder_names:
             folder_names = []
@@ -213,7 +277,7 @@ class InjectionRecovery:
             self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), p_inj, k_inj
         )))
         rvprobj = self.create_rvproblem(k_inj, p_inj, folder_names[1], data, pars, remove_injected_planet=True)
-        opt_result2 = rvprobj.maxlikefit(*args, **kwargs)
+        opt_result2 = rvprobj.maxlikefit(save=False, *args, **kwargs)
         results_dict2 = {'opt_result': opt_result2, 'priors': rvprobj.p0}
         with open(os.path.join(folder_names[1], '{}_{}p_likelihood_{}d_{}mps.pkl'.format(
             rvprobj.star_name.replace(' ', '_'), len(self.planets_dict) - 1, p_inj, k_inj
@@ -221,13 +285,16 @@ class InjectionRecovery:
             pickle.dump(results_dict2, handle)
 
         print("COMPLETED MAXLIKEFITS AT {}d, {}mps".format(p_inj, k_inj))
+        return results_dict, results_dict2
 
     def __full_mcmc_run_parallel(self, njobs=-1, backend=None, injection=True, *args, **kwargs):
         """
-        Runs all MCMCs for every combination of P and K.  WARNING: VERY COMPUTATIONALLY INTESNIVE AND TIME CONSUMING.
+        Runs all MCMCs for every combination of P and K using parallel processes with joblib.
+        WARNING: VERY COMPUTATIONALLY INTESNIVE AND TIME CONSUMING DEPENDING ON YOUR SETTINGS.
         Args:
-            njobs: Number of MCMCs to run in parallel.
-            backend: Parallel backend for joblib
+            njobs: int, Number of MCMCs to run in parallel.
+            backend: str, Parallel backend for joblib.
+            injection: bool, whether or not to actually inject the planets.
             *args: MCMC function args.
             **kwargs: MCMC function kwargs.
 
@@ -239,6 +306,17 @@ class InjectionRecovery:
         print("ALL DONE WITH ALL {} MCMCs".format(len(self.kp_array)))
 
     def __full_mcmc_run_jobarray(self, injection=True, *args, **kwargs):
+        """
+        Runs all MCMCs for every combination of P and K using a slurm jobarray.
+        WARNING: VERY COMPUTATIONALLY INTESNIVE AND TIME CONSUMING DEPENDING ON YOUR SETTINGS.
+        Args:
+            injection: bool, whether or not to actually inject the planets.
+            *args: MCMC function args.
+            **kwargs: MCMC function kwargs.
+
+        Returns:
+            None
+        """
         id = int(os.environ["SLURM_ARRAY_TASK_ID"])
         ki, peri = self.kp_array[id - 1:id][0]
         tpi = self.tp[id - 1]
@@ -246,6 +324,19 @@ class InjectionRecovery:
         print("ALL DONE WITH JOB ARRAY ID {}".format(id))
 
     def full_mcmc_run(self, *args, **kwargs):
+        """
+        Runs all MCMCs for every combination of P and K, using either joblib or slurm depending on self.slurm.
+        WARNING: VERY COMPUTATIONALLY INTESNIVE AND TIME CONSUMING DEPENDING ON YOUR SETTINGS.
+        Args:
+            njobs: int, Number of MCMCs to run in parallel.
+            backend: str, Parallel backend for joblib.
+            injection: bool, whether or not to actually inject the planets.
+            *args: MCMC function args.
+            **kwargs: MCMC function kwargs.
+
+        Returns:
+            None
+        """
         if not self.slurm:
             self.__full_mcmc_run_parallel(*args, **kwargs)
         else:
@@ -253,7 +344,8 @@ class InjectionRecovery:
 
     def __full_maxlikefit_run_parallel(self, njobs=-1, backend=None, *args, **kwargs):
         """
-        Runs all maxlikelihood fits for every combination of P and K.  WARNING: VERY COMPUTATIONALLY INTESNIVE AND TIME CONSUMING.
+        Runs all maxlikelihood fits for every combination of P and K using parallel processes with joblib.
+        WARNING: VERY COMPUTATIONALLY INTESNIVE AND TIME CONSUMING.
         Args:
             njobs: Number of maxlikelihood fits to run in parallel.
             backend: Parallel backend for joblib
@@ -268,6 +360,18 @@ class InjectionRecovery:
         print("ALL DONE WITH ALL {} MAXLIKEFITS".format(len(self.kp_array)))
 
     def __full_maxlikefit_run_jobarray(self,  *args, **kwargs):
+        """
+        Runs all maxlikelihood fits for every combination of P and K using a slurm jobarray
+        WARNING: VERY COMPUTATIONALLY INTESNIVE AND TIME CONSUMING.
+        Args:
+            njobs: Number of maxlikelihood fits to run in parallel.
+            backend: Parallel backend for joblib
+            *args: MCMC function args.
+            **kwargs: MCMC function kwargs.
+
+        Returns:
+            None
+        """
         id = int(os.environ["SLURM_ARRAY_TASK_ID"])
         ki, peri = self.kp_array[id - 1:id][0]
         tpi = self.tp[id - 1]
@@ -275,12 +379,35 @@ class InjectionRecovery:
         print("ALL DONE WITH JOB ARRAY ID {}".format(id))
 
     def full_maxlikefit_run(self, *args, **kwargs):
+        """
+        Runs all maxlikelihood fits for every combination of P and K, using either joblib or slurm depending on self.slurm.
+        WARNING: VERY COMPUTATIONALLY INTESNIVE AND TIME CONSUMING DEPENDING ON YOUR SETTINGS.
+        Args:
+            njobs: int, Number of MCMCs to run in parallel.
+            backend: str, Parallel backend for joblib.
+            *args: MCMC function args.
+            **kwargs: MCMC function kwargs.
+
+        Returns:
+            None
+        """
         if not self.slurm:
             self.__full_maxlikefit_run_parallel(*args, **kwargs)
         else:
             self.__full_maxlikefit_run_jobarray(*args, **kwargs)
 
     def gather_injection_data(self, injection=True):
+        """
+        Gathers the saved injection/recovery data from pickle files after performing a full MCMC run.
+        Args:
+            injection: bool, True to gather injected data and False to gather noninjected data.
+
+        Returns:
+            priors, full_run_data, gp, gp_unc [dicts]
+        """
+        key = 'injection' if injection else 'noninjection'
+        if key in list(self.full_run_data.keys()):
+            return self.priors[key], self.full_run_data[key], self.gp[key], self.gp_unc[key]
         pickles = glob.glob(os.path.join(self.path, '**', '{}_{}injected_*d_*mps.pkl'.format(
             self.star_name.replace(' ', '_'), 'non' if not injection else '')), recursive=True)
 
@@ -293,28 +420,37 @@ class InjectionRecovery:
         self.gptype = [(gp_key, float) for gp_key in frun_gp0.keys()]
         self.gpunctype = [(gp_key, object) for gp_key in frun_gpunc0.keys()]
 
+        key = 'injection' if injection else 'noninjection'
         # Define structured arrays to store data
-        self.priors = np.full(shape=(len(pickles),), dtype=object, fill_value=np.nan)
-        self.full_run_data = np.full(shape=(len(pickles),), dtype=self.fruntype, fill_value=(np.nan,)*len(self.fruntype))
-        self.gp = np.full(shape=(len(pickles),), dtype=self.gptype, fill_value=(np.nan,)*len(self.gptype))
-        self.gp_unc = np.full(shape=(len(pickles),), dtype=self.gpunctype, fill_value=(np.nan,)*len(self.gpunctype))
+        self.priors[key] = np.full(shape=(len(pickles),), dtype=object, fill_value=np.nan)
+        self.full_run_data[key] = np.full(shape=(len(pickles),), dtype=self.fruntype, fill_value=np.nan)
+        self.gp[key] = np.full(shape=(len(pickles),), dtype=self.gptype, fill_value=np.nan)
+        self.gp_unc[key] = np.full(shape=(len(pickles),), dtype=self.gpunctype, fill_value=np.nan)
 
         # Append the first results to the arrays
-        self.priors[0] = priors0
-        self.full_run_data[0] = frun_data0
-        self.gp[0] = tuple(frun_gp0.values())
-        self.gp_unc[0] = tuple(frun_gpunc0.values())
+        self.priors[key][0] = priors0
+        self.full_run_data[key][0] = frun_data0
+        self.gp[key][0] = tuple(frun_gp0.values())
+        self.gp_unc[key][0] = tuple(frun_gpunc0.values())
 
         # Iterate through the rest of the data and append accordingly
         for i, pkl in enumerate(pickles[1:len(pickles)]):
             result = self.load_data(pkl)
-            self.priors[i+1], self.full_run_data[i+1], frun_gpi, frun_gpunci = self.get_data(result)
-            self.gp[i+1] = tuple(frun_gpi.values())
-            self.gp_unc[i+1] = tuple(frun_gpunci)
+            self.priors[key][i+1], self.full_run_data[key][i+1], frun_gpi, frun_gpunci = self.get_data(result)
+            self.gp[key][i+1] = tuple(frun_gpi.values())
+            self.gp_unc[key][i+1] = tuple(frun_gpunci)
 
-        return self.priors, self.full_run_data, self.gp, self.gp_unc
+        return self.priors[key], self.full_run_data[key], self.gp[key], self.gp_unc[key]
 
     def gather_likelihood_data(self):
+        """
+        Gathers the saved likelihood data from pickle files after performing a full maximum likelihood run.
+
+        Returns:
+            maxlike_results (all planets), maxlike_results (all planets - 1) [dicts]
+        """
+        if 'high' in list(self.maxlike_results.keys()) and 'low' in list(self.maxlike_results.keys()):
+            return self.maxlike_results['high'], self.maxlike_results['low']
         pickles_Xp = glob.glob(os.path.join(self.path, '**', '{}_{}p_likelihood_*d_*mps.pkl'.format(self.star_name.replace(' ', '_'),
                                                                                                     len(self.planets_dict))),
                                recursive=True)
@@ -323,97 +459,151 @@ class InjectionRecovery:
                                recursive=True)
 
         lnLtype = [('lnL', float), ('per', float), ('k', float)]
-        self.maxlike_results_H = np.full(shape=(len(pickles_Xp),), dtype=lnLtype, fill_value=(np.nan,)*len(lnLtype))
-        self.maxlike_results_L = np.full(shape=(len(pickles_Yp),), dtype=lnLtype, fill_value=(np.nan,)*len(lnLtype))
-        self.maxlike_priors_H = np.full(shape=(len(pickles_Xp),), dtype=object, fill_value=np.nan)
-        self.maxlike_priors_L = np.full(shape=(len(pickles_Yp),), dtype=object, fill_value=np.nan)
+        self.maxlike_results['high'] = np.full(shape=(len(pickles_Xp),), dtype=lnLtype, fill_value=np.nan)
+        self.maxlike_results['low'] = np.full(shape=(len(pickles_Yp),), dtype=lnLtype, fill_value=np.nan)
+        self.maxlike_priors['high'] = np.full(shape=(len(pickles_Xp),), dtype=object, fill_value=np.nan)
+        self.maxlike_priors['low'] = np.full(shape=(len(pickles_Yp),), dtype=object, fill_value=np.nan)
 
         for pickly in [pickles_Xp, pickles_Yp]:
             for i, pkl in enumerate(pickly):
                 f = self.load_data(pkl)
+                a = 1 if pickly == pickles_Yp else 0
                 lnL = -f['opt_result']['fbest']
-                per = f['priors']['per' + str(len(self.planets_dict))]
-                k = f['priors']['k' + str(len(self.planets_dict))]
+                per = f['priors']['per' + str(len(self.planets_dict) - a)].value
+                k = f['priors']['k' + str(len(self.planets_dict) - a)].value
                 if pickly == pickles_Xp:
-                    self.maxlike_results_H[i] = tuple((lnL, per, k))
-                    self.maxlike_priors_H[i] = f['priors']
+                    self.maxlike_results['high'][i] = tuple((lnL, per, k))
+                    self.maxlike_priors['high'][i] = f['priors']
                 elif pickly == pickles_Yp:
-                    self.maxlike_results_L[i] = tuple((lnL, per, k))
-                    self.maxlike_priors_L[i] = f['priors']
+                    self.maxlike_results['low'][i] = tuple((lnL, per, k))
+                    self.maxlike_priors['low'][i] = f['priors']
 
-        return self.maxlike_results_H, self.maxlike_results_L
+        return self.maxlike_results['high'], self.maxlike_results['low']
 
-    def organize_injection_data(self, save=True):
-        self.periods = np.unique(self.full_run_data['pb_in'])
-        self.semiamps = np.unique(self.full_run_data['kb_in'])
+    def organize_injection_data(self, save=True, injection=True):
+        """
+        Organize the collected MCMC and maxlikelihood data into 2D arrays in preparation to be plotted on a 2D histogram.
+        Args:
+            save: bool, True to save data to pickle & json files.
+            injection: True to organize injected data, False to organize noninjected data.
+
+        Returns:
+            kbfrac: dict[ndarray], recovered semiamplitude / injected semiamplitude
+            kbfrac_unc: dict[ndarray], recovered semiamplitude uncertainty / injected semiamplitude
+            kb_rec: dict[ndarray], recovered semiamplitude
+            kbfrac_unc_rec: dict[ndarray], recovered semiamplitude uncertainty / recovered semiamplitude
+            gp_sorted: dict[ndarray], posterior GP parameters
+            gp_unc_sorted: dict[ndarray], posterior GP uncertainties
+            delta_lnL: ndarray, log likelihood (all planets) - log likelihood (all planets - 1)
+            delta_aicc: ndarray, AiCc (all planets) - AiCc (all planets - 1)
+        """
+        self.gather_likelihood_data()
+        self.gather_injection_data(injection=injection)
+        key = 'injection' if injection else 'noninjection'
+        if key in list(self.kbfrac.keys()):
+            return self.kbfrac[key], self.kbfrac_unc[key], self.kb_rec[key], self.kbfrac_unc_rec[key], self.gp_sorted[key], self.gp_unc_sorted[key], \
+            self.delta_lnL, self.delta_aicc
+        do_likes = False if 'high' in list(self.lnL.keys()) else True
+
+        self.periods = np.unique(self.full_run_data[key]['pb_in'])
+        self.semiamps = np.unique(self.full_run_data[key]['kb_in'])
 
         # Alias
         pb = self.periods
         kbin = self.semiamps
 
         n = len(self.data.get_vec('y'))
-        self.kbfrac = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
-        self.kbfrac_unc = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
-        self.kbfrac_unc_rec = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
-        self.kb_rec = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
-        self.lnLH = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
-        self.lnLL = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
-        self.delta_lnL = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
-        self.pars_sorted = np.full(shape=(len(kbin), len(pb)), dtype=object, fill_value=np.nan)
-        self.pars_likeH = np.full(shape=(len(kbin), len(pb)), dtype=object, fill_value=np.nan)
-        self.pars_likeL = np.full(shape=(len(kbin), len(pb)), dtype=object, fill_value=np.nan)
-        self.aiccH = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
-        self.aiccL = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
-        self.delta_aicc = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+        self.kbfrac[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+        self.kbfrac_unc[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+        self.kbfrac_unc_rec[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+        self.kb_rec[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+        self.pars_sorted[key] = np.full(shape=(len(kbin), len(pb)), dtype=object, fill_value=np.nan)
+        self.gp_sorted[key] = np.full(shape=(len(kbin), len(pb)), dtype=self.gptype, fill_value=np.nan)
+        self.gp_unc_sorted[key] = np.full(shape=(len(kbin), len(pb)), dtype=self.gpunctype, fill_value=np.nan)
 
-        self.gp_sorted = np.full(shape=(len(kbin), len(pb)), dtype=self.gptype, fill_value=(np.nan,)*self.gptype)
-        self.gp_unc_sorted = np.full(shape=(len(kbin), len(pb)), dtype=self.gpunctype, fill_value=(np.nan,)*self.gpunctype)
+        if do_likes:
+            self.lnL['high'] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+            self.lnL['low'] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+            self.delta_lnL = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+            self.pars_like['high'] = np.full(shape=(len(kbin), len(pb)), dtype=object, fill_value=np.nan)
+            self.pars_like['low'] = np.full(shape=(len(kbin), len(pb)), dtype=object, fill_value=np.nan)
+            self.aicc['high'] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+            self.aicc['low'] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
+            self.delta_aicc = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
 
         for x in range(len(pb)):
             for y in range(len(kbin)):
-                c = np.where(np.isclose(self.full_run_data['pb_in'], pb[x]) & np.isclose(self.full_run_data['kb_in'], kbin[y]))[0]
-                eh = np.where(np.isclose(self.maxlike_results_H['per'], pb[x]) & np.isclose(self.maxlike_results_H['k'], kbin[y]))[0]
-                el = np.where(np.isclose(self.maxlike_results_L['per'], pb[x]) & np.isclose(self.maxlike_results_L['k'], kbin[y]))[0]
+                c = np.where(np.isclose(self.full_run_data[key]['pb_in'], pb[x]) & np.isclose(self.full_run_data[key]['kb_in'], kbin[y]))[0]
+                eh = np.where(np.isclose(self.maxlike_results['high']['per'], pb[x]) & np.isclose(self.maxlike_results['high']['k'], kbin[y]))[0]
+                # This won't work because the L maxlike results don't have an injected planet period/semiamp
+                # el = np.where(np.isclose(self.maxlike_results_L['per'], pb[x]) & np.isclose(self.maxlike_results_L['k'], kbin[y]))[0]
+                el = eh
                 if c.size:
-                    self.kbfrac[y, x] = float(self.full_run_data['kb_out'][c] / self.full_run_data['kb_in'][c])
-                    self.kbfrac_unc[y, x] = float(np.mean(self.full_run_data['kb_unc'][c][0]) / self.full_run_data['kb_in'][c])
-                    self.kbfrac_unc_rec[y, x] = float(np.mean(self.full_run_data['kb_unc'][c][0]) / self.full_run_data['kb_out'][c])
-                    self.kb_rec[y, x] = float(self.full_run_data['kb_out'][c])
-                    self.pars_sorted[y, x] = self.priors[c]
-                    self.gp_sorted[y, x] = self.gp[c]
-                    self.gp_unc_sorted[y, x] = self.gp_unc[c]
-                if eh.size > 1:
+                    self.kbfrac[key][y, x] = float(self.full_run_data[key]['kb_out'][c] / self.full_run_data[key]['kb_in'][c])
+                    self.kbfrac_unc[key][y, x] = float(np.mean(self.full_run_data[key]['kb_unc'][c][0]) / self.full_run_data[key]['kb_in'][c])
+                    self.kbfrac_unc_rec[key][y, x] = float(np.mean(self.full_run_data[key]['kb_unc'][c][0]) / self.full_run_data[key]['kb_out'][c])
+                    self.kb_rec[key][y, x] = float(self.full_run_data[key]['kb_out'][c])
+                    self.pars_sorted[key][y, x] = self.priors[key][c]
+                    self.gp_sorted[key][y, x] = self.gp[key][c]
+                    self.gp_unc_sorted[key][y, x] = self.gp_unc[key][c]
+                if eh.size and do_likes:
                     eh = eh[0]
-                    self.lnLH[y, x] = float(np.ma.masked_invalid(self.maxlike_results_H['lnL'][eh]))
-                    self.pars_likeH[y, x] = self.maxlike_priors_H[eh]
-                if el.size > 1:
+                    self.lnL['high'][y, x] = float(np.ma.masked_invalid(self.maxlike_results['high']['lnL'][eh]))
+                    self.pars_like['high'][y, x] = self.maxlike_priors['high'][eh]
+                if el.size and do_likes:
                     el = el[0]
-                    self.lnLL[y, x] = float(np.ma.masked_invalid(self.maxlike_results_L['lnL'][el]))
-                    self.pars_likeL[y, x] = self.maxlike_priors_L[el]
-                if eh.size and el.size:
-                    self.delta_lnL[y, x] = self.lnLH[y, x] - self.lnLL[y, x]
-                if c.size and eh.size and el.size:
-                    kh = self.pars_likeH[y, x][0].num_varied()
-                    kl = self.pars_likeL[y, x][0].num_varied()
-                    self.aiccH[y, x] = self.get_aicc(kh, self.lnLH[y, x], n)
-                    self.aiccL[y, x] = self.get_aicc(kl, self.lnLL[y, x], n)
-                    self.delta_aicc[y, x] = self.aiccH[y, x] - self.aiccL[y, x]
+                    self.lnL['low'][y, x] = float(np.ma.masked_invalid(self.maxlike_results['low']['lnL'][el]))
+                    self.pars_like['low'][y, x] = self.maxlike_priors['low'][el]
+                if eh.size and el.size and do_likes:
+                    self.delta_lnL[y, x] = self.lnL['high'][y, x] - self.lnL['low'][y, x]
+                if c.size and eh.size and el.size and do_likes:
+                    kh = self.pars_like['high'][y, x].num_varied()
+                    kl = self.pars_like['low'][y, x].num_varied()
+                    self.aicc['high'][y, x] = self.get_aicc(kh, self.lnL['high'][y, x], n)
+                    self.aicc['low'][y, x] = self.get_aicc(kl, self.lnL['low'][y, x], n)
+                    self.delta_aicc[y, x] = self.aicc['high'][y, x] - self.aicc['low'][y, x]
 
         if save:
             savedict = {'kbfrac': self.kbfrac, 'kbfrac_unc': self.kbfrac_unc, 'kb_rec': self.kb_rec, 'kbfrac_unc_rec': self.kbfrac_unc_rec,
-                        'lnLH': self.lnLH, 'lnLL': self.lnLL, 'delta_lnL': self.delta_lnL, 'pars_sorted': self.pars_sorted, 'pars_likeH': self.pars_likeH,
-                        'pars_likeL': self.pars_likeL, 'aiccH': self.aiccH, 'aiccL': self.aiccL, 'delta_aicc': self.delta_aicc, 'gp_sorted': self.gp_sorted,
-                        'gp_unc_sorted': self.gp_unc_sorted}
-            serialized = json.dumps(savedict, indent=4, sort_keys=True)
+                        'lnL': self.lnL, 'delta_lnL': self.delta_lnL, 'pars_sorted': self.pars_sorted, 'pars_like': self.pars_like,
+                        'aicc': self.aicc, 'delta_aicc': self.delta_aicc, 'gp_sorted': self.gp_sorted,
+                        'gp_unc_sorted': self.gp_unc_sorted, 'periods': self.periods, 'semiamps': self.semiamps}
             with open(self.path + os.sep + '{}_organized_data_{}.pkl'.format(self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S')), 'wb') as handle:
                 pickle.dump(savedict, handle)
-            with open(self.path + os.sep + '{}_organized_data_{}.json'.format(self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S')), 'wb') as handle:
+            savedict_list = {}
+            for ki, vi in savedict.items():
+                v = {}
+                if type(vi) is not dict:
+                    savedict_list[ki] = vi.tolist()
+                    continue
+                if 'pars' not in ki:
+                    for kii in ('injection', 'noninjection', 'high', 'low'):
+                        if kii in list(vi.keys()):
+                            v[kii] = vi[kii].tolist()
+                else:
+                    for kii in ('injection', 'noninjection', 'high', 'low'):
+                        if kii in list(vi.keys()):
+                            v[kii] = [vii.__repr__() for vii in vi[kii].ravel().tolist()]
+                savedict_list[ki] = v
+            serialized = json.dumps(savedict_list, indent=4, sort_keys=True)
+            with open(self.path + os.sep + '{}_organized_data_{}.json'.format(self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S')), 'w') as handle:
                 handle.write(serialized)
 
-        return self.kbfrac, self.kbfrac_unc, self.kb_rec, self.kbfrac_unc_rec, self.gp_sorted, self.gp_unc_sorted, self.delta_lnL, self.delta_aicc
+        return self.kbfrac[key], self.kbfrac_unc[key], self.kb_rec[key], self.kbfrac_unc_rec[key], self.gp_sorted[key], self.gp_unc_sorted[key], \
+               self.delta_lnL, self.delta_aicc
 
     @staticmethod
     def get_aicc(k, lnL, n):
+        """
+        Calculated the corrected Akaike injection criterion.
+        Args:
+            k: int, number of free parameters.
+            lnL: float, log likelihood.
+            n: int, number of measurements.
+
+        Returns:
+            aicc: float, corrected AiC
+        """
         aic = -2.0 * lnL + 2.0 * k
         _aicc = aic
         denom = n - k - 1.0
@@ -423,10 +613,30 @@ class InjectionRecovery:
 
     @staticmethod
     def load_data(path):
+        """
+        Loads a pickle file.
+        Args:
+            path: str, the filepath.
+
+        Returns:
+            f: object, the contents of the pickle file.
+        """
         f = pickle.load(open(path, 'rb'))
         return f
 
     def get_data(self, result):
+        """
+        Recovers the MCMC results from a single pickle file.
+        Args:
+            result: the loaded pickle data from self.load_data
+
+        Returns:
+            priors: pychell.orbits.Parameters, the priors of the MCMC run
+            frun_data: tuple, the injected P and K, the recovered P and K, the uncertainty in recovered P and K,
+                as well as the lnL from the MCMC.
+            frun_gp: dict, the GP posterior parameters from the MCMC.
+            frun_gp_unc: dict, the uncertainty in GP posteriors from the MCMC.
+        """
         injected_planet = list(self.planets_dict.keys())[-1]
         kbkey = 'k{}'.format(injected_planet)
         pbkey = 'per{}'.format(injected_planet)
@@ -449,8 +659,28 @@ class InjectionRecovery:
 
         return priors, frun_data, frun_gp, frun_gp_unc
 
-    def plot_injection_2D_hist(self, injection=True, vector=False):
+    def plot_injection_2D_hist(self, injection=True, vector=False, bounds_k=None, bounds_unc=None, colormap_k='RdYlGn', colormap_unc='RdYlBu',
+                               xticks_k=None, xticks_unc=None, yticks_k=None, yticks_unc=None):
+        """
+        Plots the 2D histogram of injection/recovery data.  The upper plot is K recovered / K injected, and the lower
+        plot is K injected / sigma K recovered for injection runs and K recovered / sigma K recovered for noninjection runs.
+        Args:
+            injection: bool, True to plot injection data, False to plot noninjection data.
+            vector: bool, True to save as eps, False to save as png.
+            bounds_k: list / tuple, colorbar limits for the upper plot.
+            bounds_unc: list / tuple, colorbar limits for the lower plot.
+            colormap_k: matplotlib.colormap / str, the colormap to use for the upper plot.
+            colormap_unc: matplotlib.colormap / str, the colormap to use for the lower plot.
+            xticks_k: list / array, the upper plot x ticks.
+            xticks_unc: list / array, the lower plot x ticks.
+            yticks_k: list / array, the upper plot y ticks.
+            yticks_unc: list / array, the lower plot y ticks.
+
+        Returns:
+            None.
+        """
         assert self.kbfrac is not None
+        key = 'injection' if injection else 'noninjection'
         fig, (ax1, ax2) = plt.subplots(2)
         # norm = None if planets_model == 1 else colors.LogNorm()
         norm1 = colors.LogNorm()
@@ -459,13 +689,16 @@ class InjectionRecovery:
         pos2 = ax2.get_position()
         cbar_ax = fig.add_axes([0.83, pos1.y0, 0.025, pos1.height])
         cbar2_ax = fig.add_axes([0.83, pos2.y0, 0.025, pos2.height])
-        bounds = (1e-1, 20) if injection else (1e-3, 20)
-        plot = ax1.pcolormesh(self.periods, self.semiamps, self.kbfrac, cmap='RdYlGn', vmin=bounds[0], vmax=bounds[1], norm=norm1,
+        if not bounds_k:
+            bounds_k = (np.nanmin(self.kbfrac[key]), np.nanmax(self.kbfrac[key]))
+        plot = ax1.pcolormesh(self.periods, self.semiamps, self.kbfrac[key], cmap=colormap_k, vmin=bounds_k[0], vmax=bounds_k[1], norm=norm1,
                               shading='nearest')
         cb = fig.colorbar(plot, cax=cbar_ax, label='$K_{\\mathrm{recovered}}\\ /\\ K_{\\mathrm{injected}}$')
-        bounds = (1 / 10, 1 / 1e-3) if injection else (1 / 50, 1 / 1e-1)
-        plot_b = ax2.pcolormesh(self.periods, self.semiamps, 1/self.kbfrac_unc if injection else 1/self.kbfrac_unc_rec,
-                                cmap='RdYlBu', vmin=bounds[0], vmax=bounds[1], norm=norm2, shading='nearest')
+
+        unc = 1/self.kbfrac_unc[key] if injection else 1/self.kbfrac_unc_rec[key]
+        bounds_unc = (np.nanmin(unc), np.nanmax(unc))
+        plot_b = ax2.pcolormesh(self.periods, self.semiamps, unc, cmap=colormap_unc, vmin=bounds_unc[0], vmax=bounds_unc[1], norm=norm2,
+                                shading='nearest')
         istr = 'injected' if injection else 'recovered'
         cb2 = fig.colorbar(plot_b, cax=cbar2_ax, label='$K_{\\mathrm{%s}}\\ /\\ \\sigma_{K}$' % istr)
         ax2.set_xlabel('Injected Period [days]')
@@ -476,11 +709,18 @@ class InjectionRecovery:
         ax2.set_yscale('log')
         ax1.minorticks_off()
         ax2.minorticks_off()
-        step = 3
-        ax1.set_xticks(self.periods[::2])
-        ax1.set_yticks(self.semiamps[::step])
-        ax2.set_xticks(self.periods[::2])
-        ax2.set_yticks(self.semiamps[::step])
+        if not xticks_k:
+            xticks_k = self.periods[::len(self.periods) // 40 + 1]
+        if not xticks_unc:
+            xticks_unc = self.periods[::len(self.periods) // 40 + 1]
+        if not yticks_k:
+            yticks_k = self.semiamps[::len(self.semiamps) // 20 + 1]
+        if not yticks_unc:
+            yticks_unc = self.semiamps[::len(self.semiamps) // 20 + 1]
+        ax1.set_xticks(xticks_k)
+        ax1.set_yticks(yticks_k)
+        ax2.set_xticks(xticks_unc)
+        ax2.set_yticks(yticks_unc)
         ax1.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
         ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
         ax2.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
@@ -489,51 +729,67 @@ class InjectionRecovery:
         ax1.yaxis.set_minor_formatter(ticker.NullFormatter())
         ax2.xaxis.set_minor_formatter(ticker.NullFormatter())
         ax2.yaxis.set_minor_formatter(ticker.NullFormatter())
-        cb2.ax.minorticks_off()
         fig.subplots_adjust(right=0.8, hspace=0.3)
         ftype = 'png' if not vector else 'eps'
         plt.savefig(self.path + os.sep + '{}injection_recovery_histograms_{}_{}.{}'.format('non' if not injection else '',
                                                                        self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'),
-                                                                      ftype),
-                    bbox_extra_artist=(cb, cb2), dpi=300)
+                                                                      ftype), bbox_extra_artist=(cb, cb2), edges='tight', dpi=300)
         plt.close()
 
-    def plot_delta_aicc(self, vector=False):
-        colors_below0 = plt.cm.PuOr(np.linspace(1, 0.5, 256))
-        colors_above0 = plt.cm.RdYlGn(np.linspace(0.5, 1, 256))
-        all_colors = np.vstack((colors_below0, colors_above0))
-        colormap = colors.LinearSegmentedColormap.from_list('red-purple', all_colors)
+    def plot_delta_aicc(self, vector=False, vmin=-10**6, vmax=10**6, linthresh=1, colormap=None, xticks=None, yticks=None):
+        """
+        Plots the 2D histogram of delta AiCc data.  Uses a symmetric logarithmic colorbar scale.
+        Args:
+            vector: bool, True to save as eps, False to save as png.
+            vmin: float, colorbar minimum limit, must be negative.
+            vmax: float, colorbar maximum limit, must be positive.
+            linthresh: float, the threshold at which the colorbar becomes linear around 0.
+            colormap: matplotlib.colormap / str, the colormap to use.
+            xticks: list / array, the x ticks.
+            yticks: list / array, the y ticks.
+
+        Returns:
+            None
+        """
+        if not colormap:
+            colors_below0 = plt.cm.PuOr(np.linspace(1, 0.5, 256))
+            colors_above0 = plt.cm.RdYlGn(np.linspace(0.5, 1, 256))
+            all_colors = np.vstack((colors_below0, colors_above0))
+            colormap = colors.LinearSegmentedColormap.from_list('red-purple', all_colors)
 
         assert self.delta_aicc is not None
         fig, ax = plt.subplots()
-        lognorm = colors.SymLogNorm(1, vmin=-10 ** 6, vmax=10 ** 6, base=10)
+        lognorm = colors.SymLogNorm(linthresh=linthresh, vmin=vmin, vmax=vmax, base=10)
         plot = ax.pcolormesh(self.periods, self.semiamps, self.delta_aicc, cmap=colormap, norm=lognorm, rasterized=True, shading='nearest')
         ax.set_xlabel('Injected Period [days]')
         ax.set_ylabel('Injected Semiamplitude [m s$^{-1}$]')
         ax.set_xscale('log')
         ax.set_yscale('log')
         ax.minorticks_off()
-        ax.set_xticks(self.periods[::2])
-        ax.set_yticks(self.semiamps[::2])
+        if not xticks:
+            xticks = self.periods[::len(self.periods) // 40 + 1]
+        if not yticks:
+            yticks = self.semiamps[::len(self.semiamps) // 20 + 1]
+        ax.set_xticks(xticks)
+        ax.set_yticks(yticks)
         ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
         ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
         ax.xaxis.set_minor_formatter(ticker.NullFormatter())
         ax.yaxis.set_minor_formatter(ticker.NullFormatter())
-        stat_str = 'delta_AICc'
         cbar = fig.colorbar(plot, ax=ax, label='$\\Delta$ AICc')
-        cbar.set_ticks(
-            [-10 ** 6, -10 ** 5, -10 ** 4, -10 ** 3, -10 ** 2, -10, -1, 0, 1, 10, 10 ** 2, 10 ** 3, 10 ** 4, 10 ** 5,
-             10 ** 6])
+        cbar.set_ticks(np.concatenate((-np.geomspace(np.abs(vmin), linthresh, int(np.log10(np.abs(vmin))+1)), [0],
+                                       np.geomspace(linthresh, np.abs(vmax), int(np.log10(np.abs(vmax))+1)))))
         ftype = 'png' if not vector else 'eps'
         plt.savefig(self.path + os.sep + 'delta_aicc_histograms_{}_{}.{}'.format(self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
-                    dpi=300)
+                    dpi=300, edges='tight')
         plt.close()
 
-    def plot_gp_histograms(self, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=100):
+    def plot_gp_histograms(self, injection=True, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=100):
         ftype = 'png' if not vector else 'eps'
+        key = 'injection' if injection else 'noninjection'
 
         fig, ax = plt.subplots()
-        kbfrac_unc_flat = 1 / self.kbfrac_unc.ravel()
+        kbfrac_unc_flat = 1 / self.kbfrac_unc[key].ravel()
         kbfrac_unc_flat = kbfrac_unc_flat[np.where(np.isfinite(kbfrac_unc_flat) & (kbfrac_unc_flat < cutoff))]
         ax.hist(kbfrac_unc_flat, bins=100, weights=weightskb, density=True)
         ax.set_yscale('log')
@@ -544,15 +800,35 @@ class InjectionRecovery:
                     edges='tight')
         plt.close()
 
-        for field in self.gp_sorted.dtype.names:
+        for field in self.gp_sorted[key].dtype.names:
             fig, ax = plt.subplots()
-            gp_param = self.gp_sorted[field].ravel()
+            gp_param = self.gp_sorted[key][field].ravel()
             gp_param = gp_param[np.where(np.isfinite(gp_param) & (np.abs(gp_param) < cutoff))]
             ax.hist(gp_param, bins=bins, weights=weightsgp, density=True)
-            ax.set_xlabel('gp_' + field)
+            ax.set_xlabel(field)
             ax.set_yscale('log')
             ax.set_ylabel('{}weighted Probability Density'.format('un' if not weightsgp else ''))
-            plt.savefig(self.path + os.sep + '1d_injection_histogram_{}_{}_{}.{}'.format(field,
+            plt.savefig(self.path + os.sep + '1d_{}injection_histogram_{}_{}_{}.{}'.format('non' if not injection else '', field,
             self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
                 edges='tight')
             plt.close()
+
+    @classmethod
+    def from_pickle(cls, filepath, *args, **kwargs):
+        """
+        Create an InjectionRecovery object from an already-saved pickle file.  Must be of the correct format.
+        Args:
+            filepath: str, the path to the pickle file.
+            *args: other arguments to give to the InjectionRecovery object.
+            **kwargs: other keyword arguments to give to the InjectionRecovery object.
+
+        Returns:
+            InjectionRecovery object.
+        """
+        data = pickle.load(open(filepath, 'rb'))
+        path = os.path.abspath(os.path.dirname(filepath))
+        required_keys = ('kbfrac', 'kbfrac_unc', 'kb_rec', 'kbfrac_unc_rec', 'pars_sorted', 'gp_sorted', 'gp_unc_sorted',
+                         'lnL', 'delta_lnL', 'aicc', 'delta_aicc', 'pars_like', 'periods', 'semiamps')
+        for key in required_keys:
+            assert key in data.keys(), "file missing key: {}".format(key)
+        return cls(*args, output_path=path, **kwargs, **data)
