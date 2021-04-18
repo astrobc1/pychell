@@ -15,12 +15,102 @@ from joblib import Parallel, delayed
 import pychell.orbits as pco
 
 
+class SoloInjectionRecovery:
+
+    def __init__(self, rv_problem, output_path=None, star_name=None):
+        assert type(rv_problem) is pco.RVProblem
+        self.rv_problem = rv_problem
+        self.star_name = star_name if star_name else 'Star'
+
+        # Alias output path
+        if output_path is None:
+            output_path = os.path.abspath(os.path.dirname(__file__))
+        self.path = output_path
+
+    def injection_mcmc(self, folder_name=None, injection=True, *args, **kwargs):
+        """
+        Runs a single injection/recovery MCMC and outputs to a sub-folder in the output directory.
+
+        Args:
+            folder_name: Name of folder to save the MCMC output to.  Defaults to an appropriate name.
+            injection: bool.  Whether or not to actually inject the planet.
+            *args: Arguments for the MCMC function
+            **kwargs: Keyword arguments for the MCMC function
+
+        Returns:
+            results_dict: dict. Contains MCMC results and priors.
+        """
+        injected_planet = list(self.rv_problem.planets_dict)[-1]
+        k_inj = self.rv_problem.p0["k" + str(injected_planet)].value
+        p_inj = self.rv_problem.p0["per" + str(injected_planet)].value
+
+        # Set up output folder
+        if not folder_name:
+            folder_name = os.path.join(self.path, '{}injection_run_{:.5f}d_{:.5f}mps'.format('non' if not injection else '', p_inj, k_inj))
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
+
+        # Run the MCMC
+        sampler_result = self.rv_problem.sample(save=False, *args, **kwargs)
+        cornerplot = self.rv_problem.corner_plot(mcmc_result=sampler_result)
+
+        # Save results to a pickle file for later use
+        results_dict = {'sampler_result': sampler_result, 'priors': self.rv_problem.p0}
+        with open(os.path.join(folder_name, '{}_{}injected_{}d_{}mps.pkl'.format(
+            self.rv_problem.star_name.replace(' ', '_'), 'non' if not injection else '', p_inj, k_inj
+        )), 'wb') as handle:
+            pickle.dump(results_dict, handle)
+
+        del sampler_result, cornerplot
+        gc.collect()
+
+        print("COMPLETED MCMC AT {}d, {}mps".format(p_inj, k_inj))
+        return results_dict
+
+    def injection_maxlikelihood(self, folder_name=None, *args, **kwargs):
+        """
+        Runs a maximum likelihood fit for the injected planet.
+        Args:
+            folder_name: str, the names of the two folders to save outputs to.  Defaults to an appropriate name.
+            *args: arguments for the optimize function.
+            **kwargs: keyword arguments for the optimize function.
+
+        Returns:
+            results_dict [dict], results_dict2 [dict]
+            The results for both runs, in dictionary form.
+        """
+        injected_planet = list(self.rv_problem.planets_dict)[-1]
+        k_inj = self.rv_problem.p0["k" + str(injected_planet)].value
+        p_inj = self.rv_problem.p0["per" + str(injected_planet)].value
+
+        # Set up output folder
+        if not folder_name:
+            folder_name = os.path.join(self.path, '{}p_likelihood_run_{:.5f}d_{:.5f}mps'.format(len(self.rv_problem.planets_dict), p_inj, k_inj))
+        if not os.path.exists(folder_name):
+            os.makedirs(folder_name)
+        self.rv_problem.output_path = folder_name
+
+        # Run twice: once with the injected planet and once without
+        opt_result = self.rv_problem.maxlikefit(save=False, *args, **kwargs)
+
+        results_dict = {'opt_result': opt_result, 'priors': self.rv_problem.p0}
+        with open(os.path.join(folder_name, '{}_{}p_likelihood_{}d_{}mps.pkl'.format(
+            self.rv_problem.star_name.replace(' ', '_'), len(self.rv_problem.planets_dict), p_inj, k_inj
+        )), 'wb') as handle:
+            pickle.dump(results_dict, handle)
+
+        print("COMPLETED MAXLIKEFITS AT {}d, {}mps".format(p_inj, k_inj))
+        return results_dict
+
+
 class InjectionRecovery:
 
     def __init__(self, data=None, p0=None, planets_dict=None, optimizer_type=pco.NelderMead, sampler_type=pco.AffInv, scorer_type=pco.RVPosterior,
                  likelihood_type=pco.RVLikelihood, kernel_type=pco.WhiteNoise, model_type=pco.RVModel,
                  output_path=None, star_name=None, k_range=(1, 100), p_range=(1.1, 100), k_resolution=20, p_resolution=30, p_shift=0.12345,
-                 ecc_inj=0, w_inj=np.pi, tp_inj=None, scaling='log', slurm=False, **internal_kwargs):
+                 ecc_inj=0, w_inj=np.pi, tp_inj=None, scaling='log', slurm=False,
+                 gaussian_shift=None, gaussian_unc=None, uniform_shift=None, jeffreys_shift=None,
+                 **internal_kwargs):
         """
         A class for running injection and recovery tests on a kernel.
         Args:
@@ -51,6 +141,13 @@ class InjectionRecovery:
                 some random offset.
             scaling: str, 'log' for logarithmic or 'lin' for linear scaling in k and p.
             slurm: bool, True if one is using slurm and wishes to sort runs using a job array task ID.
+            gaussian_shift: dict, keys: {"per", "k", "tc"}, option to shift the mean value of gaussian priors placed on the injected P, K, and TC away
+                from said injected value.  Only applies if there are guassian priors at all.
+            gaussian_unc: dict, keys: {"per", "k", "tc"}, option to scale the uncertainty of gaussian priors placed on the injected P, K, and TC by
+                this amount.  Only applies if there are gaussian priors at all.
+            uniform_shift: dict, keys: {"per", "k", "tc"}, option to shift the lower and upper bounds of uniform priors placed on the
+                injected P, K, and TC by these amounts.  For P and TC, these values are scaled by the injected period.
+            jeffreys_shift: dict, keys: {"per", "k", "tc"}, identical to uniform_shift, but for Jeffreys priors.
             **internal_kwargs: arguments for creating an already-finished injection/recovery run via a previously saved
                 pickle file or some other dictionary.  Allows for definitions of all internal parameters for plotting and such.
         """
@@ -63,6 +160,10 @@ class InjectionRecovery:
         self.kernel_type = kernel_type
         self.model_type = model_type
         self.planets_dict = planets_dict
+        self.gaussian_shift = gaussian_shift
+        self.gaussian_unc = gaussian_unc
+        self.uniform_shift = uniform_shift
+        self.jeffreys_shift = jeffreys_shift
         self.star_name = star_name if star_name else 'Star'
         array_func = np.geomspace if scaling == 'log' else np.linspace if scaling == 'lin' else None
         if not array_func:
@@ -135,6 +236,40 @@ class InjectionRecovery:
         )))
         return data_mod
 
+    def fix_priors(self, pars, injected_planet, key, value0, value1):
+        """
+        Edit the priors of the injected P, K, or TC to reflect the new injected values.
+        Args:
+            pars: pco.Parameters, the Parameters object to be edited.
+            injected_planet: int, the index of the injected planet to be edited.
+            key: str, the appropriate value to edit, "per" for period, "k" for semiamplitude, "tc" for time of conjunction
+            value0: float, the injected value corresponding to P, K, or TC - midpoint
+            value1: float, the value to scale bounds/uncertainty with
+
+        Returns:
+            pars: pco.Parameters, the edited Parameters object
+        """
+        gaussian_priors = [i for (i, prior) in enumerate(pars[key + str(injected_planet)].priors) if isinstance(prior, pco.Gaussian)]
+        uniform_priors = [i for (i, prior) in enumerate(pars[key + str(injected_planet)].priors) if isinstance(prior, pco.Uniform)]
+        jeffreys_priors = [i for (i, prior) in enumerate(pars[key + str(injected_planet)].priors) if isinstance(prior, pco.Jeffreys)]
+        if gaussian_priors and (self.gaussian_shift or self.gaussian_unc):
+            for index in gaussian_priors:
+                if self.gaussian_shift and key in self.gaussian_shift.keys():
+                    pars[key + str(injected_planet)].priors[index].mu = value0 + self.gaussian_shift[key]
+                else:
+                    pars[key + str(injected_planet)].priors[index].mu = value0
+                if self.gaussian_unc and key in self.gaussian_unc.keys():
+                    pars[key + str(injected_planet)].priors[index].sigma = value1 * self.gaussian_unc[key]
+        if uniform_priors and self.uniform_shift and (key in self.uniform_shift.keys()):
+            for index in uniform_priors:
+                pars[key + str(injected_planet)].priors[index].minval = value0 + self.uniform_shift[key][0] * value1
+                pars[key + str(injected_planet)].priors[index].maxval = value0 + self.uniform_shift[key][1] * value1
+        if jeffreys_priors and self.jeffreys_shift and (key in self.jeffreys_shift.keys()):
+            for index in jeffreys_priors:
+                pars[key + str(injected_planet)].priors[index].minval = value0 + self.jeffreys_shift[key][0] * value1
+                pars[key + str(injected_planet)].priors[index].maxval = value0 + self.jeffreys_shift[key][1] * value1
+        return pars
+
     def create_rvproblem(self, k_inj, p_inj, folder_name, data, pars, remove_injected_planet=False):
         """
         Creates an RVProblem with the appropriate kernels, models, scorers, likelihoods, posteriors, etc. etc.
@@ -156,13 +291,20 @@ class InjectionRecovery:
         # Adjust model parameters to the injected period and semiamplitude
         injected_planet = list(planets_dict.keys())[-1]
         pars["per" + str(injected_planet)].value = p_inj
-        if pars["k" + str(injected_planet)].vary == False:
-            print("WARNING: Injected planet's K prior was set to not vary.  Resetting to allow variation.")
-        pars["k" + str(injected_planet)] = pco.Parameter(value=k_inj, vary=True)
-        positive_priors = [prior for prior in pars["k" + str(injected_planet)].priors if isinstance(prior, pco.Positive)]
-        if not positive_priors:
-            print("WARNING: Injected planet's K prior did not include any positive prior.  Adding a positive prior.")
-            pars["k" + str(injected_planet)].add_prior(pco.Positive())
+        if pars["per" + str(injected_planet)].vary is False:
+            print("WARNING: Injected planet's P prior was set to not vary.")
+        else:
+            pars = self.fix_priors(pars, injected_planet, "per", p_inj, p_inj)
+        pars["k" + str(injected_planet)].value = k_inj
+        if pars["k" + str(injected_planet)].vary is False:
+            print("WARNING: Injected planet's K prior was set to not vary.")
+        else:
+            pars = self.fix_priors(pars, injected_planet, "k", k_inj, k_inj)
+
+        if pars["tc" + str(injected_planet)].vary is False:
+            print("WARNING: Injected planet's TC prior was set to not vary.")
+        else:
+            pars = self.fix_priors(pars, injected_planet, "tc", pars["tc" + str(injected_planet)].value, p_inj)
         pars["ecc" + str(injected_planet)].value = self.ecc
         pars["w" + str(injected_planet)].value = self.w
 
@@ -202,7 +344,6 @@ class InjectionRecovery:
         Returns:
             results_dict: dict. Contains MCMC results and priors.
         """
-
         # Set up output folder
         if not folder_name:
             folder_name = os.path.join(self.path, '{}injection_run_{:.5f}d_{:.5f}mps'.format('non' if not injection else '', p_inj, k_inj))
@@ -218,21 +359,10 @@ class InjectionRecovery:
 
         rvprobi = self.create_rvproblem(k_inj, p_inj, folder_name + os.sep, data, pars)
 
-        # Run the MCMC
-        sampler_result = rvprobi.sample(save=False, *args, **kwargs)
-        cornerplot = rvprobi.corner_plot(mcmc_result=sampler_result)
+        # Create SoloInjectionRun and do the MCMC
+        solo_run = SoloInjectionRecovery(rv_problem=rvprobi, output_path=self.path, star_name=self.star_name)
+        results_dict = solo_run.injection_mcmc(folder_name=folder_name, injection=injection, *args, **kwargs)
 
-        # Save results to a pickle file for later use
-        results_dict = {'sampler_result': sampler_result, 'priors': pars}
-        with open(os.path.join(folder_name, '{}_{}injected_{}d_{}mps.pkl'.format(
-            rvprobi.star_name.replace(' ', '_'), 'non' if not injection else '', p_inj, k_inj
-        )), 'wb') as handle:
-            pickle.dump(results_dict, handle)
-
-        del sampler_result, cornerplot
-        gc.collect()
-
-        print("COMPLETED MCMC AT {}d, {}mps".format(p_inj, k_inj))
         return results_dict
 
     def injection_maxlikelihood(self, k_inj, p_inj, tp_inj, folder_names=None, *args, **kwargs):
@@ -250,41 +380,28 @@ class InjectionRecovery:
             results_dict [dict], results_dict2 [dict]
             The results for both runs, in dictionary form.
         """
+        injected_planet = list(self.planets_dict)[-1]
+
         # Set up output folder
         if not folder_names:
             folder_names = []
             folder_names.append(os.path.join(self.path, '{}p_likelihood_run_{:.5f}d_{:.5f}mps'.format(len(self.planets_dict), p_inj, k_inj)))
-        if not os.path.exists(folder_names[0]):
-            os.makedirs(folder_names[0])
+            folder_names.append(os.path.join(self.path, '{}p_likelihood_run_{:.5f}d_{:.5f}mps'.format(len(self.planets_dict) - 1, p_inj, k_inj)))
+        for path in folder_names:
+            if not os.path.exists(path):
+                os.makedirs(path)
 
         # Run twice: once with the injected planet and once without
         data = self.inject_signal(k_inj, p_inj, tp_inj, folder_names[0])
         pars = copy.deepcopy(self.p0)
         rvprobi = self.create_rvproblem(k_inj, p_inj, folder_names[0], data, pars)
-        opt_result = rvprobi.maxlikefit(save=False, *args, **kwargs)
+        solo_run1 = SoloInjectionRecovery(rv_problem=rvprobi, output_path=self.path, star_name=self.star_name)
+        results_dict = solo_run1.injection_maxlikelihood(folder_name=folder_names[0], *args, **kwargs)
 
-        results_dict = {'opt_result': opt_result, 'priors': rvprobi.p0}
-        with open(os.path.join(folder_names[0], '{}_{}p_likelihood_{}d_{}mps.pkl'.format(
-            rvprobi.star_name.replace(' ', '_'), len(self.planets_dict), p_inj, k_inj
-        )), 'wb') as handle:
-            pickle.dump(results_dict, handle)
-
-        if len(folder_names) == 1:
-            folder_names.append(os.path.join(self.path, '{}p_likelihood_run_{:.5f}d_{:.5f}mps'.format(len(self.planets_dict) - 1, p_inj, k_inj)))
-        if not os.path.exists(folder_names[1]):
-            os.makedirs(folder_names[1])
-        data.to_radvel_file(os.path.join(folder_names[1], '{}_{}_injected_{}d_{}mps.txt'.format(
-            self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), p_inj, k_inj
-        )))
         rvprobj = self.create_rvproblem(k_inj, p_inj, folder_names[1], data, pars, remove_injected_planet=True)
-        opt_result2 = rvprobj.maxlikefit(save=False, *args, **kwargs)
-        results_dict2 = {'opt_result': opt_result2, 'priors': rvprobj.p0}
-        with open(os.path.join(folder_names[1], '{}_{}p_likelihood_{}d_{}mps.pkl'.format(
-            rvprobj.star_name.replace(' ', '_'), len(self.planets_dict) - 1, p_inj, k_inj
-        )), 'wb') as handle:
-            pickle.dump(results_dict2, handle)
+        solo_run2 = SoloInjectionRecovery(rv_problem=rvprobj, output_path=self.path, star_name=self.star_name)
+        results_dict2 = solo_run2.injection_maxlikelihood(folder_name=folder_names[1], *args, **kwargs)
 
-        print("COMPLETED MAXLIKEFITS AT {}d, {}mps".format(p_inj, k_inj))
         return results_dict, results_dict2
 
     def __full_mcmc_run_parallel(self, njobs=-1, backend=None, injection=True, *args, **kwargs):
@@ -539,6 +656,7 @@ class InjectionRecovery:
                 # el = np.where(np.isclose(self.maxlike_results_L['per'], pb[x]) & np.isclose(self.maxlike_results_L['k'], kbin[y]))[0]
                 el = eh
                 if c.size:
+                    c = c[0]
                     self.kbfrac[key][y, x] = float(self.full_run_data[key]['kb_out'][c] / self.full_run_data[key]['kb_in'][c])
                     self.kbfrac_unc[key][y, x] = float(np.mean(self.full_run_data[key]['kb_unc'][c][0]) / self.full_run_data[key]['kb_in'][c])
                     self.kbfrac_unc_rec[key][y, x] = float(np.mean(self.full_run_data[key]['kb_unc'][c][0]) / self.full_run_data[key]['kb_out'][c])
