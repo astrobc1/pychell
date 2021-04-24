@@ -246,3 +246,7 @@ def module_from_file(fname):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def list_diff(l1, l2):
+    return [i for i in l1 + l2 if i not in l1 or i not in l2]

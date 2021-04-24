@@ -12,4 +12,3 @@ from pychell.orbits.rvmodels import *
 from pychell.orbits.rvkernels import *
 from pychell.orbits.rvscores import *
 from pychell.orbits.rvprob import *
-from pychell.orbits.gls import *

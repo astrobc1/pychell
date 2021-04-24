@@ -25,7 +25,17 @@ import numba
 import numba.types as nt
 from llc import jit_filter_function
 
-def outer_fun(x, y, fun):
+def compute_R2_stat(y1, y2, w=None):
+    if w is None:
+        w = np.ones_like(y1)
+    w = w / np.nansum(w)
+    y1bar = weighted_mean(y1, w)
+    sstot = np.nansum((y1 - ybar)**2)
+    ssres = np.nansum((y1 - y2)**2)
+    return 1 - (ss_res / ss_tot)
+
+
+def outer_fun(fun, x, y):
     n1 = len(x)
     n2 = len(x)
     out = np.zeros((n1, n2))
@@ -33,14 +43,6 @@ def outer_fun(x, y, fun):
         for j in range(n2):
             out[i, j] = fun(x[i], y[j])
     return out
-
-def rms_loss_creator(func):
-    
-    def _rms_loss(pars, x, data):
-        model = func(x, *pars)
-        return rmsloss(x, data)
-    
-    return _rms_loss
 
 def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
     
