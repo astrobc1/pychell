@@ -112,7 +112,7 @@ def solve_kepler_all_times(mas, ecc):
 
 @njit(nogil=True)
 def _solve_kepler(ma, ecc):
-    """Solve Kepler's equation for one planet and one time. This code is nearly identical to the RadVel implemenation (BJ Fulton et al. 2018). Kepler's equation is solved using a higher order Newton's method.
+    """Solve Kepler's equation for one planet and one time. This code is nearly identical to the RadVel implemenation (BJ Fulton et al. 2018). Kepler's equation is solved using a higher order Newton's method. Note that for RV modeling, solving Kepler's eq. is typically not a bottleneck.
     
     Args:
         ma (float): mean anomaly.

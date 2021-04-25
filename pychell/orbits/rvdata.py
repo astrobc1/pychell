@@ -9,6 +9,15 @@ class RVData(optdata.Data1d):
     __slots__ = ['x', 'y', 'yerr', 'mask', 'label', 'wavelength']
     
     def __init__(self, t, rv, rverr, instname=None, wavelength=None):
+        """Construct an RV data object for a particular instrument.
+
+        Args:
+            t (np.ndarray): The time vector.
+            rv (np.ndarray): The RVs vector.
+            rverr (np.ndarray): The RVs error vector.
+            instname (np.ndarray, optional): The label for this dataset. Defaults to None initially, and is then replaced by the the key provided when constructing a composite dataset.
+            wavelength (np.ndarray, optional): The effective wavelength of the dataset. Defaults to None.
+        """
         super().__init__(t, rv, yerr=rverr, label=instname)
         self.wavelength = wavelength
         
@@ -123,24 +132,3 @@ class CompositeRVData(optdata.CompositeData1d):
     @property
     def tel_vec(self):
         return self.label_vec
- 
- 
-def group_vis_nir(data, cut=1000):
-    """Groups vis and nir data into two different dicts.
-
-    Args:
-        data (CompositeRVData): The RV data.
-        cut (float, optional): The cut between vis and nir in nm. Defaults to 1000 nm.
-
-    Returns:
-        CompositeRVData: The vis data.
-        CompositeRVData: The nir data.
-    """
-    data_vis = CompositeRVData()
-    data_nir = CompositeRVData()
-    for _data in data.values():
-        if _data.wavelength < cut:
-            data_vis[_data.label] = _data
-        else:
-            data_nir[_data.label] = _data
-    return data_vis, data_nir

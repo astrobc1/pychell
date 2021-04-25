@@ -8,8 +8,8 @@ from numba import jit, njit
 
 class RVLikelihood(optscore.Likelihood):
     
-    def __init__(self, label=None, data=None, model=None):
-        super().__init__(label=label, data=data, model=model)
+    def __init__(self, label=None, data=None, model=None, kernel=None):
+        super().__init__(label=label, data=data, model=model, kernel=kernel)
         self.data_inds = {}
         for data in self.data.values():
             self.data_inds[data.label] = self.data.get_inds(data.label)
@@ -29,7 +29,7 @@ class RVLikelihood(optscore.Likelihood):
         residuals = self.residuals_with_noise(pars)
 
         # Compute the cov matrix
-        K = self.model.kernel.compute_cov_matrix(pars, include_white_error=True, include_kernel_error=False)
+        K = self.kernel.compute_cov_matrix(pars, include_white_error=True, include_kernel_error=False)
 
         # Compute the determiniant and inverse of K
         try:
@@ -76,8 +76,8 @@ class RVLikelihood(optscore.Likelihood):
         """
         residuals_with_noise = self.residuals_with_noise(pars)
         residuals_no_noise = np.copy(residuals_with_noise)
-        if isinstance(self.model.kernel, optnoisekernels.CorrelatedNoiseKernel):
-            kernel_mean = self.model.kernel.realize(pars, residuals_with_noise, return_kernel_error=False, kernel_error=None)
+        if isinstance(self.kernel, optnoisekernels.CorrelatedNoiseKernel):
+            kernel_mean = self.kernel.realize(pars, residuals_with_noise, return_kernel_error=False, kernel_error=None)
             residuals_no_noise -= kernel_mean
         return residuals_no_noise
     
@@ -96,7 +96,7 @@ class RVLikelihood(optscore.Likelihood):
         residuals_with_noise = self.residuals_with_noise(pars)
         
         # Data errrors
-        data_rvs_error = self.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
         
         # Store in comps
         comps[self.label + "_data_t"] = data_t
@@ -104,8 +104,8 @@ class RVLikelihood(optscore.Likelihood):
         comps[self.label + "_data_rvs_error"] = data_rvs_error
         
         # Standard GP
-        if isinstance(self.model.kernel, optnoisekernels.CorrelatedNoiseKernel):
-            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data_t, xres=None, return_kernel_error=True)
+        if isinstance(self.kernel, optnoisekernels.CorrelatedNoiseKernel):
+            kernel_mean, kernel_unc = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data_t, xres=None, return_kernel_error=True)
             comps[self.label + "_kernel_mean"] = kernel_mean
             comps[self.label + "_kernel_unc"] = kernel_unc
 
@@ -138,7 +138,7 @@ class RVChromaticLikelihood(RVLikelihood):
         residuals_no_noise = np.copy(residuals_with_noise)
         for data in self.data.values():
             inds = self.model.data_inds[data.label]
-            gp_mean = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, wavelength=data.wavelength, return_kernel_error=False)
+            gp_mean = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, wavelength=data.wavelength, return_kernel_error=False)
             residuals_no_noise[inds] -= gp_mean
             
         return residuals_no_noise
@@ -158,7 +158,7 @@ class RVChromaticLikelihood(RVLikelihood):
         residuals_with_noise = self.residuals_with_noise(pars)
         
         # Data errrors
-        data_rvs_error = self.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
         
         # Store in comps
         comps[self.label + "_data_t"] = data_t
@@ -167,7 +167,7 @@ class RVChromaticLikelihood(RVLikelihood):
         
         # Standard GP
         for data in self.data.values():
-            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, wavelength=data.wavelength)
+            kernel_mean, kernel_unc = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, wavelength=data.wavelength)
             comps[self.label + "_kernel_mean_" + data.label] = kernel_mean
             comps[self.label + "_kernel_unc_" + data.label] = kernel_unc
         
@@ -188,7 +188,7 @@ class RVChromaticLikelihood2(RVLikelihood):
         residuals_no_noise = np.copy(residuals_with_noise)
         for data in self.data.values():
             inds = self.model.data_inds[data.label]
-            gp_mean = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, return_kernel_error=False, instrument=data.label)
+            gp_mean = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, return_kernel_error=False, instrument=data.label)
             residuals_no_noise[inds] -= gp_mean
             
         return residuals_no_noise
@@ -208,7 +208,7 @@ class RVChromaticLikelihood2(RVLikelihood):
         residuals_with_noise = self.residuals_with_noise(pars)
         
         # Data errrors
-        data_rvs_error = self.model.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
         
         # Store in comps
         comps[self.label + "_data_t"] = data_t
@@ -217,7 +217,7 @@ class RVChromaticLikelihood2(RVLikelihood):
         
         # Standard GP
         for data in self.data.values():
-            kernel_mean, kernel_unc = self.model.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, instrument=data.label)
+            kernel_mean, kernel_unc = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, instrument=data.label)
             comps[self.label + "_kernel_mean_" + data.label] = kernel_mean
             comps[self.label + "_kernel_unc_" + data.label] = kernel_unc
         
@@ -234,7 +234,7 @@ class RVPosterior(optscore.Posterior):
         for like in self.values():
             residuals_with_noise = like.residuals_with_noise(pars)
             residuals_no_noise = like.residuals_no_noise(pars)
-            errs = like.model.kernel.compute_data_errors(pars, include_white_error=include_white_error, include_kernel_error=include_kernel_error, kernel_error=kernel_error, residuals_with_noise=residuals_with_noise)
+            errs = like.kernel.compute_data_errors(pars, include_white_error=include_white_error, include_kernel_error=include_kernel_error, kernel_error=kernel_error, residuals_with_noise=residuals_with_noise)
             residuals = np.concatenate((residuals, residuals_no_noise))
             errors = np.concatenate((errors, errs))
         

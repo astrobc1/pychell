@@ -8,29 +8,27 @@ import pychell.orbits.planetmath as planetmath
 
 class RVModel(optmodels.Model):
     """
-    A Base RV Bayesian RV Model
+    A Base RV Model intended for Bayesian inference.
     
     Attributes:
-        planets_dict (dict): A planets dictionary containing indices (integers) as keys, and letters as values, akin to the radvel dictionary.
-        data (MixedRVData): The composite RV data set.
+        planets_dict (dict): A planets dictionary containing indices (integers) as keys, and sub dictionaries as values. Each sub dict is composed of a label key with a character value (i.e., "label": "b" for the first planet) as well as a basis key with a valid orbit basis value. (i.e., "basis": <TCOrbitBasis instance>).
+        data (CompositeRVData): The composite RV data set.
         p0 (Parameters): The initial parameters.
-        kernels (list): The list of noise kernels.
         time_base (float): The time to subtract off for the linear and quadratic gamma offsets.
     """
     
-    def __init__(self, planets_dict=None, data=None, p0=None, kernel=None, time_base=None):
+    def __init__(self, planets_dict=None, data=None, p0=None, time_base=None):
         """Construct an RV Model for multiple datasets.
 
         Args:
-            planets_dict (dict): A planets dictionary containing indices (integers) as keys, and letters as values, akin to the radvel dictionary.
-            data (RVData): The composite RV data set.
+            planets_dict (dict): A planets dictionary containing indices (integers) as keys, and sub dictionaries as values. Each sub dict is composed of a label key with a character value (i.e., "label": "b" for the first planet) as well as a basis key with a valid orbit basis value. (i.e., "basis": <TCOrbitBasis instance>).
+            data (CompositeRVData): The composite RV data set.
             p0 (Parameters): The initial parameters.
-            kernel (NoiseKernel): The noise kernel.
             time_base (float): The time to subtract off for the linear and quadratic gamma offsets.
         """
         
         # Call super init
-        super().__init__(data=data, p0=p0, kernel=kernel)
+        super().__init__(data=data, p0=p0)
         
         # Store extra attributes
         self.planets_dict = planets_dict
@@ -241,13 +239,14 @@ class AbstractOrbitBasis:
             pars (Parameters): The input parameters.
             
         Returns:
+        (tuple): tuple containing:
             float: Period.
             float: Time of periastron.
-            float: eccentricity.
+            float: Eccentricity.
             float: Angle of periastron.
             float: Semi-amplitude.
         """
-        pass
+        raise NotImplementedError(f"Must implement a to_standard method for basis class {self.__class__}")
     
     @classmethod
     def from_standard(cls, pars):
@@ -259,8 +258,8 @@ class AbstractOrbitBasis:
         Returns:
             tuple: The basis parameters. See the class attribute names for each.
         """
-        pass
-        
+        raise NotImplementedError(f"Must implement a from_standard method for class {self.__class__}")
+
 class StandardOrbitBasis(AbstractOrbitBasis):
     """The standard orbit basis: per, tp, ecc, w, k.
     """
@@ -278,7 +277,7 @@ class StandardOrbitBasis(AbstractOrbitBasis):
     
     def from_standard(self, pars):
         return self.to_standard(pars)
-    
+
 class TCOrbitBasis(AbstractOrbitBasis):
     """A basis utilizing tc over tp: per, tc, ecc, w, k.
     """
@@ -304,7 +303,7 @@ class TCOrbitBasis(AbstractOrbitBasis):
         k = pars["k" + ii].value
         tc = planetmath.tp_to_tc(tp, per, ecc, w)
         return (per, tc, ecc, w, k)
-    
+
 class TCSQEOrbitBasis(AbstractOrbitBasis):
     """The preferred basis when the angle of periastron is unknown: per, tc, sqrt(ecc)*cos(w), sqrt(ecc)*sin(w), k.
     """
