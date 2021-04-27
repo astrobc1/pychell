@@ -16,7 +16,7 @@ class RVColor(optkernels.GaussianProcess):
         self.unique_wavelengths = self.make_wave_vec_unique()
         self.compute_dist_matrix()
         
-    def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False):
+    def compute_cov_matrix(self, pars, include_white_error=True):
         
         # Alias params
         eta1 = pars[self.par_names[0]].value # amp linear wave scale
@@ -209,7 +209,7 @@ class RVColor2(RVColor):
         self.compute_dist_matrix()
         self.n_instruments = len(self.data)
     
-    def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False):
+    def compute_cov_matrix(self, pars, include_white_error=True):
         
         # Alias params
         amp_matrix = self.make_amp_matrix(pars)
@@ -265,7 +265,7 @@ class RVColor2(RVColor):
         amp_matrix = np.outer(amp_vec1, amp_vec2)
         return amp_matrix
     
-    def compute_data_errors(self, pars, include_white_error=True, include_kernel_error=True, kernel_error=None, residuals_with_noise=None):
+    def compute_data_errors(self, pars, include_white_error=True, include_kernel_error=False, kernel_error=None, residuals_with_noise=None):
         """Computes the errors added in quadrature for all datasets corresponding to this kernel.
 
         Args:
@@ -353,7 +353,7 @@ class RVColor2(RVColor):
 class RVColor3(RVColor):
     
     # Alias params
-    def compute_cov_matrix(self, pars, include_white_error=True, include_kernel_error=False):
+    def compute_cov_matrix(self, pars, include_white_error=True):
         
         eta1 = pars[self.par_names[0]].value # amp linear wave scale
         eta2 = pars[self.par_names[1]].value # amp power law wave scale

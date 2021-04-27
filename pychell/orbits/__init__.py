@@ -9,5 +9,5 @@ from optimize.samplers import *
 from pychell.orbits.rvdata import *
 from pychell.orbits.rvmodels import *
 from pychell.orbits.rvkernels import *
-from pychell.orbits.rvscores import *
+from pychell.orbits.rvobjectives import *
 from pychell.orbits.rvprob import *

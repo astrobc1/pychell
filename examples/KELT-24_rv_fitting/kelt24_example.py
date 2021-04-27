@@ -7,29 +7,29 @@ import numpy as np
 # Import pychell orbits module
 import pychell.orbits as pco
 
-# Path to input rv file and outputs
-path = os.path.dirname(os.path.abspath(__file__)) + os.sep
+# Path to input rv file and outputs for outputs
+output_path = os.path.dirname(os.path.abspath(__file__)) + os.sep
 fname = 'kelt24_rvs.txt'
 
 # The name of the star for plots
 star_name = 'KELT-24'
 
-# Mass and uncertainty of star for mass determination
+# Mass and uncertainty of star for mass determination (solar units)
 mstar = 1.460
-mstar_unc = [0.059, 0.055]
+mstar_unc = [0.059, 0.055] # -, +
 
-# Starting jitter values for each instrument.
-jitter_dict = {'SONG': 50, 'TRES': 0}
-
-# All data in one dictionary
+# All data in one dictionary from a radvel formatted file
 data = pco.CompositeRVData.from_radvel_file(fname)
 
 # Init parameters and planets dictionary
 pars = pco.Parameters()
 planets_dict = {}
 
+# Used later to set initial values
+jitter_dict = {"TRES": 0, "SONG": 50}
+
 # Define parameters for planet 1
-# Other bases are available.
+# Other bases are available, this fits for P, TC, ECC, W, K.
 planets_dict[1] = {"label": "b", "basis": pco.TCOrbitBasis(1)}
 
 # Values from Rodriguez et al. 2019 for KELT-24 b
@@ -66,11 +66,12 @@ pars["k1"].add_prior(pco.Positive())
 # Per instrument gamma offsets
 # Additional small offset is to avoid cases where the median is already subtracted off.
 for instname in data:
+    data[instname].y += 300
     pname = "gamma_" + instname
-    pars[pname] = pco.Parameter(value=np.nanmedian(data[instname].rv) + np.pi / 100, vary=True)
+    pars[pname] = pco.Parameter(value=np.nanmedian(data[instname].rv) + np.pi, vary=True)
     pars[pname].add_prior(pco.Uniform(pars[pname].value - 200, pars[pname].value + 200))
     
-# Linear and quadratic trends
+# Linear and quadratic trends, fix at zero
 pars["gamma_dot"] = pco.Parameter(value=0, vary=False)
 pars["gamma_ddot"] = pco.Parameter(value=0, vary=False)
 
@@ -90,31 +91,34 @@ model = pco.RVModel(planets_dict=planets_dict, data=data, p0=pars)
 likes["rvs"] = pco.RVLikelihood(data=data, model=model, kernel=kernel)
 
 # Define max like optimizer (iterative Nelder-Mead) and emcee MCMC sampler
-optimizer = pco.NelderMead(scorer=likes)
-sampler = pco.AffInv(scorer=likes, options=None)
+optimizer = pco.NelderMead(obj=likes)
+sampler = pco.AffInv(obj=likes, options=None)
 
 # Define top-level exoplanet "problem" (Really an RV problem for now)
-optprob = pco.RVProblem(output_path=path, star_name=star_name, p0=pars, optimizer=optimizer, sampler=sampler, data=data, scorer=likes, mstar=mstar, mstar_unc=mstar_unc, tag="EXAMPLE")
+optprob = pco.RVProblem(output_path=output_path, star_name=star_name, p0=pars, optimizer=optimizer, sampler=sampler, data=data, obj=likes, mstar=mstar, mstar_unc=mstar_unc, tag="EXAMPLE")
 
-# Perform max like fit
-# Results are saved to a pickle file.
-maxlike_result = optprob.maxlikefit()
+# Perform maximum a posteriori fit
+# Results are saved to a pickle file with a unique timestamp.
+map_result = optprob.mapfit()
+
+# Alias best fit parameters
+pbest = map_result["pbest"]
 
 # Plots
-# All plots are automatically saved with a unique timestamp in the filename.
-optprob.plot_phased_rvs_all(maxlike_result["pbest"])
-optprob.plot_full_rvs(maxlike_result["pbest"])
+# All plots are interactive plotly figures and are automatically saved with a unique timestamp in the filename.
+optprob.plot_phased_rvs_all()
+optprob.plot_full_rvs(pbest)
 
-# Set parameters from max like fit
-optprob.set_pars(maxlike_result["pbest"])
+# Set parameters from map fit
+optprob.set_pars(pbest)
 
 # Perform model comparison
 # Results are saved to a pickle file
 mc_result = optprob.model_comparison()
 
-# Perform mcmc. Here we expose several kwargs, which is not always necessary.
-# Results are saved to a pickle file
+# Perform mcmc. Here we expose several kwargs which have defaults that will work for most cases.
+# Results are saved to a pickle file.
 mcmc_result = optprob.mcmc(n_burn_steps=500, check_every=200, n_steps=75_000, rel_tau_thresh=0.01, n_min_steps=1000, n_cores=8, n_taus_thresh=50)
 
-# Corner plot
+# Corner plot, saved automatically
 optprob.corner_plot(mcmc_result)

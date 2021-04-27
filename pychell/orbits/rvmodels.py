@@ -129,7 +129,6 @@ class RVModel(optmodels.Model):
             
         return trend_global
         
-        
     def _builder(self, pars, t):
         
         # All planets
@@ -193,8 +192,8 @@ class RVModel(optmodels.Model):
             m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
             return k * np.cos(m + w)
 
-        # Let a negative period be zero
-        if per < 0:
+        # Period must be positive
+        if per <= 0:
             per = 1E-6
             
         # Force circular orbit if ecc is negative
@@ -213,6 +212,20 @@ class RVModel(optmodels.Model):
 
         # Return rv
         return rv
+
+    @staticmethod
+    def disable_planet_pars(pars, planets_dict, planet_index):
+        """Disables (sets vary=False) in-place for the planet parameters corresponding to planet_index.
+
+        Args:
+            pars (Parameters): The parameters.
+            planets_dict (dict): The planets dict.
+            planet_index (int): The index to disable.
+        """
+        for par in pars.values():
+            for planet_par_name in planets_dict[planet_index]["basis"].names:
+                if par.name == planet_par_name + str(planet_index):
+                    pars[par.name].vary = False
 
 class AbstractOrbitBasis:
     """An abstract orbit basis class, not useful on its own. Each method must define to_standard and from_standard below.
