@@ -14,7 +14,7 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="pychell",
-    version="1.0.4",
+    version="1.0.5",
     author="Bryson Cale",
     author_email="bryson.cale1@gmail.com",
     description="Toolkit from raw echelle spectra through orbit fitting.",
