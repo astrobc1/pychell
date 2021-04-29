@@ -47,12 +47,11 @@ class RVProblem(optframeworks.OptProblem):
     #### Constructor Methods (incl. helpers) ####
     #############################################
     
-    def __init__(self, output_path=None, data=None, p0=None, optimizer=None, sampler=None, obj=None, star_name=None, mstar=None, mstar_unc=None, rplanets=None, tag=None):
+    def __init__(self, output_path=None, p0=None, optimizer=None, sampler=None, obj=None, star_name=None, mstar=None, mstar_unc=None, rplanets=None, tag=None):
         """Constructs the primary exoplanet problem object.
 
         Args:
             output_path (The output path for plots and pickled objects, optional): []. Defaults to this current working direcrory.
-            data (CompositeRVData, optional): The composite data object. Defaults to None.
             p0 (Parameters, optional): The initial parameters. Defaults to None.
             optimizer (Optimizer, optional): The max like optimizer. Defaults to None.
             sampler (Sampler, optional): The MCMC sampler object. Defaults to None.
@@ -213,7 +212,7 @@ class RVProblem(optframeworks.OptProblem):
     #### Standard Plotting Methods ####
     ###################################
     
-    def plot_phased_rvs(self, planet_index, pars=None, plot_width=1000, plot_height=600):
+    def plot_phased_rvs(self, planet_index, pars=None, plot_width=1000, plot_height=600, save=True):
         """Creates a phased rv plot for a given planet with the model on top. An html figure is saved with a unique filename.
 
         Args:
@@ -299,12 +298,13 @@ class RVProblem(optframeworks.OptProblem):
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_yaxes(tickprefix="<b>",ticksuffix ="</b><br>")
         fig.update_layout(width=plot_width, height=plot_height)
-        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + self.planets_dict[planet_index]["label"] + '_rvs_phased_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.html')
+        if save:
+            fig.write_html(self.output_path + self.star_name.replace(' ', '_') + self.planets_dict[planet_index]["label"] + '_rvs_phased_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.html')
         
         # Return fig
         return fig
     
-    def plot_phased_rvs_all(self, pars=None, plot_width=1000, plot_height=600):
+    def plot_phased_rvs_all(self, pars=None, plot_width=1000, plot_height=600, save=True):
         """Wrapper to plot the phased RV model for all planets.
 
         Args:
@@ -320,11 +320,11 @@ class RVProblem(optframeworks.OptProblem):
         
         plots = []
         for planet_index in self.planets_dict:
-            plot = self.plot_phased_rvs(planet_index, pars=pars, plot_width=plot_width, plot_height=plot_height)
+            plot = self.plot_phased_rvs(planet_index, pars=pars, plot_width=plot_width, plot_height=plot_height, save=save)
             plots.append(plot)
         return plots
         
-    def plot_full_rvs(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=200, plot_width=1800, plot_height=1200):
+    def plot_full_rvs(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=200, plot_width=1800, plot_height=1200, save=True):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
@@ -585,12 +585,13 @@ class RVProblem(optframeworks.OptProblem):
         fig.update_layout(template="plotly_white")
         fig.update_layout(font=dict(size=20))
         fig.update_layout(width=plot_width, height=plot_height)
-        fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.html')
+        if save:
+            fig.write_html(self.output_path + self.star_name.replace(' ', '_') + '_rvs_full_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.html')
         
         # Return the figure for streamlit
         return fig
         
-    def corner_plot(self, mcmc_result):
+    def corner_plot(self, mcmc_result, save=True):
         """Constructs a corner plot.
 
         Args:
@@ -604,7 +605,8 @@ class RVProblem(optframeworks.OptProblem):
         truths = pbest_vary_dict["value"]
         labels = [par.latex_str for par in mcmc_result["pbest"].values() if par.vary]
         corner_plot = corner.corner(mcmc_result["chains"], labels=labels, truths=truths, show_titles=True)
-        corner_plot.savefig(self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.png')
+        if save:
+            corner_plot.savefig(self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.png')
         return corner_plot
         
     ######################
@@ -794,7 +796,7 @@ class RVProblem(optframeworks.OptProblem):
         
         return pgram
 
-    def rv_period_search(self, pars=None, pmin=None, pmax=None, n_periods=None, n_cores=1, planet_index=1):
+    def rv_period_search(self, pars=None, pmin=None, pmax=None, n_periods=None, n_cores=1, planet_index=1, save=True):
         """A brute force period search. A max like fit is run for many locked periods for a specified planet. The remaining model params are subject to what is passed, allowing for flexible brute force searches.
 
         Args:
@@ -840,8 +842,9 @@ class RVProblem(optframeworks.OptProblem):
         persearch_results = Parallel(n_jobs=n_cores, verbose=0, batch_size=2)(delayed(self._rv_period_search_wrapper)(*args_pass[i]) for i in tqdm.tqdm(range(n_periods)))
         
         # Save
-        with open(self.output_path + self.star_name.replace(' ', '_') + '_persearch_results_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl', 'wb') as f:
-            pickle.dump({"periods": periods, "persearch_results": persearch_results}, f)
+        if save:
+            with open(self.output_path + self.star_name.replace(' ', '_') + '_persearch_results_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl', 'wb') as f:
+                pickle.dump({"periods": periods, "persearch_results": persearch_results}, f)
             
         return periods, persearch_results
     
@@ -1232,7 +1235,7 @@ class RVProblem(optframeworks.OptProblem):
     #### Additional Tools ####
     ##########################
     
-    def model_comparison(self):
+    def model_comparison(self, save=True):
         """Runs a model comparison for all combinations of planets.
 
         Returns:
@@ -1316,9 +1319,10 @@ class RVProblem(optframeworks.OptProblem):
             mcr['delta_bic'] = bic_diffs[i]
     
         # Save
-        fname = self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl'
-        with open(fname, 'wb') as f:
-            pickle.dump(model_comp_results, f)
+        if save:
+            fname = self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl'
+            with open(fname, 'wb') as f:
+                pickle.dump(model_comp_results, f)
         
         return model_comp_results
 
@@ -1386,6 +1390,14 @@ class RVProblem(optframeworks.OptProblem):
     @property
     def likes(self):
         return self.obj
+    
+    @property
+    def instnames(self):
+        instnames = []
+        for like in self.likes.values():
+            for data in like.data.values():
+                instnames.append(data.label)
+        return instnames
     
     @property
     def post(self):
