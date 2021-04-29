@@ -14,10 +14,10 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="pychell",
-    version="1.0.3",
+    version="1.0.4",
     author="Bryson Cale",
     author_email="bryson.cale1@gmail.com",
-    description="Reduce echelle spectra and generate radial velocities",
+    description="Toolkit from raw echelle spectra through orbit fitting.",
     long_description=long_description,
     long_description_content_type="text/x-rst",
     packages = setuptools.find_packages(),
@@ -25,9 +25,8 @@ setuptools.setup(
     install_requires=install_requires,
     url="https://github.com/astrobc1/pychell",
     classifiers=[
-        "Programming Language :: Python :: 3.6",
-        "Operating System :: Unix",
-        "License :: OSI Approved :: GNU General Public License v3 (GPLv3)"
+        "Programming Language :: Python :: 3.8",
+        "Operating System :: Unix"
     ],
-    python_requires='>=3.6'
+    python_requires='>=3.8'
 )

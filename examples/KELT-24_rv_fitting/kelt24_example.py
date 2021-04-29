@@ -33,6 +33,8 @@ jitter_dict = {"TRES": 0, "SONG": 50}
 planets_dict[1] = {"label": "b", "basis": pco.TCOrbitBasis(1)}
 
 # Values from Rodriguez et al. 2019 for KELT-24 b
+# Given the extremely precise values for P and TC from the multiple transits, there is no reason to fit for P and TC here.
+# We will still fit for P and TC for demonstrative purposes.
 per1 = 5.5514926
 per1_unc = 0.0000081
 tc1 =  2457147.0529
@@ -63,7 +65,7 @@ pars["w1"].add_prior(pco.Gaussian(w1, w1_unc))
 pars["k1"] = pco.Parameter(value=462, vary=True)
 pars["k1"].add_prior(pco.Positive())
 
-# Per instrument gamma offsets
+# Per instrument zero points
 # Additional small offset is to avoid cases where the median is already subtracted off.
 for instname in data:
     data[instname].y += 300
@@ -75,7 +77,7 @@ for instname in data:
 pars["gamma_dot"] = pco.Parameter(value=0, vary=False)
 pars["gamma_ddot"] = pco.Parameter(value=0, vary=False)
 
-# Per-instrument jitter
+# Per-instrument jitter (only fit for SONG jitter, TRES jitter is typically sufficient.)
 for instname in data:
     pname = "jitter_" + instname
     pars[pname] = pco.Parameter(value=jitter_dict[instname], vary=jitter_dict[instname] > 0)
@@ -94,31 +96,31 @@ likes["rvs"] = pco.RVLikelihood(data=data, model=model, kernel=kernel)
 optimizer = pco.NelderMead(obj=likes)
 sampler = pco.AffInv(obj=likes, options=None)
 
-# Define top-level exoplanet "problem" (Really an RV problem for now)
-optprob = pco.RVProblem(output_path=output_path, star_name=star_name, p0=pars, optimizer=optimizer, sampler=sampler, data=data, obj=likes, mstar=mstar, mstar_unc=mstar_unc, tag="EXAMPLE")
+# Construct a top-level RV "problem"
+rvprob = pco.RVProblem(output_path=output_path, star_name=star_name, p0=pars, optimizer=optimizer, sampler=sampler, obj=likes, mstar=mstar, mstar_unc=mstar_unc, tag="EXAMPLE")
 
 # Perform maximum a posteriori fit
 # Results are saved to a pickle file with a unique timestamp.
-map_result = optprob.mapfit()
+map_result = rvprob.mapfit()
 
 # Alias best fit parameters
 pbest = map_result["pbest"]
 
 # Plots
 # All plots are interactive plotly figures and are automatically saved with a unique timestamp in the filename.
-optprob.plot_phased_rvs_all()
-optprob.plot_full_rvs(pbest)
+rvprob.plot_phased_rvs_all(pbest)
+rvprob.plot_full_rvs(pbest)
 
 # Set parameters from map fit
-optprob.set_pars(pbest)
+rvprob.set_pars(pbest)
 
 # Perform model comparison
 # Results are saved to a pickle file
-mc_result = optprob.model_comparison()
+mc_result = rvprob.model_comparison()
 
 # Perform mcmc. Here we expose several kwargs which have defaults that will work for most cases.
 # Results are saved to a pickle file.
-mcmc_result = optprob.mcmc(n_burn_steps=500, check_every=200, n_steps=75_000, rel_tau_thresh=0.01, n_min_steps=1000, n_cores=8, n_taus_thresh=50)
+mcmc_result = rvprob.mcmc(n_burn_steps=500, check_every=200, n_steps=75_000, rel_tau_thresh=0.01, n_min_steps=1000, n_cores=8, n_taus_thresh=50)
 
 # Corner plot, saved automatically
-optprob.corner_plot(mcmc_result)
+rvprob.corner_plot(mcmc_result)
