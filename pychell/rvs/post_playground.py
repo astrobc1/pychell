@@ -750,6 +750,7 @@ def parameter_corrs(parser, iter_indices=None, debug=False, n_iters_plot=1, high
                             axarr[row, col].plot(_rvs[ispec, :], _pars[ispec, :], alpha=0.6, c='powderblue', lw=0.7)
                     
                     axarr[row, col].plot(_rvs[:, -1], _pars[:, -1], marker='.', lw=0, c='black', markersize=5, alpha=0.8)
+                    axarr[row, col].plot(_rvs[:, 0], _pars[:, 0], marker='.', lw=0, c='red', markersize=5, alpha=0.3)
                     if highlight is not None:
                         axarr[row, col].plot(_rvs[highlight, -1], _pars[highlight, -1], marker='.', lw=0, c='red', markersize=5, alpha=0.8)
                     axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
