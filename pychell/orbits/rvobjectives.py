@@ -1,5 +1,5 @@
 import optimize.objectives as optobj
-import optimize.kernels as optnoisekernels
+import optimize.noise as optnoise
 import time
 from scipy.linalg import cho_factor, cho_solve
 import matplotlib.pyplot as plt
@@ -8,11 +8,11 @@ from numba import jit, njit
 
 class RVLikelihood(optobj.Likelihood):
     
-    def __init__(self, label=None, data=None, model=None, kernel=None):
-        super().__init__(label=label, data=data, model=model, kernel=kernel)
-        self.data_inds = {}
-        for data in self.data.values():
-            self.data_inds[data.label] = self.data.get_inds(data.label)
+    def __init__(self, data, model, noise, p0=None, label=None):
+        super().__init__(data=data, model=model, noise=noise, p0=p0, label=label)
+        self.data_t = self.data.gen_vec("t")
+        self.data_rv = self.data.gen_vec("rv")
+        self.data_rverr = self.data.gen_vec("rverr")
     
     def compute_logL(self, pars):
         """Computes the log of the likelihood.
@@ -26,10 +26,10 @@ class RVLikelihood(optobj.Likelihood):
         """
 
         # Get residuals
-        residuals = self.residuals_with_noise(pars)
+        residuals = self.compute_data_pre_noise_process(pars)
 
         # Compute the cov matrix
-        K = self.kernel.compute_cov_matrix(pars, include_white_error=True)
+        K = self.noise.compute_cov_matrix(pars, include_uncorr_error=True)
         
         # Compute the determiniant and inverse of K
         try:
@@ -50,7 +50,7 @@ class RVLikelihood(optobj.Likelihood):
         # Return the final ln(L)
         return lnL
     
-    def residuals_with_noise(self, pars):
+    def compute_data_pre_noise_process(self, pars):
         """Computes the residuals without subtracting off the best fit noise kernel.
 
         Args:
@@ -65,7 +65,7 @@ class RVLikelihood(optobj.Likelihood):
         residuals = data_arr - model_arr
         return residuals
     
-    def residuals_no_noise(self, pars):
+    def compute_data_post_noise_process(self, pars):
         """Computes the residuals after subtracting off the best fit noise kernel.
 
         Args:
@@ -74,12 +74,18 @@ class RVLikelihood(optobj.Likelihood):
         Returns:
             np.ndarray: The residuals.
         """
-        residuals_with_noise = self.residuals_with_noise(pars)
-        residuals_no_noise = np.copy(residuals_with_noise)
-        if isinstance(self.kernel, optnoisekernels.CorrelatedNoiseKernel):
-            kernel_mean = self.kernel.realize(pars, residuals_with_noise, return_kernel_error=False, kernel_error=None)
-            residuals_no_noise -= kernel_mean
-        return residuals_no_noise
+        
+        # Get the data containing only noise
+        data_pre_noise_process = self.compute_data_pre_noise_process(pars)
+        
+        # Copy the data
+        data_post_noise_process = np.copy(data_pre_noise_process)
+        
+        # If noise is correlated, the mean may not be zero, so realize the noise process and subtract.
+        if isinstance(self.noise, optnoise.CorrelatedNoiseProcess):
+            noise_process_mean = self.noise.realize(pars, data_pre_noise_process)
+            data_post_noise_process -= noise_process_mean
+        return data_post_noise_process
     
     def get_components(self, pars):
         
@@ -96,7 +102,7 @@ class RVLikelihood(optobj.Likelihood):
         residuals_with_noise = self.residuals_with_noise(pars)
         
         # Data errrors
-        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        data_rvs_error = self.kernel.compute_data_errors(pars, include_gp_error=True, residuals_with_noise=residuals_with_noise)
         
         # Store in comps
         comps[self.label + "_data_t"] = data_t
@@ -104,28 +110,16 @@ class RVLikelihood(optobj.Likelihood):
         comps[self.label + "_data_rvs_error"] = data_rvs_error
         
         # Standard GP
-        if isinstance(self.kernel, optnoisekernels.CorrelatedNoiseKernel):
+        if isinstance(self.kernel, optnoisekernels.CorrelatedNoiseProcess):
             kernel_mean, kernel_unc = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data_t, xres=None, return_kernel_error=True)
             comps[self.label + "_kernel_mean"] = kernel_mean
             comps[self.label + "_kernel_unc"] = kernel_unc
 
         return comps
+
+class RVChromaticLikelihoodJ1(RVLikelihood):
     
-    @property
-    def data_t(self):
-        return self.data_x
-    
-    @property
-    def data_rv(self):
-        return self.data_y
-    
-    @property
-    def data_rverr(self):
-        return self.data_yerr
-    
-class RVChromaticLikelihood(RVLikelihood):
-    
-    def residuals_no_noise(self, pars):
+    def compute_data_post_noise_process(self, pars):
         """Computes the residuals after subtracting off the best fit noise kernel.
 
         Args:
@@ -134,61 +128,11 @@ class RVChromaticLikelihood(RVLikelihood):
         Returns:
             np.ndarray: The residuals.
         """
-        residuals_with_noise = self.residuals_with_noise(pars)
+        residuals_with_noise = self.compute_data_pre_noise_process(pars)
         residuals_no_noise = np.copy(residuals_with_noise)
         for data in self.data.values():
             inds = self.model.data_inds[data.label]
-            gp_mean = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, wavelength=data.wavelength, return_kernel_error=False)
-            residuals_no_noise[inds] -= gp_mean
-            
-        return residuals_no_noise
-    
-    def get_components(self, pars):
-        
-        comps = {}
-        
-        # Data times
-        data_t = np.copy(self.data_t)
-        
-        # Data RVs - offsets
-        data_rvs = np.copy(self.data_rv)
-        data_rvs -= self.model.build_trend_zero(pars, data_t, instname=None)
-        
-        # Get residuals
-        residuals_with_noise = self.residuals_with_noise(pars)
-        
-        # Data errrors
-        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
-        
-        # Store in comps
-        comps[self.label + "_data_t"] = data_t
-        comps[self.label + "_data_rvs"] = data_rvs
-        comps[self.label + "_data_rvs_error"] = data_rvs_error
-        
-        # Standard GP
-        for data in self.data.values():
-            kernel_mean, kernel_unc = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, wavelength=data.wavelength)
-            comps[self.label + "_kernel_mean_" + data.label] = kernel_mean
-            comps[self.label + "_kernel_unc_" + data.label] = kernel_unc
-        
-        return comps
-    
-class RVChromaticLikelihood2(RVLikelihood):
-    
-    def residuals_no_noise(self, pars):
-        """Computes the residuals after subtracting off the best fit noise kernel.
-
-        Args:
-            pars (Parameters): The parameters to use.
-
-        Returns:
-            np.ndarray: The residuals.
-        """
-        residuals_with_noise = self.residuals_with_noise(pars)
-        residuals_no_noise = np.copy(residuals_with_noise)
-        for data in self.data.values():
-            inds = self.model.data_inds[data.label]
-            gp_mean = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, return_kernel_error=False, instrument=data.label)
+            gp_mean = self.noise.realize(pars, data_with_noise=residuals_with_noise, xpred=data.t, return_gp_error=False, instname=data.label)
             residuals_no_noise[inds] -= gp_mean
             
         return residuals_no_noise
@@ -223,8 +167,109 @@ class RVChromaticLikelihood2(RVLikelihood):
         
         return comps
 
+class RVChromaticLikelihoodJ2(RVLikelihood):
+    
+    def compute_data_post_noise_process(self, pars):
+        """Computes the residuals after subtracting off the best fit noise kernel.
+
+        Args:
+            pars (Parameters): The parameters to use.
+
+        Returns:
+            np.ndarray: The residuals.
+        """
+        residuals_with_noise = self.compute_data_pre_noise_process(pars)
+        residuals_no_noise = np.copy(residuals_with_noise)
+        for data in self.data.values():
+            inds = self.model.data_inds[data.label]
+            gp_mean = self.noise.realize(pars, data_with_noise=residuals_with_noise, xpred=data.t, return_gp_error=False, wavelength=data.wavelength)
+            residuals_no_noise[inds] -= gp_mean
+            
+        return residuals_no_noise
+    
+    def get_components(self, pars):
+        
+        comps = {}
+        
+        # Data times
+        data_t = np.copy(self.data_t)
+        
+        # Data RVs - offsets
+        data_rvs = np.copy(self.data_rv)
+        data_rvs -= self.model.build_trend_zero(pars, data_t, instname=None)
+        
+        # Get residuals
+        residuals_with_noise = self.residuals_with_noise(pars)
+        
+        # Data errrors
+        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        
+        # Store in comps
+        comps[self.label + "_data_t"] = data_t
+        comps[self.label + "_data_rvs"] = data_rvs
+        comps[self.label + "_data_rvs_error"] = data_rvs_error
+        
+        # Standard GP
+        for data in self.data.values():
+            kernel_mean, kernel_unc = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, wavelength=data.wavelength)
+            comps[self.label + "_kernel_mean_" + data.label] = kernel_mean
+            comps[self.label + "_kernel_unc_" + data.label] = kernel_unc
+        
+        return comps
+
+class RVChromaticLikelihoodJ3(RVLikelihood):
+    
+    def compute_data_post_noise_process(self, pars):
+        """Computes the residuals after subtracting off the best fit noise kernel.
+
+        Args:
+            pars (Parameters): The parameters to use.
+
+        Returns:
+            np.ndarray: The residuals.
+        """
+        residuals_with_noise = self.compute_data_pre_noise_process(pars)
+        residuals_no_noise = np.copy(residuals_with_noise)
+        for data in self.data.values():
+            inds = self.model.data_inds[data.label]
+            gp_mean = self.noise.realize(pars, data_with_noise=residuals_with_noise, xpred=data.t, return_gp_error=False, instname=data.label)
+            residuals_no_noise[inds] -= gp_mean
+            
+        return residuals_no_noise
+    
+    def get_components(self, pars):
+        
+        comps = {}
+        
+        # Data times
+        data_t = np.copy(self.data_t)
+        
+        # Data RVs - offsets
+        data_rvs = np.copy(self.data_rv)
+        data_rvs = self.model.apply_offsets(data_rvs, pars)
+        
+        # Get residuals
+        residuals_with_noise = self.residuals_with_noise(pars)
+        
+        # Data errrors
+        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        
+        # Store in comps
+        comps[self.label + "_data_t"] = data_t
+        comps[self.label + "_data_rvs"] = data_rvs
+        comps[self.label + "_data_rvs_error"] = data_rvs_error
+        
+        # Standard GP
+        for data in self.data.values():
+            kernel_mean, kernel_unc = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, instrument=data.label)
+            comps[self.label + "_kernel_mean_" + data.label] = kernel_mean
+            comps[self.label + "_kernel_unc_" + data.label] = kernel_unc
+        
+        return comps
+
+
 class RVPosterior(optobj.Posterior):
-    """Probably identical to Posterior.
+    """A class for RV Posteriors
     """
     
     def compute_redchi2(self, pars, include_white_error=True, include_kernel_error=True, kernel_error=None):
@@ -271,8 +316,6 @@ class RVPosterior(optobj.Posterior):
         data_t = np.array([], dtype=float)
         for like in self.values():
             data_t = np.concatenate((data_t, like.data_t))
-        ss = np.argsort(data_t)
-        data_t = data_t[ss]
         return data_t
     
     @property
@@ -280,7 +323,6 @@ class RVPosterior(optobj.Posterior):
         data_rv = np.array([], dtype=float)
         for like in self.values():
             data_rv = np.concatenate((data_rv, like.data_rv))
-        data_rv = data_rv[self.sorting_inds]
         return data_rv
     
     @property
@@ -290,11 +332,4 @@ class RVPosterior(optobj.Posterior):
             data_rverr = np.concatenate((data_rverr, like.data_rverr))
         data_rverr = data_rverr[self.sorting_inds]
         return data_rverr
-    
-    @property
-    def sorting_inds(self):
-        data_t = np.array([], dtype=float)
-        for like in self.values():
-            data_t = np.concatenate((data_t, like.data_t))
-        ss = np.argsort(data_t)
-        return ss
+        

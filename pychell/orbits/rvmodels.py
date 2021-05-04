@@ -1,5 +1,5 @@
 import optimize.models as optmodels
-import optimize.kernels as optnoisekernels
+import optimize.noise as optnoise
 import numpy as np
 import time
 import matplotlib.pyplot as plt
@@ -17,35 +17,31 @@ class RVModel(optmodels.Model):
         time_base (float): The time to subtract off for the linear and quadratic gamma offsets.
     """
     
-    def __init__(self, planets_dict=None, data=None, p0=None, time_base=None):
+    def __init__(self, planets_dict, data, time_zero=None):
         """Construct an RV Model for multiple datasets.
 
         Args:
             planets_dict (dict): A planets dictionary containing indices (integers) as keys, and sub dictionaries as values. Each sub dict is composed of a label key with a character value (i.e., "label": "b" for the first planet) as well as a basis key with a valid orbit basis value. (i.e., "basis": <TCOrbitBasis instance>).
             data (CompositeRVData): The composite RV data set.
             p0 (Parameters): The initial parameters.
-            time_base (float): The time to subtract off for the linear and quadratic gamma offsets.
+            time_zero (float): The time to subtract off for the linear and quadratic gamma offsets.
         """
         
         # Call super init
-        super().__init__(data=data, p0=p0)
+        super().__init__()
         
-        # Store extra attributes
+        # Store planets dictionary
         self.planets_dict = planets_dict
-        if time_base is None:
-            self.time_base = np.nanmean(self.data.get_vec(key='x'))
-            
-        self.data_t = self.data.get_vec('t')
-        self.data_rv = self.data.get_vec('rv')
-        self.data_rverr = self.data.get_vec('rverr')
-        self.data_inds = {}
-        for data in self.data.values():
-            self.data_inds[data.label] = self.data.get_inds(data.label)
         
-    @property
-    def n_planets(self):
-        return len(self.planets_dict)
-    
+        # Time zero
+        self.time_zero = np.nanmean(data.gen_vec(key='x')) if time_zero is None else time_zero
+            
+        # Store the time vector to construct the model on the data grid.
+        self.data_t = data.gen_vec('t')
+        
+        # Store per-instrument indices to properly offset the data.
+        self.data_inds = data.gen_inds_dict()
+        
     def build_planet(self, pars, t, planet_index):
         """Builds a model for a single planet.
 
@@ -81,7 +77,7 @@ class RVModel(optmodels.Model):
         for planet_index in self.planets_dict:
             _model += self.build_planet(pars, t, planet_index)
         return _model
-    
+
     def build_without_planet(self, pars, t, planet_index):
         """Builds the model without a planet.
 
@@ -104,12 +100,12 @@ class RVModel(optmodels.Model):
         
         # Per-instrument zero points
         if instname is None:
-            for data in self.data.values():
-                pname = "gamma_" + data.label
-                inds = self.data_inds[data.label]
+            for instname in self.data_inds:
+                pname = f"gamma_{instname}"
+                inds = self.data_inds[instname]
                 trend_zero[inds] = pars[pname].value
         else:
-            pname = "gamma_" + instname
+            pname = f"gamma_{instname}"
             trend_zero += pars[pname].value
         
         return trend_zero
@@ -121,11 +117,11 @@ class RVModel(optmodels.Model):
                 
         # Linear trend
         if 'gamma_dot' in pars and pars['gamma_dot'].value != 0:
-            trend_global += pars['gamma_dot'].value * (t - self.time_base)
+            trend_global += pars['gamma_dot'].value * (t - self.time_zero)
         
         # Quadratic trend
         if 'gamma_ddot' in pars and pars['gamma_ddot'].value != 0:
-            trend_global += pars['gamma_ddot'].value * (t - self.time_base)**2
+            trend_global += pars['gamma_ddot'].value * (t - self.time_zero)**2
             
         return trend_global
         
@@ -160,7 +156,7 @@ class RVModel(optmodels.Model):
         if t is None and instname is None:
             t = self.data_t
         if t is None and instname is not None:
-            t = self.data[instname].t
+            t = self.data_t[self.data_inds[instname]]
         trend_zero = self.build_trend_zero(pars, t=t, instname=instname)
         trend_global = self.build_trend_global(pars, t=t)
         rv_vec -= (trend_zero + trend_global)
@@ -226,6 +222,10 @@ class RVModel(optmodels.Model):
             for planet_par_name in planets_dict[planet_index]["basis"].names:
                 if par.name == planet_par_name + str(planet_index):
                     pars[par.name].vary = False
+
+    @property
+    def n_planets(self):
+        return len(self.planets_dict)
 
 class AbstractOrbitBasis:
     """An abstract orbit basis class, not useful on its own. Each method must define to_standard and from_standard below.

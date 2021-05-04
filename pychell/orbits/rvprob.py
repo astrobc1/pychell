@@ -20,7 +20,7 @@ from PyAstronomy.pyTiming import pyPeriod
 # Pychell deps
 import pychell
 import pychell.maths as pcmath
-import pychell.orbits.rvkernels as pcrvkernels
+import pychell.orbits.rvnoise as pcrvnoise
 import pychell.orbits.rvobjectives as pcrvobj
 import pychell.utils as pcutils
 PLOTLY_COLORS = pcutils.PLOTLY_COLORS
@@ -30,7 +30,7 @@ import pychell.orbits.planetmath as planetmath
 
 # Optimize
 import optimize.frameworks as optframeworks
-import optimize.kernels as optkernels
+import optimize.noise as optnoise
 
 # Plots
 import corner
@@ -260,11 +260,11 @@ class RVProblem(optframeworks.OptProblem):
         for like in self.obj.values():
             
             # Create a data rv vector where everything is removed except this planet
-            residuals_with_noise = like.residuals_with_noise(pars)
-            residuals_no_noise = like.residuals_no_noise(pars)
+            residuals_with_noise = like.compute_data_pre_noise_process(pars)
+            residuals_no_noise = like.compute_data_post_noise_process(pars)
             
             # Compute error bars
-            errors = like.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise, kernel_error=None)
+            errors = like.noise.compute_data_errors(pars, include_gp_error=True, data_with_noise=residuals_with_noise)
             
             # Loop over instruments and plot each
             for data in like.data.values():
@@ -369,90 +369,20 @@ class RVProblem(optframeworks.OptProblem):
         for like in self.obj.values():
             
             # Data errors
-            residuals_with_noise = like.residuals_with_noise(pars)
-            errors = like.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+            residuals_with_noise = like.compute_data_post_noise_process(pars)
+            errors = like.noise.compute_data_errors(pars, include_gp_error=False, data_with_noise=residuals_with_noise)
             
-            # RV Color 1
-            if type(like) is pcrvobj.RVChromaticLikelihood:
+            # RV Color J1
+            if type(like) is pcrvobj.RVChromaticLikelihoodJ1 or type(like) is pcrvobj.RVChromaticLikelihoodJ3:
                 
                 # Generate the residuals
-                residuals_with_noise = like.residuals_with_noise(pars)
-                residuals_no_noise = like.residuals_no_noise(pars)
+                residuals_with_noise = like.compute_data_pre_noise_process(pars)
+                residuals_no_noise = like.compute_data_post_noise_process(pars)
                 
                 s = 4 * pars["gp_per"].value
                 
                 # Plot a GP for each instrument
-                for wavelength in like.kernel.unique_wavelengths:
-                    
-                    print("Plotting Wavelength = " + str(int(wavelength)) + " nm")
-                    
-                    # Smartly sample gp
-                    inds = like.kernel.get_wave_inds(wavelength)
-                    t_hr_gp = np.array([], dtype=float)
-                    gpmu_hr = np.array([], dtype=float)
-                    gpstddev_hr = np.array([], dtype=float)
-                    tvec = like.data.get_vec('t')
-                    for i in range(tvec.size):
-                        _t_hr_gp = np.linspace(tvec[i] - s, tvec[i] + s, num=kernel_sampling)
-                        _gpmu, _gpstddev = like.kernel.realize(pars, xpred=_t_hr_gp, residuals_with_noise=residuals_with_noise, return_kernel_error=True, wavelength=wavelength)
-                        t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
-                        gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
-                        gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
-
-                    ss = np.argsort(t_hr_gp)
-                    t_hr_gp = t_hr_gp[ss]
-                    gpmu_hr = gpmu_hr[ss]
-                    gpstddev_hr = gpstddev_hr[ss]
-                    
-                    # Plot the GP
-                    tt = t_hr_gp - time_offset
-                    gp_lower, gp_upper = gpmu_hr - gpstddev_hr, gpmu_hr + gpstddev_hr
-                    instnames = like.kernel.get_instnames_for_wave(wavelength)
-                    label = '<b>GP ' + '&#x3BB;' + ' = ' + str(int(wavelength)) + ' nm ' + '['
-                    for instname in instnames:
-                        label += instname + ', '
-                    label = label[0:-2]
-                    label += ']</b>'
-                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=1.2, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
-                    fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
-                                             y=np.concatenate([gp_upper, gp_lower[::-1]]),
-                                             fill='toself',
-                                             line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1),
-                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.6),
-                                             name=label))
-                    color_index += 1
-                    
-                # Plot the data on top of the GPs, and the residuals
-                data_arr = np.copy(like.data_rv)
-                data_arr = like.model.apply_offsets(data_arr, pars)
-                for data in like.data.values():
-                    
-                    # Data errors for this instrument
-                    _errors = errors[like.model.data_inds[data.label]]
-                    _yerr = dict(array=_errors)
-                    
-                    # Data on top of the GP, only offset by gammas
-                    _data = data_arr[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
-                    
-                    # Residuals for this instrument after the noise kernel has been removed
-                    _residuals = residuals_no_noise[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
-                    
-                    # Increase color index
-                    color_index += 1
-                    
-            # RV Color 2
-            elif type(like) is pcrvobj.RVChromaticLikelihood2:
-                
-                # Generate the residuals
-                residuals_with_noise = like.residuals_with_noise(pars)
-                residuals_no_noise = like.residuals_no_noise(pars)
-                
-                s = 4 * pars["gp_per"].value
-                
-                # Plot a GP for each instrument
-                for data in like.kernel.data.values():
+                for data in like.noise.data.values():
                     
                     print("Plotting Instrument: " + data.label)
                     
@@ -460,10 +390,10 @@ class RVProblem(optframeworks.OptProblem):
                     t_hr_gp = np.array([], dtype=float)
                     gpmu_hr = np.array([], dtype=float)
                     gpstddev_hr = np.array([], dtype=float)
-                    tvec = like.data.get_vec('t')
+                    tvec = like.data.gen_vec('t')
                     for i in range(tvec.size):
                         _t_hr_gp = np.linspace(tvec[i] - s, tvec[i] + s, num=kernel_sampling)
-                        _gpmu, _gpstddev = like.kernel.realize(pars, xpred=_t_hr_gp, residuals_with_noise=residuals_with_noise, return_kernel_error=True, instrument=data.label)
+                        _gpmu, _gpstddev = like.noise.realize(pars, xpred=_t_hr_gp, data_with_noise=residuals_with_noise, return_gp_error=True, instname=data.label)
                         t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
                         gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
                         gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
@@ -501,9 +431,79 @@ class RVProblem(optframeworks.OptProblem):
                     # Residuals for this instrument after the noise kernel has been removed
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.95), line=dict(width=2, color='DarkSlateGrey'), size=14), showlegend=False), row=2, col=1)
+
+            # RV Color J2
+            elif type(like) is pcrvobj.RVChromaticLikelihoodJ2:
+                
+                # Generate the residuals
+                residuals_with_noise = like.compute_data_pre_noise_process(pars)
+                residuals_no_noise = like.compute_data_post_noise_process(pars)
+                
+                s = 4 * pars["gp_per"].value
+                
+                # Plot a GP for each instrument
+                for wavelength in like.noise.unique_wavelengths:
                     
+                    print("Plotting Wavelength = " + str(int(wavelength)) + " nm")
+                    
+                    # Smartly sample gp
+                    inds = like.noise.get_wave_inds(wavelength)
+                    t_hr_gp = np.array([], dtype=float)
+                    gpmu_hr = np.array([], dtype=float)
+                    gpstddev_hr = np.array([], dtype=float)
+                    tvec = like.data.gen_vec('t')
+                    for i in range(tvec.size):
+                        _t_hr_gp = np.linspace(tvec[i] - s, tvec[i] + s, num=kernel_sampling)
+                        _gpmu, _gpstddev = like.noise.realize(pars, xpred=_t_hr_gp, data_with_noise=residuals_with_noise, return_gp_error=True, wavelength=wavelength)
+                        t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
+                        gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
+                        gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
+
+                    ss = np.argsort(t_hr_gp)
+                    t_hr_gp = t_hr_gp[ss]
+                    gpmu_hr = gpmu_hr[ss]
+                    gpstddev_hr = gpstddev_hr[ss]
+                    
+                    # Plot the GP
+                    tt = t_hr_gp - time_offset
+                    gp_lower, gp_upper = gpmu_hr - gpstddev_hr, gpmu_hr + gpstddev_hr
+                    instnames = like.noise.get_instnames_for_wave(wavelength)
+                    label = '<b>GP ' + '&#x3BB;' + ' = ' + str(int(wavelength)) + ' nm ' + '['
+                    for instname in instnames:
+                        label += instname + ', '
+                    label = label[0:-2]
+                    label += ']</b>'
+                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gpmu_hr, line=dict(width=1.2, color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8)), name=label, showlegend=False), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
+                                             y=np.concatenate([gp_upper, gp_lower[::-1]]),
+                                             fill='toself',
+                                             line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1),
+                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.6),
+                                             name=label))
+                    color_index += 1
+                    
+                # Plot the data on top of the GPs, and the residuals
+                data_arr = np.copy(like.data_rv)
+                data_arr = like.model.apply_offsets(data_arr, pars)
+                for data in like.data.values():
+                    
+                    # Data errors for this instrument
+                    _errors = errors[like.model.data_inds[data.label]]
+                    _yerr = dict(array=_errors)
+                    
+                    # Data on top of the GP, only offset by gammas
+                    _data = data_arr[like.model.data_inds[data.label]]
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
+                    
+                    # Residuals for this instrument after the noise kernel has been removed
+                    _residuals = residuals_no_noise[like.model.data_inds[data.label]]
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
+                    
+                    # Increase color index
+                    color_index += 1
+
             # Standard GP
-            elif isinstance(like.kernel, optkernels.GaussianProcess):
+            elif isinstance(like.noise, optnoise.GaussianProcess):
                 
                 # Make hr array for GP
                 if 'gp_per' in pars:
@@ -515,12 +515,12 @@ class RVProblem(optframeworks.OptProblem):
                 t_hr_gp = np.array([], dtype=float)
                 gpmu_hr = np.array([], dtype=float)
                 gpstddev_hr = np.array([], dtype=float)
-                residuals_with_noise = like.residuals_with_noise(pars)
-                if like.label == "rvs_HIRES":
-                    continue
+                residuals_with_noise = like.compute_data_pre_noise_process(pars)
+                #if like.label == "rvs_HIRES":
+                    #continue
                 for i in range(like.data_t.size):
                     _t_hr_gp = np.linspace(like.data_t[i] - s, like.data_t[i] + s, num=kernel_sampling)
-                    _gpmu, _gpstddev = like.kernel.realize(pars, xpred=_t_hr_gp, residuals_with_noise=residuals_with_noise, return_kernel_error=True)
+                    _gpmu, _gpstddev = like.noise.realize(pars, xpred=_t_hr_gp, data_with_noise=residuals_with_noise, return_gp_error=True)
                     t_hr_gp = np.concatenate((t_hr_gp, _t_hr_gp))
                     gpmu_hr = np.concatenate((gpmu_hr, _gpmu))
                     gpstddev_hr = np.concatenate((gpstddev_hr, _gpstddev))
@@ -543,7 +543,7 @@ class RVProblem(optframeworks.OptProblem):
                                             name=label))
                 
                 # Generate the residuals without noise
-                residuals_no_noise = like.residuals_no_noise(pars)
+                residuals_no_noise = like.compute_data_post_noise_process(pars)
                 
                 # For each instrument, plot
                 for data in like.data.values():
@@ -554,10 +554,10 @@ class RVProblem(optframeworks.OptProblem):
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr_offset, name=data.label, error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14)), row=1, col=1)
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, error_y=_yerr, mode='markers', marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14), showlegend=False), row=2, col=1)
                     color_index += 1
-                
+
             # White noise
             else:
-                residuals_no_noise = like.residuals_no_noise(pars)
+                residuals_no_noise = like.compute_data_post_noise_process(pars)
                 
                 # For each instrument, plot
                 for data in like.data.values():
@@ -633,7 +633,7 @@ class RVProblem(optframeworks.OptProblem):
         if pmin is None:
             pmin = 1.1
         if pmax is None:
-            times = self.data.get_vec('x')
+            times = self.data.gen_vec('x')
             pmax = np.max(times) - np.min(times)
         if pmax <= pmin:
             raise ValueError("Pmin is less than Pmax")
@@ -669,9 +669,9 @@ class RVProblem(optframeworks.OptProblem):
             data_rvs = np.array([], dtype=float)
             data_unc = np.array([], dtype=float)
             for like in self.obj.values():
-                residuals_with_noise = like.residuals_with_noise(pbest)
-                residuals_no_noise = like.residuals_no_noise(pbest)
-                errors = like.kernel.compute_data_errors(pbest, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise, kernel_error=kernel_error)
+                residuals_with_noise = like.compute_data_pre_noise_process(pbest)
+                residuals_no_noise = like.compute_data_post_noise_process(pbest)
+                errors = like.noise.compute_data_errors(pbest, include_gp_error=True, data_with_noise=residuals_with_noise, gp_error=gp_error)
                 for data in like.data.values():
                     inds = like.model.data_inds[data.label]
                     data_t = np.concatenate((data_t, data.t))
@@ -714,9 +714,9 @@ class RVProblem(optframeworks.OptProblem):
             data_rvs = np.array([], dtype=float)
             data_unc = np.array([], dtype=float)
             for like in self.obj.values():
-                residuals_with_noise = like.residuals_with_noise(pbest)
-                residuals_no_noise = like.residuals_no_noise(pbest)
-                errors = like.kernel.compute_data_errors(pbest, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+                residuals_with_noise = like.compute_data_pre_noise_process(pbest)
+                residuals_no_noise = like.compute_data_post_noise_process(pbest)
+                errors = like.noise.compute_data_errors(pbest, include_gp_error=True, data_with_noise=residuals_with_noise)
                 for data in like.data.values():
                     inds = like.model.data_inds[data.label]
                     data_t = np.concatenate((data_t, data.t))
@@ -756,7 +756,7 @@ class RVProblem(optframeworks.OptProblem):
             pbest = opt_result["pbest"]
                 
             for like in self.obj.values():
-                errors = like.kernel.compute_data_errors(pbest, include_white_error=True, include_kernel_error=True, kernel_error=None, residuals_with_noise=None)
+                errors = like.noise.compute_data_errors(pbest, include_gp_error=True, gp_error=None, data_with_noise=None)
                 data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, pbest)
                 for data in like.data.values():
@@ -780,7 +780,7 @@ class RVProblem(optframeworks.OptProblem):
             data_rvs = np.array([], dtype=float)
             data_unc = np.array([], dtype=float)
             for like in self.obj.values():
-                errors = like.kernel.compute_data_errors(self.p0, include_jit=True, include_gp=True, gp_unc=None, residuals_no_noise=None)
+                errors = like.noise.compute_data_errors(self.p0, include_jit=True, include_gp=True, gp_unc=None, residuals_no_noise=None)
                 data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, self.p0)
                 for data in like.data.values():
@@ -823,7 +823,7 @@ class RVProblem(optframeworks.OptProblem):
         if pmin is None:
             pmin = 1.1
         if pmax is None:
-            times = self.data.get_vec('x')
+            times = self.data.gen_vec('x')
             pmax = np.max(times) - np.min(times)
         if pmax <= pmin:
             raise ValueError("Pmin is less than Pmax")
@@ -1057,8 +1057,8 @@ class RVProblem(optframeworks.OptProblem):
         
         # Filter data to only consider each wavelength
         wave_vec = self.obj.like0.kernel.make_wave_vec()
-        times_vec = self.data.get_vec('t')
-        rv_vec = self.data.get_vec('rv')
+        times_vec = self.data.gen_vec('t')
+        rv_vec = self.data.gen_vec('rv')
         rv_vec = self.like0.model.apply_offsets(rv_vec, pars)
         unc_vec = self.like0.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=False, residuals_with_noise=None, kernel_error=None)
         tel_vec = self.data.make_tel_vec()
@@ -1182,8 +1182,8 @@ class RVProblem(optframeworks.OptProblem):
         # Filter data to only consider each wavelength
         wave_vec = self.obj.like0.kernel.make_wave_vec()
         tel_vec = self.data.make_tel_vec()
-        data_t = self.data.get_vec('t')
-        data_rvs = self.data.get_vec('rv') # Offset rvs
+        data_t = self.data.gen_vec('t')
+        data_rvs = self.data.gen_vec('rv') # Offset rvs
         data_rvs = self.like0.model.apply_offsets(data_rvs, pars)
         data_rvs_unc = self.like0.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=False)
         
@@ -1383,7 +1383,7 @@ class RVProblem(optframeworks.OptProblem):
     def data_t(self):
         t = np.array([], dtype=float)
         for like in self.likes.values():
-            t = np.concatenate((t, like.data.get_vec('t')))
+            t = np.concatenate((t, like.data.gen_vec('t')))
         t = np.sort(t)
         return t
     

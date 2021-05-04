@@ -1,10 +1,14 @@
-# Python built in modules
+# Base Python
 import copy
-import os # Making directories
-import time # Time the code
+import os
+import time
 import pickle
 
-# Graphics
+# Science/math
+from scipy import constants as cs # cs.c = speed of light in m/s
+import numpy as np # Math, Arrays
+
+# Plotting
 import matplotlib # to set the backend
 import matplotlib.pyplot as plt # Plotting
 import pychell
@@ -12,16 +16,11 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 
 # Multiprocessing
 from joblib import Parallel, delayed
-import tqdm
-
-# Science/math
-from scipy import constants as cs # cs.c = speed of light in m/s
-import numpy as np # Math, Arrays
 
 # llvm
 from numba import njit, jit, prange
 
-# User defined
+# pychell deps
 import pychell.maths as pcmath
 from pychell.maths import cspline_interp, lin_interp
 import pychell.rvs.template_augmenter as pcaugmenter
@@ -42,10 +41,10 @@ class ForwardModels(list):
         # Init the list
         super().__init__()
         
-        # Order number
+        # Order number (1, 2, 3...)
         self.order_num = order_num
         
-        # The parser
+        # The parser object for parsing the 1d spectra and barycenter info
         self.parser = parser
         
         # Set config
@@ -271,7 +270,6 @@ class ForwardModels(list):
                 iter_pass.append((self[ispec], self.templates_dict, iter_index, self.rvs_dict['xcorr_options']))
 
             # Cross Correlate in Parallel
-            #ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].cross_correlate_all_regions_wrapper)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
             ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self[0].cross_correlate_all_regions_wrapper)(*iter_pass[ispec]) for ispec in range(self.n_spec))
             
         else:
@@ -432,10 +430,8 @@ class ForwardModels(list):
                 iter_pass.append((self[ispec], self.templates_dict, self[ispec].sregion_order))
 
             # Cross Correlate in Parallel
-            #ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in tqdm.tqdm(range(self.n_spec)))
             ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(ccf_method)(*iter_pass[ispec]) for ispec in range(self.n_spec))
         else:
-            #ccf_results = [ccf_method(fwm, self.templates_dict, fwm.sregion_order) for fwm in tqdm.tqdm(self)]
             ccf_results = [ccf_method(fwm, self.templates_dict, fwm.sregion_order) for fwm in self]
             
         for ispec, fwm in enumerate(self):
