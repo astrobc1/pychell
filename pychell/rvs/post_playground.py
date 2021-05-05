@@ -805,7 +805,7 @@ def plot_final_rvs(parser, phase_to=None, tc=None, kamp=None):
         plt.plot(modelx, modely, label='K = ' + str(kamp) + ' m/s')
     
     if phase_to is None:
-        plt.xlabel('BJD - BJD$_{0}$')
+        plt.xlabel('BJD')
     else:
         plt.xlabel('Phase [days, P = ' +  str(round(_phase_to, 3)) + ']')
     plt.ylabel('RV [m/s]')
