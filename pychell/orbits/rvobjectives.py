@@ -94,15 +94,15 @@ class RVLikelihood(optobj.Likelihood):
         # Data times
         data_t = np.copy(self.data_t)
         
-        # Data RVs - offsets
+        # Data RVs - trends
         data_rvs = np.copy(self.data_rv)
-        data_rvs -= self.model.build_trend_zero(pars, data_t, instname=None)
+        data_rvs -= self.model.apply_offsets(pars, data_t, instname=None)
         
         # Get residuals
-        residuals_with_noise = self.residuals_with_noise(pars)
+        residuals_with_noise = self.compute_data_pre_noise_process(pars)
         
         # Data errrors
-        data_rvs_error = self.kernel.compute_data_errors(pars, include_gp_error=True, residuals_with_noise=residuals_with_noise)
+        data_rvs_error = self.noise.compute_data_errors(pars, include_gp_error=True, data_with_noise=residuals_with_noise)
         
         # Store in comps
         comps[self.label + "_data_t"] = data_t
@@ -110,12 +110,20 @@ class RVLikelihood(optobj.Likelihood):
         comps[self.label + "_data_rvs_error"] = data_rvs_error
         
         # Standard GP
-        if isinstance(self.kernel, optnoisekernels.CorrelatedNoiseProcess):
-            kernel_mean, kernel_unc = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data_t, xres=None, return_kernel_error=True)
-            comps[self.label + "_kernel_mean"] = kernel_mean
-            comps[self.label + "_kernel_unc"] = kernel_unc
+        if isinstance(self.noise, optnoise.CorrelatedNoiseProcess):
+            gp_mean, gp_unc = self.noise.realize(pars, data_with_noise=residuals_with_noise, xpred=data_t, return_gp_error=True)
+            comps[self.label + "_gp_mean"] = gp_mean
+            comps[self.label + "_gp_unc"] = gp_unc
 
         return comps
+
+    def gen_inds(self):
+        inds = {}
+        for like in self.values():
+            t = np.concatenate((t, like.data_t))
+        ss = np.argsort(t)
+        return ss
+
 
 class RVChromaticLikelihoodJ1(RVLikelihood):
     
@@ -272,14 +280,14 @@ class RVPosterior(optobj.Posterior):
     """A class for RV Posteriors
     """
     
-    def compute_redchi2(self, pars, include_white_error=True, include_kernel_error=True, kernel_error=None):
+    def compute_redchi2(self, pars, include_gp_error=False, gp_error=None):
         
         residuals = np.array([], dtype=float)
         errors = np.array([], dtype=float)
         for like in self.values():
-            residuals_with_noise = like.residuals_with_noise(pars)
-            residuals_no_noise = like.residuals_no_noise(pars)
-            errs = like.kernel.compute_data_errors(pars, include_white_error=include_white_error, include_kernel_error=include_kernel_error, kernel_error=kernel_error, residuals_with_noise=residuals_with_noise)
+            residuals_with_noise = like.compute_data_pre_noise_process(pars)
+            residuals_no_noise = like.compute_data_post_noise_process(pars)
+            errs = like.noise.compute_data_errors(pars, include_gp_error=include_gp_error, gp_error=gp_error, data_with_noise=residuals_with_noise)
             residuals = np.concatenate((residuals, residuals_no_noise))
             errors = np.concatenate((errors, errs))
         
@@ -296,13 +304,16 @@ class RVPosterior(optobj.Posterior):
         # Components
         comps = {}
         
-        # Time vector for this likelihood
-        t_vec = np.copy(self.data_t)
+        # All data
+        comps["data_t"] = np.copy(self.data_t)
+        comps["data_rv"] = np.copy(self.data_rv)
+        comps["data_rverr"] = np.copy(self.data_rverr)
         
         # Planets
         for planet_index in self.like0.model.planets_dict:
-            planet_signal = self.like0.model.build_planet(pars, t_vec, planet_index)
-            comps["planet_" + str(planet_index) + "_rvs"] = planet_signal
+            for like in self.likes():
+                planet_signal = self.like0.model.build_planet(pars, comps["data_t"], planet_index)
+                comps["planet_" + str(planet_index) + "_rvs"] = planet_signal
             
         # Data and GP
         for like in self.values():
@@ -313,23 +324,46 @@ class RVPosterior(optobj.Posterior):
     
     @property
     def data_t(self):
-        data_t = np.array([], dtype=float)
+        t = np.array([], dtype=float)
         for like in self.values():
-            data_t = np.concatenate((data_t, like.data_t))
-        return data_t
+            t = np.concatenate((t, like.data_t))
+        ss = np.argsort(t)
+        t = t[ss]
+        return t
     
     @property
     def data_rv(self):
-        data_rv = np.array([], dtype=float)
+        rv = np.array([], dtype=float)
         for like in self.values():
-            data_rv = np.concatenate((data_rv, like.data_rv))
-        return data_rv
+            rv = np.concatenate((rv, like.data_rv))
+        return rv
     
     @property
     def data_rverr(self):
-        data_rverr = np.array([], dtype=float)
+        rverr = np.array([], dtype=float)
         for like in self.values():
-            data_rverr = np.concatenate((data_rverr, like.data_rverr))
-        data_rverr = data_rverr[self.sorting_inds]
-        return data_rverr
-        
+            rverr = np.concatenate((rverr, like.data_rverr))
+        rverr = rverr[self.like_inds]
+        return rverr
+
+    
+  
+    @property
+    def instname_vec(self):
+        instnames = np.array([], dtype=float)
+        t = np.array([], dtype=float)
+        for like in self.values():
+            instnames = np.concatenate((instnames, like.data.gen_tel_vec()))
+            t = np.concatenate(())
+        #instnames = instnames[]
+        return instnames
+    
+    @property
+    def data_inds(self):
+        instnames = self.instnames_vec
+        sorting_inds = {}
+        for like in self.likes():
+            for data in like.data.values():
+                inds = np.where(data.label == self.instnames)
+                sorting_inds[data.label] = inds
+        return sorting_inds
