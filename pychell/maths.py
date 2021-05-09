@@ -108,43 +108,49 @@ def Rfromlsf(wave, fwhm=None, sigma=None):
         return wave / sigmatofwhm(sigma)
     
     
-def rolling_clip(x, y, weights=None, width=None, method='median', nsigma=3, percentile=None):
+def rolling_clip(x, y, weights=None, width=None, method='median', n_sigma=3):
     
-    mask = np.zeros(x.size)
+    # Mask must be the length of x
+    mask = np.ones_like(x)
     
-    good = np.where(np.isfinite(xx) & np.isfinite(yy))[0]
-    xx, yy = x[good], y[good]
-    mask[good] = 1
-    
-    if percentile is None:
-        percentile = 0.5
-    
+    # Create a mask and weights
     if weights is None:
-        weights = np.ones(xx.size)
-    else:
-        ww = weights[good]
+        weights = np.ones_like(x)
+    good = np.where(np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights >= 0))[0]
+    n_good = len(good)
+    xx, yy, ww = x[good], y[good], weights[good]
+    
+    # Start and last x value
+    x_start = np.nanmin(x)
+    x_end = np.nanmax(x)
+    delta_x = x_start - x_end
+    
+    # Want n_per_bin ~ 10
+    if width is None:
+        n_per_bin = 10
+        width = n_per_bin * delta_x / n_good
         
-    xs, xe, xx.min(), xx.max()
-    nbins = (xe - xs) / width + 1
-    bins = np.linspace(xe - 1E-10, xs + 1E-10, num=nbins)
+    # Bins
+    n_bins = int(delta_x / width)
+    bins = np.linspace(x_end - width / 1000, x_start + width / 1000, num=n_bins + 1)
+    
+    # Loop over bins and flag
     for i in range(len(bins) - 1):
         use = np.where((xx >= bins[i]) & (xx <= bins[i+1]))[0]
-        if use.size > 5:
+        if use.size >= n_per_bin / 2:
             if method == 'median':
-                wmed = weighted_median(yy[use], weights=ww[use], percentile=percentile)
+                wmed = weighted_median(yy[use], weights=ww[use], percentile=0.5)
                 wavg = wmed
-                meddev = weighted_median(yy[use] - wmed, weights=ww[use], percentile=percentile)
+                meddev = weighted_median(yy[use] - wmed, weights=ww[use], percentile=0.5)
                 wstddev = meddev * 1.4826
             else:
                 wavg = weighted_mean(yy[use], ww[use])
                 wstddev = weighted_stddev(yy[use], ww[use])
                 
-            bad = np.where(np.abs(yy[use] - wavg) > nsigma * wstddev)[0]
+            bad = np.where(np.abs(yy[use] - wavg) > n_sigma * wstddev)[0]
             if bad.size > 0:
-                mask[bad] = 0
-            
-            
-                
+                mask[use[bad]] = 0
+ 
     return mask
 
 def doppler_shift(wave, vel, wave_out=None, flux=None, interp='cspline', kind='exp'):

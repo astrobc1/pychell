@@ -112,7 +112,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         tell_flux_hrc = forward_model.models_dict['lsf'].convolve_flux(tell_flux_hr, pars=pars)
         tell_flux_lr = np.interp(forward_model.models_dict['wavelength_solution'].build(pars), templates_dict['star'][:, 0], tell_flux_hrc, left=0, right=0)
         tell_weights = tell_flux_lr**2
-        bad = np.where(tell_flux_lr < 0.99)
+        bad = np.where(tell_flux_lr < 0.75)[0]
         tell_weights = np.ones_like(weights_init)
         tell_weights[bad] = 0
         # Combine weights
@@ -126,7 +126,6 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
     for i in range(vels.size):
         
         # Copy the weights
-        weights = np.copy(weights_init)
         
         # Set the RV parameter to the current step
         pars[forward_model.models_dict['star'].par_names[0]].setv(value=vels[i])
@@ -136,7 +135,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
         
         # Shift the stellar weights instead of recomputing the rv content.
         star_weights_shifted = pcmath.doppler_shift(templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='spline', wave_out=wave_lr)
-        weights *= star_weights_shifted
+        weights = weights_init * star_weights_shifted
         
         # Construct the RMS
         rmss[i] = pcmath.rmsloss(forward_model.data.flux_chunk, model_lr, weights=weights)
@@ -148,7 +147,7 @@ def weighted_brute_force(forward_model, templates_dict, iter_index, sregion, xco
 
     # Fit with a polynomial
     # Include 5 points on each side of min vel (11 total points)
-    use = np.arange(M-5, M+6).astype(int)
+    use = np.arange(M-10, M+11).astype(int)
 
     try:
         pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
@@ -592,6 +591,49 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
     rvs_out = {"rvs": rvs_single_out, "unc": unc_single_out, "rvs_nightly": rvs_nightly_out, "unc_nightly" : unc_nightly_out}
         
     return rvs_out
+
+def combine_rvs_weighted_mean(rvs, weights, n_obs_nights):
+    """Combines RVs considering the differences between all the data points.
+    
+    Args:
+        rvs (np.ndarray): RVs of shape n_orders, n_spec, n_chunks
+        weights (np.ndarray): Corresponding uncertainties of the same shape.
+    """
+    
+    # Numbers
+    n_orders, n_spec, n_chunks = rvs.shape
+    n_nights = len(n_obs_nights)
+    
+    # Rephrase problem as n_quasi_orders = n_orders * n_chunks
+    n_tot_chunks = n_orders * n_chunks
+    
+    # Output arrays
+    rvs_single_out = np.full(n_spec, fill_value=np.nan)
+    unc_single_out = np.full(n_spec, fill_value=np.nan)
+    rvs_nightly_out = np.full(n_nights, fill_value=np.nan)
+    unc_nightly_out = np.full(n_nights, fill_value=np.nan)
+    
+    # Offset each order and chunk
+    rvs_offset = np.copy(rvs)
+    for o in range(n_orders):
+        for ichunk in range(n_chunks):
+            rvs_offset[o, :, ichunk] = rvs[o, :, ichunk] - pcmath.weighted_mean(rvs[o, :, ichunk], weights[o, :, ichunk])
+            
+    for i in range(n_spec):
+        rr = rvs_offset[:, i, :].flatten()
+        ww = weights[:, i, :].flatten()
+        rvs_single_out[i], rvs_single_out[i] = pcmath.weighted_combine(rr, ww)
+        
+    for i, f, l in nightly_iteration(n_obs_nights):
+        rr = rvs_offset[:, f:l, :].flatten()
+        ww = weights[:, f:l, :].flatten()
+        rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr, ww)
+            
+    rvs_out = {"rvs": rvs_single_out, "unc": unc_single_out, "rvs_nightly": rvs_nightly_out, "unc_nightly" : unc_nightly_out}
+        
+    return rvs_out
+    
+    
 
 def combine_rvs_tfa(rvs, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points

@@ -152,15 +152,15 @@ class RVChromaticLikelihoodJ1(RVLikelihood):
         # Data times
         data_t = np.copy(self.data_t)
         
-        # Data RVs - offsets
+        # Data RVs - trends
         data_rvs = np.copy(self.data_rv)
-        data_rvs = self.model.apply_offsets(data_rvs, pars)
+        data_rvs = self.model.apply_offsets(data_rvs, pars, data_t, instname=None)
         
         # Get residuals
-        residuals_with_noise = self.residuals_with_noise(pars)
+        residuals_with_noise = self.compute_data_pre_noise_process(pars)
         
         # Data errrors
-        data_rvs_error = self.kernel.compute_data_errors(pars, include_white_error=True, include_kernel_error=True, residuals_with_noise=residuals_with_noise)
+        data_rvs_error = self.noise.compute_data_errors(pars, include_gp_error=True, data_with_noise=residuals_with_noise)
         
         # Store in comps
         comps[self.label + "_data_t"] = data_t
@@ -169,10 +169,10 @@ class RVChromaticLikelihoodJ1(RVLikelihood):
         
         # Standard GP
         for data in self.data.values():
-            kernel_mean, kernel_unc = self.kernel.realize(pars, residuals_with_noise=residuals_with_noise, xpred=data.t, xres=None, return_kernel_error=True, instrument=data.label)
-            comps[self.label + "_kernel_mean_" + data.label] = kernel_mean
-            comps[self.label + "_kernel_unc_" + data.label] = kernel_unc
-        
+            gp_mean, gp_unc = self.noise.realize(pars, data_with_noise=residuals_with_noise, xpred=data.t, xdata=None, return_gp_error=True, instname=data.label)
+            comps[self.label + "_gp_mean_" + data.label] = gp_mean
+            comps[self.label + "_gp_unc_" + data.label] = gp_unc
+
         return comps
 
 class RVChromaticLikelihoodJ2(RVLikelihood):
