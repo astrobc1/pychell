@@ -47,7 +47,7 @@ class RVProblem(optframeworks.OptProblem):
     #### Constructor Methods (incl. helpers) ####
     #############################################
     
-    def __init__(self, output_path=None, p0=None, optimizer=None, sampler=None, obj=None, star_name=None, mstar=None, mstar_unc=None, rplanets=None, tag=None):
+    def __init__(self, output_path=None, p0=None, optimizer=None, sampler=None, obj=None, star_name=None, tag=None):
         """Constructs the primary exoplanet problem object.
 
         Args:
@@ -73,13 +73,6 @@ class RVProblem(optframeworks.OptProblem):
         
         # Full tag for filenames
         self.full_tag = f"{self.star_name}_{self.tag}"
-        
-        # Mass of star for deriving mass uncertainties.
-        self.mstar = mstar
-        self.mstar_unc = mstar_unc
-        
-        # Radius of planets for deriving densities.
-        self.rplanets = rplanets
         
         # Generate latex labels for the parameters.
         self._gen_latex_labels()
@@ -1328,6 +1321,146 @@ class RVProblem(optframeworks.OptProblem):
 
     def get_components(self, pars):
         return self.obj.get_components(pars)
+            
+    def compute_masses(self, mcmc_result, mstar, mstar_unc=None):
+        """Computes the planet masses and uncertainties in Earth Masses.
+
+        Args:
+            mcmc_result (dict): The MCMC result.
+            mstar (float): The mass of the star in solar units.
+            mstar_unc (list of floats): The lower and upper uncertainty in mstar (both positive).
+
+        Returns:
+            dict: A dictionary with keys identical to the planets dictionary and values containing a tuple with the mass, lower uncertainty, and upper uncertainty in Earth units.
+        """
+        
+        if mstar_unc is None:
+            mstar_unc = (0, 0)
+        
+        msiniplanets = {} # In earth masses
+        for planet_index in self.planets_dict:
+            perdist = []
+            tpdist = []
+            eccdist = []
+            wdist = []
+            kdist = []
+            mdist = []
+            pars = copy.deepcopy(mcmc_result["pmed"])
+            for i in range(mcmc_result["n_steps"]):
+                for pname in self.planets_dict[planet_index]["basis"].pnames:
+                    if pars[pname].vary:
+                        ii = pars.index_from_par(pname, rel_vary=True)
+                        pars[pname].value = mcmc_result["chains"][i, ii]
+                per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
+                perdist.append(per)
+                tpdist.append(tp)
+                eccdist.append(ecc)
+                wdist.append(w)
+                kdist.append(k)
+                mdist.append(planetmath.compute_mass(per, ecc, k, mstar))
+            val, unc_low, unc_high = self.sampler.chain_uncertainty(mdist)
+            if mstar_unc is not None:
+                unc_low = np.sqrt(unc_low**2 + planetmath.compute_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[0]**2)
+                unc_high = np.sqrt(unc_high**2 + planetmath.compute_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[1]**2)
+                msiniplanets[planet_index] = (val, unc_low, unc_high)
+        return msiniplanets
+           
+    def compute_semimajor_axes(self, mcmc_result, mstar, mstar_unc):
+        """Computes the semi-major axis of each planet and uncertainty.
+
+        Args:
+            mcmc_result (dict): The returned value from calling sample.
+            mstar (float): The mass of the star in solar units.
+            mstar (list): The uncertainty of the mass of the star in solar units, lower, upper.
+
+        Returns:
+            (dict): The semi-major axis, lower, and upper uncertainty of each planet in a dictionary.
+        """
+        
+        if mstar_unc is None:
+            mstar_unc = (0, 0)
+        
+        sa_dict = {} # In AU
+        
+        for planet_index in self.planets_dict:
+            perdist = []
+            tpdist = []
+            eccdist = []
+            wdist = []
+            kdist = []
+            adist = []
+            pars = copy.deepcopy(mcmc_result["pmed"])
+            for i in range(mcmc_result["n_steps"]):
+                for pname in self.planets_dict[planet_index]["basis"].pnames:
+                    if pars[pname].vary:
+                        ii = pars.index_from_par(pname, rel_vary=True)
+                        pars[pname].value = mcmc_result["chains"][i, ii]
+                per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
+                perdist.append(per)
+                tpdist.append(tp)
+                eccdist.append(ecc)
+                wdist.append(w)
+                kdist.append(k)
+                a = planetmath.compute_sa(per, mstar)
+                adist.append(a)
+            val, unc_low, unc_high = self.sampler.chain_uncertainty(adist)
+            da_dMstar = planetmath.compute_sa_deriv_mstar(per, mstar) # in AU / M_SUN
+            unc_low = np.sqrt(unc_low**2 + da_dMstar**2 * mstar_unc[0]**2)
+            unc_high = np.sqrt(unc_high**2 + da_dMstar**2 * mstar_unc[1]**2)
+            sa_dict[planet_index] = (val, unc_low, unc_high)
+            
+        return sa_dict
+            
+    def compute_densities(self, mcmc_result, mstar, mstar_unc, rplanets_dict=None):
+        """Computes the value of msini and uncertainty for each planet in units of Earth Masses.
+
+        Args:
+            mcmc_result (dict): The returned value from calling sample.
+        Returns:
+            (dict): The density, lower, and upper uncertainty of each planet in a dictionary, in units of grams/cm^3.
+        """
+        if mstar_unc is None:
+            mstar_unc = (0, 0)
+        if rplanets_dict is None:
+            rplanets_dict = {}
+            
+        sa_dict = {} # In AU
+        mplanets = self.compute_masses(mcmc_result, mstar, mstar_unc)
+        rho_dict = {} # In jupiter masses
+        for planet_index in self.planets_dict:
+            perdist = []
+            tpdist = []
+            eccdist = []
+            wdist = []
+            kdist = []
+            mdist = []
+            rhodist = []
+            pars = copy.deepcopy(mcmc_result["pmed"])
+            for i in range(mcmc_result["n_steps"]):
+                for pname in self.planets_dict[planet_index]["basis"].pnames:
+                    if pars[pname].vary:
+                        ii = pars.index_from_par(pname, rel_vary=True)
+                        pars[pname].value = mcmc_result["chains"][i, ii]
+                per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
+                perdist.append(per)
+                tpdist.append(tp)
+                eccdist.append(ecc)
+                wdist.append(w)
+                kdist.append(k)
+                mplanet = planetmath.compute_mass(per, ecc, k, mstar)
+                rplanet_val = rplanets_dict[planet_index][0]
+                rplanet_unc_low = rplanets_dict[planet_index][1]
+                rplanet_unc_high = rplanets_dict[planet_index][2]
+                rhodist.append(planetmath.compute_density(mplanet, rplanet_val))
+            val, unc_low, unc_high = self.sampler.chain_uncertainty(rhodist)
+            if planet_index in rplanets_dict[planet_index]:
+                mplanet = mplanets[planet_index][0]
+                unc_low = np.sqrt(unc_low**2 + planetmath.compute_density_deriv_rplanet(rplanet_val, mplanet)**2 * rplanet_unc_low**2)
+                unc_high = np.sqrt(unc_high**2 + planetmath.compute_density_deriv_rplanet(rplanet_val, mplanet)**2 * rplanet_unc_high**2)
+                rho_dict[planet_index] = (val, unc_low, unc_high)
+            else:
+                rho_dict[planet_index] = (val, unc_low, unc_high)
+        return rho_dict
             
     ######################################
     #### Static Methods (all helpers) ####
