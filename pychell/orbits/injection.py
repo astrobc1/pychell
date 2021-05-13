@@ -778,7 +778,7 @@ class InjectionRecovery:
         return priors, frun_data, frun_gp, frun_gp_unc
 
     def plot_injection_2D_hist(self, injection=True, vector=False, bounds_k=None, bounds_unc=None, colormap_k='RdYlGn', colormap_unc='RdYlBu',
-                               xticks_k=None, xticks_unc=None, yticks_k=None, yticks_unc=None):
+                               xticks_k=None, xticks_unc=None, yticks_k=None, yticks_unc=None, plot_style=None):
         """
         Plots the 2D histogram of injection/recovery data.  The upper plot is K recovered / K injected, and the lower
         plot is K injected / sigma K recovered for injection runs and K recovered / sigma K recovered for noninjection runs.
@@ -793,12 +793,15 @@ class InjectionRecovery:
             xticks_unc: list / array, the lower plot x ticks.
             yticks_k: list / array, the upper plot y ticks.
             yticks_unc: list / array, the lower plot y ticks.
+            plot_style: str, the matplotlib stylesheet to use.  Defaults to the pychell gadfly stylesheet.
 
         Returns:
             None.
         """
         assert self.kbfrac is not None
         key = 'injection' if injection else 'noninjection'
+        if plot_style:
+            plt.style.use(plot_style)
         fig, (ax1, ax2) = plt.subplots(2)
         # norm = None if planets_model == 1 else colors.LogNorm()
         norm1 = colors.LogNorm()
@@ -814,7 +817,8 @@ class InjectionRecovery:
         cb = fig.colorbar(plot, cax=cbar_ax, label='$K_{\\mathrm{recovered}}\\ /\\ K_{\\mathrm{injected}}$')
 
         unc = 1/self.kbfrac_unc[key] if injection else 1/self.kbfrac_unc_rec[key]
-        bounds_unc = (np.nanmin(unc), np.nanmax(unc))
+        if not bounds_unc:
+            bounds_unc = (np.nanmin(unc), np.nanmax(unc))
         plot_b = ax2.pcolormesh(self.periods, self.semiamps, unc, cmap=colormap_unc, vmin=bounds_unc[0], vmax=bounds_unc[1], norm=norm2,
                                 shading='nearest')
         istr = 'injected' if injection else 'recovered'
@@ -854,7 +858,8 @@ class InjectionRecovery:
                                                                       ftype), bbox_extra_artist=(cb, cb2), edges='tight', dpi=300)
         plt.close()
 
-    def plot_delta_aicc(self, vector=False, vmin=-10**6, vmax=10**6, linthresh=1, colormap=None, xticks=None, yticks=None):
+    def plot_delta_aicc(self, vector=False, vmin=-10**6, vmax=10**6, linthresh=1, colormap=None, xticks=None, yticks=None,
+                        plot_style=None):
         """
         Plots the 2D histogram of delta AiCc data.  Uses a symmetric logarithmic colorbar scale.
         Args:
@@ -865,6 +870,7 @@ class InjectionRecovery:
             colormap: matplotlib.colormap / str, the colormap to use.
             xticks: list / array, the x ticks.
             yticks: list / array, the y ticks.
+            plot_style: str, the plot style to use.  Defaults to pychell gadfly stylesheet.
 
         Returns:
             None
@@ -876,6 +882,8 @@ class InjectionRecovery:
             colormap = colors.LinearSegmentedColormap.from_list('red-purple', all_colors)
 
         assert self.delta_aicc is not None
+        if plot_style:
+            plt.style.use(plot_style)
         fig, ax = plt.subplots()
         lognorm = colors.SymLogNorm(linthresh=linthresh, vmin=vmin, vmax=vmax, base=10)
         plot = ax.pcolormesh(self.periods, self.semiamps, self.delta_aicc, cmap=colormap, norm=lognorm, rasterized=True, shading='nearest')
@@ -902,10 +910,13 @@ class InjectionRecovery:
                     dpi=300, edges='tight')
         plt.close()
 
-    def plot_gp_histograms(self, injection=True, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=100):
+    def plot_1d_histograms(self, injection=True, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=100,
+                           plot_style=None):
         ftype = 'png' if not vector else 'eps'
         key = 'injection' if injection else 'noninjection'
 
+        if plot_style:
+            plt.style.use(plot_style)
         fig, ax = plt.subplots()
         kbfrac_unc_flat = 1 / self.kbfrac_unc[key].ravel()
         kbfrac_unc_flat = kbfrac_unc_flat[np.where(np.isfinite(kbfrac_unc_flat) & (kbfrac_unc_flat < cutoff))]
