@@ -12,13 +12,30 @@ import gc
 import itertools
 from joblib import Parallel, delayed
 
-import pychell.orbits as pco
+import pychell.maths as pcmath
+import pychell.orbits.planetmath as planetmath
+import pychell.orbits.rvdata as pcrvdata
+import pychell.orbits.rvmodels as pcrvmodels
+import pychell.orbits.rvnoise as pcrvnoise
+import pychell.orbits.rvobjectives as pcrvobj
+import pychell.orbits.rvprob as pcrvprob
+
+import optimize.data as optdata
+import optimize.frameworks as optframe
+import optimize.knowledge as optknow
+import optimize.models as optmodels
+import optimize.neldermead as optnelder
+import optimize.noise as optnoise
+import optimize.objectives as optobj
+import optimize.optimizers as optopt
+import optimize.samplers as optsamplers
+import optimize.scipy_optimizers as optscipy
 
 
 class SoloInjectionRecovery:
 
     def __init__(self, rv_problem, output_path=None, star_name=None):
-        assert type(rv_problem) is pco.RVProblem
+        assert type(rv_problem) is pcrvprob.RVProblem
         self.rv_problem = rv_problem
         self.star_name = star_name if star_name else 'Star'
 
@@ -91,7 +108,7 @@ class SoloInjectionRecovery:
         self.rv_problem.output_path = folder_name
 
         # Run twice: once with the injected planet and once without
-        opt_result = self.rv_problem.maxlikefit(save=False, *args, **kwargs)
+        opt_result = self.rv_problem.mapfit(save=False, *args, **kwargs)
 
         results_dict = {'opt_result': opt_result, 'priors': self.rv_problem.p0}
         with open(os.path.join(folder_name, '{}_{}p_likelihood_{}d_{}mps.pkl'.format(
@@ -105,8 +122,8 @@ class SoloInjectionRecovery:
 
 class InjectionRecovery:
 
-    def __init__(self, data=None, p0=None, planets_dict=None, optimizer_type=pco.NelderMead, sampler_type=pco.AffInv, scorer_type=pco.RVPosterior,
-                 likelihood_type=pco.RVLikelihood, kernel_type=pco.WhiteNoise, model_type=pco.RVModel,
+    def __init__(self, data=None, p0=None, planets_dict=None, optimizer_type=optnelder.NelderMead, sampler_type=optsamplers.AffInv, scorer_type=pcrvobj.RVPosterior,
+                 likelihood_type=pcrvobj.RVLikelihood, kernel_type=optnoise.NoiseKernel, model_type=pcrvmodels.RVModel,
                  output_path=None, star_name=None, k_range=(1, 100), p_range=(1.1, 100), k_resolution=20, p_resolution=30, p_shift=0.12345,
                  ecc_inj=0, w_inj=np.pi, tp_inj=None, scaling='log', slurm=False,
                  gaussian_shift=None, gaussian_unc=None, uniform_shift=None, jeffreys_shift=None,
@@ -123,9 +140,9 @@ class InjectionRecovery:
             optimizer_type: optimize.optimizers.Optimizer / Minimizer, the model optimizer class to be tested.  Default is
                 NelderMead.
             sampler_type: optimize.samplers.Sampler, the MCMC sampler type to be tested.  Default is AffInv.
-            scorer_type: optimize.scores.Posterior, the posterior distribution type.  Default is RVPosterior.
-            likelihood_type: optimize.scores.Likelihood, the likelihood type.  Default is RVLikelihood.
-            kernel_type: optimize.kernels.NoiseKernel, the type of kernel to be tested.  Default is WhiteNoise.
+            scorer_type: optimize.objectives.Posterior, the posterior distribution type.  Default is RVPosterior.
+            likelihood_type: optimize.objectives.Likelihood, the likelihood type.  Default is RVLikelihood.
+            kernel_type: optimize.noise.NoiseKernel, the type of kernel to be tested.  Default is WhiteNoise.
             model_type: optimize.models.Model, the type of model to be tested.  Default is RVModel.
             output_path: str, the output directory for all files, in which subdirectories will be made.  Default is the current
                 directory.
@@ -177,7 +194,7 @@ class InjectionRecovery:
         self.ecc = ecc_inj
         self.w = w_inj
         if not tp_inj and data:
-            tp_inj = np.array([np.float(np.nanmedian(self.data.get_vec('t'))) * (np.random.rand() - 0.5) * p_inj for k_inj, p_inj in self.kp_array])
+            tp_inj = np.array([np.float(np.nanmedian(self.data.gen_vec('t'))) * (np.random.rand() - 0.5) * p_inj for k_inj, p_inj in self.kp_array])
         assert ((type(tp_inj) in (list, tuple, np.ndarray)) and (len(tp_inj) == len(self.kp_array))) or (tp_inj is None), "If specified, a unique Tp must be given for each combination of k and p"
         self.tp = tp_inj
 
@@ -228,7 +245,7 @@ class InjectionRecovery:
 
         # Inject signal into the data
         for _data in data_mod.values():
-            _data.y += pco.pcrvmodels.planet_signal(_data.t, p_inj, tp_inj, self.ecc, self.w, k_inj)
+            _data.y += pcrvmodels.RVModel.planet_signal(_data.t, p_inj, tp_inj, self.ecc, self.w, k_inj)
 
         # Write injected RVs and diff RVs to radvel files
         data_mod.to_radvel_file(os.path.join(folder_name, '{}_{}_injected_{}d_{}mps.txt'.format(
@@ -249,9 +266,9 @@ class InjectionRecovery:
         Returns:
             pars: pco.Parameters, the edited Parameters object
         """
-        gaussian_priors = [i for (i, prior) in enumerate(pars[key + str(injected_planet)].priors) if isinstance(prior, pco.Gaussian)]
-        uniform_priors = [i for (i, prior) in enumerate(pars[key + str(injected_planet)].priors) if isinstance(prior, pco.Uniform)]
-        jeffreys_priors = [i for (i, prior) in enumerate(pars[key + str(injected_planet)].priors) if isinstance(prior, pco.Jeffreys)]
+        gaussian_priors = [i for (i, prior) in enumerate(pars[key + str(injected_planet)].priors) if isinstance(prior, optknow.Gaussian)]
+        uniform_priors = [i for (i, prior) in enumerate(pars[key + str(injected_planet)].priors) if isinstance(prior, optknow.Uniform)]
+        jeffreys_priors = [i for (i, prior) in enumerate(pars[key + str(injected_planet)].priors) if isinstance(prior, optknow.Jeffreys)]
         if gaussian_priors and (self.gaussian_shift or self.gaussian_unc):
             for index in gaussian_priors:
                 if self.gaussian_shift and key in self.gaussian_shift.keys():
@@ -316,16 +333,19 @@ class InjectionRecovery:
 
         # Create kernels, models, scorers, and optimizers
         par_names_gp = [pname for pname in pars.keys() if "gp" in pname]
-        kernel = self.kernel_type(data=data, par_names=par_names_gp)
-        model = self.model_type(planets_dict=planets_dict, data=data, p0=pars, kernel=kernel)
+        if par_names_gp:
+            kernel = self.kernel_type(data=data, par_names=par_names_gp)
+        else:
+            kernel = self.kernel_type(data=data)
+        model = self.model_type(planets_dict=planets_dict, data=data)
         scorer = self.scorer_type()
-        scorer["rvs"] = self.likelihood_type(data=data, model=model)
-        optimizer = self.optimizer_type(scorer=scorer)
-        sampler = self.sampler_type(scorer=scorer, options=None)
+        scorer["rvs"] = self.likelihood_type(data=data, model=model, noise=kernel, p0=pars)
+        optimizer = self.optimizer_type(obj=scorer, options=None)
+        sampler = self.sampler_type(obj=scorer, options=None)
 
         # Create the RVProblem
-        rvprobi = pco.RVProblem(output_path=folder_name, star_name=self.star_name, data=data, p0=pars, optimizer=optimizer,
-                                sampler=sampler, scorer=scorer)
+        rvprobi = pcrvprob.RVProblem(output_path=folder_name, star_name=self.star_name, p0=pars, optimizer=optimizer,
+                                     sampler=sampler, obj=scorer)
         return rvprobi
 
     def injection_mcmc(self, k_inj, p_inj, tp_inj, folder_name=None, injection=True, *args, **kwargs):
@@ -629,7 +649,7 @@ class InjectionRecovery:
         pb = self.periods
         kbin = self.semiamps
 
-        n = len(self.data.get_vec('y'))
+        n = len(self.data.gen_vec('y'))
         self.kbfrac[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
         self.kbfrac_unc[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
         self.kbfrac_unc_rec[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
