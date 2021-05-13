@@ -119,7 +119,6 @@ def cubic_spline_lsq(forward_models, iter_index=None):
             
             # Almost final weights
             tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk] * tell_weights).tolist()
-            #tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk]).tolist()
 
     # Loop over spectra and also weight spectra according to the barycenter sampling
     # Here we explicitly use a multiplicative combination of weights.

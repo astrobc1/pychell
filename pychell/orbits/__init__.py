@@ -8,9 +8,8 @@ from optimize.samplers import *
 # pychell
 from pychell.orbits.rvdata import *
 from pychell.orbits.rvmodels import *
-from pychell.orbits.rvmodels import *
-from pychell.orbits.rvkernels import *
-from pychell.orbits.rvscores import *
+from pychell.orbits.rvnoise import *
+from pychell.orbits.rvobjectives import *
 from pychell.orbits.rvprob import *
-from pychell.orbits.gls import *
+from pychell.orbits.planetmath import *
 from pychell.orbits.injection import *

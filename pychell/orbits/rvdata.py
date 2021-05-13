@@ -4,52 +4,74 @@ import pandas as pd
 import warnings
 import matplotlib.pyplot as plt
 
-class RVData(optdata.Data1d):
+class RVData(optdata.DataS1d):
     
     __slots__ = ['x', 'y', 'yerr', 'mask', 'label', 'wavelength']
     
     def __init__(self, t, rv, rverr, instname=None, wavelength=None):
+        """Construct an RV data object for a particular instrument.
+
+        Args:
+            t (np.ndarray): The time vector.
+            rv (np.ndarray): The RVs vector.
+            rverr (np.ndarray): The RVs error vector.
+            instname (np.ndarray, optional): The label for this dataset. Defaults to None initially, and is then replaced by the the key provided when constructing a composite dataset.
+            wavelength (np.ndarray, optional): The effective wavelength of the dataset. Defaults to None.
+        """
         super().__init__(t, rv, yerr=rverr, label=instname)
         self.wavelength = wavelength
-        
+
+    def __repr__(self):
+        return f"{len(self.t)} RVs from {self.instname}"
+
     @property
     def t(self):
         return self.x
-    
+
     @property
     def rv(self):
         return self.y
-    
+
     @property
     def rverr(self):
         return self.yerr
-    
+
     @property
     def instname(self):
         return self.label
-    
+
     @property
     def time_baseline(self):
-        t = self.get_vec('x')
-        return np.max(t) - np.min(t)
-    
+        """T_max - T_min
+
+        Returns:
+            float: The time baseline.
+        """
+        return np.nanmax(self.t) - np.nanmin(self.t)
+
     @classmethod
     def from_file(cls, fname, instname=None, delimiter=",", skiprows=0, usecols=None, wavelength=None):
+        """Constructor from a delimited file.
+
+        Args:
+            fname (str): The full path and filename.
+            instname (str, optional): The name of the instrument. Defaults to None.
+            delimiter (str, optional): The delimiter. Defaults to ",".
+            skiprows (int, optional): Which rows to skip. Defaults to 0.
+            usecols (tuple of ints, optional): The columns corresponding to time, rv, rverr. Defaults to (0, 1, 2).
+            wavelength (float, optional): The wavelength of this dataset. Defaults to None.
+
+        Returns:
+            RVData: The RV data object for this instrument.
+        """
         if usecols is None:
             usecols = (0, 1, 2)
         t, rvs, rvs_unc = np.loadtxt(fname, delimiter=delimiter, usecols=usecols, unpack=True, skiprows=skiprows)
         data = cls(t, rvs, rvs_unc, instname=instname, wavelength=wavelength)
         return data
-        
-    def __repr__(self):
-        return str(len(self.t)) + " RVs from " + self.instname
-    
-    
-class CompositeRVData(optdata.CompositeData1d):
-    
-    @property
-    def instnames(self):
-        return np.array(list(self.keys()), dtype="<U50")
+
+
+class CompositeRVData(optdata.CompositeDataS1d):
 
     @classmethod
     def from_radvel_file(cls, fname, wavelengths=None):
@@ -77,9 +99,9 @@ class CompositeRVData(optdata.CompositeData1d):
             data[tel] = RVData(t_all[inds], rv_all[inds], rverr_all[inds], instname=tel, wavelength=wavelength)
         return data
     
-    def get_wave_vec(self):
+    def gen_wave_vec(self):
         wave_vec = np.array([], dtype=float)
-        t = self.get_vec('t', sort=False)
+        t = self.gen_vec('t', sort=False)
         ss = np.argsort(t)
         for data in self.values():
             wave_vec = np.concatenate((wave_vec, np.full(data.t.size, fill_value=data.wavelength)))
@@ -92,55 +114,30 @@ class CompositeRVData(optdata.CompositeData1d):
         Args:
             fname (str): The full path and filename of the file to create. If the file exists, it is overwritten.
         """
-        times = self.get_vec('t', sort=True)
-        rvs = self.get_vec('rv', sort=True)
-        rvserr = self.get_vec('rverr', sort=True)
-        tel_vec = self.make_tel_vec()
+        times = self.gen_vec('t', sort=True)
+        rvs = self.gen_vec('rv', sort=True)
+        rvserr = self.gen_vec('rverr', sort=True)
+        tel_vec = self.gen_instname_vec()
         out = np.array([times, rvs, rvserr, tel_vec], dtype=object).T
         with open(fname, 'w') as f:
             f.write('time,mnvel,errvel,tel\n')
             np.savetxt(f, out, fmt='%f,%f,%f,%s')
         
-    def make_tel_vec(self):
-        return self.make_label_vec()
+    def gen_instname_vec(self):
+        return self.gen_label_vec()
     
-    def get_inds(self, label):
-        tel_vec = self.make_tel_vec()
-        inds = np.where(tel_vec == label)[0]
+    def gen_inds(self, label):
+        instname_vec = self.gen_instname_vec()
+        inds = np.where(instname_vec == label)[0]
         return inds
-    
+ 
     def get(self, instnames):
-        """Returns a view into sub data objects.
+        """Returns a view into sub data objects. Really just a forward method, propogating instnames -> labels.
 
         Args:
-            instnames (list): A list of instnmes (str).
+            instnames (list): A list of instruments as strings.
 
         Returns:
-            CompositeData: A view into the original data object.
+            CompositeData: A view into the original data object (not a copy).
         """
         return super().get(labels=instnames)
-    
-    @property
-    def tel_vec(self):
-        return self.label_vec
- 
- 
-def group_vis_nir(data, cut=1000):
-    """Groups vis and nir data into two different dicts.
-
-    Args:
-        data (CompositeRVData): The RV data.
-        cut (float, optional): The cut between vis and nir in nm. Defaults to 1000 nm.
-
-    Returns:
-        CompositeRVData: The vis data.
-        CompositeRVData: The nir data.
-    """
-    data_vis = CompositeRVData()
-    data_nir = CompositeRVData()
-    for _data in data.values():
-        if _data.wavelength < cut:
-            data_vis[_data.label] = _data
-        else:
-            data_nir[_data.label] = _data
-    return data_vis, data_nir
