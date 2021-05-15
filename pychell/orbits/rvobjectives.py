@@ -29,7 +29,7 @@ class RVLikelihood(optobj.Likelihood):
         residuals = self.compute_data_pre_noise_process(pars)
 
         # Compute the cov matrix
-        K = self.noise.compute_cov_matrix(pars, include_uncorr_error=True)
+        K = self.noise.compute_cov_matrix(pars)
         
         # Compute the determiniant and inverse of K
         try:
@@ -91,27 +91,22 @@ class RVLikelihood(optobj.Likelihood):
         
         comps = {}
         
-        # Data times
-        data_t = np.copy(self.data_t)
+        # Data times for this label
+        comps[self.label + "_data_t"] = np.copy(self.data_t)
         
         # Data RVs - trends
         data_rvs = np.copy(self.data_rv)
-        data_rvs -= self.model.apply_offsets(pars, data_t, instname=None)
+        comps[self.label + "_data_rvs"] = self.model.apply_offsets(data_rvs, pars, instname=None)
         
         # Get residuals
         residuals_with_noise = self.compute_data_pre_noise_process(pars)
         
-        # Data errrors
-        data_rvs_error = self.noise.compute_data_errors(pars, include_gp_error=True, data_with_noise=residuals_with_noise)
-        
-        # Store in comps
-        comps[self.label + "_data_t"] = data_t
-        comps[self.label + "_data_rvs"] = data_rvs
-        comps[self.label + "_data_rvs_error"] = data_rvs_error
+        # Intrinsic + Jitter errors
+        comps[self.label + "_data_rvs_error"] = self.noise.compute_data_errors(pars, include_gp_error=False, data_with_noise=residuals_with_noise)
         
         # Standard GP
         if isinstance(self.noise, optnoise.CorrelatedNoiseProcess):
-            gp_mean, gp_unc = self.noise.realize(pars, data_with_noise=residuals_with_noise, xpred=data_t, return_gp_error=True)
+            gp_mean, gp_unc = self.noise.realize(pars, data_with_noise=residuals_with_noise, xpred=comps[self.label + "_data_t"], return_gp_error=True)
             comps[self.label + "_gp_mean"] = gp_mean
             comps[self.label + "_gp_unc"] = gp_unc
 
@@ -275,7 +270,6 @@ class RVChromaticLikelihoodJ3(RVLikelihood):
         
         return comps
 
-
 class RVPosterior(optobj.Posterior):
     """A class for RV Posteriors
     """
@@ -322,6 +316,29 @@ class RVPosterior(optobj.Posterior):
         
         return comps
     
+    def gen_label_vec(self):
+        
+        # Times
+        t = np.array([], dtype=float)
+        for like in self.values():
+            t = np.concatenate((t, like.data_t))
+        
+        # Labels
+        label_vec = np.array([], dtype='<U50')
+        for like in self.values():
+            label_vec = np.concatenate((label_vec, np.full(len(like.data_t), fill_value=like.label, dtype='<U50')))
+            
+        ss = np.argsort(t)
+        label_vec = label_vec[ss]
+        return label_vec
+    
+    def gen_like_inds(self):
+        like_label_vec = self.gen_label_vec()
+        inds = {}
+        for like in self.values():
+            inds[like.label] = np.where(like_label_vec == like.label)[0]
+        return inds
+    
     @property
     def data_t(self):
         t = np.array([], dtype=float)
@@ -333,37 +350,24 @@ class RVPosterior(optobj.Posterior):
     
     @property
     def data_rv(self):
+        t = np.array([], dtype=float)
         rv = np.array([], dtype=float)
         for like in self.values():
             rv = np.concatenate((rv, like.data_rv))
+            t = np.concatenate((t, like.data_t))
+        ss = np.argsort(t)
+        rv = rv[ss]
         return rv
     
     @property
     def data_rverr(self):
+        t = np.array([], dtype=float)
         rverr = np.array([], dtype=float)
         for like in self.values():
+            t = np.concatenate((t, like.data_t))
             rverr = np.concatenate((rverr, like.data_rverr))
-        rverr = rverr[self.like_inds]
+        ss = np.argsort(t)
+        rverr = rverr[ss]
         return rverr
 
-    
-  
-    @property
-    def instname_vec(self):
-        instnames = np.array([], dtype=float)
-        t = np.array([], dtype=float)
-        for like in self.values():
-            instnames = np.concatenate((instnames, like.data.gen_tel_vec()))
-            t = np.concatenate(())
-        #instnames = instnames[]
-        return instnames
-    
-    @property
-    def data_inds(self):
-        instnames = self.instnames_vec
-        sorting_inds = {}
-        for like in self.likes():
-            for data in like.data.values():
-                inds = np.where(data.label == self.instnames)
-                sorting_inds[data.label] = inds
-        return sorting_inds
+        
