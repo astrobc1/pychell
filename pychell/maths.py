@@ -25,14 +25,39 @@ import numba
 import numba.types as nt
 from llc import jit_filter_function
 
-def compute_R2_stat(y1, y2, w=None):
+def compute_R2_stat(ydata, ymodel, w=None):
+    """Computes the weighted R2 stat.
+
+    Args:
+        ydata (np.ndarray): The observations.
+        ymodel (np.ndarray): The model.
+        w (np.ndarray, optional): The weights. Defaults to uniform weights (so unweighted).
+
+    Returns:
+        float: The weighted R2 stat.
+    """
+    
+    # Weights
     if w is None:
-        w = np.ones_like(y1)
+        w = np.ones_like(ydata)
     w = w / np.nansum(w)
-    y1bar = weighted_mean(y1, w)
-    sstot = np.nansum((y1 - ybar)**2)
-    ssres = np.nansum((y1 - y2)**2)
-    return 1 - (ss_res / ss_tot)
+    
+    # Weighted mean of the data
+    ybardata = weighted_mean(ydata, w)
+    
+    # SStot (total sum of squares)
+    sstot = np.nansum(w * (ydata - ybardata)**2)
+    
+    # Residuals
+    resid = ydata - ymodel
+    
+    # SSres
+    ssres = np.nansum(w * resid**2)
+    
+    # R2 stat
+    r2 = 1 - (ssres / sstot)
+    
+    return r2
 
 
 def outer_fun(fun, x, y):
