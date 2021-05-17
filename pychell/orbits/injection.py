@@ -122,8 +122,8 @@ class SoloInjectionRecovery:
 
 class InjectionRecovery:
 
-    def __init__(self, data=None, p0=None, planets_dict=None, optimizer_type=optnelder.NelderMead, sampler_type=optsamplers.AffInv, scorer_type=pcrvobj.RVPosterior,
-                 likelihood_type=pcrvobj.RVLikelihood, kernel_type=optnoise.NoiseKernel, model_type=pcrvmodels.RVModel,
+    def __init__(self, data=None, p0=None, planets_dict=None, optimizer_type=optnelder.NelderMead, sampler_type=optsamplers.emceeSampler, scorer_type=pcrvobj.RVPosterior,
+                 likelihood_type=pcrvobj.RVLikelihood, kernel_type=optnoise.WhiteNoiseProcess, model_type=pcrvmodels.RVModel,
                  output_path=None, star_name=None, k_range=(1, 100), p_range=(1.1, 100), k_resolution=20, p_resolution=30, p_shift=0.12345,
                  ecc_inj=0, w_inj=np.pi, tp_inj=None, scaling='log', slurm=False,
                  gaussian_shift=None, gaussian_unc=None, uniform_shift=None, jeffreys_shift=None,
