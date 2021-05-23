@@ -353,7 +353,7 @@ class RVProblem(optframeworks.OptProblem):
         t_hr = np.linspace(t_start - dt / 100, t_end + dt / 100, num=n_model_pts)
         
         # Create hr planet model
-        model_arr_hr = self.like0.model._builder(pars, t_hr)
+        model_arr_hr = self.like0.model.builder(pars, t_hr)
 
         # Plot the planet model
         fig.add_trace(plotly.graph_objects.Scatter(x=t_hr - time_offset, y=model_arr_hr, line=dict(color='black', width=2), name="<b>Keplerian Model</b>"), row=1, col=1)
@@ -479,8 +479,8 @@ class RVProblem(optframeworks.OptProblem):
                     fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                              y=np.concatenate([gp_upper, gp_lower[::-1]]),
                                              fill='toself',
-                                             line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.8), width=1),
-                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.6),
+                                             line=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.5), width=1),
+                                             fillcolor=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.3),
                                              name=label))
                     color_index += 1
                     
@@ -495,11 +495,11 @@ class RVProblem(optframeworks.OptProblem):
                     
                     # Data on top of the GP, only offset by gammas
                     _data = data_arr[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12)), row=1, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_data, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.95), size=14, line=dict(width=2, color='DarkSlateGrey'))), row=1, col=1)
                     
                     # Residuals for this instrument after the noise kernel has been removed
                     _residuals = residuals_no_noise[like.model.data_inds[data.label]]
-                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], size=12), showlegend=False), row=2, col=1)
+                    fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=_residuals, name="<b>" + data.label + "</b>", error_y=_yerr, mode='markers', marker=dict(color=pcutils.csscolor_to_rgba(PLOTLY_COLORS[color_index%len(PLOTLY_COLORS)], a=0.95), size=14, line=dict(width=2, color='DarkSlateGrey')), showlegend=False), row=2, col=1)
                     
                     # Increase color index
                     color_index += 1
@@ -1426,7 +1426,57 @@ class RVProblem(optframeworks.OptProblem):
             
         return sa_dict
             
-    def compute_densities(self, mcmc_result, mstar, mstar_unc, rplanets_dict=None):
+    # def compute_densities(self, mcmc_result, mstar, mstar_unc, rplanets_dict=None):
+    #     """Computes the value of msini and uncertainty for each planet in units of Earth Masses.
+
+    #     Args:
+    #         mcmc_result (dict): The returned value from calling sample.
+    #     Returns:
+    #         (dict): The density, lower, and upper uncertainty of each planet in a dictionary, in units of grams/cm^3.
+    #     """
+    #     if mstar_unc is None:
+    #         mstar_unc = (0, 0)
+    #     if rplanets_dict is None:
+    #         rplanets_dict = {}
+            
+    #     mplanets = self.compute_masses(mcmc_result, mstar, mstar_unc)
+    #     rho_dict = {} # In jupiter masses
+    #     for planet_index in self.planets_dict:
+    #         perdist = []
+    #         tpdist = []
+    #         eccdist = []
+    #         wdist = []
+    #         kdist = []
+    #         mdist = []
+    #         rhodist = []
+    #         pars = copy.deepcopy(mcmc_result["pmed"])
+    #         for i in range(mcmc_result["n_steps"]):
+    #             for pname in self.planets_dict[planet_index]["basis"].pnames:
+    #                 if pars[pname].vary:
+    #                     ii = pars.index_from_par(pname, rel_vary=True)
+    #                     pars[pname].value = mcmc_result["chains"][i, ii]
+    #             per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
+    #             perdist.append(per)
+    #             tpdist.append(tp)
+    #             eccdist.append(ecc)
+    #             wdist.append(w)
+    #             kdist.append(k)
+    #             mplanet = planetmath.compute_mass(per, ecc, k, mstar)
+    #             rplanet_val = rplanets_dict[planet_index][0]
+    #             rplanet_unc_low = rplanets_dict[planet_index][1]
+    #             rplanet_unc_high = rplanets_dict[planet_index][2]
+    #             rhodist.append(planetmath.compute_density(mplanet, rplanet_val))
+    #         val, unc_low, unc_high = self.sampler.chain_uncertainty(rhodist)
+    #         if planet_index in rplanets_dict[planet_index]:
+    #             mplanet = mplanets[planet_index][0]
+    #             unc_low = np.sqrt(unc_low**2 + planetmath.compute_density_deriv_rplanet(rplanet_val, mplanet)**2 * (rplanet_unc_low * planetmath.RADIUS_EARTH_CM)**2)
+    #             unc_high = np.sqrt(unc_high**2 + planetmath.compute_density_deriv_rplanet(rplanet_val, mplanet)**2 * (rplanet_unc_high * planetmath.RADIUS_EARTH_CM)**2)
+    #             rho_dict[planet_index] = (val, unc_low, unc_high)
+    #         else:
+    #             rho_dict[planet_index] = (val, unc_low, unc_high)
+    #     return rho_dict
+    
+    def compute_densities(self, mcmc_result, mstar, mstar_unc=None, rplanets_dict=None):
         """Computes the value of msini and uncertainty for each planet in units of Earth Masses.
 
         Args:
@@ -1439,42 +1489,19 @@ class RVProblem(optframeworks.OptProblem):
         if rplanets_dict is None:
             rplanets_dict = {}
             
-        sa_dict = {} # In AU
         mplanets = self.compute_masses(mcmc_result, mstar, mstar_unc)
         rho_dict = {} # In jupiter masses
         for planet_index in self.planets_dict:
-            perdist = []
-            tpdist = []
-            eccdist = []
-            wdist = []
-            kdist = []
-            mdist = []
-            rhodist = []
-            pars = copy.deepcopy(mcmc_result["pmed"])
-            for i in range(mcmc_result["n_steps"]):
-                for pname in self.planets_dict[planet_index]["basis"].pnames:
-                    if pars[pname].vary:
-                        ii = pars.index_from_par(pname, rel_vary=True)
-                        pars[pname].value = mcmc_result["chains"][i, ii]
-                per, tp, ecc, w, k = self.planets_dict[planet_index]["basis"].to_standard(pars)
-                perdist.append(per)
-                tpdist.append(tp)
-                eccdist.append(ecc)
-                wdist.append(w)
-                kdist.append(k)
-                mplanet = planetmath.compute_mass(per, ecc, k, mstar)
-                rplanet_val = rplanets_dict[planet_index][0]
-                rplanet_unc_low = rplanets_dict[planet_index][1]
-                rplanet_unc_high = rplanets_dict[planet_index][2]
-                rhodist.append(planetmath.compute_density(mplanet, rplanet_val))
-            val, unc_low, unc_high = self.sampler.chain_uncertainty(rhodist)
-            if planet_index in rplanets_dict[planet_index]:
-                mplanet = mplanets[planet_index][0]
-                unc_low = np.sqrt(unc_low**2 + planetmath.compute_density_deriv_rplanet(rplanet_val, mplanet)**2 * rplanet_unc_low**2)
-                unc_high = np.sqrt(unc_high**2 + planetmath.compute_density_deriv_rplanet(rplanet_val, mplanet)**2 * rplanet_unc_high**2)
-                rho_dict[planet_index] = (val, unc_low, unc_high)
-            else:
-                rho_dict[planet_index] = (val, unc_low, unc_high)
+            mass = mplanets[planet_index][0] * planetmath.MASS_EARTH_GRAMS
+            mass_unc_low = mplanets[planet_index][1] * planetmath.MASS_EARTH_GRAMS
+            mass_unc_high = mplanets[planet_index][2] * planetmath.MASS_EARTH_GRAMS
+            radius = rplanets_dict[planet_index][0] * planetmath.RADIUS_EARTH_CM
+            radius_unc_low = rplanets_dict[planet_index][1] * planetmath.RADIUS_EARTH_CM
+            radius_unc_high = rplanets_dict[planet_index][2] * planetmath.RADIUS_EARTH_CM
+            rho = 3 * mass / (4 * np.pi * radius**3)
+            rho_unc_low = np.sqrt((3 / (4 * np.pi * radius**3))**2 * mass_unc_low**2 + (9 * mass / (4 * np.pi * radius**4))**2 * radius_unc_high**2)
+            rho_unc_high = np.sqrt((3 / (4 * np.pi * radius**3))**2 * mass_unc_high**2 + (9 * mass / (4 * np.pi * radius**4))**2 * radius_unc_low**2)
+            rho_dict[planet_index] = (rho, rho_unc_low, rho_unc_high)
         return rho_dict
             
     ######################################

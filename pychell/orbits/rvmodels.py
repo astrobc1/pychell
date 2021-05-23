@@ -37,10 +37,10 @@ class RVModel(optmodels.Model):
         self.time_zero = np.nanmean(data.gen_vec(key='x')) if time_zero is None else time_zero
             
         # Store the time vector to construct the model on the data grid.
-        self.data_t = data.gen_vec('t')
+        self.data_t = data.gen_vec('t', sort=True)
         
-        # Store per-instrument indices to properly offset the data.
-        self.data_inds = data.gen_inds_dict()
+        # Data indices
+        self.data_inds = data.indices
         
     def build_planet(self, pars, t, planet_index):
         """Builds a model for a single planet.
@@ -73,10 +73,10 @@ class RVModel(optmodels.Model):
         Returns:
             np.ndarray: The RV model for this planet
         """
-        _model = np.zeros_like(t)
+        model = np.zeros_like(t)
         for planet_index in self.planets_dict:
-            _model += self.build_planet(pars, t, planet_index)
-        return _model
+            model += self.build_planet(pars, t, planet_index)
+        return model
 
     def build_without_planet(self, pars, t, planet_index):
         """Builds the model without a planet.
@@ -89,9 +89,9 @@ class RVModel(optmodels.Model):
         Returns:
             np.ndarray: The model without the designated planet.
         """
-        model_arr_full = self._builder(pars, t)
+        model = self.builder(pars, t)
         planet_signal = self.build_planet(pars, t, planet_index)
-        return model_arr_full - planet_signal
+        return model - planet_signal
     
     def build_trend_zero(self, pars, t, instname=None):
         
@@ -125,13 +125,13 @@ class RVModel(optmodels.Model):
             
         return trend_global
         
-    def _builder(self, pars, t):
+    def builder(self, pars, t):
         
         # All planets
-        _model = self.build_planets(pars, t)
+        model = self.build_planets(pars, t)
         
         # Return model
-        return _model
+        return model
         
     def build(self, pars):
         """Builds the model using the specified parameters on the data grid.
@@ -142,8 +142,8 @@ class RVModel(optmodels.Model):
         Returns:
             np.ndarray: The full model.
         """
-        _model = self._builder(pars, self.data_t)
-        return _model
+        model = self.builder(pars, self.data_t)
+        return model
 
     def apply_offsets(self, rv_vec, pars, t=None, instname=None):
         """Apply gamma offsets (zero points only) to the data. Linear and quadratic terms are applied to the model.
@@ -226,6 +226,7 @@ class RVModel(optmodels.Model):
     @property
     def n_planets(self):
         return len(self.planets_dict)
+
 
 class AbstractOrbitBasis:
     """An abstract orbit basis class, not useful on its own. Each method must define to_standard and from_standard below.

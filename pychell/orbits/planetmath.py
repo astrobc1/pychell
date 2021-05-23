@@ -1,5 +1,5 @@
 import numpy as np
-from numba import njit
+from numba import njit, jit
 import pychell.maths as pcmath
 import scipy.constants
 
@@ -109,7 +109,7 @@ def compute_density(mplanet, rplanet):
     rho_cgs = (3 * mplanet_grams) / (4 * np.pi * rplanet_cm**3)
     return rho_cgs
 
-def compute_density_deriv_rplanet(mplanet, rplanet):
+def compute_density_deriv_rplanet(rplanet, mplanet):
     """A helper function that computes (d rho)/(d rplanet) in useful units given values for mass and radius of the planet.
 
     Args:
@@ -117,7 +117,7 @@ def compute_density_deriv_rplanet(mplanet, rplanet):
         rplanet (float): The radius of the planet in Earth units.
 
     Returns:
-        float: The derivative (d rho)/(d mplanet) evaluated at (mplanet, rplanet).
+        float: The derivative (d rho)/(d mplanet) evaluated at (mplanet, rplanet) in units of cgs / cm.
     """
     mplanet_grams = mplanet * MASS_EARTH_GRAMS
     rplanet_cm = rplanet * RADIUS_EARTH_CM

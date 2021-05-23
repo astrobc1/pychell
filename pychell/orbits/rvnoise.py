@@ -104,14 +104,14 @@ class ChromaticProcessJ1(optnoise.GaussianProcess):
         
         # Add per-instrument jitter terms in quadrature
         for data in self.data.values():
-            inds = self.data_inds[data.label]
+            inds = self.data.indices[data.label]
             pname = "jitter_" + data.label
             errors[inds] += pars[pname].value**2
             
         # Compute GP error
         if include_gp_error:
             for data in self.data.values():
-                inds = self.data_inds[data.label]
+                inds = self.data.indices[data.label]
                 if gp_error is None:
                     _, _gp_error = self.realize(pars, data_with_noise=data_with_noise, xpred=data.t, return_gp_error=True, instname=data.label)
                 errors[inds] += _gp_error**2
@@ -271,14 +271,14 @@ class ChromaticProcessJ2(optnoise.GaussianProcess):
         
         # Add per-instrument jitter terms in quadrature
         for data in self.data.values():
-            inds = self.data_inds[data.label]
+            inds = self.data.indices[data.label]
             pname = "jitter_" + data.label
             errors[inds] += pars[pname].value**2
             
         # Compute GP error
         if include_gp_error:
             for data in self.data.values():
-                inds = self.data_inds[data.label]
+                inds = self.data.indices[data.label]
                 if gp_error is None:
                     _, _gp_error = self.realize(pars, data_with_noise=data_with_noise, xpred=data.t, return_gp_error=True, wavelength=data.wavelength)
                 errors[inds] += _gp_error**2
@@ -476,14 +476,14 @@ class ChromaticProcessJ3(optnoise.GaussianProcess):
         
         # Add per-instrument jitter terms in quadrature
         for data in self.data.values():
-            inds = self.data_inds[data.label]
+            inds = self.data.indices[data.label]
             pname = "jitter_" + data.label
             errors[inds] += pars[pname].value**2
             
         # Compute GP error
         if include_gp_error:
             for data in self.data.values():
-                inds = self.data_inds[data.label]
+                inds = self.data.indices[data.label]
                 if gp_error is None:
                     _, _gp_error = self.realize(pars, data_with_noise=data_with_noise, xpred=data.t, return_gp_error=True, instname=data.label)
                 errors[inds] += _gp_error**2
@@ -584,14 +584,14 @@ class ChromaticProcessJ4(optnoise.GaussianProcess):
         
         # Add per-instrument jitter terms in quadrature
         for data in self.data.values():
-            inds = self.data_inds[data.label]
+            inds = self.data.indices[data.label]
             pname = "jitter_" + data.label
             errors[inds] += pars[pname].value**2
             
         # Compute GP error
         if include_gp_error:
             for data in self.data.values():
-                inds = self.data_inds[data.label]
+                inds = self.data.indices[data.label]
                 if gp_error is None:
                     _, _gp_error = self.realize(pars, data_with_noise=data_with_noise, xpred=data.t, return_gp_error=True, instname=data.label)
                 errors[inds] += _gp_error**2

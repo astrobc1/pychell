@@ -125,11 +125,6 @@ class CompositeRVData(optdata.CompositeDataS1d):
         
     def gen_instname_vec(self):
         return self.gen_label_vec()
-    
-    def gen_inds(self, label):
-        instname_vec = self.gen_instname_vec()
-        inds = np.where(instname_vec == label)[0]
-        return inds
  
     def get(self, instnames):
         """Returns a view into sub data objects. Really just a forward method, propogating instnames -> labels.
