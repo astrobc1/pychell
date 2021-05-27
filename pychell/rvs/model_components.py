@@ -1,7 +1,7 @@
 # Science/math
 from scipy import constants as cs  # cs.c = speed of light in m/s
 import numpy as np  # Math, Arrays
-from scipy.special import legendre
+from scipy.special import legendre, eval_legendre
 
 # Graphics
 import matplotlib.pyplot as plt
@@ -1243,7 +1243,7 @@ class LegPolyWavelengthSolution(WavelengthSolution):
         # Build full polynomial
         wave_sol = np.zeros(self.nx)
         for i in range(self.n_poly_pars):
-            wave_sol += coeffs[i] * scipy.special.eval_legendre(i, pixel_grid)
+            wave_sol += coeffs[i] * eval_legendre(i, pixel_grid)
         
         return wave_sol
 

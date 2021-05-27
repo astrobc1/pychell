@@ -658,7 +658,8 @@ class ForwardModel:
             fig.text(0.015, 0.5, 'Data, Model, Residuals', fontsize=10, rotation=90, verticalalignment='center', horizontalalignment='center')
         
         # Save
-        #plt.subplots_adjust(left=0.05, bottom=0.05, right=None, top=0.95, wspace=None, hspace=None)
+        plt.subplots_adjust(left=0.07, bottom=0.17, right=None, top=0.95, wspace=None, hspace=None)
+        #plt.tight_layout()
         plt.savefig(fname)
         plt.close()
 

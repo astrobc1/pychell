@@ -384,6 +384,8 @@ class RVProblem(optframeworks.OptProblem):
                 for data in like.noise.data.values():
                     
                     print("Plotting Instrument: " + data.label)
+                    if data.label == "HIRES":
+                        continue
                     
                     # Smartly sample gp
                     t_hr_gp = np.array([], dtype=float)
@@ -418,6 +420,9 @@ class RVProblem(optframeworks.OptProblem):
                 data_arr = np.copy(like.data_rv)
                 data_arr = like.model.apply_offsets(data_arr, pars)
                 for data in like.data.values():
+                    
+                    if data.label == "HIRES":
+                        continue
                     
                     # Data errors for this instrument
                     _errors = errors[like.model.data_inds[data.label]]
