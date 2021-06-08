@@ -1304,7 +1304,10 @@ class RVProblem(optframeworks.OptProblem):
             aicc = _optprob.optimizer.obj.compute_aicc(pbest)
             
             # Red chi 2
-            redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest, include_gp_error=True)
+            try:
+                redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest, include_gp_error=True)
+            except:
+                redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest)
             
             # Store
             model_comp_results.append({'planets_dict': planets_dict, 'lnL': lnL, 'bic': bic, 'aicc': aicc, 'pbest': pbest, 'redchi2': redchi2})
