@@ -283,7 +283,10 @@ class RVPosterior(optobj.Posterior):
         for like in self.values():
             residuals_with_noise = like.compute_data_pre_noise_process(pars)
             residuals_no_noise = like.compute_data_post_noise_process(pars)
-            errs = like.noise.compute_data_errors(pars, include_gp_error=include_gp_error, gp_error=gp_error, data_with_noise=residuals_with_noise)
+            try:
+                errs = like.noise.compute_data_errors(pars, include_gp_error=include_gp_error, gp_error=gp_error, data_with_noise=residuals_with_noise)
+            except:
+                errs = like.noise.compute_data_errors(pars)
             residuals = np.concatenate((residuals, residuals_no_noise))
             errors = np.concatenate((errors, errs))
         
