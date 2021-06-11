@@ -273,3 +273,46 @@ def tp_to_tc(tp, per, ecc, w):
     tc = tp + per / (2 * np.pi) * (ee - ecc * np.sin(ee))         # time of conjunction
 
     return tc
+
+@njit(nogil=True)
+def planet_signal(t, per, tp, ecc, w, k):
+    """Computes the RV signal of one planet for a given time vector.
+
+    Args:
+        t (np.ndarray): The times in units of per.
+        k (float): The RV semi-amplitude.
+        per (float): The period of the orbit in units of t.
+        tc (float): The time of conjunction.
+        ecc (float): The eccentricity of the bounded orbit.
+        w (float): The angle of periastron
+        tp (float): The time of perisatron
+
+    Returns:
+        np.ndarray: The rv signal for this planet.
+    """
+
+    # Circular orbit
+    if ecc == 0.0:
+        m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
+        return k * np.cos(m + w)
+
+    # Period must be positive
+    if per <= 0:
+        per = 1E-6
+        
+    # Force circular orbit if ecc is negative
+    if ecc < 0:
+        ecc = 0
+        m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
+        return k * np.cos(m + w)
+    
+    # Force bounded orbit if ecc > 1
+    if ecc > 0.99:
+        ecc = 0.99
+        
+    # Calculate the eccentric anomaly (ea) from the mean anomaly (ma). Requires solving kepler's eq. if ecc>0.
+    ta = true_anomaly(t, tp, per, ecc)
+    rv = k * (np.cos(ta + w) + ecc * np.cos(w))
+
+    # Return rv
+    return rv

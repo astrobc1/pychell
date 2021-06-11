@@ -622,7 +622,7 @@ def combine_rvs_weighted_mean(rvs, weights, n_obs_nights):
     for i in range(n_spec):
         rr = rvs_offset[:, i, :].flatten()
         ww = weights[:, i, :].flatten()
-        rvs_single_out[i], rvs_single_out[i] = pcmath.weighted_combine(rr, ww)
+        rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rr, ww)
         
     for i, f, l in nightly_iteration(n_obs_nights):
         rr = rvs_offset[:, f:l, :].flatten()

@@ -473,16 +473,20 @@ class ForwardModel:
         self.data = pcdata.SpecData1d.from_forward_model(input_file, self)
         
         # Init the models
-        self.init_models(config, model_blueprints)
+        try:
+            self.init_models(config, model_blueprints)
+            
+            # N iters
+            self.n_iters_rvs = self.n_template_fits
+            self.index_offset = int(not self.models_dict['star'].from_synthetic)
+            self.n_iters_opt = self.n_template_fits + self.index_offset
         
-        # N iters
-        self.n_iters_rvs = self.n_template_fits
-        self.index_offset = int(not self.models_dict['star'].from_synthetic)
-        self.n_iters_opt = self.n_template_fits + self.index_offset
-    
-        # Storage arrays after each iteration
-        # Each entry is a tuple for each iteration: (best_fit_pars, RMS, FCALLS)
-        self.opt_results = []
+            # Storage arrays after each iteration
+            # Each entry is a tuple for each iteration: (best_fit_pars, RMS, FCALLS)
+            self.opt_results = []
+        except:
+            print(self.data.input_file)
+        
 
     def init_chunks(self, model_blueprints):
         good = np.where(self.data.mask)[0]

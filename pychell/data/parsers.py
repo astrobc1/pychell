@@ -1,9 +1,10 @@
 # Import the barycorrpy module
+import warnings
 try:
     from barycorrpy import get_BC_vel
     from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
 except:
-    pass
+    warnings.warn("Could not load in barycorrpy", ImportWarning)
 from astropy.time import Time
 import sklearn.cluster
 import glob
