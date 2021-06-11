@@ -16,7 +16,6 @@ torch>=1.5.1
 streamlit>=0.73.1
 plotly>=4.14.1
 emcee>=3.0.2
-bayesoptimize>=1.0.2
 webcolors>=1.11.1
 pylatex>=1.4.1
 mpld3>=0.5.2
