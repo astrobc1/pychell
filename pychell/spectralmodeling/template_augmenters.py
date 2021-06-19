@@ -1,192 +1,152 @@
-# Python built in modules
-import copy
-import glob # File searching
-import os # Making directories
-import importlib.util # importing other modules from files
-import warnings # ignore warnings
-import sys # sys utils
-import pickle
+# Base Python
+import os
+import sys
 import warnings
-from sys import platform # plotting backend
-from pdb import set_trace as stop # debugging
 
 # Graphics
-import matplotlib # to set the backend
 import matplotlib.pyplot as plt # Plotting
 import pychell
-plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
+try:
+    plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
+except:
+    pass
 
-# Science/math
+# Maths
 from scipy import constants as cs # cs.c = speed of light in m/s
-import numpy as np # Math, Arrays
-import scipy.signal
+import numpy as np
 try:
     import torch
 except:
     warnings.warn("Could not import pytorch!")
 import scipy.interpolate # Cubic spline LSQ fitting
 
-# llvm
-from numba import njit, jit, prange
+# Pychell deps
+import pychell.maths as pcmath
 
-# Pychell modules
-import pychell.config as pcconfig
-import pychell.maths as pcmath # mathy equations
-from pychell.maths import cspline_interp
-import pychell.rvs.forward_models as pcforwardmodels # the various forward model implementations
-import pychell.data as pcdata # the data objects
-import pychell.rvs.model_components as pcmodelcomponents # the data objects
-import pychell.rvs.target_functions as pctargetfuns
-import pychell.utils as pcutils
-import pychell.rvs.rvcalc as pcrvcalc
-
-def cubic_spline_lsq(forward_models, iter_index=None):
-    """Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. The weighting scheme includes (possible inversly) the rms of the fit, the amount of telluric absorption. Weights are also applied such that the barycenter sampling is approximately uniform from vmin to vmax.
-
-    Args:
-        forward_models (ForwardModels): The list of forward model objects
-        iter_index (int): The iteration to use.
-        nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
-    """
+class TemplateAugmenter:
     
-    # Which nights / spectra to consider
-    if hasattr(forward_models, 'nights_for_template') and forward_models.nights_for_template is not None and len(forward_models.nights_for_template) > 0:
-        nights_for_template = forward_models.nights_for_template
-        if nights_for_template == 'best':
-            nights_for_template = [determine_best_night(rms, forward_models.n_obs_nights)]
-        template_spec_indices = []
-        for night in nights_for_template:
-            template_spec_indices += list(forward_models[0].get_all_spec_indices_from_night(night, forward_models.n_obs_nights))
-    else:
-        nights_for_template = np.arange(forward_models.n_nights).astype(int)
-        template_spec_indices = np.arange(forward_models.n_spec).astype(int)
-
-    # Unpack the current stellar template
-    current_stellar_template = np.copy(forward_models.templates_dict['star'])
-    
-    # Storage arrays
-    wave_star_rest = [] 
-    residuals_lr = [] 
-    tot_weights_lr = []
-    
-    # Fetch the fit metric
-    fit_metrics = np.zeros((forward_models.n_spec, forward_models.n_chunks))
-    for ispec in range(forward_models.n_spec):
-        for ichunk in range(forward_models.n_chunks):
-            fit_metrics[ispec, ichunk] = np.abs(forward_models[ispec].opt_results[-1][ichunk]['fbest'])
-    
-    # Weights according to fit metric
-    fit_weights = 1 / fit_metrics**2
-    good = np.where(np.isfinite(fit_weights))[0]
-    bad = np.where(~np.isfinite(fit_weights))[0]
-    if good.size == 0:
-        fit_weights = np.ones(shape=(forward_models.n_spec, forward_models.n_chunks))
-    
-    # Unpack bc vels
-    bc_vels = np.array([fwm.data.bc_vel for fwm in forward_models])
-            
-    # Loop over spectra
-    for ispec in range(forward_models.n_spec):
+    def __init__(self, use_nights=None, downweight_tellurics=True, max_thresh=None):
+        self.use_nights = use_nights
+        self.downweight_tellurics = downweight_tellurics
+        self.max_thresh = max_thresh
         
-        # Unpack
-        fwm = forward_models[ispec]
+    def augment_templates(self, pars_all, data, spectral_model):
+        pass
+
+class CubicSplineLSQ(TemplateAugmenter):
+    
+    def augment_templates(self, specrvprob, iter_index):
         
-        for ichunk, sregion in enumerate(fwm.chunk_regions):
+        # Which nights / spectra to consider
+        if self.use_nights is None:
             
+            # Default use all nights
+            self.use_nights = np.arange(specrvprob.n_nights).astype(int)
+
+        # Unpack the current stellar template
+        current_stellar_template = np.copy(specrvprob.spectral_model.templates_dict["star"])
+        
+        # Get the fit metric
+        fit_metrics = np.full(specrvprob.n_spec, np.nan)
+        for ispec in range(specrvprob.n_spec):
+            fit_metrics[ispec] = np.abs(specrvprob.opt_results[ispec, iter_index]["fbest"])
+        
+        # Weights according to fit metric
+        fit_weights = 1 / fit_metrics**2
+        good = np.where(np.isfinite(fit_weights))[0]
+        bad = np.where(~np.isfinite(fit_weights))[0]
+        if good.size == 0:
+            fit_weights = np.ones(specrvprob.n_spec)
+            
+        wave_star_rest = []
+        residuals = []
+        weights = []
+        
+        # Loop over data and build residuals
+        for ispec in range(specrvprob.n_spec):
+                
+            # Best fit pars
+            pars = specrvprob.opt_results[ispec, iter_index]["pbest"]
+        
             # Init the chunk
-            templates_dict_chunked = fwm.init_chunk(forward_models.templates_dict, sregion)
-            
-            # Get the best fit pars
-            pars = fwm.opt_results[-1][ichunk]['xbest']
+            specrvprob.spectral_model.initialize(pars, specrvprob.data[ispec], iter_index=iter_index)
         
-            # Generate the residuals
-            wave_data = fwm.models_dict['wavelength_solution'].build(pars)
-            _res = (fwm.data.flux_chunk - fwm.build_full(pars, templates_dict_chunked))[1]
-            residuals_lr += _res.tolist()
+            # Generate the low res model
+            wave_data, model_lr = specrvprob.spectral_model.build(pars)
+            
+            # Residuals
+            residuals_lr = specrvprob.data[ispec].flux - model_lr
+            residuals += residuals_lr.tolist()
 
             # Shift to a pseudo rest frame. All must start from same frame
-            if fwm.models_dict['star'].from_synthetic:
-                vel = -1 * pars[fwm.models_dict['star'].par_names[0]].value
+            if specrvprob.spectral_model.models_dict["star"].from_flat:
+                vel = specrvprob.data[ispec].bc_vel
             else:
-                vel = bc_vels[ispec]
+                vel = -1 * pars[specrvprob.spectral_model.models_dict["star"].par_names[0]].value
+                
             wave_star_rest += pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None).tolist()
 
-            # Telluric weights
-            tell_flux_hr = fwm.models_dict['tellurics'].build(pars, templates_dict_chunked['tellurics'], current_stellar_template[:, 0])
-            tell_flux_hr_shifted = pcmath.doppler_shift(current_stellar_template[:, 0], vel, flux=tell_flux_hr)
-            tell_flux_lr = np.interp(wave_data, current_stellar_template[:, 0], tell_flux_hr, left=np.nan, right=np.nan)
-            tell_weights = tell_flux_lr**4
+            # Telluric weights, must doppler shift them as well.
+            if self.downweight_tellurics:
+                tell_flux = specrvprob.spectral_model.models_dict["tellurics"].build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
+                tell_flux = pcmath.doppler_shift(wave_data, vel, flux=tell_flux)
+                tell_weights = tell_flux**2
             
-            # Almost final weights
-            tot_weights_lr += (fwm.data.mask_chunk * fit_weights[ispec, ichunk] * tell_weights).tolist()
+            # Final weights
+            _weights = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
+            weights += _weights.tolist()
+            
+        # Convert to numpy arrays
+        wave_star_rest = np.array(wave_star_rest)
+        residuals = np.array(residuals)
+        weights = np.array(weights)
+    
+        # Remove all bad pixels.
+        good = np.where(np.isfinite(wave_star_rest) & np.isfinite(residuals) & (weights > 0))[0]
+        wave_star_rest, residuals, weights = wave_star_rest[good], residuals[good], weights[good]
 
-    # Loop over spectra and also weight spectra according to the barycenter sampling
-    # Here we explicitly use a multiplicative combination of weights.
-    if len(template_spec_indices) == forward_models.n_spec and forward_models.use_bc_weights:
-        
-        # Generate the histogram
-        hist_counts, histx = np.histogram(bc_vels, bins=int(np.min([forward_models.n_spec, 10])), range=(np.min(bc_vels)-1, np.max(bc_vels)+1))
-        
-        # Check where we have no spectra (no observations in this bin)
-        hist_counts = hist_counts.astype(np.float64)
-        number_weights = 1 / hist_counts
-        bad = np.where(hist_counts == 0)[0]
+        # Sort the wavelengths
+        ss = np.argsort(wave_star_rest)
+        wave_star_rest, residuals, weights = wave_star_rest[ss], residuals[ss], weights[ss]
+    
+        # Knot points are roughly the detector grid.
+        # Ensure the data surrounds the knots.
+        knots_init = np.linspace(wave_star_rest[0] + 0.001, wave_star_rest[-1] - 0.001, num=specrvprob.spectral_model.sregion.pix_len())
+    
+        # Remove bad knots
+        bad_knots = []
+        for iknot in range(len(knots_init) - 1):
+            n = np.where((wave_star_rest > knots_init[iknot]) & (wave_star_rest < knots_init[iknot+1]))[0].size
+            if n == 0:
+                bad_knots.append(iknot)
+        knots = np.delete(knots_init, bad_knots)
+    
+        # Do the fit
+        weights /= np.nansum(weights) # probably irrelevant
+        spline_fitter = scipy.interpolate.LSQUnivariateSpline(wave_star_rest, residuals, t=knots, w=weights, k=3, ext=1)
+    
+        # Use the fit to determine the hr residuals to add
+        residuals_hr_fit = spline_fitter(current_stellar_template[:, 0])
+
+        # Remove bad regions
+        bad = np.where((current_stellar_template[:, 0] <= knots[0]) | (current_stellar_template[:, 0] >= knots[-1]))[0]
         if bad.size > 0:
-            number_weights[bad] = 0
-            
-        # Normalize
-        number_weights /= np.nansum(number_weights)
-        for ispec in range(forward_models.n_spec):
-            inds = np.where(histx >= bc_vels[ispec])[0][0] - 1
-            tot_weights_lr[:, ispec] *= number_weights[inds]
-            
-    # Now to co-add residuals according to a least squares cubic spline
-    # Flatten the arrays
-    wave_star_rest = np.array(wave_star_rest)
-    residuals_lr = np.array(residuals_lr)
-    tot_weights_lr = np.array(tot_weights_lr)
-    
-    # Remove all bad pixels.
-    good = np.where(np.isfinite(wave_star_rest) & np.isfinite(residuals_lr) & (tot_weights_lr > 0))[0]
-    wave_star_rest, residuals_lr, tot_weights_lr = wave_star_rest[good], residuals_lr[good], tot_weights_lr[good]
+            residuals_hr_fit[bad] = 0
 
-    # Sort the wavelengths
-    ss = np.argsort(wave_star_rest)
-    wave_star_rest, residuals_lr, tot_weights_lr = wave_star_rest[ss], residuals_lr[ss], tot_weights_lr[ss]
+        # Augment the template
+        new_flux = current_stellar_template[:, 1] + residuals_hr_fit
     
-    # Knot points are roughly the detector grid.
-    knots_init = np.linspace(wave_star_rest[0]+0.001, wave_star_rest[-1]-0.001, num=forward_models[0].sregion_order.pix_len())
+        # Force the max to be less than 1.
+        if self.max_thresh is not None:
+            bad = np.where(new_flux > self.max_thresh)[0]
+            if bad.size > 0:
+                new_flux[bad] = self.max_thresh
     
-    # Remove bad knots
-    bad_knots = []
-    for iknot in range(len(knots_init) - 1):
-        n = np.where((wave_star_rest > knots_init[iknot]) & (wave_star_rest < knots_init[iknot+1]))[0].size
-        if n == 0:
-            bad_knots.append(iknot)
-    knots = np.delete(knots_init, bad_knots)
+        # Update the template
+        specrvprob.spectral_model.templates_dict['star'][:, 1] = new_flux
     
-    # Do the fit
-    tot_weights_lr /= np.nansum(tot_weights_lr) # probably irrelevant
-    spline_fitter = scipy.interpolate.LSQUnivariateSpline(wave_star_rest, residuals_lr, t=knots[1:-1], w=tot_weights_lr, k=3, ext=1)
-    
-    # Use the fit to determine the hr residuals to add
-    residuals_hr_fit = spline_fitter(current_stellar_template[:, 0])
 
-    # Remove bad regions
-    bad = np.where((current_stellar_template[:, 0] <= knots[0]) | (current_stellar_template[:, 0] >= knots[-1]))[0]
-    if bad.size > 0:
-        residuals_hr_fit[bad] = 0
 
-    # Augment the template
-    new_flux = current_stellar_template[:, 1] + residuals_hr_fit
-    
-    # Force the max to be less than 1.
-    bad = np.where(new_flux > 1)[0]
-    if bad.size > 0:
-        new_flux[bad] = 1
-    
-    forward_models.templates_dict['star'][:, 1] = new_flux
-    
 
 def weighted_median(forward_models, iter_index=None):
     """Augments the stellar template by considering the weighted median of the residuals on a common high resolution grid.

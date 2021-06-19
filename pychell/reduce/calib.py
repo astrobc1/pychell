@@ -36,7 +36,7 @@ def generate_master_flat(individuals, bias_subtraction=False, dark_subtraction=F
     
     # Generate a data cube
     n_flats = len(individuals)
-    flats_cube = pcdata.Image.generate_cube(individuals)
+    flats_cube = pcdata.Echellogram.generate_cube(individuals)
     
     # For each flat, subtract master dark and bias
     # Also normalize each image and remove obvious bad pixels

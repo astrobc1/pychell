@@ -29,11 +29,9 @@ from joblib import Parallel, delayed
 import pychell.utils as pcutils
 import pychell.maths as pcmath
 import pychell.data as pcdata
-import pychell.data.parsers as pcparsers
 import pychell.reduce.extract as pcextract
 import pychell.reduce.calib as pccalib
 import pychell.reduce.order_map as pcomap
-import pychell.config as pcconfig
 
 def reduce_night(user_redux_settings):
     """The main function to reduce a night of data.
@@ -138,8 +136,6 @@ def init_night(user_redux_settings):
     
     # Start with the default config
     config = {}
-    config.update(pcconfig.general_settings)
-    config.update(pcconfig.redux_settings)
     
     # Update with the default instrument dictionaries
     spec_module = importlib.import_module('pychell.data.' + user_redux_settings['spectrograph'].lower())
@@ -150,18 +146,19 @@ def init_night(user_redux_settings):
 
     # Get the base input directory. The reduction (output) folder will have this same name.
     base_input_path = os.path.basename(os.path.normpath(config['data_input_path']))
-    config['run_output_path'] = config['output_path_root'] + base_input_path + os.sep
+    config['output_path'] = config['output_path'] + base_input_path + os.sep
     
     # Make the output directories
     create_output_dirs(config)
     
     # Identify what's what.
     print('Analyzing the input files ...')
-    if hasattr(pcparsers, config['spectrograph'] + 'Parser'):
-        data_parser_class= getattr(pcparsers, config['spectrograph'] + 'Parser')
-        data = data_parser_class(config).categorize_raw_data(config)
+    if hasattr(spec_module, config['spectrograph'] + 'Parser'):
+        data_parser_class= getattr(spec_module, config['spectrograph'] + 'Parser')
+        data = data_parser_class(config["data_input_path"], config["output_path"]).categorize_raw_data(config)
     else:
         raise NotImplementedError("Must use a supported instrument for now, or implement a new instrument.")
+    
             
     return config, data
     
@@ -169,13 +166,13 @@ def init_night(user_redux_settings):
 def create_output_dirs(config):
     
     # Make the root output directory for this run
-    os.makedirs(config['run_output_path'], exist_ok=True)
+    os.makedirs(config['output_path'], exist_ok=True)
 
     # Trace information (profiles, refined y positions, order maps)
-    os.makedirs(config['run_output_path'] + 'trace', exist_ok=True)
+    os.makedirs(config['output_path'] + 'trace', exist_ok=True)
 
     # 1-dimensional spectra in fits files and 
-    os.makedirs(config['run_output_path'] + 'spectra', exist_ok=True)
+    os.makedirs(config['output_path'] + 'spectra', exist_ok=True)
 
     # Calibration (master bias, darks, flats, tellurics, wavecal)
-    os.makedirs(config['run_output_path'] + 'calib', exist_ok=True)
+    os.makedirs(config['output_path'] + 'calib', exist_ok=True)
