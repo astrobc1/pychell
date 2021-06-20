@@ -260,16 +260,14 @@ spectral_model_blueprints = {
         'class': 'SplineContinuum',
         'n_splines': 10,
         'poly_order': 2,
-        'poly_6': [-5.5E-9, -2E-6, 5.5E-9],
-        'poly_5': [-5.5E-8, -2E-6, 5.5E-8],
-        'poly_4': [-5.5E-7, -2E-6, 5.5E-7],
-        'poly_3': [-5.5E-6, -2E-6, 5.5E-6],
+        'poly_6': [-5.5E-9, -2E-8, 5.5E-9],
+        'poly_5': [-5.5E-8, -2E-7, 5.5E-8],
+        'poly_4': [-5.5E-7, -8E-6, 5.5E-7],
+        'poly_3': [-5.5E-6, -4E-6, 5.5E-6],
         'poly_2': [-5.5E-5, -2E-6, 5.5E-5],
         'poly_1': [-0.001, 1E-5, 0.001],
         'poly_0': [0.96, 1.0, 1.1],
-        'spline_lagrange': [0.3, 0.95, 1.2],
-        'n_delay': 0,
-        'n_delay_splines': 0
+        'spline_lagrange': [0.3, 0.95, 1.2]
     },
     
     # Hermite Gaussian LSF
@@ -292,14 +290,6 @@ spectral_model_blueprints = {
         'n_splines': 6,
         'poly_wave_lagrange': [-0.35, 0.01, 0.35],
         'spline_lagrange': [-0.35, 0.01, 0.35]
-    },
-    
-    # Fabry Perot cavity with two parameters
-    'fringing': {
-        'name': 'fringing',
-        'class': 'FPCavityFringing',
-        'logd': [19.02990269, 19.0299625 , 19.03006581],
-        'fin': [0.01, 0.04, 0.08]
     }
 }
 

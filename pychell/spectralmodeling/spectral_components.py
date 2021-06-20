@@ -476,6 +476,9 @@ class AugmentedStar(Star):
     def initialize(self, p0, data, templates_dict, iter_index=None):
         if iter_index == 0 and self.from_flat:
             p0[self.par_names[0]].vary = False
+        elif iter_index == 1 and self.from_flat:
+            p0[self.par_names[0]].vary = True
+            p0[self.par_names[0]].value = -1 * data.bc_vel
 
 
 #########################
