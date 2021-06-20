@@ -180,7 +180,6 @@ spectral_model_blueprints = {
         'input_file': 'iodine_gas_cell_chiron_master_40K.npz'
     },
     
-    # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'vis_tellurics',
         'class': 'TelluricsTAPAS',
@@ -198,9 +197,8 @@ spectral_model_blueprints = {
         }
     },
     
-    # The default blaze is a quadratic + splines.
     'continuum': {
-        'name': 'full_blaze', # The blaze model after a division from a flat field
+        'name': 'full_blaze',
         'class': 'SplineContinuum',
         'n_splines': 10,
         'poly_0': [1.02, 1.05, 1.4],
@@ -209,22 +207,19 @@ spectral_model_blueprints = {
         'spline_lagrange': [0.2, 0.95, 1.2]
     },
     
-    # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
         'class': 'HermiteLSF',
-        'hermdeg': 2,
+        'hermdeg': 6,
         'n_delay': 0,
         "nx": 128,
         'width': [0.009, 0.014, 0.018], # LSF width, in angstroms
-        'ak': [-0.01, 0.001, 0.01] # See arken et al for definition of ak
+        'ak': [-0.1, 0.001, 0.1] # See arken et al for definition of ak
     },
     
-    # Determined by splines
     'wavelength_solution': {
-        'name': 'csplines_wavesol',
+        'name': 'i2_wls',
         'class': 'SplineWavelengthSolution',
-        'poly_order': 6,
         'n_splines': 6,
         'poly_wave_lagrange': [-0.1, 0.01, 0.1],
         'spline_lagrange': [-0.1, 0.01, 0.1]

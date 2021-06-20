@@ -175,9 +175,7 @@ spectral_model_blueprints = {
     'gas_cell': {
         'name': 'iodine_gas_cell',
         'class': 'PerfectGasCell',
-        'input_file': 'iodine_gas_cell_minervanorth_0.1nm.npz',
-        'shift': [0, 0, 0],
-        'depth': [1, 1, 1]
+        'input_file': 'iodine_gas_cell_minervanorth_0.1nm.npz'
     },
     
     # Tellurics (from TAPAS)
@@ -217,15 +215,13 @@ spectral_model_blueprints = {
         'n_delay': 0,
         "nx": 128,
         'width': [0.016, 0.0229, 0.0245], # LSF width, in angstroms
-        'ak': [-0.005, 0.001, 0.005] # Hermite polynomial coefficients
+        'ak': [-0.1, 0.001, 0.1] # Hermite polynomial coefficients
     },
     
     # Quadratic (Lagrange points) + splines
     'wavelength_solution': {
-        
-        'name': 'wavesol_csplines',
+        'name': 'i2_wls',
         'class': 'SplineWavelengthSolution',
-        
         'poly_wave_lagrange': [-0.35, 0.01, 0.35],
         'spline_lagrange': [-0.35, 0.01, 0.35]
     }
