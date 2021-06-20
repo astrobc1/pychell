@@ -275,11 +275,10 @@ spectral_model_blueprints = {
         'name': 'lsf_hermite',
         'class': 'HermiteLSF',
         'hermdeg': 6,
-        'n_delay': 0,
-        "nx": 128,
+        "nx": 256,
         'width': [0.08, 0.11, 0.15], # LSF width, in angstroms
         #'width': [0.11037, 0.11037, 0.11037],
-        'ak': [-0.05, 0.001, 0.1] # Hermite polynomial coefficients
+        'ak': [-0.1, 0.001, 0.1] # Hermite polynomial coefficients
     },
     
     # Determined by splines
