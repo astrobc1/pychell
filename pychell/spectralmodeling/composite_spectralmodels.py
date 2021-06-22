@@ -5,18 +5,19 @@ import os
 # Maths
 import numpy as np
 
-# Plots
-import matplotlib.pyplot as plt
-try:
-    plt.style.use("gadfly_stylesheet")
-except:
-    print("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
-
 # pychell
+import pychell
 import pychell.maths as pcmath
 import pychell.spectralmodeling.rvcalc as pcrvcalc
 import pychell.spectralmodeling.spectralmodels as pcspecmodels
 from pychell.spectralmodeling.spectralmodels import SpectralRegion
+
+# Plots
+import matplotlib.pyplot as plt
+try:
+    plt.style.use(f"{os.path.dirname(pychell.__file__) + os.sep}gadfly_stylesheet.mplstyle")
+except:
+    print("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
 
 # Optimize
 from optimize.models import Model

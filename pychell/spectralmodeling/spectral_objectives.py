@@ -53,12 +53,12 @@ class WeightedSpectralUncRMS(SpectralObjectiveFunction):
             rms += 1E2
             
         # Parameter bounds
-        # Use actual number to create a super crude but maybe somewhat useful gradient
+        # Use actual number to create a crude gradient
         rms += pars.num_out_of_bounds * 1E2
         
         # Check for infinity or nan
         if not np.isfinite(rms):
-            return 1E6
+            rms = 1E6
 
         # Return final rms
         return rms

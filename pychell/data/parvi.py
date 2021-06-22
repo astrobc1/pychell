@@ -145,9 +145,17 @@ class PARVIParser(DataParser):
         fits_data = fits.open(data.input_file)
         fits_data.verify('fix')
         data.header = fits_data[0].header
-        data.default_wave_grid = 10 * fits_data[1].data[0, data.order_num - 1, :]
-        data.flux = fits_data[1].data[7, data.order_num - 1, :]
-        data.flux_unc = fits_data[1].data[8, data.order_num - 1, :]
+        
+        # For GJ 229 formatted data (old?)
+        #data.apriori_wave_grid = 10 * fits_data[1].data[0, data.order_num - 1, :]
+        #data.flux = fits_data[1].data[7, data.order_num - 1, :]
+        #data.flux_unc = fits_data[1].data[8, data.order_num - 1, :]
+        #data.mask = np.ones_like(data.flux)
+        
+        # For Tau Boo formatted data (June 2021) (is this the new standard?)
+        data.apriori_wave_grid = 10 * fits_data[4].data[0, data.order_num - 1, :]
+        data.flux = fits_data[4].data[3, data.order_num - 1, :]
+        data.flux_unc = fits_data[4].data[4, data.order_num - 1, :]
         data.mask = np.ones_like(data.flux)
         
     def compute_midpoint(self, data):
@@ -160,6 +168,7 @@ class PARVIParser(DataParser):
         jds = np.array(jds)
         mean_jd = np.nanmean(jds)
         return mean_jd
+
 
 
 ################################
@@ -186,7 +195,6 @@ spectral_model_blueprints = {
         'vel': [-3E5, 100, 3E5]
     },
     
-    # Tellurics (from TAPAS) NOTE: Still need proper tellurics, so steal Whipple
     'tellurics': {
         'name': 'nir_tellurics',
         'class': 'TelluricsTAPAS',
@@ -220,7 +228,8 @@ spectral_model_blueprints = {
         'name': 'lsf_hermite',
         'class': 'HermiteLSF',
         'hermdeg': 0,
-        'width': [0.08, 0.08, 0.08], # LSF width, in angstroms
+        'nx': 128,
+        'width': [0.05, 0.08, 0.12], # LSF width, in angstroms
         'ak': [-0.075, 0.001, 0.075] # See cale et al 2019 or arfken et al some year for definition of ak > 0
     },
     

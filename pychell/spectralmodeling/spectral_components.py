@@ -1014,6 +1014,8 @@ class LegPolyWavelengthSolution(WavelengthSolution):
 
 class PerfectWavelengthSolution(WavelengthSolution):
     
+    name = "apriori_wls"
+    
     ##################
     #### BUILDERS ####
     ##################

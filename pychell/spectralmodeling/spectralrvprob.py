@@ -10,13 +10,6 @@ import numpy as np
 # Multiprocessing
 from joblib import Parallel, delayed
 
-# Plots
-import matplotlib.pyplot as plt
-try:
-    plt.style.use("gadfly_stylesheet")
-except:
-    print("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
-
 # pychell
 import pychell.maths as pcmath
 import pychell.spectralmodeling.rvcalc as pcrvcalc
@@ -24,6 +17,13 @@ import pychell.utils as pcutils
 from pychell.data.spectraldata import SpecData1d
 from pychell.spectralmodeling.composite_spectralmodels import IterativeSpectralForwardModel
 from pychell.spectralmodeling.spectralmodels import SpectralRegion
+
+# Plots
+import matplotlib.pyplot as plt
+try:
+    plt.style.use(f"{os.path.dirname(pychell.__file__) + os.sep}gadfly_stylesheet.mplstyle")
+except:
+    print("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
 
 # Optimize
 from optimize.frameworks import OptProblem
@@ -40,7 +40,7 @@ class IterativeSpectralRVProb(OptProblem):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, spectrograph, data_input_path, filelist, blueprints, templates_path, order_num, tag, output_path, target_dict, augmenter=None, bc_corrs=None, crop_pix=[200, 200], n_iterations=10, model_resolution=8, optimizer=None, obj=None, n_cores=1):
+    def __init__(self, spectrograph, data_input_path, filelist, blueprints, templates_path, order_num, tag, output_path, target_dict, augmenter=None, bc_corrs=None, crop_pix=[200, 200], n_iterations=10, model_resolution=8, optimizer=None, obj=None, n_cores=1, verbose=True):
         
         # The number of cores
         self.n_cores = n_cores
@@ -56,6 +56,9 @@ class IterativeSpectralRVProb(OptProblem):
         
         # Number of iterations
         self.n_iterations = n_iterations
+        
+        # Verbose
+        self.verbose = verbose
         
         # Input path
         self.data_input_path = data_input_path
@@ -169,8 +172,8 @@ class IterativeSpectralRVProb(OptProblem):
             for i in range(self.n_spec):
                 self.rvs_dict["bjds"][i], self.rvs_dict["bc_vels"][i] = self.parser.compute_barycenter_corrections(self.data[i], observatory, self.target_dict)
         else:
-            self.rvs_dict["bjds"] = bary_corrs[:, 0]
-            self.rvs_dict["bc_vels"] = bary_corrs[:, 1]
+            self.rvs_dict["bjds"] = bc_corrs[:, 0]
+            self.rvs_dict["bc_vels"] = bc_corrs[:, 1]
         
         # Get the nightly jds
         self.rvs_dict["bjds_nightly"], self.rvs_dict["n_obs_nights"] = pcrvcalc.gen_nightly_jds(self.rvs_dict["bjds"])
@@ -225,7 +228,7 @@ class IterativeSpectralRVProb(OptProblem):
                     p0s.append(self.opt_results[ispec, iter_index - 1]["pbest"])
             
             # Call the parallel job via joblib.
-            self.opt_results[:, iter_index] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.optimize_and_plot_observation)(p0s[ispec], self.data[ispec], self.spectral_model, self.obj, self.optimizer, iter_index, self.output_path, self.tag, self.target_dict["name"]) for ispec in range(self.n_spec))
+            self.opt_results[:, iter_index] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.optimize_and_plot_observation)(p0s[ispec], self.data[ispec], self.spectral_model, self.obj, self.optimizer, iter_index, self.output_path, self.tag, self.target_dict["name"], self.verbose) for ispec in range(self.n_spec))
 
         else:
 
@@ -242,7 +245,7 @@ class IterativeSpectralRVProb(OptProblem):
                 self.opt_results[ispec, iter_index] = self.optimize_and_plot_observation(p0, self.data[ispec], self.spectral_model,
                                                                                          self.obj, self.optimizer, iter_index,
                                                                                          self.output_path,
-                                                                                         self.tag, self.target_dict["name"])
+                                                                                         self.tag, self.target_dict["name"], self.verbose)
         
         # Store rvs
         rvsfwm = np.full(self.n_spec, np.nan)
@@ -256,7 +259,7 @@ class IterativeSpectralRVProb(OptProblem):
         print(f"Fitting Finished in {round((stopwatch.time_since())/60, 3)} min ", flush=True)
             
     @staticmethod
-    def optimize_and_plot_observation(p0, data, spectral_model, obj, optimizer, iter_index, output_path, tag, star_name):
+    def optimize_and_plot_observation(p0, data, spectral_model, obj, optimizer, iter_index, output_path, tag, star_name, verbose):
             
         # Time the fit
         stopwatch = pcutils.StopWatch()
@@ -281,8 +284,9 @@ class IterativeSpectralRVProb(OptProblem):
         
         # Print diagnostics
         print(f"Fit spectrum {data.spec_num} in {round((stopwatch.time_since())/60, 2)} min", flush=True)
-        print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
-        print(f" Models: {spectral_model.summary(opt_result['pbest'])}", flush=True)
+        if verbose:
+            print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
+            print(f" Best Fit Parameters:\n{spectral_model.summary(opt_result['pbest'])}", flush=True)
 
         # Plot
         IterativeSpectralRVProb.plot_spectral_model(opt_result["pbest"], data, spectral_model, iter_index, output_path, tag, star_name)

@@ -161,7 +161,7 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
         rvsfwm_single_iter[o, :] = rvs_dict["rvsfwm"][o, :, iter_indices[o]]
         weights_single_iter[o, :] = weights[o, :, iter_indices[o]]
     result_fwm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, n_obs_nights)
-    breakpoint()
+
     # Add to dictionary
     rvs_dict['rvsfwm_out'] = result_fwm[0]
     rvs_dict['uncfwm_out'] = result_fwm[1]
