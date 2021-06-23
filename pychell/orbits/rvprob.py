@@ -974,7 +974,7 @@ class RVProblem(BayesianProblem):
             # Remove all other planets except this combo.
             for planet_index in planets_dict_cp:
                 if planet_index not in planets_dict:
-                    self.like0.model._disable_planet_pars(p0, planets_dict_cp, planet_index)
+                    self.like0.model.kep_model._disable_planet_pars(p0, planets_dict_cp, planet_index)
             
             # Set planets dict for each model
             for like in _optprob.post.values():
@@ -984,7 +984,7 @@ class RVProblem(BayesianProblem):
             _optprob.set_pars(p0)
 
             # Run the max like
-            opt_result = _optprob.mapfit(save=False)
+            opt_result = _optprob.run_mapfit(save=False)
             
             # Alias best fit params
             pbest = opt_result['pbest']
@@ -993,13 +993,16 @@ class RVProblem(BayesianProblem):
             lnL = _optprob.post.compute_logL(pbest)
             
             # Run the BIC
-            bic = _optprob.optimizer.post.compute_bic(pbest)
+            bic = _optprob.optimizer.obj.compute_bic(pbest)
             
             # Run the AICc
-            aicc = _optprob.optimizer.post.compute_aicc(pbest)
+            aicc = _optprob.optimizer.obj.compute_aicc(pbest)
             
             # Red chi 2
-            redchi2 = _optprob.optimizer.post.compute_redchi2(pbest, include_gp_error=True)
+            try:
+                redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest, include_uncorr_error=True)
+            except:
+                redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest)
             
             # Store
             mc_results.append({'planets_dict': planets_dict, 'lnL': lnL, 'bic': bic, 'aicc': aicc, 'pbest': pbest, 'redchi2': redchi2})
@@ -1007,30 +1010,30 @@ class RVProblem(BayesianProblem):
             del _optprob
             
         # Get the aicc and bic vals for each model
-        aicc_vals = np.array([mcr['aicc'] for mcr in model_comp_results], dtype=float)
+        aicc_vals = np.array([mcr['aicc'] for mcr in mc_results], dtype=float)
         
         # Sort according to aicc val (smaller is "better")
         ss = np.argsort(aicc_vals)
         mc_results = [mc_results[ss[i]] for i in range(len(ss))]
         
         # Grab the aicc and bic vals again
-        aicc_vals = np.array([mcr['aicc'] for mcr in model_comp_results], dtype=float)
-        bic_vals = np.array([mcr['bic'] for mcr in model_comp_results], dtype=float)
+        aicc_vals = np.array([mcr['aicc'] for mcr in mc_results], dtype=float)
+        bic_vals = np.array([mcr['bic'] for mcr in mc_results], dtype=float)
         
         # Compute aicc and bic vals
         aicc_diffs = np.abs(aicc_vals - np.nanmin(aicc_vals))
         bic_diffs = np.abs(bic_vals - np.nanmin(bic_vals))
         
         # Store diffs
-        for i, mcr in enumerate(model_comp_results):
+        for i, mcr in enumerate(mc_results):
             mcr['delta_aicc'] = aicc_diffs[i]
             mcr['delta_bic'] = bic_diffs[i]
     
         # Save
         if save:
-            fname = self.output_path + self.star_name.replace(' ', '_') + '_modelcomp_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl'
+            fname = f"{self.output_path}{self.star_name.replace(' ', '_')}_modelcomp_{pcutils.gendatestr(time=True)}_{self.tag}.pkl"
             with open(fname, 'wb') as f:
-                pickle.dump(model_comp_results, f)
+                pickle.dump(mc_results, f)
         
         return mc_results
 

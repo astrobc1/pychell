@@ -90,7 +90,7 @@ class KeplerianRVModel(DeterministicModel):
         return planetmath.planet_signal(t, per, tp, ecc, w, k)
 
     @staticmethod
-    def disable_planet_pars(pars, planets_dict, planet_index):
+    def _disable_planet_pars(pars, planets_dict, planet_index):
         """Disables (sets vary=False) inplace for the planet parameters corresponding to planet_index.
 
         Args:

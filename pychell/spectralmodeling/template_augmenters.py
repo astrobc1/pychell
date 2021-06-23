@@ -3,13 +3,16 @@ import os
 import sys
 import warnings
 
-# Graphics
-import matplotlib.pyplot as plt # Plotting
+# Pychell deps
 import pychell
+import pychell.maths as pcmath
+
+# Graphics
+import matplotlib.pyplot as plt
 try:
-    plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
+    plt.style.use(f"{os.path.dirname(pychell.__file__)}{os.sep}gadfly_stylesheet.mplstyle")
 except:
-    pass
+    warnings.warn("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
 
 # Maths
 from scipy import constants as cs # cs.c = speed of light in m/s
@@ -20,9 +23,6 @@ except:
     warnings.warn("Could not import pytorch!")
 import scipy.interpolate # Cubic spline LSQ fitting
 
-# Pychell deps
-import pychell.maths as pcmath
-
 class TemplateAugmenter:
     
     def __init__(self, use_nights=None, downweight_tellurics=True, max_thresh=None):
@@ -30,7 +30,7 @@ class TemplateAugmenter:
         self.downweight_tellurics = downweight_tellurics
         self.max_thresh = max_thresh
         
-    def augment_templates(self, pars_all, data, spectral_model):
+    def augment_templates(self, specrvprob, iter_index):
         pass
 
 class CubicSplineLSQ(TemplateAugmenter):
@@ -79,7 +79,7 @@ class CubicSplineLSQ(TemplateAugmenter):
             residuals += residuals_lr.tolist()
 
             # Shift to a pseudo rest frame. All must start from same frame
-            if specrvprob.spectral_model.models_dict["star"].from_flat:
+            if specrvprob.spectral_model.models_dict["star"].from_flat and iter_index == 0:
                 vel = specrvprob.data[ispec].bc_vel
             else:
                 vel = -1 * pars[specrvprob.spectral_model.models_dict["star"].par_names[0]].value
@@ -147,166 +147,216 @@ class CubicSplineLSQ(TemplateAugmenter):
     
 
 
+class WeightedMedian(TemplateAugmenter):
 
-def weighted_median(forward_models, iter_index=None):
-    """Augments the stellar template by considering the weighted median of the residuals on a common high resolution grid.
+    def augment_templates(self, specrvprob, iter_index):
+    
+        # Which nights / spectra to consider
+        if self.use_nights is None:
+            
+            # Default use all nights
+            self.use_nights = np.arange(specrvprob.n_nights).astype(int)
 
-    Args:
-        forward_models (ForwardModels): The list of forward model objects
-        iter_index (int): The iteration to use.
-        nights_for_template (str or list): The nights to consider for averaging residuals to update the stellar template. Options are 'best' to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.
-    """
-    
-    # Which nights / spectra to consider
-    if hasattr(forward_models, 'nights_for_template') and forward_models.nights_for_template is not None and len(forward_models.nights_for_template) > 0:
-        nights_for_template = forward_models.nights_for_template
-        if nights_for_template == 'best':
-            nights_for_template = [determine_best_night(rms, forward_models.n_obs_nights)]
-        template_spec_indices = []
-        for night in nights_for_template:
-            template_spec_indices += list(forward_models[0].get_all_spec_indices_from_night(night, forward_models.n_obs_nights))
-    else:
-        nights_for_template = np.arange(forward_models.n_nights).astype(int)
-        template_spec_indices = np.arange(forward_models.n_spec).astype(int)
+        # Unpack the current stellar template
+        current_stellar_template = np.copy(specrvprob.spectral_model.templates_dict["star"])
+        
+        # Get the fit metric
+        fit_metrics = np.full(specrvprob.n_spec, np.nan)
+        for ispec in range(specrvprob.n_spec):
+            fit_metrics[ispec] = np.abs(specrvprob.opt_results[ispec, iter_index]["fbest"])
+        
+        # Weights according to fit metric
+        fit_weights = 1 / fit_metrics**2
+        good = np.where(np.isfinite(fit_weights))[0]
+        bad = np.where(~np.isfinite(fit_weights))[0]
+        if good.size == 0:
+            fit_weights = np.ones(specrvprob.n_spec)
 
-    # Unpack the current stellar template
-    current_stellar_template = np.copy(forward_models.templates_dict['star'])
-    star_wave_master_hr = current_stellar_template[:, 0]
-    
-    # Storage arrays
-    nx = forward_models.templates_dict['star'][:, 0].size
-    residuals_median = np.zeros(nx)
-    residuals_hr = np.zeros(shape=(forward_models.n_spec, forward_models.n_chunks, nx), dtype=float)
-    tot_weights_hr = np.zeros(shape=(forward_models.n_spec, forward_models.n_chunks, nx), dtype=float)
-    
-    # Fetch all fit metrics
-    fit_metrics = np.zeros(shape=(forward_models.n_spec, forward_models.n_chunks), dtype=float)
-    for ispec in range(forward_models.n_spec):
-        for ichunk in range(forward_models.n_chunks):
-            fit_metrics[ispec, ichunk] = forward_models[ispec].opt_results[-1][ichunk]['fbest']
-    
-    # Weights according to fit metric
-    fit_weights = 1 / fit_metrics**2
-    good = np.where(np.isfinite(fit_weights))[0]
-    bad = np.where(~np.isfinite(fit_weights))[0]
-    if good.size == 0:
-        fit_weights = np.ones(shape=(forward_models.n_spec, forward_models.n_chunks))
-    else:
-        ss = np.argsort(fit_weights)
-        nflag = int(forward_models.n_spec / 20)
-        fit_weights[ss[0:nflag]] = 0
-    
-    # Unpack bc vels
-    bc_vels = np.array([fwm.data.bc_vel for fwm in forward_models])
-    
-    # Loop over chunks and regions
-    for ichunk, sregion in enumerate(forward_models[0].chunk_regions):
+        # Storage arrays
+        nx  = len(current_stellar_template[:, 0])
+        residuals_median = np.zeros(nx)
+        residuals = np.zeros(shape=(nx, specrvprob.n_spec), dtype=float)
+        weights = np.zeros(shape=(nx, specrvprob.n_spec), dtype=float)
 
         # Loop over spectra
-        for ispec in range(forward_models.n_spec):
+        for ispec in range(specrvprob.n_spec):
             
-            # Grab the forward model
-            fwm = forward_models[ispec]
-            
-            # Init the chunk
-            templates_dict_chunked = fwm.init_chunk(forward_models.templates_dict, sregion)
+            # Best fit pars
+            pars = specrvprob.opt_results[ispec, iter_index]["pbest"]
         
-            # Get the parameters for this chunk
-            pars = fwm.opt_results[-1][ichunk]['xbest']
+            # Init the chunk
+            specrvprob.spectral_model.initialize(pars, specrvprob.data[ispec], iter_index=iter_index)
+        
+            # Generate the low res model
+            wave_data, model_lr = specrvprob.spectral_model.build(pars)
             
-            # Generate the residuals
-            wave_data = fwm.models_dict['wavelength_solution'].build(pars)
-            residuals_lr = fwm.data.flux_chunk - fwm.build_full(pars, templates_dict_chunked)[1]
-            good = np.where((fwm.data.mask[sregion.data_inds] == 1) & np.isfinite(residuals_lr))[0]
+            # Residuals
+            residuals_lr = specrvprob.data[ispec].flux - model_lr
 
             # Shift to a pseudo rest frame. All must start from same frame
-            if forward_models[ispec].models_dict['star'].from_synthetic:
-                vel = -1 * pars[fwm.models_dict['star'].par_names[0]].value
+            if specrvprob.spectral_model.models_dict["star"].from_flat and iter_index == 0:
+                vel = specrvprob.data[ispec].bc_vel
             else:
-                vel = bc_vels[ispec]
-            wave_star_rest = pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None)
-            
-            # HR residuals
-            good = np.where(np.isfinite(wave_star_rest) & np.isfinite(residuals_lr))[0]
-            _wave, _res = wave_star_rest[good], residuals_lr[good]
-            _mask = np.ones(_res.size, dtype=bool)
-            width = sregion.wave_len() / 10
-            if iter_index == 0:
-                continuum_estim = pcmodelcomponents.ContinuumModel.estimate_splines(_wave, _res, cont_val=0.5, n_splines=int(sregion.pix_len() / 100), width=width)
-                _res -= continuum_estim
-            res_hr = cspline_interp(_wave, _res, star_wave_master_hr)
-            chunk_match = sregion.wave_within(star_wave_master_hr)
-            residuals_hr[ispec, ichunk, chunk_match] = res_hr[chunk_match]
-
-            # Telluric weights
-            tell_flux_hr = fwm.models_dict['tellurics'].build(pars, templates_dict_chunked['tellurics'], current_stellar_template[:, 0])
-            tell_flux_hr_shifted = pcmath.doppler_shift(current_stellar_template[:, 0], vel, flux=tell_flux_hr)
-            tell_flux_lr = np.interp(wave_data, current_stellar_template[:, 0], tell_flux_hr, left=np.nan, right=np.nan)
-            tell_weights = tell_flux_lr**4
-        
-            # HR Mask
-            mask_hr = np.interp(star_wave_master_hr, wave_star_rest, fwm.data.mask[sregion.data_inds], left=0, right=0)
-            bad = np.where(mask_hr < 1)[0]
-            if bad.size > 0:
-                mask_hr[bad] = 0
-        
-            # Almost final weights
-            tot_weights_hr[ispec, ichunk, :] = mask_hr * fit_weights[ispec, ichunk] # * tell_weights
-
-    # Loop over spectra and also weight spectra according to the barycenter sampling
-    # Here we explicitly use a multiplicative combination of weights.
-    if len(template_spec_indices) == forward_models.n_spec and forward_models.use_bc_weights:
-        # Generate the histogram
-        hist_counts, histx = np.histogram(bc_vels, bins=int(np.min([forward_models.n_spec, 10])), range=(np.min(bc_vels)-1, np.max(bc_vels)+1))
-        
-        # Check where we have no spectra (no observations in this bin)
-        hist_counts = hist_counts.astype(np.float64)
-        number_weights = 1 / hist_counts
-        bad = np.where(hist_counts == 0)[0]
-        if bad.size > 0:
-            number_weights[bad] = 0
+                vel = -1 * pars[specrvprob.spectral_model.models_dict["star"].par_names[0]].value
                 
-        # Normalize
-        number_weights /= np.nansum(number_weights)
-        for ispec in range(forward_models.n_spec):
-            inds = np.where(histx >= bc_vels[ispec])[0][0] - 1
-            tot_weights_hr[ispec, :, :] *= number_weights[inds]
+            # Shift residuals
+            wave_star_rest = pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None)
+            residuals[:, ispec] = pcmath.cspline_interp(wave_star_rest, residuals_lr, current_stellar_template[:, 0])
 
-    # Only use specified nights
-    tot_weights_hr = tot_weights_hr[template_spec_indices, :, :]
-    residuals_hr = residuals_hr[template_spec_indices, :, :]
+            # Telluric weights, must doppler shift them as well.
+            if self.downweight_tellurics:
+                tell_flux = specrvprob.spectral_model.models_dict["tellurics"].build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
+                tell_flux = pcmath.doppler_shift(wave_data, vel, flux=tell_flux)
+                tell_weights = tell_flux**2
+            
+            # Final weights
+            weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
+            weights_hr = pcmath.cspline_interp(wave_data, weights_lr, current_stellar_template[:, 0])
+            bad = np.where(weights_hr < 0)[0]
+            if bad.size > 0:
+                weights_hr[bad] = 0
+            weights[:, ispec] = weights_hr
 
-    # Co-add residuals according to a weighted median crunch
-    # 1. If all weights at a given pixel are zero, set median value to zero.
-    # 2. If there's more than one spectrum, compute the weighted median
-    # 3. If there's only one spectrum, use those residuals, unless it's nan.
-    for ix in range(residuals_median.size):
-        weights, res = tot_weights_hr[:, :, ix].flatten(), residuals_hr[:, :, ix].flatten()
-        if np.nansum(weights) == 0:
-            residuals_median[ix] = 0
-        else:
-            good = np.where((weights > 0) & np.isfinite(weights))[0]
-            if good.size == 0:
+
+        # Co-add residuals according to a weighted median crunch
+        # 1. If all weights at a given pixel are zero, set median value to zero.
+        # 2. If there's more than one spectrum, compute the weighted median
+        # 3. If there's only one spectrum, use those residuals, unless it's nan.
+        for ix in range(nx):
+            ww, rr = weights[ix, :], residuals[ix, :]
+            if np.nansum(ww) == 0:
                 residuals_median[ix] = 0
-            elif good.size == 1:
-                residuals_median[ix] = res[good[0]]
             else:
-                residuals_median[ix] = pcmath.weighted_median(res, weights=weights)
-        
-    # Change any nans to zero
-    bad = np.where(~np.isfinite(residuals_median))[0]
-    if bad.size > 0:
-        residuals_median[bad] = 0
+                good = np.where((ww > 0) & np.isfinite(ww))[0]
+                if good.size == 0:
+                    residuals_median[ix] = 0
+                elif good.size == 1:
+                    residuals_median[ix] = rr[good[0]]
+                else:
+                    residuals_median[ix] = pcmath.weighted_median(rr, weights=ww)
 
-    # Augment the template
-    new_flux = current_stellar_template[:, 1] + residuals_median
-    
-    # Force the max to be less than 1
-    locs = np.where(new_flux > 1)[0]
-    if locs.size > 0:
-        new_flux[locs] = 1
+        # Change any nans to zero just in case
+        bad = np.where(~np.isfinite(residuals_median))[0]
+        if bad.size > 0:
+            residuals_median[bad] = 0
+
+        # Augment the template
+        new_flux = current_stellar_template[:, 1] + residuals_median
         
-    forward_models.templates_dict['star'][:, 1] = new_flux
+        # Force the max to be less than 1.
+        if self.max_thresh is not None:
+            bad = np.where(new_flux > self.max_thresh)[0]
+            if bad.size > 0:
+                new_flux[bad] = self.max_thresh
+    
+        # Update the template
+        specrvprob.spectral_model.templates_dict['star'][:, 1] = new_flux
+        
+        
+class WeightedMean(TemplateAugmenter):
+
+    def augment_templates(self, specrvprob, iter_index):
+    
+        # Which nights / spectra to consider
+        if self.use_nights is None:
+            
+            # Default use all nights
+            self.use_nights = np.arange(specrvprob.n_nights).astype(int)
+
+        # Unpack the current stellar template
+        current_stellar_template = np.copy(specrvprob.spectral_model.templates_dict["star"])
+        
+        # Get the fit metric
+        fit_metrics = np.full(specrvprob.n_spec, np.nan)
+        for ispec in range(specrvprob.n_spec):
+            fit_metrics[ispec] = np.abs(specrvprob.opt_results[ispec, iter_index]["fbest"])
+        
+        # Weights according to fit metric
+        fit_weights = 1 / fit_metrics**2
+        good = np.where(np.isfinite(fit_weights))[0]
+        bad = np.where(~np.isfinite(fit_weights))[0]
+        if good.size == 0:
+            fit_weights = np.ones(specrvprob.n_spec)
+
+        # Storage arrays
+        nx  = len(current_stellar_template[:, 0])
+        residuals_median = np.zeros(nx)
+        residuals = np.zeros(shape=(nx, specrvprob.n_spec), dtype=float)
+        weights = np.zeros(shape=(nx, specrvprob.n_spec), dtype=float)
+
+        # Loop over spectra
+        for ispec in range(specrvprob.n_spec):
+            
+            # Best fit pars
+            pars = specrvprob.opt_results[ispec, iter_index]["pbest"]
+        
+            # Init the chunk
+            specrvprob.spectral_model.initialize(pars, specrvprob.data[ispec], iter_index=iter_index)
+        
+            # Generate the low res model
+            wave_data, model_lr = specrvprob.spectral_model.build(pars)
+            
+            # Residuals
+            residuals_lr = specrvprob.data[ispec].flux - model_lr
+
+            # Shift to a pseudo rest frame. All must start from same frame
+            if specrvprob.spectral_model.models_dict["star"].from_flat and iter_index == 0:
+                vel = specrvprob.data[ispec].bc_vel
+            else:
+                vel = -1 * pars[specrvprob.spectral_model.models_dict["star"].par_names[0]].value
+                
+            # Shift residuals
+            wave_star_rest = pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None)
+            residuals[:, ispec] = pcmath.cspline_interp(wave_star_rest, residuals_lr, current_stellar_template[:, 0])
+
+            # Telluric weights, must doppler shift them as well.
+            if self.downweight_tellurics:
+                tell_flux = specrvprob.spectral_model.models_dict["tellurics"].build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
+                tell_flux = pcmath.doppler_shift(wave_data, vel, flux=tell_flux)
+                tell_weights = tell_flux**2
+            
+            # Final weights
+            weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
+            weights_hr = pcmath.cspline_interp(wave_data, weights_lr, current_stellar_template[:, 0])
+            bad = np.where(weights_hr < 0)[0]
+            if bad.size > 0:
+                weights_hr[bad] = 0
+            weights[:, ispec] = weights_hr
+
+
+        # Co-add residuals according to a weighted median crunch
+        # 1. If all weights at a given pixel are zero, set median value to zero.
+        # 2. If there's more than one spectrum, compute the weighted median
+        # 3. If there's only one spectrum, use those residuals, unless it's nan.
+        for ix in range(nx):
+            ww, rr = weights[ix, :], residuals[ix, :]
+            if np.nansum(ww) == 0:
+                residuals_median[ix] = 0
+            else:
+                good = np.where((ww > 0) & np.isfinite(ww))[0]
+                if good.size == 0:
+                    residuals_median[ix] = 0
+                elif good.size == 1:
+                    residuals_median[ix] = rr[good[0]]
+                else:
+                    residuals_median[ix] = pcmath.weighted_mean(rr, ww)
+
+        # Change any nans to zero just in case
+        bad = np.where(~np.isfinite(residuals_median))[0]
+        if bad.size > 0:
+            residuals_median[bad] = 0
+
+        # Augment the template
+        new_flux = current_stellar_template[:, 1] + residuals_median
+        
+        # Force the max to be less than 1.
+        if self.max_thresh is not None:
+            bad = np.where(new_flux > self.max_thresh)[0]
+            if bad.size > 0:
+                new_flux[bad] = self.max_thresh
+    
+        # Update the template
+        specrvprob.spectral_model.templates_dict['star'][:, 1] = new_flux
 
 # Uses pytorch to optimize the template
 def global_fit(forward_models, iter_index=None):

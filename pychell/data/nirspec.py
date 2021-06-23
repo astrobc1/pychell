@@ -2,9 +2,6 @@ import os
 import numpy as np
 import pychell.rvs
 
-# Path to default templates for rvs
-default_templates_path = pychell.rvs.__file__[0:-11] + 'default_templates' + os.sep
-
 #############################
 ####### Name and Site #######
 #############################

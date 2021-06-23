@@ -11,6 +11,7 @@ import numpy as np
 from joblib import Parallel, delayed
 
 # pychell
+import pychell
 import pychell.maths as pcmath
 import pychell.spectralmodeling.rvcalc as pcrvcalc
 import pychell.utils as pcutils
