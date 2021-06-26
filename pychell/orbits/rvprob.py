@@ -1162,7 +1162,7 @@ class RVProblem(BayesianProblem):
     @staticmethod
     def _brute_force_wrapper(rvprob, per, planet_index):
         rvprob.p0[f"per{planet_index}"].value = per
-        opt_result = rvprob.run_mapfit()
+        opt_result = rvprob.run_mapfit(save=False)
         return opt_result
 
     @staticmethod
