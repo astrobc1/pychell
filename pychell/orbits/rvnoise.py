@@ -41,6 +41,34 @@ class RVJitter(WhiteNoiseProcess):
 #### GPs ####
 #############
 
+class RVGP(GaussianProcess):
+    
+    def compute_data_errors(self, pars, include_corr_error=False, linpred=None):
+        """Computes the errors added in quadrature for all datasets corresponding to this kernel.
+        Args:
+            pars (Parameters): The parameters to use.
+        Returns:
+            np.ndarray: The data errors.
+        """
+        
+        # Get intrinsic data errors
+        errors = self.data.get_apriori_errors()
+        
+        # Add per-instrument jitter terms in quadrature
+        for data in self.data.values():
+            inds = self.data.indices[data.label]
+            pname = f"jitter_{data.label}"
+            errors[inds] = np.sqrt(errors[inds]**2 + pars[pname].value**2)
+            
+        # Compute GP error
+        if include_corr_error:
+            for data in self.data.values():
+                inds = self.data.indices[data.label]
+                gp_error = self.compute_corr_error(pars, linpred=linpred, xpred=data.t)
+                errors[inds] = np.sqrt(errors[inds]**2 + gp_error**2)
+                    
+        return errors
+
 class ChromaticProcessJ1(GaussianProcess):
     
     def __init__(self, data=None, name=None, par_names=None):
