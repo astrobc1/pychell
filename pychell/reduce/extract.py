@@ -29,10 +29,6 @@ import pychell.reduce.calib as pccalib
 import pychell.reduce.order_map as pcomap
 import pychell.data as pcdata
 
-import optimparameters.parameters as OptimParams
-from robustneldermead.neldermead import NelderMead
-
-
 def extract_full_image_wrapper(data_all, index, config):
     """A wrapper to extract a full frame image for printing purposes.
 

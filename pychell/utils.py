@@ -1,7 +1,6 @@
 # Python default modules
 from functools import reduce
 import operator
-from string import ascii_lowercase
 import numpy as np
 import sys
 import time
@@ -29,11 +28,6 @@ def hex_to_rgba(h, a=1.0):
     return s
 
 def csscolor_to_rgba(color, a=1.0):
-    r, g, b = webcolors.name_to_rgb(color)
-    s = 'rgba(' + str(r) + ',' + str(g) + ',' + str(b) + ',' + str(a) + ')'
-    return s
-
-def csscolor_to_rgba2(color, a=1.0):
     r, g, b = webcolors.name_to_rgb(color)
     s = 'rgba(' + str(r) + ',' + str(g) + ',' + str(b) + ',' + str(a) + ')'
     return s
@@ -134,49 +128,6 @@ def get_size(obj, seen=None):
         size += sum([get_size(i, seen) for i in obj])
     return size
 
-
-class SpectralRegion:
-    
-    __slots__ = ['pixmin', 'pixmax', 'wavemin', 'wavemax', 'label', 'data_inds']
-    
-    def __init__(self, pixmin, pixmax, wavemin, wavemax, label=None):
-        self.pixmin = pixmin
-        self.pixmax = pixmax
-        self.wavemin = wavemin
-        self.wavemax = wavemax
-        self.label = label
-        self.data_inds = np.arange(self.pixmin, self.pixmax + 1).astype(int)
-        
-    def __len__(self):
-        return self.wavemax - self.wavemin
-    
-    def wave_len(self):
-        return self.wavemax - self.wavemin
-    
-    def pix_len(self):
-        return self.pixmax - self.pixmin + 1
-        
-    def pix_within(self, pixels, pad=0):
-        good = np.where((pixels >= self.pixmin - pad) & (pixels <= self.pixmax + pad))[0]
-        return good
-        
-    def wave_within(self, waves, pad=0):
-        good = np.where((waves >= self.wavemin - pad) & (waves <= self.wavemax + pad))[0]
-        return good
-    
-    def midwave(self):
-        return self.wavemin + self.wave_len() / 2
-    
-    def midpix(self):
-        return self.pixmin + self.pix_len() / 2
-        
-    def pix_per_wave(self):
-        return (self.pixmax - self.pixmin) / (self.wavemax - self.wavemin)
-    
-    def __repr__(self):
-        s = "Pix: (" + str(self.pixmin) + ", " + str(self.pixmax) + ") Wave: (" + str(self.wavemin) + ", " + str(self.wavemax) + ")"
-        return s
-    
 def gendatestr(time=False):
     now = datetime.now()
     if time:
@@ -184,50 +135,6 @@ def gendatestr(time=False):
     else:
         dt_string = now.strftime("%Y%m%d")
     return dt_string
-
-class SessionState:
-    """Session State for Streamlit.
-    """
-    
-    def __init__(self, fname=None, use_prev=True):
-        
-        # Load existing state
-        if fname is not None and os.path.exists(fname) and use_prev:
-            self = self.load(fname)
-        # Start from new state
-        else:
-            self.data = {}
-            if fname is None:
-                self.fname = "state_" + gendatestr(time=True) + ".pkl"
-            else:
-                self.fname = fname
-        
-    def save(self):
-        with open(self.fname, 'wb') as f:
-            pickle.dump(self, f)
-            
-    @staticmethod
-    def make_default_fname():
-        fname = 'results_' + pcutils.gendatestr(True) + '.pkl'
-        return fname
-            
-    def __setitem__(self, key, value):
-        self.data[key] = value
-        
-    def __setattr__(self, key, value):
-        if key == "fname":
-            self.fname = value
-        else:
-            self.data[key] = value
-    
-    def __getitem__(self, key):
-        return self.data[key]
-        
-    @staticmethod
-    def load(fname):
-        with open(fname, 'rb') as f:
-            d = pickle.load(f)
-        return d
      
 def dict_diff(d1, d2):
     out = {}
@@ -247,6 +154,24 @@ def module_from_file(fname):
     spec.loader.exec_module(module)
     return module
 
+def nightly_iteration(n_obs_nights):
+    """A generator for iterating over observations within a given night.
+
+    Args:
+        n_obs_nights (np.ndarray): The number of observations on each night.
+
+    Yields:
+        int: The night index.
+        int: The index of the first observation for this night.
+        int: The index of the last observation for this night + 1. The additional + 1 is so one can index the array via array[f:l].
+    """
+    n_nights = len(n_obs_nights)
+    f, l = 0, n_obs_nights[0]
+    for i in range(n_nights):
+        yield i, f, l
+        if i < n_nights - 1:
+            f += n_obs_nights[i]
+            l += n_obs_nights[i+1]
 
 def list_diff(l1, l2):
     return [i for i in l1 + l2 if i not in l1 or i not in l2]

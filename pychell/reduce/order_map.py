@@ -3,7 +3,6 @@ from functools import reduce
 import glob
 import os
 import sys
-from pdb import set_trace as stop
 import operator
 import json
 import copy

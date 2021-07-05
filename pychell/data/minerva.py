@@ -1,7 +1,7 @@
 # Base Python
 import os
 
-import pychell.data.parser as pcdataparser
+from pychell.data.parser import DataParser
 import glob
 from astropy.io import fits
 import pychell.data as pcdata
@@ -16,22 +16,23 @@ import astropy.units as units
 import pychell.maths as pcmath
 
 #######################
-#### NAME AND SITE ####
+#### Name and Site ####
 #######################
 
-spectrograph = 'CHIRON'
+spectrograph = 'MINERVA'
 observatory = {
-    "name": 'CTIO',
-    "lat": 30.169286111111113,
-    "long": 70.806789,
-    "alt": 2207
+    'name': 'Whipple',
+    'lat': 31.6884,
+    'lon': -110.8854,
+    'alt': np.nan,
 }
+
 
 ######################
 #### DATA PARSING ####
 ######################
 
-class CHIRONParser(pcdataparser.DataParser):
+class MINERVAParser(DataParser):
     
     def categorize_raw_data(self, config):
 
@@ -115,23 +116,23 @@ class CHIRONParser(pcdataparser.DataParser):
         return data.target
         
     def parse_utdate(self, data):
-        utdate = "".join(data.header["DATE-OBS"].split('-')[0:3])
+        utdate = "".join(data.header["DATE_OBS"].split('-'))
         data.utdate = utdate
         return data.utdate
         
     def parse_sky_coord(self, data):
-        data.skycoord = SkyCoord(ra=data.header['RA'], dec=data.header['DEC'], unit=(units.hourangle, units.deg))
+        data.skycoord = SkyCoord(ra=data.header['TCS_RA'], dec=data.header['TCS_DEC'], unit=(units.hourangle, units.deg))
         return data.skycoord
-        
+    
     def parse_exposure_start_time(self, data):
-        data.time_obs_start = Time(data.header['DATE-OBS'])
+        data.time_obs_start = Time(float(data.header['JD']), scale='utc', format='jd')
         return data.time_obs_start
         
     def get_n_traces(self, data):
         return 1
     
     def get_n_orders(self, data):
-        return 62
+        return 29
     
     def parse_itime(self, data):
         data.itime = data.header["EXPTIME"]
@@ -142,16 +143,10 @@ class CHIRONParser(pcdataparser.DataParser):
         fits_data.verify('fix')
         data.header = fits_data.header
         oi = data.order_num - 1
-        data.apriori_wave_grid, data.flux = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 1].astype(np.float64)
-        data.flux_unc = np.zeros_like(data.flux) + 1E-3
-        data.mask = np.ones_like(data.flux)
+        data.apriori_wave_grid, data.flux, data.flux_unc, data.mask = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 1].astype(np.float64), fits_data.data[oi, :, 2].astype(np.float64), fits_data.data[oi, :, 3].astype(np.float64)
         
     def estimate_wavelength_solution(self, data):
-        oi = data.order_num - 1
-        shift = gas_cell_shifts[oi]
-        wls = data.apriori_wave_grid - shift
-        return wls
-
+        return data.apriori_wave_grid
 
 ################################
 #### REDUCTION / EXTRACTION ####
@@ -159,34 +154,38 @@ class CHIRONParser(pcdataparser.DataParser):
 
 redux_settings = NotImplemented
 
+
 #######################################
 ##### GENERATING RADIAL VELOCITIES ####
 #######################################
 
 # Forward model blueprints for RVs
+# No default blueprints are defined.
 spectral_model_blueprints = {
     
     # The star
     'star': {
+        'name': 'star',
         'class': 'AugmentedStar',
         'input_file': None,
         'vel': [-1000 * 300, 10, 1000 * 300]
     },
     
-    # The methane gas cell
+    # The iodine gas cell
     'gas_cell': {
         'name': 'iodine_gas_cell',
         'class': 'PerfectGasCell',
-        'input_file': 'iodine_gas_cell_chiron_master_40K.npz'
+        'input_file': 'iodine_gas_cell_minervanorth_0.1nm.npz'
     },
     
+    # Tellurics (from TAPAS)
     'tellurics': {
         'name': 'vis_tellurics',
         'class': 'TelluricsTAPAS',
         'vel': [-300, 0, 300],
         'water_depth': [0.01, 1.5, 4.0],
         'airmass_depth': [0.8, 1.2, 4.0],
-        "feature_depth": 0.98,
+        'feature_depth': 0.02,
         'input_files': {
             'water': 'telluric_water_tapas_whipple.npz',
             'methane': 'telluric_methane_tapas_whipple.npz',
@@ -198,37 +197,32 @@ spectral_model_blueprints = {
     },
     
     'continuum': {
-        'name': 'full_blaze',
+        'name': 'residual_blaze', # The blaze model after a division from a flat field
         'class': 'SplineContinuum',
         'n_splines': 10,
-        'poly_0': [1.02, 1.05, 1.4],
-        'poly_1': [-0.001, 0.0001, .001],
-        'poly_2': [-1E-5, -1E-7, 1E-5],
-        'spline_lagrange': [0.2, 0.95, 1.2]
+        'spline_lagrange': [0.2, 0.8, 1.1],
+        'poly_2': [-5.5E-3, -2E-6, 5.5E-5],
+        'poly_1': [-0.01, 1E-5, 0.01],
+        'poly_0': [0.5, 1.0, 1.1],
+        'poly_order': 4,
     },
     
+    # Hermite Gaussian LSF
     'lsf': {
         'name': 'lsf_hermite',
         'class': 'HermiteLSF',
-        'hermdeg': 6,
+        'hermdeg': 0,
         'n_delay': 0,
         "nx": 128,
-        'width': [0.009, 0.014, 0.018], # LSF width, in angstroms
-        'ak': [-0.1, 0.001, 0.1] # See arken et al for definition of ak
+        'width': [0.016, 0.0229, 0.0245], # LSF width, in angstroms
+        'ak': [-0.1, 0.001, 0.1] # Hermite polynomial coefficients
     },
     
+    # Quadratic (Lagrange points) + splines
     'wavelength_solution': {
         'name': 'i2_wls',
         'class': 'SplineWavelengthSolution',
-        'n_splines': 6,
-        'poly_wave_lagrange': [-0.1, 0.01, 0.1],
-        'spline_lagrange': [-0.1, 0.01, 0.1]
-    },
+        'poly_wave_lagrange': [-0.35, 0.01, 0.35],
+        'spline_lagrange': [-0.35, 0.01, 0.35]
+    }
 }
-
-###############
-#### MISC. ####
-###############
-
-# Shifts between the thar lamp and gas cell for each order
-gas_cell_shifts = [-1.28151621, -1.28975381, -1.29827329, -1.30707465, -1.31615788, -1.32552298, -1.33516996, -1.34509881, -1.35530954, -1.36580215, -1.37657662, -1.38763298, -1.3989712, -1.4105913, -1.42249328, -1.43467713, -1.44714286, -1.45989046, -1.47291993, -1.48623128, -1.49982451, -1.5136996 , -1.52785658, -1.54229543, -1.55701615, -1.57201875, -1.58730322, -1.60286957, -1.61871779, -1.63484788, -1.65125985, -1.6679537 , -1.68492942, -1.70218701, -1.71972648, -1.73754783, -1.75565104, -1.77403614, -1.79270311, -1.81165195, -1.83088267, -1.85039526, -1.87018972, -1.89026606, -1.91062428, -1.93126437, -1.95218634, -1.97339018, -1.99487589, -2.01664348, -2.03869294, -2.06102428, -2.08363749, -2.10653258, -2.12970954, -2.15316838, -2.17690909, -2.20093168, -2.22523614, -2.24982247, -2.27469068, -2.29984077, -2.32527273]

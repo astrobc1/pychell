@@ -1,10 +1,12 @@
-import optimize.data as optdata
+# Optimize deps
+from optimize.data import SimpleSeries, HomogeneousCompositeSimpleSeries
+
+# Maths
 import numpy as np
 import pandas as pd
-import warnings
-import matplotlib.pyplot as plt
 
-class RVData(optdata.DataS1d):
+
+class RVData(SimpleSeries):
     
     __slots__ = ['x', 'y', 'yerr', 'mask', 'label', 'wavelength']
     
@@ -71,7 +73,7 @@ class RVData(optdata.DataS1d):
         return data
 
 
-class CompositeRVData(optdata.CompositeDataS1d):
+class CompositeRVData(HomogeneousCompositeSimpleSeries):
 
     @classmethod
     def from_radvel_file(cls, fname, wavelengths=None):
@@ -101,7 +103,7 @@ class CompositeRVData(optdata.CompositeDataS1d):
     
     def gen_wave_vec(self):
         wave_vec = np.array([], dtype=float)
-        t = self.gen_vec('t', sort=False)
+        t = self.t
         ss = np.argsort(t)
         for data in self.values():
             wave_vec = np.concatenate((wave_vec, np.full(data.t.size, fill_value=data.wavelength)))
@@ -114,9 +116,9 @@ class CompositeRVData(optdata.CompositeDataS1d):
         Args:
             fname (str): The full path and filename of the file to create. If the file exists, it is overwritten.
         """
-        times = self.gen_vec('t', sort=True)
-        rvs = self.gen_vec('rv', sort=True)
-        rvserr = self.gen_vec('rverr', sort=True)
+        times = self.get_vec('t', sort=True)
+        rvs = self.get_vec('rv', sort=True)
+        rvserr = self.get_vec('rverr', sort=True)
         tel_vec = self.gen_instname_vec()
         out = np.array([times, rvs, rvserr, tel_vec], dtype=object).T
         with open(fname, 'w') as f:
@@ -125,13 +127,8 @@ class CompositeRVData(optdata.CompositeDataS1d):
         
     def gen_instname_vec(self):
         return self.gen_label_vec()
-    
-    def gen_inds(self, label):
-        instname_vec = self.gen_instname_vec()
-        inds = np.where(instname_vec == label)[0]
-        return inds
  
-    def get(self, instnames):
+    def get_view(self, instnames):
         """Returns a view into sub data objects. Really just a forward method, propogating instnames -> labels.
 
         Args:
@@ -140,4 +137,26 @@ class CompositeRVData(optdata.CompositeDataS1d):
         Returns:
             CompositeData: A view into the original data object (not a copy).
         """
-        return super().get(labels=instnames)
+        return super().get_view(labels=instnames)
+    
+    @property
+    def t(self):
+        return self.x
+
+    @property
+    def rv(self):
+        return self.y
+
+    @property
+    def rverr(self):
+        return self.yerr
+
+    @property
+    def time_baseline(self):
+        """T_max - T_min
+
+        Returns:
+            float: The time baseline.
+        """
+        t = self.t
+        return np.nanmax(t) - np.nanmin(t)
