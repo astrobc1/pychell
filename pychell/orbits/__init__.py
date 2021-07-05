@@ -12,6 +12,6 @@ from pychell.orbits.rvmodels import *
 from pychell.orbits.rvnoise import *
 from pychell.orbits.rvobjectives import *
 from pychell.orbits.rvprob import *
-from pychell.orbits.planetmath import *
+from pychell.orbits.planetmaths import *
 from pychell.orbits.injection import *
 from pychell.orbits.planetmaths import *
