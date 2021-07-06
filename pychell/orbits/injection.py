@@ -198,7 +198,7 @@ class InjectionRecovery:
         self.ecc = ecc_inj
         self.w = w_inj
         if not tp_inj and data:
-            tp_inj = np.array([np.float(np.nanmedian(self.data.get_vec('t'))) * (np.random.rand() - 0.5) * p_inj for k_inj, p_inj in self.kp_array])
+            tp_inj = np.float(np.nanmedian(self.data.get_vec('t'))) + np.pi/1000
         assert ((type(tp_inj) in (list, tuple, np.ndarray)) and (len(tp_inj) == len(self.kp_array))) or (tp_inj is None), "If specified, a unique Tp must be given for each combination of k and p"
         self.tp = tp_inj
 
@@ -463,7 +463,7 @@ class InjectionRecovery:
         """
         id = int(os.environ["SLURM_ARRAY_TASK_ID"])
         ki, peri = self.kp_array[id - 1:id][0]
-        tpi = self.tp[id - 1]
+        tpi = self.tp
         self.injection_mcmc(ki, peri, tpi, injection=injection, *args, **kwargs)
         print("ALL DONE WITH JOB ARRAY ID {}".format(id))
 
@@ -518,7 +518,7 @@ class InjectionRecovery:
         """
         id = int(os.environ["SLURM_ARRAY_TASK_ID"])
         ki, peri = self.kp_array[id - 1:id][0]
-        tpi = self.tp[id - 1]
+        tpi = self.tp
         self.injection_maxlikelihood(ki, peri, tpi, *args, **kwargs)
         print("ALL DONE WITH JOB ARRAY ID {}".format(id))
 
