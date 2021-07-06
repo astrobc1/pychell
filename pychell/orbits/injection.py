@@ -1,6 +1,8 @@
 import copy
 import os
 import datetime
+import re
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
@@ -609,10 +611,12 @@ class InjectionRecovery:
         for pickly in [pickles_Xp, pickles_Yp]:
             for i, pkl in enumerate(pickly):
                 f = self.load_data(pkl)
+                folder = pkl.split(os.sep)[-2]
                 a = 1 if pickly == pickles_Yp else 0
                 lnL = f['rvprob'].post.compute_logL(f['opt_result']['pbest'])
-                per = f['rvprob'].p0['per' + str(len(self.planets_dict) - a)].value
-                k = f['rvprob'].p0['k' + str(len(self.planets_dict) - a)].value
+                regex = re.match('[0-9]p_likelihood_run_(\d+.\d+)d_(\d+.\d+)mps', folder)
+                per = float(regex.group(1))
+                k = float(regex.group(2))
                 if pickly == pickles_Xp:
                     self.maxlike_results['high'][i] = tuple((lnL, per, k))
                     self.maxlike_priors['high'][i] = f['rvprob'].p0
@@ -677,9 +681,7 @@ class InjectionRecovery:
             for y in range(len(kbin)):
                 c = np.where(np.isclose(self.full_run_data[key]['pb_in'], pb[x]) & np.isclose(self.full_run_data[key]['kb_in'], kbin[y]))[0]
                 eh = np.where(np.isclose(self.maxlike_results['high']['per'], pb[x]) & np.isclose(self.maxlike_results['high']['k'], kbin[y]))[0]
-                # This won't work because the L maxlike results don't have an injected planet period/semiamp
-                # el = np.where(np.isclose(self.maxlike_results_L['per'], pb[x]) & np.isclose(self.maxlike_results_L['k'], kbin[y]))[0]
-                el = eh
+                el = np.where(np.isclose(self.maxlike_results['low']['per'], pb[x]) & np.isclose(self.maxlike_results['low']['k'], kbin[y]))[0]
                 if c.size:
                     c = c[0]
                     self.kbfrac[key][y, x] = float(self.full_run_data[key]['kb_out'][c] / self.full_run_data[key]['kb_in'][c])
