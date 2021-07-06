@@ -291,7 +291,7 @@ class InjectionRecovery:
                 pars[key + str(injected_planet)].priors[index].maxval = value0 + self.jeffreys_shift[key][1] * value1
         return pars
 
-    def create_rvproblem(self, k_inj, p_inj, folder_name, data, pars, remove_injected_planet=False):
+    def create_rvproblem(self, k_inj, p_inj, tp_inj, folder_name, data, pars, remove_injected_planet=False):
         """
         Creates an RVProblem with the appropriate kernels, models, scorers, likelihoods, posteriors, etc. etc.
         for a single injection.
@@ -322,6 +322,8 @@ class InjectionRecovery:
         else:
             pars = self.fix_priors(pars, injected_planet, "k", k_inj, k_inj)
 
+        tc_inj = planetmath.tp_to_tc(tp_inj)
+        pars["tc" + str(injected_planet)].value = tc_inj
         if pars["tc" + str(injected_planet)].vary is False:
             print("WARNING: Injected planet's TC prior was set to not vary.")
         else:
@@ -382,7 +384,7 @@ class InjectionRecovery:
             data = copy.deepcopy(self.data)
         pars = copy.deepcopy(self.p0)
 
-        rvprobi = self.create_rvproblem(k_inj, p_inj, folder_name + os.sep, data, pars)
+        rvprobi = self.create_rvproblem(k_inj, p_inj, tp_inj, folder_name + os.sep, data, pars)
 
         # Create SoloInjectionRun and do the MCMC
         solo_run = SoloInjectionRecovery(rv_problem=rvprobi, output_path=self.path, star_name=self.star_name)
@@ -419,11 +421,11 @@ class InjectionRecovery:
         # Run twice: once with the injected planet and once without
         data = self.inject_signal(k_inj, p_inj, tp_inj, folder_names[0])
         pars = copy.deepcopy(self.p0)
-        rvprobi = self.create_rvproblem(k_inj, p_inj, folder_names[0], data, pars)
+        rvprobi = self.create_rvproblem(k_inj, p_inj, tp_inj, folder_names[0], data, pars)
         solo_run1 = SoloInjectionRecovery(rv_problem=rvprobi, output_path=self.path, star_name=self.star_name)
         results_dict = solo_run1.injection_maxlikelihood(folder_name=folder_names[0], *args, **kwargs)
 
-        rvprobj = self.create_rvproblem(k_inj, p_inj, folder_names[1], data, pars, remove_injected_planet=True)
+        rvprobj = self.create_rvproblem(k_inj, p_inj, tp_inj, folder_names[1], data, pars, remove_injected_planet=True)
         solo_run2 = SoloInjectionRecovery(rv_problem=rvprobj, output_path=self.path, star_name=self.star_name)
         results_dict2 = solo_run2.injection_maxlikelihood(folder_name=folder_names[1], *args, **kwargs)
 
