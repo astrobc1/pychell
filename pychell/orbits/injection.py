@@ -610,7 +610,7 @@ class InjectionRecovery:
             for i, pkl in enumerate(pickly):
                 f = self.load_data(pkl)
                 a = 1 if pickly == pickles_Yp else 0
-                lnL = f['rvprob'].post.compute_logL(f['rvprob'].p0)
+                lnL = f['rvprob'].post.compute_logL(f['opt_result']['pbest'])
                 per = f['rvprob'].p0['per' + str(len(self.planets_dict) - a)].value
                 k = f['rvprob'].p0['k' + str(len(self.planets_dict) - a)].value
                 if pickly == pickles_Xp:
