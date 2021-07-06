@@ -704,8 +704,8 @@ class InjectionRecovery:
                 if c.size and eh.size and el.size and do_likes:
                     kh = self.pars_like['high'][y, x].num_varied
                     kl = self.pars_like['low'][y, x].num_varied
-                    self.aicc['high'][y, x] = self.get_aicc(kh, np.abs(self.lnL['high'][y, x]), n)
-                    self.aicc['low'][y, x] = self.get_aicc(kl, np.abs(self.lnL['low'][y, x]), n)
+                    self.aicc['high'][y, x] = self.get_aicc(kh, self.lnL['high'][y, x], n)
+                    self.aicc['low'][y, x] = self.get_aicc(kl, self.lnL['low'][y, x], n)
                     self.delta_aicc[y, x] = self.aicc['high'][y, x] - self.aicc['low'][y, x]
 
         if save:
