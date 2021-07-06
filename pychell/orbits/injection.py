@@ -915,7 +915,7 @@ class InjectionRecovery:
         if plot_style:
             plt.style.use(plot_style)
         fig, ax = plt.subplots()
-        lognorm = colors.SymLogNorm(linthresh=linthresh, vmin=vmin, vmax=vmax, base=10)
+        lognorm = colors.SymLogNorm(linthresh=linthresh, vmin=vmin, vmax=vmax, base=10, vcenter=0)
         plot = ax.pcolormesh(self.periods, self.semiamps, self.delta_aicc, cmap=colormap, norm=lognorm, rasterized=True, shading='nearest')
         ax.set_xlabel('Injected Period [days]')
         ax.set_ylabel('Injected Semiamplitude [m s$^{-1}$]')
