@@ -949,12 +949,12 @@ class InjectionRecovery:
         if plot_style:
             plt.style.use(plot_style)
         fig, ax = plt.subplots()
-        kbfrac_unc_flat = 1 / self.kbfrac_unc[key].ravel()
+        kbfrac_unc_flat = 1 / self.kbfrac_unc_rec[key].ravel()
         kbfrac_unc_flat = kbfrac_unc_flat[np.where(np.isfinite(kbfrac_unc_flat) & (kbfrac_unc_flat < cutoff))]
         ax.hist(kbfrac_unc_flat, bins=100, weights=weightskb, density=True)
         ax.set_yscale('log')
         ax.set_ylabel('Probability Density')
-        ax.set_xlabel('$K_{\\mathrm{injected}}\\ /\\ \\sigma_{K}$')
+        ax.set_xlabel('$K_{\\mathrm{recovered}}\\ /\\ \\sigma_{K}$')
         plt.savefig(self.path + os.sep + '1d_injection_histogram_kunc_{}_{}.{}'.format(
             self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
                     edges='tight')
