@@ -843,12 +843,12 @@ class InjectionRecovery:
                               shading='nearest')
         cb = fig.colorbar(plot, cax=cbar_ax, label='$K_{\\mathrm{recovered}}\\ /\\ K_{\\mathrm{injected}}$')
 
-        unc = 1/self.kbfrac_unc[key] if injection else 1/self.kbfrac_unc_rec[key]
+        unc = 1/self.kbfrac_unc_rec[key]
         if not bounds_unc:
             bounds_unc = (np.nanmin(unc), np.nanmax(unc))
         plot_b = ax2.pcolormesh(self.periods, self.semiamps, unc, cmap=colormap_unc, vmin=bounds_unc[0], vmax=bounds_unc[1], norm=norm2,
                                 shading='nearest')
-        istr = 'injected' if injection else 'recovered'
+        istr = 'recovered'
         cb2 = fig.colorbar(plot_b, cax=cbar2_ax, label='$K_{\\mathrm{%s}}\\ /\\ \\sigma_{K}$' % istr)
         ax2.set_xlabel('Injected Period [days]')
         fig.text(0.02, 0.5, 'Injected Semiamplitude [m s$^{-1}$]', va='center', rotation='vertical')
