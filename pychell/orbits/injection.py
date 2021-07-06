@@ -70,7 +70,7 @@ class SoloInjectionRecovery:
             os.makedirs(folder_name)
 
         # Run the MCMC
-        sampler_result = self.rv_problem.sample(save=False, *args, **kwargs)
+        sampler_result = self.rv_problem.run_mcmc(*args, **kwargs)
         cornerplot = self.rv_problem.corner_plot(mcmc_result=sampler_result)
 
         # Save results to a pickle file for later use
@@ -110,7 +110,7 @@ class SoloInjectionRecovery:
         self.rv_problem.output_path = folder_name
 
         # Run twice: once with the injected planet and once without
-        opt_result = self.rv_problem.mapfit(save=False, *args, **kwargs)
+        opt_result = self.rv_problem.run_mapfit(save=False, *args, **kwargs)
 
         results_dict = {'opt_result': opt_result, 'priors': self.rv_problem.p0}
         with open(os.path.join(folder_name, '{}_{}p_likelihood_{}d_{}mps.pkl'.format(
@@ -198,7 +198,7 @@ class InjectionRecovery:
         self.ecc = ecc_inj
         self.w = w_inj
         if not tp_inj and data:
-            tp_inj = np.array([np.float(np.nanmedian(self.data.gen_vec('t'))) * (np.random.rand() - 0.5) * p_inj for k_inj, p_inj in self.kp_array])
+            tp_inj = np.array([np.float(np.nanmedian(self.data.get_vec('t'))) * (np.random.rand() - 0.5) * p_inj for k_inj, p_inj in self.kp_array])
         assert ((type(tp_inj) in (list, tuple, np.ndarray)) and (len(tp_inj) == len(self.kp_array))) or (tp_inj is None), "If specified, a unique Tp must be given for each combination of k and p"
         self.tp = tp_inj
 
@@ -337,7 +337,7 @@ class InjectionRecovery:
 
         # Create kernels, models, scorers, and optimizers
         par_names_gp = [pname for pname in pars.keys() if "gp" in pname]
-        if par_names_gp:
+        if par_names_gp and self.kernel_type:
             kernel = self.kernel_type(data=data, par_names=par_names_gp)
             process = self.process_type(data=data, kernel=kernel, name="RVs")
         else:
@@ -654,7 +654,7 @@ class InjectionRecovery:
         pb = self.periods
         kbin = self.semiamps
 
-        n = len(self.data.gen_vec('y'))
+        n = len(self.data.get_vec('y'))
         self.kbfrac[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
         self.kbfrac_unc[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
         self.kbfrac_unc_rec[key] = np.full(shape=(len(kbin), len(pb)), fill_value=np.nan)
@@ -700,8 +700,8 @@ class InjectionRecovery:
                 if eh.size and el.size and do_likes:
                     self.delta_lnL[y, x] = self.lnL['high'][y, x] - self.lnL['low'][y, x]
                 if c.size and eh.size and el.size and do_likes:
-                    kh = self.pars_like['high'][y, x].num_varied()
-                    kl = self.pars_like['low'][y, x].num_varied()
+                    kh = self.pars_like['high'][y, x].num_varied
+                    kl = self.pars_like['low'][y, x].num_varied
                     self.aicc['high'][y, x] = self.get_aicc(kh, self.lnL['high'][y, x], n)
                     self.aicc['low'][y, x] = self.get_aicc(kl, self.lnL['low'][y, x], n)
                     self.delta_aicc[y, x] = self.aicc['high'][y, x] - self.aicc['low'][y, x]
@@ -735,8 +735,8 @@ class InjectionRecovery:
         return self.kbfrac[key], self.kbfrac_unc[key], self.kb_rec[key], self.kbfrac_unc_rec[key], self.gp_sorted[key], self.gp_unc_sorted[key], \
                self.delta_lnL, self.delta_aicc
 
-    @njit
     @staticmethod
+    @njit
     def get_aicc(k, lnL, n):
         """
         Calculated the corrected Akaike injection criterion.
