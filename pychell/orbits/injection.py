@@ -446,7 +446,7 @@ class InjectionRecovery:
             None
         """
         Parallel(n_jobs=njobs, backend=backend)(delayed(self.injection_mcmc)(ki, peri, self.tp, injection=injection, *args, **kwargs) for (ki, peri) in
-                                               zip(self.kp_array))
+                                               self.kp_array)
         print("ALL DONE WITH ALL {} MCMCs".format(len(self.kp_array)))
 
     def __full_mcmc_run_jobarray(self, injection=True, *args, **kwargs):
@@ -499,7 +499,7 @@ class InjectionRecovery:
             None
         """
         Parallel(n_jobs=njobs, backend=backend)(delayed(self.injection_maxlikelihood)(ki, peri, self.tp, *args, **kwargs) for (ki, peri) in
-                                               zip(self.kp_array))
+                                               self.kp_array)
         print("ALL DONE WITH ALL {} MAXLIKEFITS".format(len(self.kp_array)))
 
     def __full_maxlikefit_run_jobarray(self,  *args, **kwargs):
