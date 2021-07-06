@@ -887,7 +887,7 @@ class InjectionRecovery:
         plt.close()
 
     def plot_delta_aicc(self, vector=False, vmin=-10**6, vmax=10**6, linthresh=1, colormap=None, xticks=None, yticks=None,
-                        plot_style=None):
+                        plot_style=None, xtickprecision=0, ytickprecision=0):
         """
         Plots the 2D histogram of delta AiCc data.  Uses a symmetric logarithmic colorbar scale.
         Args:
@@ -921,13 +921,15 @@ class InjectionRecovery:
         ax.set_yscale('log')
         ax.minorticks_off()
         if not xticks:
-            xticks = self.periods[::len(self.periods) // 40 + 1]
+            xticks = self.periods[::len(self.periods) // 40 + 2]
         if not yticks:
             yticks = self.semiamps[::len(self.semiamps) // 20 + 1]
         ax.set_xticks(xticks)
         ax.set_yticks(yticks)
-        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
-        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
+        fmtstrx = '{:.' + str(xtickprecision) + 'f}'
+        fmtstry = '{:.' + str(ytickprecision) + 'f}'
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstrx.format(y)))
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstry.format(y)))
         ax.xaxis.set_minor_formatter(ticker.NullFormatter())
         ax.yaxis.set_minor_formatter(ticker.NullFormatter())
         cbar = fig.colorbar(plot, ax=ax, label='$\\Delta$ AICc')
