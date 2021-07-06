@@ -804,7 +804,7 @@ class InjectionRecovery:
         return priors, frun_data, frun_gp, frun_gp_unc
 
     def plot_injection_2D_hist(self, injection=True, vector=False, bounds_k=None, bounds_unc=None, colormap_k='RdYlGn', colormap_unc='RdYlBu',
-                               xticks_k=None, xticks_unc=None, yticks_k=None, yticks_unc=None, plot_style=None):
+                               xticks_k=None, xticks_unc=None, yticks_k=None, yticks_unc=None, plot_style=None, xtickprecision=0, ytickprecision=0):
         """
         Plots the 2D histogram of injection/recovery data.  The upper plot is K recovered / K injected, and the lower
         plot is K injected / sigma K recovered for injection runs and K recovered / sigma K recovered for noninjection runs.
@@ -858,9 +858,9 @@ class InjectionRecovery:
         ax1.minorticks_off()
         ax2.minorticks_off()
         if not xticks_k:
-            xticks_k = self.periods[::len(self.periods) // 40 + 1]
+            xticks_k = self.periods[::len(self.periods) // 40 + 2]
         if not xticks_unc:
-            xticks_unc = self.periods[::len(self.periods) // 40 + 1]
+            xticks_unc = self.periods[::len(self.periods) // 40 + 2]
         if not yticks_k:
             yticks_k = self.semiamps[::len(self.semiamps) // 20 + 1]
         if not yticks_unc:
@@ -869,10 +869,12 @@ class InjectionRecovery:
         ax1.set_yticks(yticks_k)
         ax2.set_xticks(xticks_unc)
         ax2.set_yticks(yticks_unc)
-        ax1.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
-        ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
-        ax2.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
-        ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: '{:.0f}'.format(y)))
+        fmtstrx = '{:.' + str(xtickprecision) + 'f}'
+        fmtstry = '{:.' + str(ytickprecision) + 'f}'
+        ax1.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstrx.format(y)))
+        ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstry.format(y)))
+        ax2.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstrx.format(y)))
+        ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstry.format(y)))
         ax1.xaxis.set_minor_formatter(ticker.NullFormatter())
         ax1.yaxis.set_minor_formatter(ticker.NullFormatter())
         ax2.xaxis.set_minor_formatter(ticker.NullFormatter())
