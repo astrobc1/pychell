@@ -112,7 +112,7 @@ class SoloInjectionRecovery:
         # Run twice: once with the injected planet and once without
         opt_result = self.rv_problem.run_mapfit(save=False, *args, **kwargs)
 
-        results_dict = {'opt_result': opt_result, 'priors': self.rv_problem.p0}
+        results_dict = {'opt_result': opt_result, 'rvprob': self.rv_problem}
         with open(os.path.join(folder_name, '{}_{}p_likelihood_{}d_{}mps.pkl'.format(
             self.rv_problem.star_name.replace(' ', '_'), len(self.rv_problem.planets_dict), p_inj, k_inj
         )), 'wb') as handle:
@@ -414,12 +414,11 @@ class InjectionRecovery:
         if not folder_names:
             folder_names = []
             folder_names.append(os.path.join(self.path, '{}p_likelihood_run_{:.5f}d_{:.5f}mps'.format(len(self.planets_dict), p_inj, k_inj)))
-            folder_names.append(os.path.join(self.path, '{}p_likelihood_run_{:.5f}d_{:.5f}mps'.format(len(self.planets_dict) - 1, p_inj, k_inj)))
-        for path in folder_names:
-            if not os.path.exists(path):
-                os.makedirs(path)
+            folder_names.append(os.path.join(self.path, '{}p_likelihood_run_{:.5f}d_{:.5f}mps'.format(len(self.planets_dict)-1, p_inj, k_inj)))
+        for fname in folder_names:
+            if not os.path.exists(fname):
+                os.makedirs(fname)
 
-        # Run twice: once with the injected planet and once without
         data = self.inject_signal(k_inj, p_inj, tp_inj, folder_names[0])
         pars = copy.deepcopy(self.p0)
         rvprobi = self.create_rvproblem(k_inj, p_inj, tp_inj, folder_names[0], data, pars)
@@ -611,15 +610,15 @@ class InjectionRecovery:
             for i, pkl in enumerate(pickly):
                 f = self.load_data(pkl)
                 a = 1 if pickly == pickles_Yp else 0
-                lnL = -f['opt_result']['fbest']
-                per = f['priors']['per' + str(len(self.planets_dict) - a)].value
-                k = f['priors']['k' + str(len(self.planets_dict) - a)].value
+                lnL = f['rvprob'].post.compute_logL(f['rvprob'].p0)
+                per = f['rvprob'].p0['per' + str(len(self.planets_dict) - a)].value
+                k = f['rvprob'].p0['k' + str(len(self.planets_dict) - a)].value
                 if pickly == pickles_Xp:
                     self.maxlike_results['high'][i] = tuple((lnL, per, k))
-                    self.maxlike_priors['high'][i] = f['priors']
+                    self.maxlike_priors['high'][i] = f['rvprob'].p0
                 elif pickly == pickles_Yp:
                     self.maxlike_results['low'][i] = tuple((lnL, per, k))
-                    self.maxlike_priors['low'][i] = f['priors']
+                    self.maxlike_priors['low'][i] = f['rvprob'].p0
 
         return self.maxlike_results['high'], self.maxlike_results['low']
 
