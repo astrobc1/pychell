@@ -199,7 +199,7 @@ class InjectionRecovery:
         self.w = w_inj
         if not tp_inj and data:
             tp_inj = np.float(np.nanmedian(self.data.get_vec('t'))) + np.pi/1000
-        assert ((type(tp_inj) in (list, tuple, np.ndarray)) and (len(tp_inj) == len(self.kp_array))) or (tp_inj is None), "If specified, a unique Tp must be given for each combination of k and p"
+        assert (type(tp_inj) in (int, float)), "currently only one TP for all injections is supported"
         self.tp = tp_inj
 
         # Alias output path
