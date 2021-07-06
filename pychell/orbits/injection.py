@@ -445,8 +445,8 @@ class InjectionRecovery:
         Returns:
             None
         """
-        Parallel(n_jobs=njobs, backend=backend)(delayed(self.injection_mcmc)(ki, peri, tpi, injection=injection, *args, **kwargs) for (ki, peri), tpi in
-                                               zip(self.kp_array, self.tp))
+        Parallel(n_jobs=njobs, backend=backend)(delayed(self.injection_mcmc)(ki, peri, self.tp, injection=injection, *args, **kwargs) for ki, peri in
+                                               zip(self.kp_array))
         print("ALL DONE WITH ALL {} MCMCs".format(len(self.kp_array)))
 
     def __full_mcmc_run_jobarray(self, injection=True, *args, **kwargs):
@@ -463,8 +463,7 @@ class InjectionRecovery:
         """
         id = int(os.environ["SLURM_ARRAY_TASK_ID"])
         ki, peri = self.kp_array[id - 1:id][0]
-        tpi = self.tp
-        self.injection_mcmc(ki, peri, tpi, injection=injection, *args, **kwargs)
+        self.injection_mcmc(ki, peri, self.tp, injection=injection, *args, **kwargs)
         print("ALL DONE WITH JOB ARRAY ID {}".format(id))
 
     def full_mcmc_run(self, *args, **kwargs):
@@ -499,8 +498,8 @@ class InjectionRecovery:
         Returns:
             None
         """
-        Parallel(n_jobs=njobs, backend=backend)(delayed(self.injection_maxlikelihood)(ki, peri, tpi, *args, **kwargs) for (ki, peri), tpi in
-                                               zip(self.kp_array, self.tp))
+        Parallel(n_jobs=njobs, backend=backend)(delayed(self.injection_maxlikelihood)(ki, peri, self.tp, *args, **kwargs) for ki, peri in
+                                               zip(self.kp_array))
         print("ALL DONE WITH ALL {} MAXLIKEFITS".format(len(self.kp_array)))
 
     def __full_maxlikefit_run_jobarray(self,  *args, **kwargs):
@@ -518,8 +517,7 @@ class InjectionRecovery:
         """
         id = int(os.environ["SLURM_ARRAY_TASK_ID"])
         ki, peri = self.kp_array[id - 1:id][0]
-        tpi = self.tp
-        self.injection_maxlikelihood(ki, peri, tpi, *args, **kwargs)
+        self.injection_maxlikelihood(ki, peri, self.tp, *args, **kwargs)
         print("ALL DONE WITH JOB ARRAY ID {}".format(id))
 
     def full_maxlikefit_run(self, *args, **kwargs):
