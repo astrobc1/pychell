@@ -322,7 +322,7 @@ class InjectionRecovery:
         else:
             pars = self.fix_priors(pars, injected_planet, "k", k_inj, k_inj)
 
-        tc_inj = planetmath.tp_to_tc(tp_inj)
+        tc_inj = planetmath.tp_to_tc(tp_inj, p_inj, self.ecc, self.w)
         pars["tc" + str(injected_planet)].value = tc_inj
         if pars["tc" + str(injected_planet)].vary is False:
             print("WARNING: Injected planet's TC prior was set to not vary.")
