@@ -941,7 +941,7 @@ class InjectionRecovery:
                                        np.geomspace(linthresh, np.abs(vmax), int(np.log10(np.abs(vmax))+1)))))
         ftype = 'png' if not vector else 'eps'
         plt.savefig(self.path + os.sep + 'delta_aicc_histograms_{}_{}.{}'.format(self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
-                    dpi=300, edges='tight')
+                    dpi=300)
         plt.close()
 
     def plot_1d_histograms(self, injection=True, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=100,
@@ -959,8 +959,7 @@ class InjectionRecovery:
         ax.set_ylabel('Probability Density')
         ax.set_xlabel('$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$')
         plt.savefig(self.path + os.sep + '1d_injection_histogram_kunc_{}_{}.{}'.format(
-            self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
-                    edges='tight')
+            self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype))
         plt.close()
 
         for field in self.gp_sorted[key].dtype.names:
@@ -972,8 +971,7 @@ class InjectionRecovery:
             ax.set_yscale('log')
             ax.set_ylabel('{}weighted Probability Density'.format('un' if not weightsgp else ''))
             plt.savefig(self.path + os.sep + '1d_{}injection_histogram_{}_{}_{}.{}'.format('non' if not injection else '', field,
-            self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
-                edges='tight')
+            self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype))
             plt.close()
 
     def plot_all_histograms(self, injection=True, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=30,
@@ -1085,10 +1083,12 @@ class InjectionRecovery:
         ax4.grid(False)
         ax5.grid(False)
 
+        fig.tight_layout()
+
         plt.savefig(
             self.path + os.sep + '{}injection_recovery_FULL_histograms_{}_{}.{}'.format('non' if not injection else '',
             self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
-            bbox_extra_artist=(cb, cb2), edges='tight', dpi=300)
+            dpi=300)
         plt.close()
 
 
