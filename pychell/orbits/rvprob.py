@@ -252,7 +252,7 @@ class RVProblem(BayesianProblem):
         # Plot the the binned data.
         ss = np.argsort(phases_data_all)
         phases_data_all, rvs_data_all, unc_data_all = phases_data_all[ss], rvs_data_all[ss], unc_data_all[ss]
-        phases_binned, rvs_binned, unc_binned = planetmath.bin_phased_rvs(phases_data_all, rvs_data_all, unc_data_all, window=0.1)
+        phases_binned, rvs_binned, unc_binned = planetmath.bin_phased_rvs(phases_data_all, rvs_data_all, unc_data_all, nbins=10)
         fig.add_trace(plotly.graph_objects.Scatter(x=phases_binned,
                                                    y=rvs_binned,
                                                    error_y=dict(array=unc_binned),

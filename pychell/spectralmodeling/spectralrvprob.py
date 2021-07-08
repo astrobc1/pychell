@@ -212,6 +212,78 @@ class IterativeSpectralRVProb(OptProblem):
     ##################
     #### OPTIMIZE ####
     ##################
+    
+    def compute_rvs_for_target(self):
+        """The main function to run for a given target to compute the RVs for iterative spectral rv problems.
+        """
+
+        # Start the main clock!
+        stopwatch = pcutils.StopWatch()
+        stopwatch.lap(name='ti_main')
+                
+        # Iterate over remaining stellar template generations
+        for iter_index in range(self.n_iterations):
+            
+            if iter_index == 0 and self.spectral_model.models_dict['star'].from_flat:
+                
+                print(f"Starting Iteration {iter_index + 1} of {self.n_iterations} (flat template, no RVs) ...", flush=True)
+                stopwatch.lap(name='ti_iter')
+                
+                # Fit all observations
+                self.optimize_all_observations(0)
+                
+                print(f"Finished Iteration {iter_index + 1} in {round(stopwatch.time_since(name='ti_iter')/3600, 2)} hours", flush=True)
+                
+                # Augment the template
+                if iter_index < self.n_iterations - 1:
+                    self.augment_templates(iter_index)
+            
+            else:
+                
+                print(f"Starting Iteration {iter_index + 1} of {self.n_iterations} ...", flush=True)
+                stopwatch.lap(name='ti_iter')
+
+                # Run the fit for all spectra and do a cross correlation analysis as well.
+                self.optimize_all_observations(iter_index)
+            
+                # Run the ccf for all spectra
+                self.cross_correlate_spectra(iter_index)
+            
+                # Generate the rvs for each observation
+                self.gen_nightly_rvs(iter_index)
+            
+                # Plot the rvs
+                self.plot_rvs(iter_index)
+            
+                # Save the rvs each iteration
+                self.save_rvs()
+                
+                print(f"Finished Iteration {iter_index + 1} in {round(stopwatch.time_since(name='ti_iter')/3600, 2)} hours", flush=True)
+
+                # Print RV Diagnostics
+                if self.n_spec >= 1:
+                    rvs_std = np.nanstd(self.rvs_dict['rvsfwm'][:, iter_index])
+                    print(f"  Stddev of all fwm RVs: {round(rvs_std, 4)} m/s", flush=True)
+                    rvs_std = np.nanstd(self.rvs_dict['rvsxc'][:, iter_index])
+                    print(f"  Stddev of all xc RVs: {round(rvs_std, 4)} m/s", flush=True)
+                if self.n_nights > 1:
+                    rvs_std = np.nanstd(self.rvs_dict['rvsfwm_nightly'][:, iter_index])
+                    print(f"  Stddev of all fwm nightly RVs: {round(rvs_std, 4)} m/s", flush=True)
+                    rvs_std = np.nanstd(self.rvs_dict['rvsxc_nightly'][:, iter_index])
+                    print(f"  Stddev of all xc nightly RVs: {round(rvs_std, 4)} m/s", flush=True)
+                    
+                # Augment the template
+                if iter_index < self.n_iterations - 1:
+                    self.augment_templates(iter_index)
+                
+
+        # Save forward model outputs
+        print("Saving results ... ", flush=True)
+        self.save_to_pickle()
+        
+        # End the clock!
+        print(f"Completed order {self.order_num} Runtime: {round(stopwatch.time_since(name='ti_main') / 3600, 2)} hours", flush=True)
+
         
     def optimize_all_observations(self, iter_index):
             

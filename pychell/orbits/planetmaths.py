@@ -47,11 +47,11 @@ def get_phases(t, per, tc):
     phases = ((t - tc - per / 2) % per) / per
     return phases
 
-def bin_phased_rvs(phases, rvs, unc, window=0.1):
+def bin_phased_rvs(phases, rvs, unc, nbins=10):
     """Bins the phased RVs.
 
     Args:
-        phases (np.ndarray): The phases, [0, 1).
+        phases (np.ndarray): The phases in [0, 1].
         rvs (np.ndarray): The data rvs.
         unc (np.ndarray): The corresponding data uncertainties.
         window (float): The bin size.
@@ -62,19 +62,20 @@ def bin_phased_rvs(phases, rvs, unc, window=0.1):
         np.ndarray: The binned uncertainties.
     """
     
-    binned_phases = []
-    binned_rvs = []
-    binned_unc = []
-    i = 0
-    while i < len(phases):
-        inds = np.where((phases >= phases[i]) & (phases < phases[i] + window))[0]
+    binned_phases = np.full(nbins, np.nan)
+    binned_rvs = np.full(nbins, np.nan)
+    binned_unc = np.full(nbins, np.nan)
+    bins = np.linspace(0, 1, num=nbins + 1)
+    for i in range(nbins):
+        inds = np.where((phases >= bins[i]) & (phases < phases[i + 1]))[0]
         n = len(inds)
+        if n == 0:
+            continue
         w = 1 / unc[inds]**2
         w /= np.nansum(w)
-        binned_phases.append(np.mean(phases[inds])) # unlike radvel, just use unweighted mean for time.
-        binned_rvs.append(np.sum(w * rvs[inds]))
-        binned_unc.append(1 / np.sqrt(np.sum(1 / unc[inds]**2)))
-        i += n
+        binned_phases[i] = np.nanmean(phases[inds])
+        binned_rvs[i] = pcmath.weighted_mean(rvs[inds], w)
+        binned_unc[i] = pcmath.weighted_stddev(rvs[inds], w) / np.sqrt(n)
 
     return binned_phases, binned_rvs, binned_unc
 

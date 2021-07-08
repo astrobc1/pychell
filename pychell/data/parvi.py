@@ -216,10 +216,10 @@ spectral_model_blueprints = {
     'continuum': {
         'name': 'continuum', # The blaze model after a division from a flat field
         'class': 'SplineContinuum',
-        'n_splines': 4,
-        'spline': [0.95, 0.99, 1.1],
-        'poly_2': [-1E-7, -1E-6, 1E-7],
-        'poly_1': [-1E-6, 1E-5, 1E-6],
+        'n_splines': 6,
+        'spline_lagrange': [0.9, 1.0, 1.1],
+        'poly_2': [-1E-5, -1E-6, 1E-5],
+        'poly_1': [-1E-4, 1E-5, 1E-4],
         'poly_0': [0.95, 1, 1.05]
     },
     

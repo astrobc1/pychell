@@ -135,7 +135,7 @@ class RawImage(Echellogram):
         return self.parser.parse_image_header(self)
     
     def __repr__(self):
-        return f"Raw Echellogram: {self.base_input_file}"
+        return self.base_input_file
 
 class MasterCalibImage(Echellogram):
     

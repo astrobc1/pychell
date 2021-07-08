@@ -15,6 +15,7 @@ import copy
 import pychell.data as pcdata
 from astropy.io import fits
 import sys
+import pickle
 from astropy.coordinates import SkyCoord
 import pychell.maths as pcmath
 import astropy.units as units
@@ -33,7 +34,7 @@ class DataParser:
     #### CATEGORIZE RAW DATA ####
     #############################
     
-    def categorize_raw_data(self, config):
+    def categorize_raw_data(self):
         # Allowed entries in data_dict:
         # flats, darks, bias
         # master_flats, master_darks, master_bias
@@ -200,20 +201,16 @@ class DataParser:
     #########################
     
     def correct_readmath(self, data, data_image):
-        # Corrects NDRs - Number of dynamic reads, or Non-destructive reads.
+        # Corrects NDRs - Number of dynamic reads, or Non-destructive reads, take your pick.
         # This reduces the read noise by sqrt(NDR)
-        if 'NDR' in data.header:
-            data_image /= float(data.header['NDR'])
-        return data_image
+        if hasattr(data, "header"):
+            if 'NDR' in data.header:
+                data_image /= float(data.header['NDR'])
     
-    def save_reduced_orders(self, data, reduced_orders):
-        fname = self.gen_reduced_spectra_filename(data)
-        hdu = fits.PrimaryHDU(reduced_orders, header=data.header)
+    def save_reduced_orders(self, data, reduced_data):
+        fname = f"{self.output_path}spectra{os.sep}{data.base_input_file_noext}_{data.target}_reduced.fits"
+        hdu = fits.PrimaryHDU(reduced_data, header=data.header)
         hdu.writeto(fname, overwrite=True)
-
-    def gen_reduced_spectra_filename(self, data):
-        fname = f"{self.output_path}{spectra}{os.sep}{data.base_input_file_noext}_{data.target}_reduced.fits"
-        return fname
     
     ###################################
     #### BARYCENTENTER CORRECTIONS ####
