@@ -7,6 +7,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 import matplotlib.ticker as ticker
+import matplotlib.font_manager as font_manager
+from matplotlib import gridspec
 import pickle
 import json
 import glob
@@ -842,7 +844,7 @@ class InjectionRecovery:
             bounds_k = (np.nanmin(self.kbfrac[key]), np.nanmax(self.kbfrac[key]))
         plot = ax1.pcolormesh(self.periods, self.semiamps, self.kbfrac[key], cmap=colormap_k, vmin=bounds_k[0], vmax=bounds_k[1], norm=norm1,
                               shading='nearest')
-        cb = fig.colorbar(plot, cax=cbar_ax, label='$K_{\\mathrm{recovered}}\\ /\\ K_{\\mathrm{injected}}$')
+        cb = fig.colorbar(plot, cax=cbar_ax, label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$')
 
         unc = 1/self.kbfrac_unc_rec[key]
         if not bounds_unc:
@@ -955,7 +957,7 @@ class InjectionRecovery:
         ax.hist(kbfrac_unc_flat, bins=100, weights=weightskb, density=True)
         ax.set_yscale('log')
         ax.set_ylabel('Probability Density')
-        ax.set_xlabel('$K_{\\mathrm{recovered}}\\ /\\ \\sigma_{K}$')
+        ax.set_xlabel('$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$')
         plt.savefig(self.path + os.sep + '1d_injection_histogram_kunc_{}_{}.{}'.format(
             self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
                     edges='tight')
@@ -973,6 +975,123 @@ class InjectionRecovery:
             self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
                 edges='tight')
             plt.close()
+
+    def plot_all_histograms(self, injection=True, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=30,
+                            plot_style=None,  bounds_k=None, bounds_unc=None, colormap_k='RdYlGn', colormap_unc='RdYlBu',
+                            xticks_k=None, xticks_unc=None, yticks_k=None, yticks_unc=None, xtickprecision=0, ytickprecision=0,
+                            divisions=None):
+        if plot_style:
+            plt.style.use(plot_style)
+
+        gs = gridspec.GridSpec(5, 6)
+        gs.update(hspace=1, wspace=1)
+        fig = plt.figure(figsize=(13.5, 8))
+
+        ax1 = fig.add_subplot(gs[0:4, 0:3])
+        ax2 = fig.add_subplot(gs[0:4, 3:6], sharey=ax1, sharex=ax1)
+        ax3 = fig.add_subplot(gs[4:5, 0:2])
+        ax4 = fig.add_subplot(gs[4:5, 2:4])
+        ax5 = fig.add_subplot(gs[4:5, 4:6])
+
+        assert self.kbfrac is not None
+        key = 'injection' if injection else 'noninjection'
+        # norm = None if planets_model == 1 else colors.LogNorm()
+        norm1 = colors.LogNorm()
+        norm2 = colors.LogNorm()
+        # pos1 = ax1.get_position()
+        # pos2 = ax2.get_position()
+        # cbar_ax = fig.add_axes([0.43, pos1.y0, 0.025, pos1.height])
+        # cbar2_ax = fig.add_axes([0.83, pos2.y0, 0.025, pos2.height])
+        if not bounds_k:
+            bounds_k = (np.nanmin(self.kbfrac[key]), np.nanmax(self.kbfrac[key]))
+        plot = ax1.pcolormesh(self.periods, self.semiamps, self.kbfrac[key], cmap=colormap_k, vmin=bounds_k[0],
+                              vmax=bounds_k[1], norm=norm1,
+                              shading='nearest')
+        ax1.set_xlabel('Injected Period [days]')
+        ax1.set_ylabel('Injected Semiamplitude [m s$^{-1}$]')
+        cb = fig.colorbar(plot, ax=ax1, label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$')
+        cb.ax.yaxis.label.set_font_properties(font_manager.FontProperties(size=15))
+
+        unc = 1 / self.kbfrac_unc_rec[key]
+        if not bounds_unc:
+            bounds_unc = (np.nanmin(unc), np.nanmax(unc))
+        plot_b = ax2.pcolormesh(self.periods, self.semiamps, unc, cmap=colormap_unc, vmin=bounds_unc[0],
+                                vmax=bounds_unc[1], norm=norm2,
+                                shading='nearest')
+        istr = 'rec'
+        cb2 = fig.colorbar(plot_b, ax=ax2, label='$K_{\\mathrm{%s}}\\ /\\ \\sigma_{K}$' % istr)
+        cb2.ax.yaxis.label.set_font_properties(font_manager.FontProperties(size=15))
+        ax2.set_xlabel('Injected Period [days]')
+        ax2.set_ylabel('Injected Semiamplitude [m s$^{-1}$]')
+        ax1.set_xscale('log')
+        ax1.set_yscale('log')
+        ax2.set_xscale('log')
+        ax2.set_yscale('log')
+        ax1.minorticks_off()
+        ax2.minorticks_off()
+        if not xticks_k:
+            xticks_k = self.periods[::len(self.periods) // 40 + 2]
+        if not xticks_unc:
+            xticks_unc = self.periods[::len(self.periods) // 40 + 2]
+        if not yticks_k:
+            yticks_k = self.semiamps[::len(self.semiamps) // 20 + 1]
+        if not yticks_unc:
+            yticks_unc = self.semiamps[::len(self.semiamps) // 20 + 1]
+        ax1.set_xticks(xticks_k)
+        ax1.set_yticks(yticks_k)
+        ax2.set_xticks(xticks_unc)
+        ax2.set_yticks(yticks_unc)
+        fmtstrx = '{:.' + str(xtickprecision) + 'f}'
+        fmtstry = '{:.' + str(ytickprecision) + 'f}'
+        ax1.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstrx.format(y)))
+        ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstry.format(y)))
+        ax2.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstrx.format(y)))
+        ax2.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstry.format(y)))
+        ax1.xaxis.set_minor_formatter(ticker.NullFormatter())
+        ax1.yaxis.set_minor_formatter(ticker.NullFormatter())
+        ax2.xaxis.set_minor_formatter(ticker.NullFormatter())
+        ax2.yaxis.set_minor_formatter(ticker.NullFormatter())
+        ftype = 'png' if not vector else 'eps'
+
+        if not divisions:
+            divisions = [5, 12, 30]
+        k0 = np.where(self.semiamps <= divisions[0])[0]
+        k1 = np.where((self.semiamps > divisions[0]) & (self.semiamps <= divisions[1]))[0]
+        k2 = np.where((self.semiamps > divisions[1]) & (self.semiamps <= divisions[2]))[0]
+        kbfrac0 = 1/self.kbfrac_unc_rec[key][k0, :].ravel()
+        kbfrac1 = 1/self.kbfrac_unc_rec[key][k1, :].ravel()
+        kbfrac2 = 1/self.kbfrac_unc_rec[key][k2, :].ravel()
+        kbfrac0 = kbfrac0[np.where(np.isfinite(kbfrac0) & (kbfrac0 < cutoff))]
+        kbfrac1 = kbfrac1[np.where(np.isfinite(kbfrac1) & (kbfrac1 < cutoff))]
+        kbfrac2 = kbfrac2[np.where(np.isfinite(kbfrac2) & (kbfrac2 < cutoff))]
+
+        ax3.hist(kbfrac0, bins=bins, weights=weightskb, density=True, edgecolor='k', label='0-{:.0f} m/s'.format(divisions[0]))
+        # ax3.set_yscale('log')
+        ax3.legend()
+        ax3.set_ylabel('Density', fontsize=10)
+        ax3.set_xlabel('$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', fontsize=10)
+
+        ax4.hist(kbfrac1, bins=bins, weights=weightskb, density=True, edgecolor='k', label='{:.0f}-{:.0f} m/s'.format(divisions[0], divisions[1]))
+        # ax4.set_yscale('log')
+        ax4.legend()
+        ax4.set_xlabel('$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', fontsize=10)
+
+        ax5.hist(kbfrac2, bins=bins, weights=weightskb, density=True, edgecolor='k', label='{:.0f}-{:.0f} m/s'.format(divisions[1], divisions[2]))
+        # ax5.set_yscale('log')
+        ax5.legend()
+        ax5.set_xlabel('$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', fontsize=10)
+
+        ax3.grid(False)
+        ax4.grid(False)
+        ax5.grid(False)
+
+        plt.savefig(
+            self.path + os.sep + '{}injection_recovery_FULL_histograms_{}_{}.{}'.format('non' if not injection else '',
+            self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
+            bbox_extra_artist=(cb, cb2), edges='tight', dpi=300)
+        plt.close()
+
+
 
     @classmethod
     def from_pickle(cls, filepath, *args, **kwargs):
