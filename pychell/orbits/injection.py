@@ -977,7 +977,7 @@ class InjectionRecovery:
     def plot_all_histograms(self, injection=True, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=30,
                             plot_style=None,  bounds_k=None, bounds_unc=None, colormap_k='RdYlGn', colormap_unc='RdYlBu',
                             xticks_k=None, xticks_unc=None, yticks_k=None, yticks_unc=None, xtickprecision=0, ytickprecision=0,
-                            divisions=None, histcolors=None):
+                            divisions=None, histcolors=None, cbticks=None, cbticks2=None):
         if plot_style:
             plt.style.use(plot_style)
 
@@ -990,6 +990,9 @@ class InjectionRecovery:
         ax3 = fig.add_subplot(gs[4:6, 0:2])
         ax4 = fig.add_subplot(gs[4:6, 2:4])
         ax5 = fig.add_subplot(gs[4:6, 4:6])
+
+        fmtstrx = '{:.' + str(xtickprecision) + 'f}'
+        fmtstry = '{:.' + str(ytickprecision) + 'f}'
 
         assert self.kbfrac is not None
         key = 'injection' if injection else 'noninjection'
@@ -1007,8 +1010,12 @@ class InjectionRecovery:
                               shading='nearest')
         ax1.set_xlabel('Injected Period [days]')
         ax1.set_ylabel('Injected Semiamplitude [m s$^{-1}$]')
-        cb = fig.colorbar(plot, ax=ax1, label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$')
+        cb = fig.colorbar(plot, ax=ax1, label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', ticks=cbticks)
         cb.ax.yaxis.label.set_font_properties(font_manager.FontProperties(size=15))
+        cb.ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstrx.format(y)))
+        cb.ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+        if cbticks:
+            cb.ax.set_yticklabels(cbticks)
 
         unc = 1 / self.kbfrac_unc_rec[key]
         if not bounds_unc:
@@ -1017,8 +1024,13 @@ class InjectionRecovery:
                                 vmax=bounds_unc[1], norm=norm2,
                                 shading='nearest')
         istr = 'rec'
-        cb2 = fig.colorbar(plot_b, ax=ax2, label='$K_{\\mathrm{%s}}\\ /\\ \\sigma_{K}$' % istr)
+        cb2 = fig.colorbar(plot_b, ax=ax2, label='$K_{\\mathrm{%s}}\\ /\\ \\sigma_{K}$' % istr, ticks=cbticks2)
         cb2.ax.yaxis.label.set_font_properties(font_manager.FontProperties(size=15))
+        cb2.ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstrx.format(y)))
+        cb2.ax.yaxis.set_minor_formatter(ticker.NullFormatter())
+        if cbticks2:
+            cb2.ax.set_yticklabels(cbticks2)
+
         ax2.set_xlabel('Injected Period [days]')
         ax2.set_ylabel('Injected Semiamplitude [m s$^{-1}$]')
         ax1.set_xscale('log')
@@ -1039,8 +1051,6 @@ class InjectionRecovery:
         ax1.set_yticks(yticks_k)
         ax2.set_xticks(xticks_unc)
         ax2.set_yticks(yticks_unc)
-        fmtstrx = '{:.' + str(xtickprecision) + 'f}'
-        fmtstry = '{:.' + str(ytickprecision) + 'f}'
         ax1.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstrx.format(y)))
         ax1.yaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstry.format(y)))
         ax2.xaxis.set_major_formatter(ticker.FuncFormatter(lambda y, _: fmtstrx.format(y)))
@@ -1076,14 +1086,14 @@ class InjectionRecovery:
         if weightskb:
             weights1unc *= weightskb
             weights1 *= weightskb
-        binedges = np.histogram(np.hstack((kbfrac0unc, kbfrac0)), bins=bins)[1]
-        ax3.hist(kbfrac0unc, bins=binedges, weights=weights1unc, edgecolor='k', color=histcolors[0],
+        # binedges = np.histogram(np.hstack((kbfrac0unc, kbfrac0)), bins=bins)[1]
+        ax3.hist(kbfrac0unc, bins=bins, weights=weights1unc, edgecolor='k', color=histcolors[0],
                  label='$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', alpha=0.5)
-        ax3.hist(kbfrac0, bins=binedges, weights=weights1, edgecolor='k', color=histcolors[1],
-                 label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
+        # ax3.hist(kbfrac0, bins=binedges, weights=weights1, edgecolor='k', color=histcolors[1],
+        #          label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
         # ax3.set_title(, fontsize=10)
         # ax3.set_yscale('log')
-        # ax3.legend()
+        ax3.legend()
         ax3.set_ylabel('Density', fontsize=10)
         ax3.set_xlabel('Data 0-{:.0f} m/s'.format(divisions[0]), fontsize=10)
 
@@ -1092,11 +1102,11 @@ class InjectionRecovery:
         if weightskb:
             weights2unc *= weightskb
             weights2 *= weightskb
-        binedges = np.histogram(np.hstack((kbfrac1unc, kbfrac1)), bins=bins)[1]
-        ax4.hist(kbfrac1unc, bins=binedges, weights=weights2unc, edgecolor='k', color=histcolors[0],
+        # binedges = np.histogram(np.hstack((kbfrac1unc, kbfrac1)), bins=bins)[1]
+        ax4.hist(kbfrac1unc, bins=bins, weights=weights2unc, edgecolor='k', color=histcolors[0],
                  label='$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', alpha=0.5)
-        ax4.hist(kbfrac1, bins=binedges, weights=weights2, edgecolor='k', color=histcolors[1],
-                 label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
+        # ax4.hist(kbfrac1, bins=binedges, weights=weights2, edgecolor='k', color=histcolors[1],
+        #          label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
         # ax4.set_title('{:.0f}-{:.0f} m/s'.format(divisions[0], divisions[1]), fontsize=10)
         # ax4.set_yscale('log')
         # ax4.legend()
@@ -1107,15 +1117,15 @@ class InjectionRecovery:
         if weightskb:
             weights3unc *= weightskb
             weights3 *= weightskb
-        binedges = np.histogram(np.hstack((kbfrac2unc, kbfrac2)), bins=bins)[1]
-        ax5.hist(kbfrac2unc, bins=binedges, weights=weights3unc, edgecolor='k', color=histcolors[0],
+        # binedges = np.histogram(np.hstack((kbfrac2unc, kbfrac2)), bins=bins)[1]
+        ax5.hist(kbfrac2unc, bins=bins, weights=weights3unc, edgecolor='k', color=histcolors[0],
                  label='$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', alpha=0.5)
-        ax5.hist(kbfrac2, bins=binedges, weights=weights3, edgecolor='k', color=histcolors[1],
-                 label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
+        # ax5.hist(kbfrac2, bins=binedges, weights=weights3, edgecolor='k', color=histcolors[1],
+        #          label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
         # ax5.set_title(, fontsize=10)
         # ax5.set_xscale('log')
         # ax5.set_xticks([1, 5, 10, 15])
-        ax5.legend()
+        # ax5.legend()
         ax5.set_xlabel('Data {:.0f}-{:.0f} m/s'.format(divisions[1], divisions[2]), fontsize=10)
 
         ax3.grid(False)
