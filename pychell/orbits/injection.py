@@ -977,19 +977,19 @@ class InjectionRecovery:
     def plot_all_histograms(self, injection=True, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=30,
                             plot_style=None,  bounds_k=None, bounds_unc=None, colormap_k='RdYlGn', colormap_unc='RdYlBu',
                             xticks_k=None, xticks_unc=None, yticks_k=None, yticks_unc=None, xtickprecision=0, ytickprecision=0,
-                            divisions=None):
+                            divisions=None, histcolors=None):
         if plot_style:
             plt.style.use(plot_style)
 
-        gs = gridspec.GridSpec(5, 6)
+        gs = gridspec.GridSpec(6, 6)
         gs.update(hspace=1, wspace=1)
-        fig = plt.figure(figsize=(13.5, 8))
+        fig = plt.figure(figsize=(15, 8))
 
         ax1 = fig.add_subplot(gs[0:4, 0:3])
         ax2 = fig.add_subplot(gs[0:4, 3:6], sharey=ax1, sharex=ax1)
-        ax3 = fig.add_subplot(gs[4:5, 0:2])
-        ax4 = fig.add_subplot(gs[4:5, 2:4])
-        ax5 = fig.add_subplot(gs[4:5, 4:6])
+        ax3 = fig.add_subplot(gs[4:6, 0:2])
+        ax4 = fig.add_subplot(gs[4:6, 2:4])
+        ax5 = fig.add_subplot(gs[4:6, 4:6])
 
         assert self.kbfrac is not None
         key = 'injection' if injection else 'noninjection'
@@ -1056,28 +1056,67 @@ class InjectionRecovery:
         k0 = np.where(self.semiamps <= divisions[0])[0]
         k1 = np.where((self.semiamps > divisions[0]) & (self.semiamps <= divisions[1]))[0]
         k2 = np.where((self.semiamps > divisions[1]) & (self.semiamps <= divisions[2]))[0]
-        kbfrac0 = 1/self.kbfrac_unc_rec[key][k0, :].ravel()
-        kbfrac1 = 1/self.kbfrac_unc_rec[key][k1, :].ravel()
-        kbfrac2 = 1/self.kbfrac_unc_rec[key][k2, :].ravel()
+        kbfrac0unc = 1/self.kbfrac_unc_rec[key][k0, :].ravel()
+        kbfrac1unc = 1/self.kbfrac_unc_rec[key][k1, :].ravel()
+        kbfrac2unc = 1/self.kbfrac_unc_rec[key][k2, :].ravel()
+        kbfrac0unc = kbfrac0unc[np.where(np.isfinite(kbfrac0unc) & (kbfrac0unc < cutoff))]
+        kbfrac1unc = kbfrac1unc[np.where(np.isfinite(kbfrac1unc) & (kbfrac1unc < cutoff))]
+        kbfrac2unc = kbfrac2unc[np.where(np.isfinite(kbfrac2unc) & (kbfrac2unc < cutoff))]
+        kbfrac0 = 1/self.kbfrac[key][k0, :].ravel()
+        kbfrac1 = 1/self.kbfrac[key][k1, :].ravel()
+        kbfrac2 = 1/self.kbfrac[key][k2, :].ravel()
         kbfrac0 = kbfrac0[np.where(np.isfinite(kbfrac0) & (kbfrac0 < cutoff))]
         kbfrac1 = kbfrac1[np.where(np.isfinite(kbfrac1) & (kbfrac1 < cutoff))]
         kbfrac2 = kbfrac2[np.where(np.isfinite(kbfrac2) & (kbfrac2 < cutoff))]
 
-        ax3.hist(kbfrac0, bins=bins, weights=weightskb, density=True, edgecolor='k', label='0-{:.0f} m/s'.format(divisions[0]))
+        if not histcolors:
+            histcolors = [None, None]
+        weights1unc = np.full(kbfrac0unc.shape, fill_value=1/kbfrac0unc.shape[0])
+        weights1 = np.full(kbfrac0.shape, fill_value=1/kbfrac0.shape[0])
+        if weightskb:
+            weights1unc *= weightskb
+            weights1 *= weightskb
+        binedges = np.histogram(np.hstack((kbfrac0unc, kbfrac0)), bins=bins)[1]
+        ax3.hist(kbfrac0unc, bins=binedges, weights=weights1unc, edgecolor='k', color=histcolors[0],
+                 label='$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', alpha=0.5)
+        ax3.hist(kbfrac0, bins=binedges, weights=weights1, edgecolor='k', color=histcolors[1],
+                 label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
+        # ax3.set_title(, fontsize=10)
         # ax3.set_yscale('log')
         ax3.legend()
         ax3.set_ylabel('Density', fontsize=10)
-        ax3.set_xlabel('$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', fontsize=10)
+        ax3.set_xlabel('Data 0-{:.0f} m/s'.format(divisions[0]), fontsize=10)
 
-        ax4.hist(kbfrac1, bins=bins, weights=weightskb, density=True, edgecolor='k', label='{:.0f}-{:.0f} m/s'.format(divisions[0], divisions[1]))
+        weights2unc = np.full(kbfrac1unc.shape, fill_value=1/kbfrac1unc.shape[0])
+        weights2 = np.full(kbfrac1.shape, fill_value=1/kbfrac1.shape[0])
+        if weightskb:
+            weights2unc *= weightskb
+            weights2 *= weightskb
+        binedges = np.histogram(np.hstack((kbfrac1unc, kbfrac1)), bins=bins)[1]
+        ax4.hist(kbfrac1unc, bins=binedges, weights=weights2unc, edgecolor='k', color=histcolors[0],
+                 label='$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', alpha=0.5)
+        ax4.hist(kbfrac1, bins=binedges, weights=weights2, edgecolor='k', color=histcolors[1],
+                 label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
+        # ax4.set_title('{:.0f}-{:.0f} m/s'.format(divisions[0], divisions[1]), fontsize=10)
         # ax4.set_yscale('log')
         ax4.legend()
-        ax4.set_xlabel('$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', fontsize=10)
+        ax4.set_xlabel('Data {:.0f}-{:.0f} m/s'.format(divisions[0], divisions[1]), fontsize=10)
 
-        ax5.hist(kbfrac2, bins=bins, weights=weightskb, density=True, edgecolor='k', label='{:.0f}-{:.0f} m/s'.format(divisions[1], divisions[2]))
-        # ax5.set_yscale('log')
+        weights3unc = np.full(kbfrac2unc.shape, fill_value=1/kbfrac2unc.shape[0])
+        weights3 = np.full(kbfrac2.shape, fill_value=1/kbfrac2.shape[0])
+        if weightskb:
+            weights3unc *= weightskb
+            weights3 *= weightskb
+        binedges = np.histogram(np.hstack((kbfrac2unc, kbfrac2)), bins=bins)[1]
+        ax5.hist(kbfrac2unc, bins=binedges, weights=weights3unc, edgecolor='k', color=histcolors[0],
+                 label='$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', alpha=0.5)
+        ax5.hist(kbfrac2, bins=binedges, weights=weights3, edgecolor='k', color=histcolors[1],
+                 label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
+        # ax5.set_title(, fontsize=10)
+        # ax5.set_xscale('log')
+        # ax5.set_xticks([1, 5, 10, 15])
         ax5.legend()
-        ax5.set_xlabel('$K_{\\mathrm{rec}}\\ /\\ \\sigma_{K}$', fontsize=10)
+        ax5.set_xlabel('Data {:.0f}-{:.0f} m/s'.format(divisions[1], divisions[2]), fontsize=10)
 
         ax3.grid(False)
         ax4.grid(False)
@@ -1088,7 +1127,7 @@ class InjectionRecovery:
         plt.savefig(
             self.path + os.sep + '{}injection_recovery_FULL_histograms_{}_{}.{}'.format('non' if not injection else '',
             self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
-            dpi=300)
+            dpi=300, bbox_inches='tight')
         plt.close()
 
 
