@@ -168,12 +168,6 @@ class ImageMap(Echellogram):
         # The source for the image map (ie, slit flat, fiber flat)
         self.source = source
         
-        # The algorithm
-        if type(order_map_fun) is str:
-            self.order_map_fun = getattr(pcomap, order_map_fun)
-        else:
-            self.order_map_fun = order_map_fun
-        
         # The parser
         self.parser = parser
         

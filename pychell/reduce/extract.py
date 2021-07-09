@@ -60,7 +60,8 @@ class SpectralExtractor:
             data_image[bad] = np.nan
             
         # Default storage is an HDUList of length=n_orders.
-        reduced_data = np.full((n_orders, nx, 3), np.nan)
+        # reduced_data = np.full((n_orders, nx, 3), np.nan)
+        reduced_data = np.full((n_orders, n_traces, nx, 3), np.nan)
         traces = []
         
         # Loop over orders, possibly multi-trace
@@ -88,7 +89,7 @@ class SpectralExtractor:
                 data_out, trace_out = self.extract_trace(reducer, data, data_image, trace_map_image, single_order_list[0])
                 
                 # Store
-                reduced_data[order_index, :, :] = data_out
+                reduced_data[order_index, 0, :, :] = data_out
                 traces.append(trace_out)
                 
             print(f"[{data}] Extracted Order {order_index + 1} of {n_orders} in {round(stopwatch.time_since(order_index) / 60, 3)} min", flush=True)
@@ -138,8 +139,9 @@ class SpectralExtractor:
                     continue
                     
                 # Views
-                spec1d = reduced_data[o][:, 0]
-                badpix1d = reduced_data[o][:, 2]
+                # reduced_data = np.full((n_orders, n_traces, nx, 3), np.nan)
+                spec1d = reduced_data[o, 0, :, 0]
+                badpix1d = reduced_data[o, 0, :, 2]
                 
                 # Good pixels
                 good = np.where(badpix1d == 1)[0]

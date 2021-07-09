@@ -29,7 +29,7 @@ from joblib import Parallel, delayed
 import pychell.utils as pcutils
 import pychell.maths as pcmath
 import pychell.data as pcdata
-import pychell.dev.extract as pcextract
+import pychell.reduce.extract as pcextract
 import pychell.reduce.calib as pccalib
 import pychell.reduce.order_map as pcomap
 
