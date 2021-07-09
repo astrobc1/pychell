@@ -1083,7 +1083,7 @@ class InjectionRecovery:
                  label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
         # ax3.set_title(, fontsize=10)
         # ax3.set_yscale('log')
-        ax3.legend()
+        # ax3.legend()
         ax3.set_ylabel('Density', fontsize=10)
         ax3.set_xlabel('Data 0-{:.0f} m/s'.format(divisions[0]), fontsize=10)
 
@@ -1099,7 +1099,7 @@ class InjectionRecovery:
                  label='$K_{\\mathrm{rec}}\\ /\\ K_{\\mathrm{inj}}$', alpha=0.5)
         # ax4.set_title('{:.0f}-{:.0f} m/s'.format(divisions[0], divisions[1]), fontsize=10)
         # ax4.set_yscale('log')
-        ax4.legend()
+        # ax4.legend()
         ax4.set_xlabel('Data {:.0f}-{:.0f} m/s'.format(divisions[0], divisions[1]), fontsize=10)
 
         weights3unc = np.full(kbfrac2unc.shape, fill_value=1/kbfrac2unc.shape[0])
