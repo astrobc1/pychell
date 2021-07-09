@@ -114,7 +114,7 @@ class SpectralExtractor:
         n_orders = len(reduced_data)
         
         # The number of x pixels
-        xpixels = np.arange(len(reduced_data[0]))
+        xpixels = np.arange(len(reduced_data[0, 0, :, 0]))
         
         # Plot settings
         plot_width = 20
