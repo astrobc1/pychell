@@ -941,7 +941,7 @@ class InjectionRecovery:
                                        np.geomspace(linthresh, np.abs(vmax), int(np.log10(np.abs(vmax))+1)))))
         ftype = 'png' if not vector else 'eps'
         plt.savefig(self.path + os.sep + 'delta_aicc_histograms_{}_{}.{}'.format(self.star_name.replace(' ', '_'), datetime.datetime.now().strftime('%Y%m%d_%H%M%S'), ftype),
-                    dpi=300)
+                    dpi=300, bbox_inches='tight')
         plt.close()
 
     def plot_1d_histograms(self, injection=True, weightskb=None, weightsgp=None, vector=False, cutoff=1e5, bins=100,
