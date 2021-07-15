@@ -185,87 +185,11 @@ detector_props = [
 ##### GENERATING RADIAL VELOCITIES ####
 #######################################
 
-# Forward model blueprints for RVs
-# No default blueprints are defined.
-spectral_model_blueprints = {
-    
-    # The star
-    'star': {
-        'class': 'AugmentedStar',
-        'input_file': None,
-        'vel': [-1000 * 300, 10, 1000 * 300]
-    },
-    
-    # The methane gas cell
-    'gas_cell': {
-        'name': 'methane_gas_cell', # NOTE: full parameter names are name + base_name.
-        'class': 'DynamicGasCell',
-        'input_file': 'methane_gas_cell_ishell_kgas.npz',
-        'shift': [0, 0, 0],
-        'depth': [0.97, 0.97, 0.97]
-    },
-    
-    # Tellurics (from TAPAS)
-    'tellurics': {
-        'name': 'kband_tellurics',
-        'class': 'TelluricsTAPAS',
-        'vel': [-500, -100, 500],
-        'water_depth': [0.01, 1.2, 5.0],
-        'airmass_depth': [0.8, 1.2, 4.0],
-        "feature_depth": 0.02,
-        'input_files': {
-            'water': 'telluric_water_tapas_maunakea.npz',
-            'methane': 'telluric_methane_tapas_maunakea.npz',
-            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_maunakea.npz',
-            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_maunakea.npz',
-            'oxygen' : 'telluric_oxygen_tapas_maunakea.npz',
-            'ozone': 'telluric_ozone_tapas_maunakea.npz'
-        }
-    },
-    
-    # The default blaze is a quadratic + splines.
-    'continuum': {
-        'name': 'residual_blaze', # The blaze model after a division from a flat field
-        'class': 'SplineContinuum',
-        'n_splines': 10,
-        'poly_order': 2,
-        'poly_6': [-5.5E-9, -2E-8, 5.5E-9],
-        'poly_5': [-5.5E-8, -2E-7, 5.5E-8],
-        'poly_4': [-5.5E-7, -8E-6, 5.5E-7],
-        'poly_3': [-5.5E-6, -4E-6, 5.5E-6],
-        'poly_2': [-5.5E-5, -2E-6, 5.5E-5],
-        'poly_1': [-0.001, 1E-5, 0.001],
-        'poly_0': [0.96, 1.0, 1.1],
-        'spline_lagrange': [0.3, 0.95, 1.2]
-    },
-    
-    # Hermite Gaussian LSF
-    'lsf': {
-        'name': 'lsf_hermite',
-        'class': 'HermiteLSF',
-        'hermdeg': 6,
-        "nx": 256,
-        'width': [0.08, 0.11, 0.15], # LSF width, in angstroms
-        #'width': [0.11037, 0.11037, 0.11037],
-        'ak': [-0.1, 0.001, 0.1] # Hermite polynomial coefficients
-    },
-    
-    # Determined by splines
-    'wavelength_solution': {
-        'name': 'csplines_wavesol',
-        'class': 'SplineWavelengthSolution',
-        'poly_order': 6,
-        'n_splines': 6,
-        'poly_wave_lagrange': [-0.35, 0.01, 0.35],
-        'spline_lagrange': [-0.35, 0.01, 0.35]
-    }
-}
+# Gas dell depth
+gas_cell_depth = [0.97, 0.97, 0.97]
 
-
-###############
-#### MISC. ####
-###############
-
+# LSF width
+lsf_width = [0.08, 0.11, 0.15]
 
 # Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
 quad_pixel_set_points = [199, 1023.5, 1847]

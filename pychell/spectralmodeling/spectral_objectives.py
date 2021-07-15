@@ -48,8 +48,7 @@ class WeightedSpectralUncRMS(SpectralObjectiveFunction):
         rms = pcmath.rmsloss(data.flux, flux_model, weights=weights, flag_worst=self.flag_n_worst_pixels, remove_edges=self.remove_edges)
         
         # Force LSF to be positive everywhere.
-        cons = np.nanmin(self.spectral_model.models_dict['lsf'].build(pars))
-        if cons < 0:
+        if np.min(self.spectral_model.lsf.build(pars)) < 0:
             rms += 1E2
             
         # Parameter bounds

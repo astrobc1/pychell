@@ -228,18 +228,14 @@ class SpecData1d(SpecData):
         
         # Parse
         self.parse()
-        
-    @classmethod
-    def from_forward_model(cls, input_file, forward_model):
-        return cls(input_file, forward_model.order_num, forward_model.parser, forward_model.crop_data_pix)
 
     def parse(self):
         
         # Parse the data
         self.parser.parse_spec1d(self)
         
-        # Normalize to 99th percentile
-        medflux = pcmath.weighted_median(self.flux, percentile=0.99)
+        # Normalize to 98th percentile
+        medflux = pcmath.weighted_median(self.flux, percentile=0.98)
         self.flux /= medflux
         self.flux_unc /= medflux
         
@@ -277,6 +273,12 @@ class SpecData1d(SpecData):
             self.flux[bad] = np.nan
             self.flux_unc[bad] = np.nan
             self.mask[bad] = 0
+            
+        # Check if 1d spectrum is even worth using
+        if np.nansum(self.mask) < self.mask.size / 4:
+            self.is_good = False
+        else:
+            self.is_good = True
             
   
     def __repr__(self):

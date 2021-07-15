@@ -65,7 +65,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
     pars = copy.deepcopy(p0)
     
     # Get current star vel
-    v0 = p0[spectral_model.models_dict['star'].par_names[0]].value
+    v0 = p0[spectral_model.star.par_names[0]].value
     
     # Make a grid +/- 2 km/s
     vels = np.arange(v0 - 2000, v0 + 2000, vel_step)
@@ -77,12 +77,12 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
     weights_init = np.copy(spectral_model.data.mask * spectral_model.data.flux_unc)
     
     # Heavily downweight tellurics, fully mask regions of heavy absorption
-    if 'tellurics' in spectral_model.models_dict:
+    if spectral_model.tellurics is not None:
         
         # Build the telluric flux
-        tell_flux = spectral_model.models_dict['tellurics'].build(pars, spectral_model.templates_dict['tellurics'], spectral_model.model_wave)
-        tell_flux = spectral_model.models_dict['lsf'].convolve_flux(tell_flux, pars=pars)
-        data_wave = spectral_model.models_dict['wavelength_solution'].build(pars)
+        tell_flux = spectral_model.tellurics.build(pars, spectral_model.templates_dict['tellurics'], spectral_model.model_wave)
+        tell_flux = spectral_model.lsf.convolve_flux(tell_flux, pars=pars)
+        data_wave = spectral_model.wavelength_solution.build(pars)
         tell_flux = pcmath.lin_interp(spectral_model.model_wave, tell_flux, data_wave)
         
         # Make telluric weights
@@ -94,8 +94,8 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
         weights_init *= tell_weights
         
     # Star weights depend on the information content
-    if 'lsf' in spectral_model.models_dict:
-        width = pars[spectral_model.models_dict['lsf'].par_names[0]].value
+    if spectral_model.lsf is not None:
+        width = pars[spectral_model.lsf.par_names[0]].value
     else:
         width = 1E-5
     rvc, _ = compute_rv_content(spectral_model.templates_dict['star'][:, 0], spectral_model.templates_dict['star'][:, 1], snr=100, blaze=True, ron=0, width=width)
@@ -104,13 +104,13 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
     for i in range(vels.size):
         
         # Set the RV parameter to the current step
-        pars[spectral_model.models_dict['star'].par_names[0]].value = vels[i]
+        pars[spectral_model.star.par_names[0]].value = vels[i]
         
         # Build the model
         wave_data, model_lr = spectral_model.build(pars)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        star_weights_shifted = pcmath.doppler_shift(spectral_model.templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='spline', wave_out=wave_data)
+        star_weights_shifted = pcmath.doppler_shift(spectral_model.templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='linear', wave_out=wave_data)
         
         # Final weights
         weights = weights_init * star_weights_shifted
@@ -175,7 +175,7 @@ def brute_force_ccf_crude(p0, data, spectral_model):
     for i in range(vels.size):
         
         # Set the RV parameter to the current step
-        pars[spectral_model.models_dict['star'].par_names[0]].value = vels[i]
+        pars[spectral_model.star.par_names[0]].value = vels[i]
         
         # Build the model
         _, model_lr = spectral_model.build(pars)

@@ -350,10 +350,11 @@ def compute_rv_contents(specrvprobs, templates=None):
             model_wave = specrvprobs[o].spectral_model.model_wave
         
             # Data wave grid
-            data_wave = specrvprobs[o].spectral_model.models_dict['wavelength_solution'].build(pars)
+            data_wave = specrvprobs[o].spectral_model.wavelength_solution.build(pars)
         
             # LSF
-            lsf = specrvprobs[o].spectral_model.models_dict['lsf'].build(pars)
+            if specrvprobs[o].spectral_model.lsf is not None:
+                lsf = specrvprobs[o].spectral_model.lsf.build(pars)
         
             # RV Content for each template individually
             rvcs_per_template = np.zeros(len(templates))
@@ -362,7 +363,7 @@ def compute_rv_contents(specrvprobs, templates=None):
             for i, template_key in enumerate(templates):
             
                 # Build the high res template
-                template_flux = specrvprobs[o].spectral_model.models_dict[template_key].build(pars, specrvprobs[o].spectral_model.templates_dict[template_key], model_wave)
+                template_flux = getattr(specrvprobs[o].spectral_model, template_key).build(pars, specrvprobs[o].spectral_model.templates_dict[template_key], model_wave)
             
                 # The S/N for this observation
                 snr = np.nanmedian(nightly_snrs[o, :, j])
