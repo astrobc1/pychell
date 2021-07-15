@@ -16,7 +16,7 @@ import pychell.maths as pcmath
 import pychell.spectralmodeling.rvcalc as pcrvcalc
 import pychell.utils as pcutils
 from pychell.data.spectraldata import SpecData1d
-from pychell.spectralmodeling.composite_spectralmodels import IterativeSpectralForwardModel
+from pychell.spectralmodeling.spectralmodels import IterativeSpectralForwardModel
 
 # Plots
 import matplotlib.pyplot as plt
