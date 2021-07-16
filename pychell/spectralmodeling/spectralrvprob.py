@@ -504,10 +504,13 @@ class IterativeSpectralRVProb(OptProblem):
             ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.cross_correlate_observation)(p0s[ispec], self.data[ispec], self.spectral_model, iter_index) for ispec in range(self.n_spec))
             
             for ispec in range(self.n_spec):
-                self.rvs_dict['rvsxc'][ispec, iter_index] = ccf_results[ispec][0]
-                self.rvs_dict['uncxc'][ispec, iter_index] = ccf_results[ispec][1]
-                self.rvs_dict['bis'][ispec, iter_index] = ccf_results[ispec][2]
-                self.rvs_dict['xcorrs'][ispec, iter_index] = np.array([ccf_results[ispec][3], ccf_results[ispec][4]]).T
+                if np.isfinite(ccf_results[ispec][0]):
+                    self.rvs_dict['rvsxc'][ispec, iter_index] = ccf_results[ispec][0]
+                    self.rvs_dict['uncxc'][ispec, iter_index] = ccf_results[ispec][1]
+                    self.rvs_dict['bis'][ispec, iter_index] = ccf_results[ispec][2]
+                    self.rvs_dict['xcorrs'][ispec, iter_index] = np.array([ccf_results[ispec][3], ccf_results[ispec][4]]).T
+                else:
+                    self.data[ispec].is_good = False
             
         else:
             
@@ -517,11 +520,13 @@ class IterativeSpectralRVProb(OptProblem):
                 p0 = self.opt_results[ispec, iter_index]["pbest"]
                     
                 ccf_results = self.cross_correlate_observation(p0, self.data[ispec], self.spectral_model, iter_index)
-        
-                self.rvs_dict['rvsxc'][ispec, iter_index] = ccf_results[0]
-                self.rvs_dict['uncxc'][ispec, iter_index] = ccf_results[1]
-                self.rvs_dict['bis'][ispec, iter_index] = ccf_results[2]
-                self.rvs_dict['xcorrs'][ispec, iter_index] = np.array([ccf_results[3], ccf_results[4]]).T
+                if np.isfinite(ccf_results[0]):
+                    self.rvs_dict['rvsxc'][ispec, iter_index] = ccf_results[0]
+                    self.rvs_dict['uncxc'][ispec, iter_index] = ccf_results[1]
+                    self.rvs_dict['bis'][ispec, iter_index] = ccf_results[2]
+                    self.rvs_dict['xcorrs'][ispec, iter_index] = np.array([ccf_results[3], ccf_results[4]]).T
+                else:
+                    self.data[ispec].is_good = False
                 
         print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
     
