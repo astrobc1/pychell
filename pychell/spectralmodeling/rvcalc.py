@@ -130,7 +130,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
         pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
         xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
     except:
-        xcorr_rv_unc = np.nan
+        xcorr_rv = np.nan
 
     # Uncertainty in xc rv
     try:
