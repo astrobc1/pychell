@@ -203,14 +203,15 @@ class WeightedMedian(TemplateAugmenter):
             if self.downweight_tellurics:
                 tell_flux = specrvprob.spectral_model.tellurics.build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
                 tell_flux = pcmath.doppler_shift(wave_data, vel, flux=tell_flux)
+                if specrvprob.spectral_model.lsf is not None:
+                    tell_flux = specrvprob.spectral_model.lsf.convolve_flux(tell_flux, pars)
                 tell_weights = tell_flux**2
-            
-            # Final weights
-            if self.downweight_tellurics:
                 weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
             else:
                 weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec]
-            weights_hr = pcmath.cspline_interp(wave_data, weights_lr, current_stellar_template[:, 0])
+            
+            # Final weights
+            weights_hr = pcmath.lin_interp(wave_data, weights_lr, current_stellar_template[:, 0])
             bad = np.where(weights_hr < 0)[0]
             if bad.size > 0:
                 weights_hr[bad] = 0
@@ -243,9 +244,21 @@ class WeightedMedian(TemplateAugmenter):
         new_flux = current_stellar_template[:, 1] + residuals_median
         
         # Perform cspline lsq regression
-        knots = np.linspace(specrvprob.spectral_model.sregion.wavemin, specrvprob.spectral_model.sregion.wavemax,
-                            num=specrvprob.spectral_model.sregion.pix_len())
-        spline_fitter = scipy.interpolate.LSQUnivariateSpline(current_stellar_template[:, 0], new_flux, t=knots, k=3, ext=0)
+        # Generate knots
+        good = np.where(np.isfinite(new_flux))[0]
+        wave_min, wave_max = current_stellar_template[good[0], 0], current_stellar_template[good[-1], 0]
+        knots = np.linspace(wave_min, wave_max, num=specrvprob.spectral_model.sregion.pix_len())
+        
+        # Remove bad knots
+        bad_knots = []
+        for iknot in range(len(knots) - 1):
+            n = np.where((wave_star_rest > knots[iknot]) & (wave_star_rest < knots[iknot+1]))[0].size
+            if n == 0:
+                bad_knots.append(iknot)
+        knots = np.delete(knots, bad_knots)
+        
+        # Fit with cubic spline
+        spline_fitter = scipy.interpolate.LSQUnivariateSpline(current_stellar_template[:, 0], new_flux, t=knots[1:-1], k=3, ext=0)
         new_flux = spline_fitter(current_stellar_template[:, 0])
         
         # Force the max to be less than 1.
