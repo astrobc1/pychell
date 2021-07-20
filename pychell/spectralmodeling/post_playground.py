@@ -7,6 +7,7 @@ import os
 
 # Maths
 import numpy as np
+import scipy.stats
 
 # Graphics
 import matplotlib.pyplot as plt
@@ -115,6 +116,67 @@ def parse_residuals(self):
 #### ACTIONS ####
 #################
 
+def combine_bis(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
+    
+    # Numbers
+    n_orders = len(specrvprobs)
+    do_orders = [specrvprobs[o].order_num for o in range(len(specrvprobs))]
+    n_spec = specrvprobs[0].n_spec
+    n_nights = specrvprobs[0].n_nights
+    n_iterations = specrvprobs[0].n_iterations
+    n_obs_nights = rvs_dict["n_obs_nights"]
+    
+    # Which iterations to use for each order
+    if iter_indices is None:
+        iter_indices = [n_iterations - 1] * n_orders
+    
+    # Mask rvs from user input
+    mask = gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict)
+    
+    # Combine BIS
+    bis_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+    weights_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+    for o in range(n_orders):
+        bis_single_iter[o, :] = rvs_dict["bis"][o, :, iter_indices[o]]
+        weights_single_iter[o, :] = mask[o, :, iter_indices[o]] # 1  / rvs_dict["bis"][o, :, iter_indices[o]] * mask[]
+    result = pcrvcalc.combine_relative_rvs(bis_single_iter, weights_single_iter, n_obs_nights)
+
+    # Add to dictionary
+    rvs_dict['bis_out'] = result[0]
+    rvs_dict['uncbis_out'] = result[1]
+    rvs_dict['bis_nightly_out'] = result[2]
+    rvs_dict['uncbis_nightly_out'] = result[3]
+    
+    
+    
+def rvs_quicklook(path, rvs_dict, do_orders, iter_indices=None):
+    
+    # Numbers
+    n_orders, n_spec, n_iterations = rvs_dict["rvsfwm"].shape
+    n_obs_nights = rvs_dict["n_obs_nights"]
+    n_nights = len(n_obs_nights)
+    
+    # Which iterations to use for each order
+    if iter_indices is None:
+        iter_indices = [n_iterations - 1] * n_orders
+        
+    # BJDs nightly
+    bjds_nightly = rvs_dict["bjds_nightly"]
+    
+    # Combine RVs
+    
+    # Plot each order
+    for o in range(n_orders):
+        breakpoint()
+        rvs = rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]] - np.nanmedian(rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]])
+        rverr = rvs_dict["rvserrfwm_nightly"][o, :, iter_indices[o]]
+        plt.errorbar(bjds_nightly, rvs, yerr=rverr, marker='o', lw=0, elinewidth=0.5, label=f"Order {do_orders[o]}")
+    
+    # Coadded
+    plt.errorbar(bjds_nightly, rvs, yerr=rverr, marker='o', lw=0, elinewidth=0.5, label=f"Order {do_orders[o]}")
+    
+    
+
 def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None):
     
     # Numbers
@@ -217,8 +279,7 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
         
-        
-def plot_final_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, which="xc"):
+def plot_final_rvs(path, specrvprobs, rvs_dict, which="xc"):
         
     # Unpack rvs
     bjds, bjds_nightly = rvs_dict['bjds'], rvs_dict['bjds_nightly']
@@ -253,10 +314,73 @@ def plot_final_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None,
     plt.tight_layout()
     plt.savefig(f"{path}rvs_{specrvprobs[0].spectrograph.lower().replace(' ', '_')}_{specrvprobs[0].target_dict['name'].lower().replace(' ', '_')}.png")
     plt.show()
+
+def parameter_corrs(path, specrvprobs, rvs_dict):
     
+    n_orders = len(specrvprobs)
+    n_iterations = specrvprobs[0].n_iterations
+    n_spec = specrvprobs[0].n_spec
+    
+    # Loop over orders and chunks
+    for o in range(n_orders):
+        
+        # Get varied parameters
+        pars_first_order = specrvprobs[o].opt_results[0, -1]["pbest"]
+        pars_first_order_numpy = pars_first_order.unpack()
+        varied_inds = np.where(pars_first_order_numpy["vary"])[0]
+        n_vary = len(varied_inds)
+        pars = np.empty(shape=(n_spec, n_iterations, n_vary), dtype=object)
+        par_vals = np.full(shape=(n_spec, n_iterations, n_vary), dtype=float, fill_value=np.nan)
+        par_names_vary = [pars_first_order_numpy["name"][i] for i in range(len(pars_first_order)) if pars_first_order_numpy["vary"][i]]
+        for ispec in range(n_spec):
+            for j in range(n_iterations):
+                for k in range(n_vary):
+                    pars[ispec, j, k] = specrvprobs[o].opt_results[ispec, j]['pbest'][par_names_vary[k]]
+                    par_vals[ispec, j, k] = pars[ispec, j, k].value
+        
+        n_cols = 5
+        n_rows = int(np.ceil(n_vary / n_cols))
+        fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(20, 15), dpi=400)
+        
+        for row in range(n_rows):
+            for col in range(n_cols):
+                
+                # The par index
+                k = n_cols * row + col
+                if k + 1 > n_vary:
+                    axarr[row, col].set_visible(False)
+                    continue
+                
+                # Views to arrays
+                rvs0, rvslast = rvs_dict['rvsfwm'][o, :, 0], rvs_dict['rvsfwm'][o, :, -1]
+                pars0, parslast = par_vals[:, 0, k], par_vals[:, -1, k]
+                
+                axarr[row, col].scatter(rvs0, pars0, marker='o', s=1, c='red', alpha=0.7)
+                axarr[row, col].scatter(rvslast, parslast, marker='o', s=1, c='black', alpha=0.7)
+                axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
+                axarr[row, col].set_ylabel(par_names_vary[k].replace('_', ' '), fontsize=4)
+                axarr[row, col].tick_params(axis='both', which='major', labelsize=4)
+                good0 = np.where(np.isfinite(rvs0) & np.isfinite(pars0))[0]
+                goodlast = np.where(np.isfinite(rvslast) & np.isfinite(parslast))[0]
+                axarr[row, col].text(np.max(rvs0[good0]), np.max(pars0[good0]), f"pcc 1={round(scipy.stats.pearsonr(rvs0[good0], pars0[good0])[0], 2)}", horizontalalignment="right")
+                axarr[row, col].text(np.max(rvs0[good0]), np.min(pars0[good0]), f"pcc {n_iterations}={round(scipy.stats.pearsonr(rvslast[goodlast], parslast[goodlast])[0], 2)}", horizontalalignment="right")
+                
+        plt.tight_layout()
+        fname = f"{path}Order{specrvprobs[o].order_num}{os.sep}parameter_corrs_ord{specrvprobs[o].order_num}.png"
+        plt.savefig(fname)
+        plt.close()
+
 ###############
 #### MISC. ####
 ###############
+
+def spec_indices_from_night(night_index, n_obs_night):
+    if night_index == 0:
+        return np.arange(n_obs_night[0]).astype(int)
+    else:
+        s = np.cumsum(n_obs_night)[night_index - 1]
+        return np.arange(s, s + n_obs_night[night_index]).astype(int)
+    
     
 def gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict):
     
@@ -272,12 +396,11 @@ def gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict):
     # Mask all spectra for a given night
     if 'bad_nights' in bad_rvs_dict:
         for inight in bad_rvs_dict['bad_nights']:
-            inds = get_all_spec_indices_from_night(inight, n_obs_nights)
+            inds = spec_indices_from_night(inight, n_obs_nights)
             mask[:, inds, :] = 0
             rvs_dict['rvsfwm'][:, inds, :] = np.nan
-            if rvs_dict['do_xcorr']:
-                rvs_dict['rvsxc'][:, inds, :] = np.nan
-                rvs_dict['bis'][:, inds, :] = np.nan
+            rvs_dict['rvsxc'][:, inds, :] = np.nan
+            rvs_dict['bis'][:, inds, :] = np.nan
     
     # Mask individual spectra
     if 'bad_spec' in bad_rvs_dict:

@@ -459,10 +459,10 @@ class AugmentedStar(Star):
     
     def initialize(self, spectral_model, iter_index=None):
         if iter_index == 0 and self.from_flat:
-            p0[self.par_names[0]].vary = False
+            spectral_model.p0[self.par_names[0]].vary = False
         elif iter_index == 1 and self.from_flat:
-            p0[self.par_names[0]].vary = True
-            p0[self.par_names[0]].value = -1 * data.bc_vel
+            spectral_model.p0[self.par_names[0]].vary = True
+            spectral_model.p0[self.par_names[0]].value = -1 * data.bc_vel
 
 
 #########################
@@ -591,6 +591,15 @@ class TelluricsTAPAS(Tellurics):
         
 #class TelluricsDev(Tellurics):
 #    pass
+#
+#    def __init__(self, input_path, feature_depth=0.01, ):
+#        pass
+#
+#    def build(self, pars):
+#        pass
+#
+#    def initialize(self, pars):
+#        pass
 
 ####################
 #### LSF MODELS ####

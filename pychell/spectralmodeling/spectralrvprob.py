@@ -138,7 +138,8 @@ class IterativeSpectralRVProb(OptProblem):
 
     def _init_spectral_model(self):
         self.spectral_model._init_templates(self.data)
-        self.stellar_templates[0] = np.copy(self.spectral_model.templates_dict["star"])
+        if self.spectral_model.star is not None and not self.spectral_model.star.from_flat:
+            self.stellar_templates[0] = np.copy(self.spectral_model.templates_dict["star"])
         self.spectral_model._init_parameters(self.data)
 
     def _init_rvs(self, bc_corrs=None):
@@ -267,7 +268,6 @@ class IterativeSpectralRVProb(OptProblem):
         
         # End the clock!
         print(f"Completed order {self.order_num} Runtime: {round(stopwatch.time_since(name='ti_main') / 3600, 2)} hours", flush=True)
-
         
     def optimize_all_observations(self, iter_index):
             

@@ -153,78 +153,11 @@ class CHIRONParser(pcdataparser.DataParser):
         return wls
 
 
-################################
-#### REDUCTION / EXTRACTION ####
-################################
-
-redux_settings = NotImplemented
-
 #######################################
 ##### GENERATING RADIAL VELOCITIES ####
 #######################################
 
-# Forward model blueprints for RVs
-spectral_model_blueprints = {
-    
-    # The star
-    'star': {
-        'class': 'AugmentedStar',
-        'input_file': None,
-        'vel': [-1000 * 300, 10, 1000 * 300]
-    },
-    
-    # The methane gas cell
-    'gas_cell': {
-        'name': 'iodine_gas_cell',
-        'class': 'PerfectGasCell',
-        'input_file': 'iodine_gas_cell_chiron_master_40K.npz'
-    },
-    
-    'tellurics': {
-        'name': 'vis_tellurics',
-        'class': 'TelluricsTAPAS',
-        'vel': [-300, 0, 300],
-        'water_depth': [0.01, 1.5, 4.0],
-        'airmass_depth': [0.8, 1.2, 4.0],
-        "feature_depth": 0.98,
-        'input_files': {
-            'water': 'telluric_water_tapas_whipple.npz',
-            'methane': 'telluric_methane_tapas_whipple.npz',
-            'nitrous_oxide': 'telluric_nitrous_oxide_tapas_whipple.npz',
-            'carbon_dioxide': 'telluric_carbon_dioxide_tapas_whipple.npz',
-            'oxygen' : 'telluric_oxygen_tapas_whipple.npz',
-            'ozone': 'telluric_ozone_tapas_whipple.npz'
-        }
-    },
-    
-    'continuum': {
-        'name': 'full_blaze',
-        'class': 'SplineContinuum',
-        'n_splines': 10,
-        'poly_0': [1.02, 1.05, 1.4],
-        'poly_1': [-0.001, 0.0001, .001],
-        'poly_2': [-1E-5, -1E-7, 1E-5],
-        'spline_lagrange': [0.2, 0.95, 1.2]
-    },
-    
-    'lsf': {
-        'name': 'lsf_hermite',
-        'class': 'HermiteLSF',
-        'hermdeg': 6,
-        'n_delay': 0,
-        "nx": 128,
-        'width': [0.009, 0.014, 0.018], # LSF width, in angstroms
-        'ak': [-0.1, 0.001, 0.1] # See arken et al for definition of ak
-    },
-    
-    'wavelength_solution': {
-        'name': 'i2_wls',
-        'class': 'SplineWavelengthSolution',
-        'n_splines': 6,
-        'poly_wave_lagrange': [-0.1, 0.01, 0.1],
-        'spline_lagrange': [-0.1, 0.01, 0.1]
-    },
-}
+lsf_width = [0.009, 0.014, 0.018]
 
 ###############
 #### MISC. ####

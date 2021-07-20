@@ -25,6 +25,23 @@ import numba
 import numba.types as nt
 from llc import jit_filter_function
 
+#@njit(nogil=True)
+def intersect1d(x, y):
+    result = []
+    for xx in x:
+        for yy in y:
+            if xx == yy:
+                result.append(xx)
+    return np.array(result, dtype=int)
+
+#@njit
+def where_good1d(*arrays):
+    n_arrays = len(arrays)
+    good = np.where(np.isfinite(arrays[0]))[0]
+    for i in range(1, n_arrays):
+        good = intersect1d(good, np.where(np.isfinite(arrays[i]))[0])
+    return good
+
 def compute_R2_stat(ydata, ymodel, w=None):
     """Computes the weighted R2 stat.
 
