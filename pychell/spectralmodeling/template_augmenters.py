@@ -80,14 +80,16 @@ class CubicSplineLSQ(TemplateAugmenter):
             else:
                 vel = -1 * pars[specrvprob.spectral_model.star.par_names[0]].value
                 
-            wave_star_rest += pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None).tolist()
-
+            _wave_star_rest = pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None).tolist()
+            wave_star_rest += _wave_star_rest
+            
             # Telluric weights, must doppler shift them as well.
             if self.downweight_tellurics:
                 tell_flux = specrvprob.spectral_model.tellurics.build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
+                if specrvprob.spectral_model.lsf is not None:
+                    tell_flux = specrvprob.spectral_model.lsf.convolve_flux(tell_flux, pars)
                 tell_flux = pcmath.doppler_shift(wave_data, vel, flux=tell_flux)
                 tell_weights = tell_flux**2
-            
                 _weights = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
             else:    
                 _weights = specrvprob.data[ispec].mask * fit_weights[ispec]
@@ -330,12 +332,16 @@ class WeightedMean(TemplateAugmenter):
             # Telluric weights, must doppler shift them as well.
             if self.downweight_tellurics:
                 tell_flux = specrvprob.spectral_model.tellurics.build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
+                if specrvprob.spectral_model.lsf is not None:
+                    tell_flux = specrvprob.spectral_model.lsf.convolve_flux(tell_flux, pars)
                 tell_flux = pcmath.doppler_shift(wave_data, vel, flux=tell_flux)
                 tell_weights = tell_flux**2
+                weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
+            else:
+                weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec]
             
             # Final weights
-            weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
-            weights_hr = pcmath.cspline_interp(wave_data, weights_lr, current_stellar_template[:, 0])
+            weights_hr = pcmath.cspline_interp(wave_star_rest, weights_lr, current_stellar_template[:, 0])
             bad = np.where(weights_hr < 0)[0]
             if bad.size > 0:
                 weights_hr[bad] = 0
