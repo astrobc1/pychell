@@ -202,17 +202,17 @@ class WeightedMedian(TemplateAugmenter):
             # Telluric weights, must doppler shift them as well.
             if self.downweight_tellurics:
                 tell_flux = specrvprob.spectral_model.tellurics.build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
-                tell_flux = pcmath.doppler_shift(wave_data, vel, flux=tell_flux)
                 if specrvprob.spectral_model.lsf is not None:
                     tell_flux = specrvprob.spectral_model.lsf.convolve_flux(tell_flux, pars)
+                tell_flux = pcmath.doppler_shift(wave_data, vel, flux=tell_flux)
                 tell_weights = tell_flux**2
                 weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
             else:
                 weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec]
             
-            # Final weights
-            weights_hr = pcmath.lin_interp(wave_data, weights_lr, current_stellar_template[:, 0])
-            bad = np.where(weights_hr < 0)[0]
+            # Interpolate to a high res grid
+            weights_hr = pcmath.lin_interp(wave_star_rest, weights_lr, current_stellar_template[:, 0])
+            bad = np.where((weights_hr < 0) | ~np.isfinite(weights_hr))[0]
             if bad.size > 0:
                 weights_hr[bad] = 0
             weights[:, ispec] = weights_hr

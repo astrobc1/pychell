@@ -589,17 +589,17 @@ class TelluricsTAPAS(Tellurics):
             flux = templates[:, 2]**depth
         return flux
         
-#class TelluricsDev(Tellurics):
-#    pass
-#
-#    def __init__(self, input_path, feature_depth=0.01, ):
-#        pass
-#
-#    def build(self, pars):
-#        pass
-#
-#    def initialize(self, pars):
-#        pass
+class TelluricsDev(Tellurics):
+   pass
+
+   def __init__(self, input_path, feature_depth=0.01, ):
+       pass
+
+   def build(self, pars):
+       pass
+
+   def initialize(self, pars):
+       pass
 
 ####################
 #### LSF MODELS ####
