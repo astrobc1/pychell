@@ -135,7 +135,7 @@ class RVProblem(BayesianProblem):
     #### STANDARD OPTIMIZATION METHODS ####
     #######################################
     
-    def sample(self, *args, save=True, **kwargs):
+    def run_mcmc(self, *args, save=True, **kwargs):
         """Runs the mcmc.
 
         Returns:
@@ -152,17 +152,13 @@ class RVProblem(BayesianProblem):
                 pickle.dump(mcmc_result, f)
         return mcmc_result
     
-    def optimize(self, *args, save=True, **kwargs):
+    def run_mapfit(self, save=True):
         """Runs the optimizer.
-
-        Args:
-            *args: Any args.
-            **kwargs: Any keyword args.
             
         Returns:
             dict: A dictionary with the optimize results.
         """
-        map_result = super().optimize(*args, **kwargs)
+        map_result = self.optimizer.optimize()
         if save:
             fname = f"{self.output_path}{self.star_name.replace(' ', '_')}_map_results_{pcutils.gendatestr(time=True)}_{self.tag}.pkl"
             with open(fname, 'wb') as f:
