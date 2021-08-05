@@ -145,7 +145,7 @@ class RVProblem(BayesianProblem):
         Returns:
             dict: A dictionary with the mcmc results.
         """
-        mcmc_result = super().sample(*args, **kwargs)
+        mcmc_result = super().run_mcmc(*args, **kwargs)
         if save:
             fname = self.output_path + self.star_name.replace(' ', '_') + '_mcmc_results_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.pkl'
             with open(fname, 'wb') as f:
