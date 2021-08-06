@@ -158,6 +158,7 @@ class RVProblem(BayesianProblem):
         Returns:
             dict: A dictionary with the optimize results.
         """
+        self.initialize()
         map_result = self.optimizer.optimize()
         if save:
             fname = f"{self.output_path}{self.star_name.replace(' ', '_')}_map_results_{pcutils.gendatestr(time=True)}_{self.tag}.pkl"
