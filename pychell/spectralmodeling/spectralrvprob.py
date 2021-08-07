@@ -84,7 +84,7 @@ class IterativeSpectralRVProb(OptProblem):
         self.create_output_paths()
         
         # Initialize the data
-        self._init_data()
+        self._init_data(bc_corrs=bc_corrs)
         
         # Optimize results
         self.opt_results = np.empty(shape=(self.n_spec, self.n_iterations), dtype=dict)
