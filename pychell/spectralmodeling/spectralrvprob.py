@@ -160,7 +160,7 @@ class IterativeSpectralRVProb(OptProblem):
         else:
             for i in range(self.n_spec):
                 self.data[i].bjd = bc_corrs[i, 0]
-                self.data[i].bc_vel = bc_corrs[i, 1]
+                self.data[i].bc_vel = bc_corrs[i, 1
             self.rvs_dict["bjds"] = bc_corrs[:, 0]
             self.rvs_dict["bc_vels"] = bc_corrs[:, 1]
         
