@@ -158,6 +158,9 @@ class IterativeSpectralRVProb(OptProblem):
             for i in range(self.n_spec):
                 self.rvs_dict["bjds"][i], self.rvs_dict["bc_vels"][i] = self.parser.compute_barycenter_corrections(self.data[i], observatory, self.target_dict)
         else:
+            for i in range(self.n_spec):
+                self.data[i].bjd = bc_corrs[i, 0]
+                self.data[i].bc_vel = bc_corrs[i, 1]
             self.rvs_dict["bjds"] = bc_corrs[:, 0]
             self.rvs_dict["bc_vels"] = bc_corrs[:, 1]
         

@@ -232,7 +232,7 @@ def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, t
     
         # Flag bad RVs
         for inight, f, l in pcutils.nightly_iteration(n_obs_nights):
-            wstddev = pcmaths.weighted_stddev_mumod(rvsfwm_single_iter[:, f:l].flatten(), weights_single_iter[:, f:l].flatten(), rvsn[inight])
+            wstddev = pcmaths.weighted_stddev(rvsfwm_single_iter[:, f:l].flatten(), weights_single_iter[:, f:l].flatten())
             bad = np.where(np.abs(rvsfwm_single_iter[:, f:l] - rvsn[inight]) > 4 * wstddev)
             if bad[0].size > 0:
                 rvsfwm_single_iter[:, f:l][bad] = np.nan

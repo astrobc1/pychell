@@ -8,32 +8,6 @@ import plotly
 def make_title(title):
     return st.title(title)
 
-# Not yet working
-# class SessionState:
-    
-#     def __init__(self, fname, data=None):
-#         if data is not None:
-#             self.data = data
-#             self.fname = fname
-#         if os.path.exists(fname) and data is None:
-#             self = self.load(fname)
-        
-#     def save(self):
-#         with open(self.fname, 'wb') as f:
-#             pickle.dump(self, f)
-            
-#     def load(self):
-#         with open(self.fname, 'wb') as f:
-#             return pickle.load(f)
-    
-#     def __getitem__(self, key):
-#         if key == "fname":
-#             return self.fname
-#         if key in self.data:
-#             return self.data[key]
-#         else:
-#             return super().__getitem__(key)
-
 class StreamlitComponent:
     
     def __init__(self, comps, label="", *args, **kwargs):
