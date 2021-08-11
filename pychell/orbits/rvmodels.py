@@ -126,7 +126,7 @@ class RVTrend(DeterministicModel):
     def __init__(self, poly_order, data=None, time_zero=None):
         super().__init__(data=data, name="RV Trend Model")
         self.poly_order = poly_order
-        self.time_zero = time_zero
+        self.time_zero = np.nanmedian(data.t) if time_zero is None else time_zero
     
     
     ##################
