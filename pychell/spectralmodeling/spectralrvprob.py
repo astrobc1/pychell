@@ -46,9 +46,29 @@ class IterativeSpectralRVProb(OptProblem):
                  augmenter,
                  order_num, tag, output_path, target_dict,
                  bc_corrs=None, crop_pix=[200, 200],
-                 n_iterations=10, model_resolution=8,
+                 n_iterations=10,
                  optimizer=None, obj=None,
                  n_cores=1, verbose=True):
+        """Initiate the top level iterative spectral rv problem object.
+
+        Args:
+            spectrograph (str): The name of the spectrograph.
+            data_input_path (str): The full path to the data folder.
+            filelist (str): A text file listing the observations (filenames) within data_input_path to use.
+            spectral_model (IterativeSpectralForwardModel): The spectral model obejct. For now only IterativeSpectralForwardModel is supported.
+            augmenter (TemnplateAugmenter): The template augmenter object.
+            order_num (int): The image order number (1, 2, ... n_orders).
+            tag ([type]): A tag to uniquely identify this run in the outputs. The full tag will be spectrograph_tag.
+            output_path ([type]): The output path. All outputs wioll be stored within a single sub folder within output_path, which will also contain multiple sub folders.
+            target_dict ([type]): The information for this target. For now, only the name key is used to generate the barycenter corrections (BJDs and barycenter velocity corrections) using Simbad to obtain the necessary inormation.
+            bc_corrs (np.ndarray, optional): The barycenter corrections may be passed manually as a two column numpy array; shape=(n_observations, 2). Defaults to None and the barycenter correcitons are computed with barycorrpy from information pulled form Simbad.
+            crop_pix (list, optional): How many pixels to crop on the left and right of the observation when ordered accordibg to wavelength. Defaults to [200, 200].
+            n_iterations (int, optional): The number of iterations, or number of times to augment the template(s). Defaults to 10.
+            optimizer (Optimizer, optional): The optimizer to use. Defaults to None.
+            obj (SpectralObjective, optional): The objective function to ultimiately extremize. Defaults to None.
+            n_cores (int, optional): The number of cores to use. Defaults to 1.
+            verbose (bool, optional): Whether or not to print additional diagnostics ater each fit. This should be False for long runs. Defaults to True.
+        """
         
         # The number of cores
         self.n_cores = n_cores
@@ -158,9 +178,10 @@ class IterativeSpectralRVProb(OptProblem):
             for i in range(self.n_spec):
                 self.rvs_dict["bjds"][i], self.rvs_dict["bc_vels"][i] = self.parser.compute_barycenter_corrections(self.data[i], observatory, self.target_dict)
         else:
+            bc_corrs = np.atleast_2d(bc_corrs)
             for i in range(self.n_spec):
                 self.data[i].bjd = bc_corrs[i, 0]
-                self.data[i].bc_vel = bc_corrs[i, 1
+                self.data[i].bc_vel = bc_corrs[i, 1]
             self.rvs_dict["bjds"] = bc_corrs[:, 0]
             self.rvs_dict["bc_vels"] = bc_corrs[:, 1]
         

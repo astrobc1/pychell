@@ -30,6 +30,15 @@ class SpectralRegion:
     __slots__ = ['pixmin', 'pixmax', 'wavemin', 'wavemax', 'label', 'data_inds']
     
     def __init__(self, pixmin, pixmax, wavemin, wavemax, label=None):
+        """Initiate a spectral region.
+
+        Args:
+            pixmin (int): The min pixel.
+            pixmax (int): The max pixel.
+            wavemin (float): The minimum wavelength
+            wavemax (float): The maximum wavelength
+            label (str, optional): A label for this region. Defaults to None.
+        """
         self.pixmin = pixmin
         self.pixmax = pixmax
         self.wavemin = wavemin
@@ -71,7 +80,7 @@ class SpectralRegion:
 ##################################
 
 class IterativeSpectralForwardModel(Model):
-    """The primary container for a spectral forward model problem.
+    """The primary container for an iterative spectral forward model problem.
     """
     
     ###############################
@@ -84,6 +93,18 @@ class IterativeSpectralForwardModel(Model):
                  gas_cell=None,
                  fringing=None,
                  model_resolution=8):
+        """Initiate an iterative spectral forward model object.
+
+        Args:
+            wavelength_solution (WavelengthSolution, optional): The wavelength solution model. Defaults to None.
+            continuum (Continuum, optional): The continuum model. Defaults to None.
+            lsf (LSF, optional): The LSF model. Defaults to None.
+            star (AugmentedStar, optional): The Stellar model. Defaults to None.
+            tellurics (Tellurics, optional): The telluric model. Defaults to None.
+            gas_cell (GasCell, optional): The gas cell model. Defaults to None.
+            fringing (FPCavityFringing, optional): The fringing model. Defaults to None.
+            model_resolution (int, optional): The oversample factor of the model relative to the data, which is important for proper convolution. Defaults to 8.
+        """
         
         # Model resolution
         self.model_resolution = model_resolution
