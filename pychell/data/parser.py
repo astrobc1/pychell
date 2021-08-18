@@ -1,24 +1,33 @@
+# Base Python
+import warnings
+import glob
+import os
+import importlib
+import copy
+import sys
+import pickle
+
 # Import the barycorrpy module
 try:
     from barycorrpy import get_BC_vel
     from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
 except:
-    pass
+    warnings.warn("Could not import barycorrpy")
+
+# Astropy
 from astropy.time import Time
-import sklearn.cluster
-import glob
-import numpy as np
-import os
-import importlib
-import warnings
-import copy
-import pychell.data as pcdata
 from astropy.io import fits
-import sys
-import pickle
 from astropy.coordinates import SkyCoord
-import pychell.maths as pcmath
 import astropy.units as units
+
+# Maths
+import sklearn.cluster
+import numpy as np
+
+# Pychell
+import pychell.data as pcdata
+import pychell.maths as pcmath
+
 
 class DataParser:
     

@@ -35,109 +35,8 @@
             
   <div class="section" id="pychell-api-reference">
 <h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
-<div class="section" id="module-pychell.rvs.template_augmenter">
-<span id="template-generation"></span><h2>Template Generation<a class="headerlink" href="#module-pychell.rvs.template_augmenter" title="Permalink to this headline">¶</a></h2>
-<dl class="py class">
-<dt id="pychell.rvs.template_augmenter.TemplateOptimizer">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.rvs.template_augmenter.</code><code class="sig-name descname">TemplateOptimizer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">base_flux_models</span></em>, <em class="sig-param"><span class="n">waves_lr</span></em>, <em class="sig-param"><span class="n">weights</span></em>, <em class="sig-param"><span class="n">data_flux</span></em>, <em class="sig-param"><span class="n">wave_hr_master</span></em>, <em class="sig-param"><span class="n">star_flux</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">star_vels</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">residual_lab_flux</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">lsfs</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.TemplateOptimizer" title="Permalink to this definition">¶</a></dt>
-<dd><p>Initializes internal Module state, shared by both nn.Module and ScriptModule.</p>
-<dl class="py class">
-<dt id="pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d">
-<em class="property">class </em><code class="sig-name descname">Interp1d</code><a class="headerlink" href="#pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d" title="Permalink to this definition">¶</a></dt>
-<dd><dl class="py method">
-<dt id="pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.backward">
-<em class="property">static </em><code class="sig-name descname">backward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">ctx</span></em>, <em class="sig-param"><span class="n">grad_out</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.backward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Defines a formula for differentiating the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context <code class="xref py py-attr docutils literal notranslate"><span class="pre">ctx</span></code> as the first argument, followed by
-as many outputs did <a class="reference internal" href="#pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.forward" title="pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.forward"><code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code></a> return, and it should return as many
-tensors, as there were inputs to <a class="reference internal" href="#pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.forward" title="pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.forward"><code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code></a>. Each argument is the
-gradient w.r.t the given output, and each returned value should be the
-gradient w.r.t. the corresponding input.</p>
-<p>The context can be used to retrieve tensors saved during the forward
-pass. It also has an attribute <code class="xref py py-attr docutils literal notranslate"><span class="pre">ctx.needs_input_grad</span></code> as a tuple
-of booleans representing whether each input needs gradient. E.g.,
-<a class="reference internal" href="#pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.backward" title="pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.backward"><code class="xref py py-func docutils literal notranslate"><span class="pre">backward()</span></code></a> will have <code class="docutils literal notranslate"><span class="pre">ctx.needs_input_grad[0]</span> <span class="pre">=</span> <span class="pre">True</span></code> if the
-first input to <a class="reference internal" href="#pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.forward" title="pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.forward"><code class="xref py py-func docutils literal notranslate"><span class="pre">forward()</span></code></a> needs gradient computated w.r.t. the
-output.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt id="pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.forward">
-<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">x</span></em>, <em class="sig-param"><span class="n">y</span></em>, <em class="sig-param"><span class="n">xnew</span></em>, <em class="sig-param"><span class="n">out</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.TemplateOptimizer.Interp1d.forward" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs the operation.</p>
-<p>This function is to be overridden by all subclasses.</p>
-<p>It must accept a context ctx as the first argument, followed by any
-number of arguments (tensors or other types).</p>
-<p>The context can be used to store tensors that can be then retrieved
-during the backward pass.</p>
-</dd></dl>
-
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.rvs.template_augmenter.cubic_spline_lsq">
-<code class="sig-prename descclassname">pychell.rvs.template_augmenter.</code><code class="sig-name descname">cubic_spline_lsq</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_index</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.cubic_spline_lsq" title="Permalink to this definition">¶</a></dt>
-<dd><p>Augments the stellar template by fitting the residuals with cubic spline least squares regression. The knot-points are spaced roughly according to the detector grid. The weighting scheme includes (possible inversly) the rms of the fit, the amount of telluric absorption. Weights are also applied such that the barycenter sampling is approximately uniform from vmin to vmax.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects</p></li>
-<li><p><strong>iter_index</strong> (<em>int</em>) – The iteration to use.</p></li>
-<li><p><strong>nights_for_template</strong> (<em>str</em><em> or </em><em>list</em>) – The nights to consider for averaging residuals to update the stellar template. Options are ‘best’ to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.rvs.template_augmenter.determine_best_night">
-<code class="sig-prename descclassname">pychell.rvs.template_augmenter.</code><code class="sig-name descname">determine_best_night</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">rms</span></em>, <em class="sig-param"><span class="n">n_obs_nights</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.determine_best_night" title="Permalink to this definition">¶</a></dt>
-<dd><p>Determines the night with the highest co-added S/N given the RMS of the fits.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>rms</strong> (<em>np.ndarray</em>) – The array of RMS values from fitting.</p></li>
-<li><p><strong>n_obs_nights</strong> (<em>np.ndarray</em>) – The number of observations on each night, has length = total number of nights.</p></li>
-<li><p><strong>templates_to_optimize</strong> – For now, only the star is able to be optimized. Future updates will include a lab-frame coherence  simultaneous fit.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.rvs.template_augmenter.global_fit">
-<code class="sig-prename descclassname">pychell.rvs.template_augmenter.</code><code class="sig-name descname">global_fit</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_index</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.global_fit" title="Permalink to this definition">¶</a></dt>
-<dd><p>Similar to Wobble, this will update the stellar template and lab frames by performing a gradient-based optimization via ADAM in pytorch considering all observations. Here, the template(s) are a parameter of thousands of points. The star is implemented in such a way that it will modify the current template, Doppler shift each observation and multiply them into the model. The lab frame is implemented in such a way that it will modify a zero based array, and then add this into each observation before convolution is performed.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects</p></li>
-<li><p><strong>iter_index</strong> (<em>int</em>) – The iteration to use.</p></li>
-<li><p><strong>templates_to_optimize</strong> (<em>list of strings</em>) – valid entries are ‘star’, ‘lab’.</p></li>
-<li><p><strong>nights_for_template</strong> (<em>None</em>) – May be set, but not used here.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.rvs.template_augmenter.weighted_median">
-<code class="sig-prename descclassname">pychell.rvs.template_augmenter.</code><code class="sig-name descname">weighted_median</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">forward_models</span></em>, <em class="sig-param"><span class="n">iter_index</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.rvs.template_augmenter.weighted_median" title="Permalink to this definition">¶</a></dt>
-<dd><p>Augments the stellar template by considering the weighted median of the residuals on a common high resolution grid.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>forward_models</strong> (<a class="reference internal" href="model_building_api.html#pychell.rvs.forward_models.ForwardModels" title="pychell.rvs.forward_models.ForwardModels"><em>ForwardModels</em></a>) – The list of forward model objects</p></li>
-<li><p><strong>iter_index</strong> (<em>int</em>) – The iteration to use.</p></li>
-<li><p><strong>nights_for_template</strong> (<em>str</em><em> or </em><em>list</em>) – The nights to consider for averaging residuals to update the stellar template. Options are ‘best’ to use the night with the highest co-added S/N, a list of indices for specific nights, or an empty list to use all nights. defaults to [] for all nights.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
+<div class="section" id="template-generation">
+<h2>Template Generation<a class="headerlink" href="#template-generation" title="Permalink to this headline">¶</a></h2>
 </div>
 </div>
 
@@ -166,7 +65,6 @@ during the backward pass.</p>
 <li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials.html#indices-and-tables">Indices and tables</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>

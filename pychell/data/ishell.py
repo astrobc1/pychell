@@ -188,6 +188,9 @@ detector_props = [
 # Gas dell depth
 gas_cell_depth = [0.97, 0.97, 0.97]
 
+# Gas cell file
+gas_cell_file = "methane_gas_cell_ishell_kgas.npz"
+
 # LSF width
 lsf_width = [0.08, 0.11, 0.15]
 

@@ -37,121 +37,6 @@
 <h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="module-pychell.reduce.calib">
 <span id="calibration"></span><h2>Calibration<a class="headerlink" href="#module-pychell.reduce.calib" title="Permalink to this headline">¶</a></h2>
-<dl class="py function">
-<dt id="pychell.reduce.calib.correct_flat_artifacts">
-<code class="sig-prename descclassname">pychell.reduce.calib.</code><code class="sig-name descname">correct_flat_artifacts</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">flat</span></em>, <em class="sig-param"><span class="n">redux_settings</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.calib.correct_flat_artifacts" title="Permalink to this definition">¶</a></dt>
-<dd><p>Corrects artifacts present in flat fields, under dev.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>flat</strong> (<em>FlatFieldImage</em>) – The FlatFieldImage to correct</p></li>
-<li><p><strong>redux_settings</strong> (<em>dict</em>) – redux_settings dictionary.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The corrected flat field</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>np.ndarray</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.reduce.calib.generate_master_bias">
-<code class="sig-prename descclassname">pychell.reduce.calib.</code><code class="sig-name descname">generate_master_bias</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">individuals</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.calib.generate_master_bias" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generates a median master bias image.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>individuals</strong> (<em>list</em>) – The list of BiasImages.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The master bias image.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>master_bias (np.ndarray)</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.reduce.calib.generate_master_dark">
-<code class="sig-prename descclassname">pychell.reduce.calib.</code><code class="sig-name descname">generate_master_dark</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">individuals</span></em>, <em class="sig-param"><span class="n">bias_subtraction</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.calib.generate_master_dark" title="Permalink to this definition">¶</a></dt>
-<dd><p>Computes a median master flat field image from a subset of flat field images. Dark and bias subtraction is also performed if set.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>individuals</strong> (<em>list</em>) – The list of DarkImages.</p></li>
-<li><p><strong>bias_subtraction</strong> (<em>bool</em>) – Whether or not to perform bias subtraction. If so, each dark must have a master_bias attribute.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The median combined master dark image</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>master_dark (np.ndarray)</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.reduce.calib.generate_master_flat">
-<code class="sig-prename descclassname">pychell.reduce.calib.</code><code class="sig-name descname">generate_master_flat</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">individuals</span></em>, <em class="sig-param"><span class="n">bias_subtraction</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">dark_subtraction</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flatfield_percentile</span><span class="o">=</span><span class="default_value">0.75</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.calib.generate_master_flat" title="Permalink to this definition">¶</a></dt>
-<dd><p>Computes a median master flat field image from a subset of flat field images. Dark and bias subtraction is also performed if set.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>individuals</strong> (<em>list</em>) – The list of FlatFieldImages.</p></li>
-<li><p><strong>bias_subtraction</strong> (<em>bool</em>) – Whether or not to perform bias subtraction. If so, each flat must have a master_bias attribute.</p></li>
-<li><p><strong>dark_subtraction</strong> (<em>bool</em>) – Whether or not to perform dark subtraction. If so, each flat must have a master_dark attribute.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The median combined and corrected master flat image</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>master_flat (np.ndarray)</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.reduce.calib.rectify_trace">
-<code class="sig-prename descclassname">pychell.reduce.calib.</code><code class="sig-name descname">rectify_trace</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">order_image</span></em>, <em class="sig-param"><span class="n">ypositions</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.calib.rectify_trace" title="Permalink to this definition">¶</a></dt>
-<dd><p>Rectifies (straightens) the flat field order.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>order_image</strong> (<em>np.ndarray</em>) – The non-straightened image.</p></li>
-<li><p><strong>ypositions</strong> (<em>np.ndarray</em>) – The (approximate) locations of the trace on the detector, y(x).</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.reduce.calib.standard_calibration">
-<code class="sig-prename descclassname">pychell.reduce.calib.</code><code class="sig-name descname">standard_calibration</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">data_image</span></em>, <em class="sig-param"><span class="n">bias_subtraction</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">dark_subtraction</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">flat_division</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.calib.standard_calibration" title="Permalink to this definition">¶</a></dt>
-<dd><p>Performs standard bias, flat, and dark corrections to science frames.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<em>SpecImage</em>) – The SpecImage to calibrate</p></li>
-<li><p><strong>data_image</strong> (<em>np.ndarray</em>) – The corresponding parsed image to calibrate.</p></li>
-<li><p><strong>bias_subtraction</strong> (<em>bool</em>) – Whether or not to perform bias subtraction, defaults to False.</p></li>
-<li><p><strong>dark_subtraction</strong> (<em>bool</em>) – Whether or not to perform dark subtraction, defaults to False.</p></li>
-<li><p><strong>flat_division</strong> (<em>bool</em>) – Whether or not to perform flat division, defaults to False.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The corrected data image.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>data_image (np.ndarray)</p>
-</dd>
-</dl>
-</dd></dl>
-
 </div>
 </div>
 
@@ -180,7 +65,6 @@
 <li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials.html#indices-and-tables">Indices and tables</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
 <li class="toctree-l2 current"><a class="reference internal" href="reduce_api.html">Reduction</a></li>

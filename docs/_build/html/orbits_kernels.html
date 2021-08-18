@@ -38,104 +38,15 @@
 <div class="section" id="module-pychell.orbits.rvkernels">
 <span id="noise-kernels"></span><h2>Noise Kernels<a class="headerlink" href="#module-pychell.orbits.rvkernels" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
-<dt id="pychell.orbits.rvkernels.RVColor">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvkernels.</code><code class="sig-name descname">RVColor</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">par_names</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wavelength0</span><span class="o">=</span><span class="default_value">550</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.RVColor" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.kernels.GaussianProcess</span></code></p>
-<p>Constructs a generic GP. Should be called by any class that extends this class.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<em>MixedData</em>) – The mixed data objects which utilize this noise kernel. The combined and sorted x variables will form the axes for the covariance matrix.</p></li>
-<li><p><strong>par_names</strong> (<em>list</em>) – A list of parameter names. They must be provided in the order specified by the appropriate kernel.</p></li>
-</ul>
-</dd>
-</dl>
+<dt id="pychell.orbits.rvkernels.ChromaticKernelJ1">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvkernels.</code><code class="sig-name descname">ChromaticKernelJ1</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">par_names</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ1" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.kernels.CorrelatedNoiseKernel</span></code></p>
 <dl class="py method">
-<dt id="pychell.orbits.rvkernels.RVColor.compute_data_errors">
-<code class="sig-name descname">compute_data_errors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.RVColor.compute_data_errors" title="Permalink to this definition">¶</a></dt>
-<dd><p>Computes the errors added in quadrature for all datasets corresponding to this kernel.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The errors</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>np.ndarray</p>
-</dd>
-</dl>
+<dt id="pychell.orbits.rvkernels.ChromaticKernelJ1.initialize">
+<code class="sig-name descname">initialize</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">p0</span></em>, <em class="sig-param"><span class="n">x1</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">xpred</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">instname1</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">instname2</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ1.initialize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default wrapper to initialize the kernel, storing the parameters.</p>
 </dd></dl>
 
-<dl class="py method">
-<dt id="pychell.orbits.rvkernels.RVColor.compute_dist_matrix">
-<code class="sig-name descname">compute_dist_matrix</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">x1</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">x2</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave1</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave2</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.RVColor.compute_dist_matrix" title="Permalink to this definition">¶</a></dt>
-<dd><p>Computes the distance matrix.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>x1</strong> (<em>np.ndarray</em>) – [description]</p></li>
-<li><p><strong>x2</strong> (<em>np.ndarray</em>) – [description]</p></li>
-<li><p><strong>instname</strong> (<em>str</em><em>, </em><em>optional</em>) – The name of the instrument this is for. Defaults to None.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt id="pychell.orbits.rvkernels.RVColor.compute_wave_matrix">
-<code class="sig-name descname">compute_wave_matrix</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wave1</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wave2</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.RVColor.compute_wave_matrix" title="Permalink to this definition">¶</a></dt>
-<dd><p>Generates a matrix for a linear kernel.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>wave1</strong> (<em>float</em><em>, </em><em>optional</em>) – [description]. Defaults to the data wavelengths.</p></li>
-<li><p><strong>wave2</strong> (<em>float</em><em>, </em><em>optional</em>) – The wavelength for the second axis. Defaults to the data wavelengths.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt id="pychell.orbits.rvkernels.RVColor.realize">
-<code class="sig-name descname">realize</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">residuals</span></em>, <em class="sig-param"><span class="n">xpred</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">xres</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">return_unc</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">wavelength</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.RVColor.realize" title="Permalink to this definition">¶</a></dt>
-<dd><p>Realize the GP (predict/ssample at arbitrary points). Meant to be the same as the predict method offered by other codes.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use.</p></li>
-<li><p><strong>residuals</strong> (<em>np.ndarray</em>) – The residuals before the GP is subtracted.</p></li>
-<li><p><strong>xpred</strong> (<em>np.ndarray</em>) – The vector to realize the GP on.</p></li>
-<li><p><strong>xres</strong> (<em>np.ndarray</em>) – The vector the data is on.</p></li>
-<li><p><strong>errors</strong> (<em>np.ndarray</em>) – The errorbars, already added in quadrature.</p></li>
-<li><p><strong>wavelength</strong> (<em>float</em>) – The wavelength to realize the GP for.</p></li>
-<li><p><strong>return_unc</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to compute the uncertainty in the GP. If True, both the mean and stddev are returned in a tuple. Defaults to False.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>If stddev is False, only the mean GP is returned. If stddev is True, the uncertainty in the GP is computed and returned as well. The mean GP is computed through a linear optimization.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>np.ndarray OR tuple</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt id="pychell.orbits.rvkernels.RVColor2">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvkernels.</code><code class="sig-name descname">RVColor2</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">par_names</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wavelength0</span><span class="o">=</span><span class="default_value">550</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.RVColor2" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#pychell.orbits.rvkernels.RVColor" title="pychell.orbits.rvkernels.RVColor"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.orbits.rvkernels.RVColor</span></code></a></p>
-<p>Constructs a generic GP. Should be called by any class that extends this class.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<em>MixedData</em>) – The mixed data objects which utilize this noise kernel. The combined and sorted x variables will form the axes for the covariance matrix.</p></li>
-<li><p><strong>par_names</strong> (<em>list</em>) – A list of parameter names. They must be provided in the order specified by the appropriate kernel.</p></li>
-</ul>
-</dd>
-</dl>
 </dd></dl>
 
 </div>
@@ -166,7 +77,6 @@
 <li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
-<li class="toctree-l1"><a class="reference internal" href="tutorials.html#indices-and-tables">Indices and tables</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
 <li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>

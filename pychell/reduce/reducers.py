@@ -140,7 +140,7 @@ class NightlyReducer(Reducer):
         else:
             
             # One at a time
-            print("Extracting Science Spectra In Sequence...", flush=True)
+            print("Extracting Science Spectra In Series ...", flush=True)
             for i, data in enumerate(self.data["science"]):
                 self.extractor.extract_image(self, data, i + 1)
     

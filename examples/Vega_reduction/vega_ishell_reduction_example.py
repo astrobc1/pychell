@@ -1,32 +1,25 @@
-# Import the reduction code driver
-import pychell.reduce.driver
-
-# OS tools
 import os
 
-# This must be defined. See README for key description.
-redux_settings = {
-    
-    # Input and output path
-    "input_path": "Vega" + os.sep, # the input directory the raw data lives in.
-    "output_path_root": os.path.dirname(os.path.realpath(__file__)) + os.sep + 'outputs' + os.sep, # For current directory
-    "spectrograph": "iSHELL",
-    "n_cores": 1,
-    
-    # Calibration
-    "bias_subtraction": False,
-    "dark_subtraction": False,
-    "flat_division": True,
-    "correct_fringing_in_flatfield": False,
-    "correct_blaze_function_in_flatfield": False,
-    
-    # Order map
-    'mask_trace_edges':  5,
-    'order_map': {'source': 'empirical_from_flat_fields', 'method': None},
-    
-    'oversample': 4,
-    
-    'pmassey_settings': {'bad_thresh': [20, 16, 12]}
-}
+from pychell.reduce.reducers import NightlyReducer
+from pychell.reduce.extract import OptimalSlitExtractor
+from pychell.reduce.order_map import DensityClusterTracer
+from pychell.reduce.calib import PreCalibrator, FringingPreCalibrator
 
-pychell.reduce.driver.reduce_night(redux_settings)
+# Basic info
+spectrograph = "iSHELL"
+data_input_path = os.getcwd() + os.sep + "Vega_raw" + os.sep
+output_path = os.getcwd() + os.sep
+
+# Create the class
+reducer = NightlyReducer(spectrograph=spectrograph,
+                         data_input_path=data_input_path, output_path=output_path,
+                         pre_calib=FringingPreCalibrator(do_bias=False, do_dark=False, do_flat=True, flat_percentile=0.9, remove_blaze_from_flat=False, remove_fringing_from_flat=False),
+                         tracer=DensityClusterTracer(trace_pos_poly_order=2,
+                                                     mask_left=200, mask_right=200, mask_top=20, mask_bottom=20),
+                         extractor=OptimalSlitExtractor(trace_pos_poly_order=4,
+                                                        mask_left=200, mask_right=200, mask_top=20, mask_bottom=20,
+                                                        oversample=4),
+                         n_cores=1)
+
+# Reduce the night
+reducer.reduce_night()

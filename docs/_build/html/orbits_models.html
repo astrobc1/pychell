@@ -38,175 +38,30 @@
 <div class="section" id="module-pychell.orbits.rvmodels">
 <span id="rv-models"></span><h2>RV Models<a class="headerlink" href="#module-pychell.orbits.rvmodels" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
-<dt id="pychell.orbits.rvmodels.AbstractOrbitBasis">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">AbstractOrbitBasis</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">planet_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.AbstractOrbitBasis" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
-<p>An abstract orbit basis class, not useful on its own. Each method must define to_standard and from_standard below.</p>
-<dl class="py attribute">
-<dt id="pychell.orbits.rvmodels.AbstractOrbitBasis.planet_index">
-<code class="sig-name descname">planet_index</code><a class="headerlink" href="#pychell.orbits.rvmodels.AbstractOrbitBasis.planet_index" title="Permalink to this definition">¶</a></dt>
-<dd><p>The index of this planet in the planets dictionary.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>int</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt id="pychell.orbits.rvmodels.AbstractOrbitBasis.pnames">
-<code class="sig-name descname">pnames</code><a class="headerlink" href="#pychell.orbits.rvmodels.AbstractOrbitBasis.pnames" title="Permalink to this definition">¶</a></dt>
-<dd><p>A list of the parameter names for this planet and basis combination.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>list[str]</p>
-</dd>
-</dl>
-</dd></dl>
-
-<p>Constructor for most bases.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>planet_index</strong> (<em>int</em>) – The index of this planet in the planets dictionary.</p>
-</dd>
-</dl>
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.AbstractOrbitBasis.from_standard">
-<em class="property">classmethod </em><code class="sig-name descname">from_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.AbstractOrbitBasis.from_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to this basis from the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The basis parameters. See the class attribute names for each.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>tuple</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.AbstractOrbitBasis.to_standard">
-<code class="sig-name descname">to_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.AbstractOrbitBasis.to_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Period.
-float: Time of periastron.
-float: eccentricity.
-float: Angle of periastron.
-float: Semi-amplitude.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt id="pychell.orbits.rvmodels.RVModel">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">RVModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">planets_dict</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">p0</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">kernel</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">time_base</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.Model</span></code></p>
-<p>A Base RV Bayesian RV Model</p>
-<dl class="py attribute">
-<dt id="pychell.orbits.rvmodels.RVModel.planets_dict">
-<code class="sig-name descname">planets_dict</code><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.planets_dict" title="Permalink to this definition">¶</a></dt>
-<dd><p>A planets dictionary containing indices (integers) as keys, and letters as values, akin to the radvel dictionary.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>dict</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt id="pychell.orbits.rvmodels.RVModel.data">
-<code class="sig-name descname">data</code><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.data" title="Permalink to this definition">¶</a></dt>
-<dd><p>The composite RV data set.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p><a class="reference internal" href="orbits_data.html#pychell.orbits.rvdata.MixedRVData" title="pychell.orbits.rvdata.MixedRVData">MixedRVData</a></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt id="pychell.orbits.rvmodels.RVModel.p0">
-<code class="sig-name descname">p0</code><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.p0" title="Permalink to this definition">¶</a></dt>
-<dd><p>The initial parameters.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>Parameters</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt id="pychell.orbits.rvmodels.RVModel.kernels">
-<code class="sig-name descname">kernels</code><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.kernels" title="Permalink to this definition">¶</a></dt>
-<dd><p>The list of noise kernels.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>list</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt id="pychell.orbits.rvmodels.RVModel.time_base">
-<code class="sig-name descname">time_base</code><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.time_base" title="Permalink to this definition">¶</a></dt>
-<dd><p>The time to subtract off for the linear and quadratic gamma offsets.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<p>Construct an RV Model for multiple datasets.</p>
+<dt id="pychell.orbits.rvmodels.CompositeGPRVModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">CompositeGPRVModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">planets_dict</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">noise_process</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">poly_order</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">time_zero</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">'rvs'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeGPRVModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.orbits.rvmodels.CompositeRVModel" title="pychell.orbits.rvmodels.CompositeRVModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.orbits.rvmodels.CompositeRVModel</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.GPBasedModel</span></code></p>
+<p>Base constructor for a noise based model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>planets_dict</strong> (<em>dict</em>) – A planets dictionary containing indices (integers) as keys, and letters as values, akin to the radvel dictionary.</p></li>
-<li><p><strong>data</strong> (<a class="reference internal" href="orbits_data.html#pychell.orbits.rvdata.RVData" title="pychell.orbits.rvdata.RVData"><em>RVData</em></a>) – The composite RV data set.</p></li>
-<li><p><strong>p0</strong> (<em>Parameters</em>) – The initial parameters.</p></li>
-<li><p><strong>kernel</strong> (<em>NoiseKernel</em>) – The noise kernel.</p></li>
-<li><p><strong>time_base</strong> (<em>float</em>) – The time to subtract off for the linear and quadratic gamma offsets.</p></li>
+<li><p><strong>det_model</strong> (<em>DeterministicModel</em>) – The deterministic model.</p></li>
+<li><p><strong>noise_process</strong> (<em>NoiseProcess</em>) – The noise process.</p></li>
+<li><p><strong>data</strong> (<em>Dataset</em>) – The dataset for this model.</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – The name of this model.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
-<dt id="pychell.orbits.rvmodels.RVModel.apply_offsets">
-<code class="sig-name descname">apply_offsets</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">rv_vec</span></em>, <em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">instname</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.apply_offsets" title="Permalink to this definition">¶</a></dt>
-<dd><p>Apply gamma offsets (zero points only) to the data. Linear and quadratic terms are applied to the model.</p>
+<dt id="pychell.orbits.rvmodels.CompositeGPRVModel.compute_data_errors">
+<code class="sig-name descname">compute_data_errors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">include_corr_error</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeGPRVModel.compute_data_errors" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default method to generate the data errors, which may be parametrized. Here the data a priori error bars are returned.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<em>MixedData</em>) – The full data object.</p></li>
-<li><p><strong>rv_vec</strong> (<em>np.ndarray</em>) – The RV data vector for all data</p></li>
-<li><p><strong>pars</strong> (<em>Parameters</em>) – The parameters.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.RVModel.build">
-<code class="sig-name descname">build</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.build" title="Permalink to this definition">¶</a></dt>
-<dd><p>Builds the model using the specified parameters on the data grid.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use</p>
+<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters.</p>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The full model.</p>
+<dd class="field-even"><p>The data errors.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>np.ndarray</p>
@@ -215,9 +70,92 @@ float: Semi-amplitude.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt id="pychell.orbits.rvmodels.RVModel.build_planet">
-<code class="sig-name descname">build_planet</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">planet_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.build_planet" title="Permalink to this definition">¶</a></dt>
-<dd><p>Builds a model for a single planet.</p>
+<dt id="pychell.orbits.rvmodels.CompositeGPRVModel.compute_residuals">
+<code class="sig-name descname">compute_residuals</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeGPRVModel.compute_residuals" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default method to generate the residuals (data - model).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The residuals.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.orbits.rvmodels.CompositeRVModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">CompositeRVModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">planets_dict</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">noise_process</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">poly_order</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">time_zero</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">'Composite RV Model'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeRVModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.NoiseBasedModel</span></code></p>
+<p>Base constructor for a noise based model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>det_model</strong> (<em>DeterministicModel</em>) – The deterministic model.</p></li>
+<li><p><strong>noise_process</strong> (<em>NoiseProcess</em>) – The noise process.</p></li>
+<li><p><strong>data</strong> (<em>Dataset</em>) – The dataset for this model.</p></li>
+<li><p><strong>name</strong> (<em>str</em>) – The name of this model.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.orbits.rvmodels.CompositeRVModel.compute_data_errors">
+<code class="sig-name descname">compute_data_errors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeRVModel.compute_data_errors" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default method to generate the data errors, which may be parametrized. Here the data a priori error bars are returned.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The data errors.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvmodels.CompositeRVModel.compute_residuals">
+<code class="sig-name descname">compute_residuals</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeRVModel.compute_residuals" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default method to generate the residuals (data - model).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The parameters.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The residuals.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.orbits.rvmodels.KeplerianRVModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">KeplerianRVModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">planets_dict</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.DeterministicModel</span></code></p>
+<p>Base constructor for a model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data</strong> (<em>Dataset</em><em>, </em><em>optional</em>) – The dataset for this model.</p></li>
+<li><p><strong>name</strong> (<em>str</em><em>, </em><em>optional</em>) – The name of this model.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.orbits.rvmodels.KeplerianRVModel.build_planet">
+<code class="sig-name descname">build_planet</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">planet_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel.build_planet" title="Permalink to this definition">¶</a></dt>
+<dd><p>Builds a keplerian model for a single planet.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
@@ -227,7 +165,7 @@ float: Semi-amplitude.</p>
 </ul>
 </dd>
 <dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The RV model for this planet</p>
+<dd class="field-even"><p>The RV model for this planet.</p>
 </dd>
 <dt class="field-odd">Return type</dt>
 <dd class="field-odd"><p>np.ndarray</p>
@@ -236,8 +174,8 @@ float: Semi-amplitude.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt id="pychell.orbits.rvmodels.RVModel.build_planets">
-<code class="sig-name descname">build_planets</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">t</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.build_planets" title="Permalink to this definition">¶</a></dt>
+<dt id="pychell.orbits.rvmodels.KeplerianRVModel.build_planets">
+<code class="sig-name descname">build_planets</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">t</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel.build_planets" title="Permalink to this definition">¶</a></dt>
 <dd><p>Builds a model including all planets.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -256,234 +194,8 @@ float: Semi-amplitude.</p>
 </dd></dl>
 
 <dl class="py method">
-<dt id="pychell.orbits.rvmodels.RVModel.build_without_planet">
-<code class="sig-name descname">build_without_planet</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">planet_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.RVModel.build_without_planet" title="Permalink to this definition">¶</a></dt>
-<dd><p>Builds the model without a planet.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>pars</strong> (<em>Parameters</em>) – The parameters.</p></li>
-<li><p><strong>t</strong> (<em>np.ndarray</em>) – The time vector.</p></li>
-<li><p><strong>planet_index</strong> (<em>int</em>) – The index of the planet to not consider.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The model without the designated planet.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>np.ndarray</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt id="pychell.orbits.rvmodels.StandardOrbitBasis">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">StandardOrbitBasis</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">planet_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.StandardOrbitBasis" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#pychell.orbits.rvmodels.AbstractOrbitBasis" title="pychell.orbits.rvmodels.AbstractOrbitBasis"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.orbits.rvmodels.AbstractOrbitBasis</span></code></a></p>
-<p>The standard orbit basis: per, tp, ecc, w, k.</p>
-<p>Constructor for most bases.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>planet_index</strong> (<em>int</em>) – The index of this planet in the planets dictionary.</p>
-</dd>
-</dl>
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.StandardOrbitBasis.from_standard">
-<code class="sig-name descname">from_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.StandardOrbitBasis.from_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to this basis from the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The basis parameters. See the class attribute names for each.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>tuple</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.StandardOrbitBasis.to_standard">
-<code class="sig-name descname">to_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.StandardOrbitBasis.to_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Period.
-float: Time of periastron.
-float: eccentricity.
-float: Angle of periastron.
-float: Semi-amplitude.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt id="pychell.orbits.rvmodels.TCEOrbitBasis">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">TCEOrbitBasis</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">planet_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.TCEOrbitBasis" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#pychell.orbits.rvmodels.AbstractOrbitBasis" title="pychell.orbits.rvmodels.AbstractOrbitBasis"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.orbits.rvmodels.AbstractOrbitBasis</span></code></a></p>
-<p>Constructor for most bases.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>planet_index</strong> (<em>int</em>) – The index of this planet in the planets dictionary.</p>
-</dd>
-</dl>
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.TCEOrbitBasis.from_standard">
-<code class="sig-name descname">from_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.TCEOrbitBasis.from_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to this basis from the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The basis parameters. See the class attribute names for each.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>tuple</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.TCEOrbitBasis.to_standard">
-<code class="sig-name descname">to_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.TCEOrbitBasis.to_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Period.
-float: Time of periastron.
-float: eccentricity.
-float: Angle of periastron.
-float: Semi-amplitude.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt id="pychell.orbits.rvmodels.TCOrbitBasis">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">TCOrbitBasis</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">planet_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.TCOrbitBasis" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#pychell.orbits.rvmodels.AbstractOrbitBasis" title="pychell.orbits.rvmodels.AbstractOrbitBasis"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.orbits.rvmodels.AbstractOrbitBasis</span></code></a></p>
-<p>A basis utilizing tc over tp: per, tc, ecc, w, k.</p>
-<p>Constructor for most bases.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>planet_index</strong> (<em>int</em>) – The index of this planet in the planets dictionary.</p>
-</dd>
-</dl>
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.TCOrbitBasis.from_standard">
-<code class="sig-name descname">from_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.TCOrbitBasis.from_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to this basis from the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The basis parameters. See the class attribute names for each.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>tuple</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.TCOrbitBasis.to_standard">
-<code class="sig-name descname">to_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.TCOrbitBasis.to_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Period.
-float: Time of periastron.
-float: eccentricity.
-float: Angle of periastron.
-float: Semi-amplitude.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt id="pychell.orbits.rvmodels.TCSQEOrbitBasis">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">TCSQEOrbitBasis</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">planet_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.TCSQEOrbitBasis" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#pychell.orbits.rvmodels.AbstractOrbitBasis" title="pychell.orbits.rvmodels.AbstractOrbitBasis"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.orbits.rvmodels.AbstractOrbitBasis</span></code></a></p>
-<p>The preferred basis when the angle of periastron is unknown: per, tc, sqrt(ecc)*cos(w), sqrt(ecc)*sin(w), k.</p>
-<p>Constructor for most bases.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>planet_index</strong> (<em>int</em>) – The index of this planet in the planets dictionary.</p>
-</dd>
-</dl>
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.TCSQEOrbitBasis.from_standard">
-<code class="sig-name descname">from_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.TCSQEOrbitBasis.from_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to this basis from the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The basis parameters. See the class attribute names for each.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>tuple</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt id="pychell.orbits.rvmodels.TCSQEOrbitBasis.to_standard">
-<code class="sig-name descname">to_standard</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.TCSQEOrbitBasis.to_standard" title="Permalink to this definition">¶</a></dt>
-<dd><p>Converts the parameters to the standard basis: per, tp, ecc, w, k.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em>) – The input parameters.</p>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>Period.
-float: Time of periastron.
-float: eccentricity.
-float: Angle of periastron.
-float: Semi-amplitude.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.orbits.rvmodels.planet_signal">
-<code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">planet_signal</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">per</span></em>, <em class="sig-param"><span class="n">tp</span></em>, <em class="sig-param"><span class="n">ecc</span></em>, <em class="sig-param"><span class="n">w</span></em>, <em class="sig-param"><span class="n">k</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.planet_signal" title="Permalink to this definition">¶</a></dt>
+<dt id="pychell.orbits.rvmodels.KeplerianRVModel.planet_signal">
+<em class="property">static </em><code class="sig-name descname">planet_signal</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">per</span></em>, <em class="sig-param"><span class="n">tp</span></em>, <em class="sig-param"><span class="n">ecc</span></em>, <em class="sig-param"><span class="n">w</span></em>, <em class="sig-param"><span class="n">k</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel.planet_signal" title="Permalink to this definition">¶</a></dt>
 <dd><p>Computes the RV signal of one planet for a given time vector.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -506,68 +218,19 @@ float: Semi-amplitude.</p>
 </dl>
 </dd></dl>
 
-<dl class="py function">
-<dt id="pychell.orbits.rvmodels.tc_to_tp">
-<code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">tc_to_tp</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tc</span></em>, <em class="sig-param"><span class="n">per</span></em>, <em class="sig-param"><span class="n">ecc</span></em>, <em class="sig-param"><span class="n">w</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.tc_to_tp" title="Permalink to this definition">¶</a></dt>
-<dd><p>Convert Time of Transit (time of conjunction) to Time of Periastron Passage.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>tc</strong> (<em>float</em>) – time of transit</p></li>
-<li><p><strong>per</strong> (<em>float</em>) – period [days]</p></li>
-<li><p><strong>ecc</strong> (<em>float</em>) – eccentricity</p></li>
-<li><p><strong>w</strong> (<em>float</em>) – angle of periastron (radians)</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>time of periastron passage</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
 </dd></dl>
 
-<dl class="py function">
-<dt id="pychell.orbits.rvmodels.tp_to_tc">
-<code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">tp_to_tc</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">tp</span></em>, <em class="sig-param"><span class="n">per</span></em>, <em class="sig-param"><span class="n">ecc</span></em>, <em class="sig-param"><span class="n">w</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.tp_to_tc" title="Permalink to this definition">¶</a></dt>
-<dd><p>Convert Time of Periastron to Time of Transit (time of conjunction).</p>
+<dl class="py class">
+<dt id="pychell.orbits.rvmodels.RVTrend">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">RVTrend</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">poly_order</span></em>, <em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">time_zero</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.RVTrend" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.DeterministicModel</span></code></p>
+<p>Base constructor for a model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>tp</strong> (<em>float</em>) – time of periastron</p></li>
-<li><p><strong>per</strong> (<em>float</em>) – period [days]</p></li>
-<li><p><strong>ecc</strong> (<em>float</em>) – eccentricity</p></li>
-<li><p><strong>w</strong> (<em>float</em>) – argument of periastron (radians).</p></li>
+<li><p><strong>data</strong> (<em>Dataset</em><em>, </em><em>optional</em>) – The dataset for this model.</p></li>
+<li><p><strong>name</strong> (<em>str</em><em>, </em><em>optional</em>) – The name of this model.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>The time of conjunction.</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>float</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py function">
-<dt id="pychell.orbits.rvmodels.true_anomaly">
-<code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">true_anomaly</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">tp</span></em>, <em class="sig-param"><span class="n">per</span></em>, <em class="sig-param"><span class="n">ecc</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.true_anomaly" title="Permalink to this definition">¶</a></dt>
-<dd><p>Calculate the true anomaly for a given time, period, eccentricity. This requires solving Kepler’s equation.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>t</strong> (<em>np.ndarray</em>) – The times.</p></li>
-<li><p><strong>tp</strong> (<em>float</em>) – The time of periastron.</p></li>
-<li><p><strong>per</strong> (<em>float</em>) – The period of the orbit in units of t.</p></li>
-<li><p><strong>ecc</strong> (<em>float</em>) – The eccentricity of the bounded orbit.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns</dt>
-<dd class="field-even"><p>true anomoly at each time</p>
-</dd>
-<dt class="field-odd">Return type</dt>
-<dd class="field-odd"><p>np.ndarray</p>
 </dd>
 </dl>
 </dd></dl>

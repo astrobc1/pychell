@@ -92,7 +92,10 @@ class IterativeSpectralForwardModel(Model):
                  tellurics=None,
                  gas_cell=None,
                  fringing=None,
-                 model_resolution=8):
+                 order_num=None,
+                 n_iterations=10,
+                 model_resolution=8,
+                 crop_pix=[200, 200]):
         """Initiate an iterative spectral forward model object.
 
         Args:
@@ -103,11 +106,23 @@ class IterativeSpectralForwardModel(Model):
             tellurics (Tellurics, optional): The telluric model. Defaults to None.
             gas_cell (GasCell, optional): The gas cell model. Defaults to None.
             fringing (FPCavityFringing, optional): The fringing model. Defaults to None.
+            order_num (int): The order number.
+            n_iterations (int, optional): The number of iterations, or number of times to augment the template(s). Defaults to 10.
             model_resolution (int, optional): The oversample factor of the model relative to the data, which is important for proper convolution. Defaults to 8.
+            crop_pix (list, optional): How many pixels to crop on the left and right of the observation when ordered accordibg to wavelength. Defaults to [200, 200].
         """
+        
+        # The order number
+        self.order_num = order_num
         
         # Model resolution
         self.model_resolution = model_resolution
+        
+        # Number of iterations
+        self.n_iterations = n_iterations
+        
+        # Number of pixels to crop
+        self.crop_pix = crop_pix
         
         # Model components
         self.wavelength_solution = wavelength_solution

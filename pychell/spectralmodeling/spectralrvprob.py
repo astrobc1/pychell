@@ -44,9 +44,8 @@ class IterativeSpectralRVProb(OptProblem):
                  data_input_path, filelist,
                  spectral_model,
                  augmenter,
-                 order_num, tag, output_path, target_dict,
-                 bc_corrs=None, crop_pix=[200, 200],
-                 n_iterations=10,
+                 tag, output_path, target_dict,
+                 bc_corrs=None,
                  optimizer=None, obj=None,
                  n_cores=1, verbose=True):
         """Initiate the top level iterative spectral rv problem object.
@@ -57,13 +56,10 @@ class IterativeSpectralRVProb(OptProblem):
             filelist (str): A text file listing the observations (filenames) within data_input_path to use.
             spectral_model (IterativeSpectralForwardModel): The spectral model obejct. For now only IterativeSpectralForwardModel is supported.
             augmenter (TemnplateAugmenter): The template augmenter object.
-            order_num (int): The image order number (1, 2, ... n_orders).
-            tag ([type]): A tag to uniquely identify this run in the outputs. The full tag will be spectrograph_tag.
-            output_path ([type]): The output path. All outputs wioll be stored within a single sub folder within output_path, which will also contain multiple sub folders.
-            target_dict ([type]): The information for this target. For now, only the name key is used to generate the barycenter corrections (BJDs and barycenter velocity corrections) using Simbad to obtain the necessary inormation.
+            tag (str): A tag to uniquely identify this run in the outputs. The full tag will be spectrograph_tag.
+            output_path (str): The output path. All outputs wioll be stored within a single sub folder within output_path, which will also contain multiple sub folders.
+            target_dict (dict): The information for this target. For now, only the name key is used to generate the barycenter corrections (BJDs and barycenter velocity corrections) using Simbad to obtain the necessary inormation.
             bc_corrs (np.ndarray, optional): The barycenter corrections may be passed manually as a two column numpy array; shape=(n_observations, 2). Defaults to None and the barycenter correcitons are computed with barycorrpy from information pulled form Simbad.
-            crop_pix (list, optional): How many pixels to crop on the left and right of the observation when ordered accordibg to wavelength. Defaults to [200, 200].
-            n_iterations (int, optional): The number of iterations, or number of times to augment the template(s). Defaults to 10.
             optimizer (Optimizer, optional): The optimizer to use. Defaults to None.
             obj (SpectralObjective, optional): The objective function to ultimiately extremize. Defaults to None.
             n_cores (int, optional): The number of cores to use. Defaults to 1.
@@ -72,15 +68,6 @@ class IterativeSpectralRVProb(OptProblem):
         
         # The number of cores
         self.n_cores = n_cores
-        
-        # The image order (base 1)
-        self.order_num = order_num
-        
-        # The left and right pixels to crop
-        self.crop_pix = crop_pix
-        
-        # Number of iterations
-        self.n_iterations = n_iterations
         
         # Verbose
         self.verbose = verbose
@@ -91,6 +78,9 @@ class IterativeSpectralRVProb(OptProblem):
         
         # The base output path
         self.output_path = output_path
+        
+        # The spectral model
+        self.spectral_model = spectral_model
 
         # The spectrogaph
         self.spectrograph = spectrograph
@@ -110,8 +100,7 @@ class IterativeSpectralRVProb(OptProblem):
         self.opt_results = np.empty(shape=(self.n_spec, self.n_iterations), dtype=dict)
         self.stellar_templates = np.empty(self.n_iterations, dtype=np.ndarray)
         
-        # The spectral model
-        self.spectral_model = spectral_model
+        # Initialize the spectral model
         self._init_spectral_model()
         self.p0cp = copy.deepcopy(self.p0)
         
@@ -715,6 +704,22 @@ class IterativeSpectralRVProb(OptProblem):
     def p0(self):
         return self.spectral_model.p0
     
+    @property
+    def n_iterations(self):
+        return self.spectral_model.n_iterations
+    
+    @property
+    def model_resolution(self):
+        return self.spectral_model.model_resolution
+    
+    @property
+    def crop_pix(self):
+        return self.spectral_model.crop_pix
+    
+    @property
+    def order_num(self):
+        return self.spectral_model.order_num
+        
     def __repr__(self):
         s = repr(self.spectral_model)
         s += f"{repr(self.optimizer)}\n"
