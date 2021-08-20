@@ -21,7 +21,7 @@ data_input_path = os.getcwd() + os.sep + "data" + os.sep
 filelist = "filelist_example.txt"
 output_path = os.getcwd() + os.sep
 target_dict = {"name": "GJ_699"}
-tag = "gj699_test"
+tag = "gj699_example"
 do_orders = [6, 8, 12, 15] # Do some arbitrary orders high in RV content
 templates_path = "/Users/gj_876/Research/pychell_templates/" # Must define this!
 

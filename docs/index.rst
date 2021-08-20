@@ -8,26 +8,20 @@ pychell
 
 The tldr; A environment to:
 
-1. Reduce single trace multi-order echelle spectra.
-2. Generate radial velocities for stellar sources.
+1. Reduce multi-order echelle spectra.
+2. Generate radial velocities for single stellar sources.
+3. Fit orbits to the RVs.
 
-The idea of pychell is to:
-
-1. Separate out the core steps needed to obtain the above.
-2. Provide as many of the default routines needed to obtain the above.
-3. Provide a simple interace to modify these default methods.
-
-Below is the remaining documentation, tutorials, API, and instructions on adding support for new spectrographs.
+Below is the remaining documentation, tutorials, API, and instructions on adding support for new spectrographs, all a work in progress.
 
 .. toctree::
    :maxdepth: 2
 
    Installation <installation>
-   Overview <overview>
-   Quickstart <quickstart>
    Tutorials <tutorials>
    Extending pychell <extending>
    API <api>
+
 
 Indices and tables
 ==================

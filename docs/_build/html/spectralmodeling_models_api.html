@@ -1,0 +1,138 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pychell API reference &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="pychell-api-reference">
+<h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-pychell.spectralmodeling.spectralmodels">
+<span id="composite-spectral-models-and-model-components"></span><h2>Composite Spectral Models and Model Components<a class="headerlink" href="#module-pychell.spectralmodeling.spectralmodels" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="pychell.spectralmodeling.spectralmodels.IterativeSpectralForwardModel">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.spectralmodeling.spectralmodels.</code><code class="sig-name descname">IterativeSpectralForwardModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wavelength_solution</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">continuum</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">lsf</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">star</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">tellurics</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">gas_cell</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">fringing</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">n_iterations</span><span class="o">=</span><span class="default_value">10</span></em>, <em class="sig-param"><span class="n">model_resolution</span><span class="o">=</span><span class="default_value">8</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">[200, 200]</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.spectralmodeling.spectralmodels.IterativeSpectralForwardModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.Model</span></code></p>
+<p>The primary container for an iterative spectral forward model problem.</p>
+<p>Initiate an iterative spectral forward model object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>wavelength_solution</strong> (<em>WavelengthSolution</em><em>, </em><em>optional</em>) – The wavelength solution model. Defaults to None.</p></li>
+<li><p><strong>continuum</strong> (<em>Continuum</em><em>, </em><em>optional</em>) – The continuum model. Defaults to None.</p></li>
+<li><p><strong>lsf</strong> (<em>LSF</em><em>, </em><em>optional</em>) – The LSF model. Defaults to None.</p></li>
+<li><p><strong>star</strong> (<em>AugmentedStar</em><em>, </em><em>optional</em>) – The Stellar model. Defaults to None.</p></li>
+<li><p><strong>tellurics</strong> (<em>Tellurics</em><em>, </em><em>optional</em>) – The telluric model. Defaults to None.</p></li>
+<li><p><strong>gas_cell</strong> (<em>GasCell</em><em>, </em><em>optional</em>) – The gas cell model. Defaults to None.</p></li>
+<li><p><strong>fringing</strong> (<em>FPCavityFringing</em><em>, </em><em>optional</em>) – The fringing model. Defaults to None.</p></li>
+<li><p><strong>order_num</strong> (<em>int</em>) – The order number.</p></li>
+<li><p><strong>n_iterations</strong> (<em>int</em><em>, </em><em>optional</em>) – The number of iterations, or number of times to augment the template(s). Defaults to 10.</p></li>
+<li><p><strong>model_resolution</strong> (<em>int</em><em>, </em><em>optional</em>) – The oversample factor of the model relative to the data, which is important for proper convolution. Defaults to 8.</p></li>
+<li><p><strong>crop_pix</strong> (<em>list</em><em>, </em><em>optional</em>) – How many pixels to crop on the left and right of the observation when ordered accordibg to wavelength. Defaults to [200, 200].</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/spectralmodeling_models_api.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

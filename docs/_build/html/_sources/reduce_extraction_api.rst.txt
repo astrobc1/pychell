@@ -2,8 +2,8 @@ pychell API reference
 =====================
 
 
-Template Generation
+Spectral Extraction
 +++++++++++++++++++
 
-.. automodule:: pychell.rvs.template_augmenter
+.. automodule:: pychell.reduce.extract
     :members:

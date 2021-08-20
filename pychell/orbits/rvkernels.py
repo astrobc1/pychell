@@ -18,13 +18,13 @@ class ChromaticKernelJ1(CorrelatedNoiseKernel):
         
         # Alias params
         amp_matrix = self.gen_amp_matrix(pars)
-        eta2 = pars[self.par_names[n_instruments]].value # decay
-        eta3 = pars[self.par_names[n_instruments + 1]].value # period
-        eta4 = pars[self.par_names[n_instruments + 2]].value # smoothing factor
+        exp_length = pars[self.par_names[n_instruments]].value
+        per_length = pars[self.par_names[n_instruments + 1]].value
+        per = pars[self.par_names[n_instruments + 2]].value
 
         # Construct QP terms
-        decay_term = -0.5 * (self.dist_matrix / eta2)**2
-        periodic_term = -0.5 * (1 / eta4)**2 * np.sin(np.pi * self.dist_matrix / eta3)**2
+        decay_term = -0.5 * (self.dist_matrix / exp_length)**2
+        periodic_term = -0.5 * (1 / per_length)**2 * np.sin(np.pi * self.dist_matrix / per)**2
         
         # Construct full cov matrix
         K = amp_matrix * np.exp(decay_term + periodic_term)

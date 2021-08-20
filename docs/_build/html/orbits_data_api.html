@@ -1,0 +1,240 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pychell API reference &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="pychell-api-reference">
+<h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-pychell.data.rvdata">
+<span id="orbits-data"></span><h2>Orbits Data<a class="headerlink" href="#module-pychell.data.rvdata" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="pychell.data.rvdata.CompositeRVData">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.data.rvdata.</code><code class="sig-name descname">CompositeRVData</code><a class="headerlink" href="#pychell.data.rvdata.CompositeRVData" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.data.HomogeneousCompositeSimpleSeries</span></code></p>
+<p>Constructs a general dataset, simply stores a label for now.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>label</strong> (<em>str</em>) – The label for this dataset.</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.data.rvdata.CompositeRVData.from_radvel_file">
+<em class="property">classmethod </em><code class="sig-name descname">from_radvel_file</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">fname</span></em>, <em class="sig-param"><span class="n">wavelengths</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.data.rvdata.CompositeRVData.from_radvel_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructs a new RV data object from a standard radvel csv file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fname</strong> (<em>str</em>) – The full path to the file.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The CompositeRVData set.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#pychell.data.rvdata.CompositeRVData" title="pychell.data.rvdata.CompositeRVData">CompositeRVData</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.data.rvdata.CompositeRVData.get_view">
+<code class="sig-name descname">get_view</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">instnames</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.data.rvdata.CompositeRVData.get_view" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns a view into sub data objects. Really just a forward method, propogating instnames -&gt; labels.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>instnames</strong> (<em>list</em>) – A list of instruments as strings.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A view into the original data object (not a copy).</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>CompositeData</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.data.rvdata.CompositeRVData.time_baseline">
+<em class="property">property </em><code class="sig-name descname">time_baseline</code><a class="headerlink" href="#pychell.data.rvdata.CompositeRVData.time_baseline" title="Permalink to this definition">¶</a></dt>
+<dd><p>T_max - T_min</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The time baseline.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.data.rvdata.CompositeRVData.to_radvel_file">
+<code class="sig-name descname">to_radvel_file</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">fname</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.data.rvdata.CompositeRVData.to_radvel_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a radvel input file from an instance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>fname</strong> (<em>str</em>) – The full path and filename of the file to create. If the file exists, it is overwritten.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.data.rvdata.RVData">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.data.rvdata.</code><code class="sig-name descname">RVData</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">rv</span></em>, <em class="sig-param"><span class="n">rverr</span></em>, <em class="sig-param"><span class="n">instname</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wavelength</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.data.rvdata.RVData" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.data.SimpleSeries</span></code></p>
+<p>Construct an RV data object for a particular instrument.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>t</strong> (<em>np.ndarray</em>) – The time vector.</p></li>
+<li><p><strong>rv</strong> (<em>np.ndarray</em>) – The RVs vector.</p></li>
+<li><p><strong>rverr</strong> (<em>np.ndarray</em>) – The RVs error vector.</p></li>
+<li><p><strong>instname</strong> (<em>np.ndarray</em><em>, </em><em>optional</em>) – The label for this dataset. Defaults to None initially, and is then replaced by the the key provided when constructing a composite dataset.</p></li>
+<li><p><strong>wavelength</strong> (<em>np.ndarray</em><em>, </em><em>optional</em>) – The effective wavelength of the dataset. Defaults to None.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.data.rvdata.RVData.from_file">
+<em class="property">classmethod </em><code class="sig-name descname">from_file</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">fname</span></em>, <em class="sig-param"><span class="n">instname</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">delimiter</span><span class="o">=</span><span class="default_value">','</span></em>, <em class="sig-param"><span class="n">skiprows</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">usecols</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">wavelength</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.data.rvdata.RVData.from_file" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructor from a delimited file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>fname</strong> (<em>str</em>) – The full path and filename.</p></li>
+<li><p><strong>instname</strong> (<em>str</em><em>, </em><em>optional</em>) – The name of the instrument. Defaults to None.</p></li>
+<li><p><strong>delimiter</strong> (<em>str</em><em>, </em><em>optional</em>) – The delimiter. Defaults to “,”.</p></li>
+<li><p><strong>skiprows</strong> (<em>int</em><em>, </em><em>optional</em>) – Which rows to skip. Defaults to 0.</p></li>
+<li><p><strong>usecols</strong> (<em>tuple of ints</em><em>, </em><em>optional</em>) – The columns corresponding to time, rv, rverr. Defaults to (0, 1, 2).</p></li>
+<li><p><strong>wavelength</strong> (<em>float</em><em>, </em><em>optional</em>) – The wavelength of this dataset. Defaults to None.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The RV data object for this instrument.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p><a class="reference internal" href="#pychell.data.rvdata.RVData" title="pychell.data.rvdata.RVData">RVData</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.data.rvdata.RVData.time_baseline">
+<em class="property">property </em><code class="sig-name descname">time_baseline</code><a class="headerlink" href="#pychell.data.rvdata.RVData.time_baseline" title="Permalink to this definition">¶</a></dt>
+<dd><p>T_max - T_min</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The time baseline.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/orbits_data_api.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

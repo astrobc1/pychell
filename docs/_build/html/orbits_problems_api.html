@@ -1,0 +1,396 @@
+
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>pychell API reference &#8212; pychell  documentation</title>
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="_static/alabaster.css" type="text/css" />
+    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script src="_static/jquery.js"></script>
+    <script src="_static/underscore.js"></script>
+    <script src="_static/doctools.js"></script>
+    <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <div class="section" id="pychell-api-reference">
+<h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-pychell.orbits.rvprob">
+<span id="rv-problems"></span><h2>RV Problems<a class="headerlink" href="#module-pychell.orbits.rvprob" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="pychell.orbits.rvprob.RVProblem">
+<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvprob.</code><code class="sig-name descname">RVProblem</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">output_path</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">p0</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">post</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">optimizer</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">sampler</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">star_name</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">tag</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem" title="Permalink to this definition">¶</a></dt>
+<dd><p>The primary, top-level container for Exoplanet optimization problems. As of now, this only deals with RV data. Photometric modeling will be included in future updates, but will leverage existing libraries (Batman, etc.).</p>
+<p>Constructs the primary exoplanet problem object.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>output_path</strong> (<em>The output path for plots and pickled objects</em><em>, </em><em>optional</em>) – []. Defaults to this current working direcrory.</p></li>
+<li><p><strong>p0</strong> (<em>Parameters</em><em>, </em><em>optional</em>) – The initial parameters. Defaults to None.</p></li>
+<li><p><strong>optimizer</strong> (<em>Optimizer</em><em>, </em><em>optional</em>) – The max like optimizer. Defaults to None.</p></li>
+<li><p><strong>sampler</strong> (<em>Sampler</em><em>, </em><em>optional</em>) – The MCMC sampler object. Defaults to None.</p></li>
+<li><p><strong>post</strong> (<a class="reference internal" href="orbits_objectives_api.html#pychell.orbits.rvobjectives.RVPosterior" title="pychell.orbits.rvobjectives.RVPosterior"><em>RVPosterior</em></a><em>, </em><em>optional</em>) – The composite likelihood object. Defaults to None.</p></li>
+<li><p><strong>star_name</strong> (<em>str</em><em>, </em><em>optional</em>) – The name of the star, may contain spaces. Defaults to None.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.compute_densities">
+<code class="sig-name descname">compute_densities</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">mcmc_result</span></em>, <em class="sig-param"><span class="n">mstar</span></em>, <em class="sig-param"><span class="n">mstar_unc</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">rplanets_dict</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.compute_densities" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the value of msini and uncertainty for each planet in units of Earth Masses.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>mcmc_result</strong> (<em>dict</em>) – The returned value from calling sample.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The density, lower, and upper uncertainty of each planet in a dictionary, in units of grams/cm^3.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(dict)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.compute_masses">
+<code class="sig-name descname">compute_masses</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">mcmc_result</span></em>, <em class="sig-param"><span class="n">mstar</span></em>, <em class="sig-param"><span class="n">mstar_unc</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.compute_masses" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the planet masses and uncertainties in Earth Masses.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mcmc_result</strong> (<em>dict</em>) – The MCMC result.</p></li>
+<li><p><strong>mstar</strong> (<em>float</em>) – The mass of the star in solar units.</p></li>
+<li><p><strong>mstar_unc</strong> (<em>list of floats</em>) – The lower and upper uncertainty in mstar (both positive).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A dictionary with keys identical to the planets dictionary and values containing a tuple with the mass, lower uncertainty, and upper uncertainty in Earth units.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.compute_rvcolor">
+<code class="sig-name descname">compute_rvcolor</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">wave1</span></em>, <em class="sig-param"><span class="n">wave2</span></em>, <em class="sig-param"><span class="n">sep</span><span class="o">=</span><span class="default_value">0.3</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.compute_rvcolor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the “RV-color” for wavelengths 1 and 2.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>wave1</strong> (<em>float</em>) – The first wavelength.</p></li>
+<li><p><strong>wave2</strong> (<em>float</em>) – The second wavelength.</p></li>
+<li><p><strong>sep</strong> (<em>float</em><em>, </em><em>optional</em>) – The max separation allowed to consider for observations in days. Defaults to 0.3.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>A dictionary with the following keys:</dt><dd><p>jds_avg: The mean jds for the data.
+rvcolor_data: The data RVs corresponding to this jd, RV1 - RV2.
+unccolor_data: The corresponding data uncertainties, computed by adding in quadrature.
+gp_color_data: The coarsely sampled GP-color.
+gp_color_unc_data: The corresponding unc for the coarsely sampled GP-color, GP1 - GP2.
+t_gp_hr: The densely sampled times for the GP.
+gpmean1_hr: The densely sampled GP1 mean.
+gpstddev1_hr: The densely sampled GP1 stddev.
+gpmean1_hr: The densely sampled GP2 mean.
+gpstddev2_hr: The densely sampled GP2 stddev.
+gpmean_color_hr: The densely sampled GP-color, GP1 - GP2.
+gpstddev_color_hr: The corresponding densely sampled GP-color unc, computed by adding in quadrature.
+instnames: A list containing 2-tuples of the instruments of each night, [, … (instname1, isntname2), …].</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.compute_semimajor_axes">
+<code class="sig-name descname">compute_semimajor_axes</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">mcmc_result</span></em>, <em class="sig-param"><span class="n">mstar</span></em>, <em class="sig-param"><span class="n">mstar_unc</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.compute_semimajor_axes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the semi-major axis of each planet and uncertainty.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>mcmc_result</strong> (<em>dict</em>) – The returned value from calling sample.</p></li>
+<li><p><strong>mstar</strong> (<em>list</em>) – The mass of the star in solar units.</p></li>
+<li><p><strong>mstar</strong> – The uncertainty of the mass of the star in solar units, lower, upper.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The semi-major axis, lower, and upper uncertainty of each planet in a dictionary.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>(dict)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.corner_plot">
+<code class="sig-name descname">corner_plot</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">mcmc_result</span></em>, <em class="sig-param"><span class="n">save</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.corner_plot" title="Permalink to this definition">¶</a></dt>
+<dd><p>Constructs a corner plot.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>mcmc_result</strong> (<em>dict</em>) – The mcmc result</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A matplotlib figure.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>fig</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.full_rvcolor">
+<code class="sig-name descname">full_rvcolor</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">sep</span><span class="o">=</span><span class="default_value">0.3</span></em>, <em class="sig-param"><span class="n">time_offset</span><span class="o">=</span><span class="default_value">2450000</span></em>, <em class="sig-param"><span class="n">plot_width</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">plot_height</span><span class="o">=</span><span class="default_value">600</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.full_rvcolor" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the RV Color for all possible wavelengths.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pars</strong> (<em>Parameters</em><em>, </em><em>optional</em>) – The parameters to use. Defaults to self.p0.</p></li>
+<li><p><strong>sep</strong> (<em>float</em><em>, </em><em>optional</em>) – The max separation to allow for. Defaults to 0.3.</p></li>
+<li><p><strong>time_offset</strong> (<em>int</em><em>, </em><em>optional</em>) – The time offset. Defaults to 2450000.</p></li>
+<li><p><strong>plot_width</strong> (<em>int</em><em>, </em><em>optional</em>) – The plot width in pixels. Defaults to 1000.</p></li>
+<li><p><strong>plot_height</strong> (<em>int</em><em>, </em><em>optional</em>) – The plot height in pixels. Defaults to 500.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.model_comparison">
+<code class="sig-name descname">model_comparison</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">save</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.model_comparison" title="Permalink to this definition">¶</a></dt>
+<dd><p>Runs a model comparison for all combinations of planets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Each entry is a dict containing the model comp results for each case, and is sorted according to the small sample AIC.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.plot_full_rvs">
+<code class="sig-name descname">plot_full_rvs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">ffp</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">n_model_pts</span><span class="o">=</span><span class="default_value">5000</span></em>, <em class="sig-param"><span class="n">time_offset</span><span class="o">=</span><span class="default_value">2450000</span></em>, <em class="sig-param"><span class="n">kernel_sampling</span><span class="o">=</span><span class="default_value">500</span></em>, <em class="sig-param"><span class="n">kernel_window</span><span class="o">=</span><span class="default_value">10</span></em>, <em class="sig-param"><span class="n">plot_width</span><span class="o">=</span><span class="default_value">1800</span></em>, <em class="sig-param"><span class="n">plot_height</span><span class="o">=</span><span class="default_value">1200</span></em>, <em class="sig-param"><span class="n">save</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.plot_full_rvs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates an rv plot for the full dataset and rv model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pars</strong> (<em>Parameters</em><em>, </em><em>optional</em>) – The parameters to use. Defaults to self.p0.</p></li>
+<li><p><strong>n_model_pts</strong> (<em>int</em><em>, </em><em>optional</em>) – The number of points for the densly sampled Keplerian model.</p></li>
+<li><p><strong>time_offset</strong> (<em>float</em><em>, </em><em>optional</em>) – The time to subtract from the times.</p></li>
+<li><p><strong>kernel_sampling</strong> (<em>int</em><em>, </em><em>optional</em>) – The number of points per period to sample for the correlated noise kernel. If there is no noise kernel, this argument is irrelevant.</p></li>
+<li><p><strong>plot_width</strong> (<em>int</em><em>, </em><em>optional</em>) – The plot width in pixels. Defaults to 1800.</p></li>
+<li><p><strong>plot_height</strong> (<em>int</em><em>, </em><em>optional</em>) – The plot width in pixels. Defaults to 1200.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A Plotly figure. The figure is also saved.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>plotly.figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.plot_phased_rvs">
+<code class="sig-name descname">plot_phased_rvs</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">planet_index</span></em>, <em class="sig-param"><span class="n">pars</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">plot_width</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">plot_height</span><span class="o">=</span><span class="default_value">600</span></em>, <em class="sig-param"><span class="n">save</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.plot_phased_rvs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a phased rv plot for a given planet with the model on top. An html figure is saved with a unique filename.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>planet_index</strong> (<em>int</em>) – The planet index.</p></li>
+<li><p><strong>pars</strong> (<em>Parameters</em><em>, </em><em>optional</em>) – The parameters to use. Defaults to self.p0.</p></li>
+<li><p><strong>plot_width</strong> (<em>int</em><em>, </em><em>optional</em>) – The plot width, in pixels.</p></li>
+<li><p><strong>plot_height</strong> (<em>int</em><em>, </em><em>optional</em>) – The plot height, in pixels.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A plotly figure containing the plot. The figure is also saved.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>plotly.figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.plot_phased_rvs_all">
+<code class="sig-name descname">plot_phased_rvs_all</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">plot_width</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">plot_height</span><span class="o">=</span><span class="default_value">600</span></em>, <em class="sig-param"><span class="n">save</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.plot_phased_rvs_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper to plot the phased RV model for all planets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>pars</strong> (<em>Parameters</em><em>, </em><em>optional</em>) – The parameters to use. Defaults to self.p0.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>A list of Plotly figures. The figures are also saved.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.plot_rvcolor_one_to_one">
+<code class="sig-name descname">plot_rvcolor_one_to_one</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">plot_width</span><span class="o">=</span><span class="default_value">1000</span></em>, <em class="sig-param"><span class="n">plot_height</span><span class="o">=</span><span class="default_value">600</span></em>, <em class="sig-param"><span class="n">sep</span><span class="o">=</span><span class="default_value">0.3</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.plot_rvcolor_one_to_one" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plots the data RV color vs. the GP RV color.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pars</strong> (<em>Parameters</em><em>, </em><em>optional</em>) – The parameters to use in order to remove the polynomial trend. Defaults to self.p0.</p></li>
+<li><p><strong>plot_width</strong> (<em>int</em><em>, </em><em>optional</em>) – The plot width in pixels. Defaults to 1000.</p></li>
+<li><p><strong>plot_height</strong> (<em>int</em><em>, </em><em>optional</em>) – The plot height in pixels. Defaults to 500.</p></li>
+<li><p><strong>sep</strong> (<em>float</em><em>, </em><em>optional</em>) – The max separation in time to be considered simultaneous (in days). Defaults to 0.3.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The plotly figure.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>plotly.figure</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.run_mapfit">
+<code class="sig-name descname">run_mapfit</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">save</span><span class="o">=</span><span class="default_value">True</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.run_mapfit" title="Permalink to this definition">¶</a></dt>
+<dd><p>Runs the optimizer.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A dictionary with the optimize results.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvprob.RVProblem.run_mcmc">
+<code class="sig-name descname">run_mcmc</code><span class="sig-paren">(</span><em class="sig-param"><span class="o">*</span><span class="n">args</span></em>, <em class="sig-param"><span class="n">save</span><span class="o">=</span><span class="default_value">True</span></em>, <em class="sig-param"><span class="o">**</span><span class="n">kwargs</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvprob.RVProblem.run_mcmc" title="Permalink to this definition">¶</a></dt>
+<dd><p>Runs the mcmc.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>Any args.
+<a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs: Any keyword args.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p><a href="#id3"><span class="problematic" id="id4">*</span></a>args</p>
+</dd>
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>A dictionary with the mcmc results.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>dict</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="index.html">
+              <img class="logo" src="_static/pychell_logo.png" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="index.html">pychell</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
+<li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" />
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>$('#searchbox').show(0);</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2020, Bryson Cale.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="_sources/orbits_problems_api.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>

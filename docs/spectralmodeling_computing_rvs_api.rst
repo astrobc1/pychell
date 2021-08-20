@@ -5,5 +5,5 @@ pychell API reference
 Computing RVs
 +++++++++++++
 
-.. automodule:: pychell.rvs.rvcalc
+.. automodule:: pychell.spectralmodeling.rvcalc
     :members:

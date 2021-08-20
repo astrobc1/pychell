@@ -65,9 +65,9 @@ def bin_phased_rvs(phases, rvs, unc, nbins=10):
     binned_phases = np.full(nbins, np.nan)
     binned_rvs = np.full(nbins, np.nan)
     binned_unc = np.full(nbins, np.nan)
-    bins = np.linspace(0, 1, num=nbins + 1)
+    bins = np.linspace(0, 1, num=nbins+1)
     for i in range(nbins):
-        inds = np.where((phases >= bins[i]) & (phases < phases[i + 1]))[0]
+        inds = np.where((phases >= bins[i]) & (phases < bins[i + 1]))[0]
         n = len(inds)
         if n == 0:
             continue

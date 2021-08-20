@@ -7,7 +7,7 @@ from pychell.reduce.calib import PreCalibrator, FringingPreCalibrator
 
 # Basic info
 spectrograph = "iSHELL"
-data_input_path = os.getcwd() + os.sep + "Vega_raw" + os.sep
+data_input_path = os.getcwd() + os.sep + "Vega" + os.sep
 output_path = os.getcwd() + os.sep
 
 # Create the class

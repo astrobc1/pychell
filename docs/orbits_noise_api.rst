@@ -1,8 +1,12 @@
 pychell API reference
 =====================
 
-Noise Kernels
-+++++++++++++
+Noise Modeling
+++++++++++++++
+
+.. automodule:: pychell.orbits.rvnoise
+    :members:
+    :show-inheritance:
 
 .. automodule:: pychell.orbits.rvkernels
     :members:

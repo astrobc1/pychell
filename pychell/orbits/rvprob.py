@@ -391,8 +391,12 @@ class RVProblem(BayesianProblem):
                     label = f"<b>{noise_label.replace('_', ' ')}</b>"
                         
                     # Plot the actual GP
+                    for instname in like.model.data:
+                        if instname in noise_label:
+                            _instname = instname
+                            break
                     fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gp,
-                                                                line=dict(width=0.8, color=pcutils.csscolor_to_rgba(pcutils.PLOTLY_COLORS[color_index], a=0.6)),
+                                                                line=dict(width=0.8, color=pcutils.hex_to_rgba(self.color_map[_instname], a=0.6)),
                                                                 name=label, showlegend=False),
                                     row=1, col=1)
                     
@@ -400,8 +404,8 @@ class RVProblem(BayesianProblem):
                     fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                                                 y=np.concatenate([gp_upper, gp_lower[::-1]]),
                                                                 fill='toself',
-                                                                line=dict(color=pcutils.csscolor_to_rgba(pcutils.PLOTLY_COLORS[color_index], a=0.6), width=1),
-                                                                fillcolor=pcutils.csscolor_to_rgba(pcutils.PLOTLY_COLORS[color_index], a=0.6),
+                                                                line=dict(color=pcutils.hex_to_rgba(self.color_map[_instname], a=0.6), width=1),
+                                                                fillcolor=pcutils.hex_to_rgba(self.color_map[_instname], a=0.5),
                                                                 name=label, showlegend=True),
                                     row=1, col=1)
                     color_index += 1

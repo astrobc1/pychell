@@ -30,12 +30,20 @@ import pychell.maths as pcmath
 
 
 class DataParser:
+    """Base class for parsing/generating information from spectrograph specific data files.
+    """
     
     #####################
     #### CONSTRUCTOR ####
     #####################
     
     def __init__(self, data_input_path, output_path=None):
+        """Construct a parser object.
+
+        Args:
+            data_input_path (str): The full path to the data to be parsed.
+            output_path (str, optional): The output path for writing any calibration files, only used for the reduce module. Defaults to None.
+        """
         self.data_input_path = data_input_path
         self.output_path = output_path
     

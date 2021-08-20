@@ -2,15 +2,14 @@ pychell API reference
 =====================
 
 
-The orbits module
------------------
+Orbit Fitting
++++++++++++++
 
 .. toctree::
     :maxdepth: 1
 
-    Problems (Primary interface) <orbits_problems.rst>
-    Data <orbits_data.rst>
-    Noise Kernels <orbits_kernels.rst>
-    Models <orbits_models.rst>
-    Likelihoods <orbits_likes.rst>
-
+    Problems (Primary interface) <orbits_problems_api.rst>
+    Data <orbits_data_api.rst>
+    Noise Modeling <orbits_noise_api.rst>
+    Keplerian Models and Trends <orbits_models_api.rst>
+    Objectives (Likelihoods) <orbits_objectives_api.rst>

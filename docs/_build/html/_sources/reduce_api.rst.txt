@@ -8,6 +8,7 @@ The reduce module
 .. toctree::
     :maxdepth: 1
 
-    Order Tracing <order_map_api.rst>
-    Calibration <calib_api.rst>
-    Extraction <extraction_api.rst>
+    Calibration <reduce_calib_api.rst>
+    Order Tracing <reduce_order_map_api.rst>
+    Extraction <reduce_extraction_api.rst>
+    Reducers <reduce_reducers_api.rst>

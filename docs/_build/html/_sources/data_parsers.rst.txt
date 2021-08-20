@@ -5,6 +5,8 @@ pychell API reference
 Data Parsers
 ++++++++++++
 
-.. automodule:: pychell.data.parsers
+Each spectrogrpah must subclass the Parser class within its own file.
+
+.. automodule:: pychell.data.parser
     :members:
     :show-inheritance:

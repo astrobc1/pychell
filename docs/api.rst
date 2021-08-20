@@ -6,6 +6,6 @@ pychell API reference
     :maxdepth: 2
 
     Reduction <reduce_api>
-    Radial Velocity Generation <rvs_api>
+    Radial Velocity Generation <spectralmodeling_api>
     Radial Velocity Fitting <orbits_api>
-    Spectrographs <spectrographs_api>
+    Data Containers <data_api>

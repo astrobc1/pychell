@@ -36,35 +36,21 @@
 <h1>pychell<a class="headerlink" href="#pychell" title="Permalink to this headline">¶</a></h1>
 <p>The tldr; A environment to:</p>
 <ol class="arabic simple">
-<li><p>Reduce single trace multi-order echelle spectra.</p></li>
-<li><p>Generate radial velocities for stellar sources.</p></li>
+<li><p>Reduce multi-order echelle spectra.</p></li>
+<li><p>Generate radial velocities for single stellar sources.</p></li>
+<li><p>Fit orbits to the RVs.</p></li>
 </ol>
-<p>The idea of pychell is to:</p>
-<ol class="arabic simple">
-<li><p>Separate out the core steps needed to obtain the above.</p></li>
-<li><p>Provide as many of the default routines needed to obtain the above.</p></li>
-<li><p>Provide a simple interace to modify these default methods.</p></li>
-</ol>
-<p>Below is the remaining documentation, tutorials, API, and instructions on adding support for new spectrographs.</p>
+<p>Below is the remaining documentation, tutorials, API, and instructions on adding support for new spectrographs, all a work in progress.</p>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="installation.html#from-github">From GitHub</a></li>
-<li class="toctree-l2"><a class="reference internal" href="installation.html#from-pypi">From PyPI</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#reduction">Reduction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="overview.html#radial-velocities">Radial Velocities</a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#reduction">Reduction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#radial-velocities">Radial Velocities</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="tutorials.html#rv-fitting">RV Fitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials.html#reduction">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials.html#radial-velocitiy-generation">Radial Velocitiy Generation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="tutorials.html#radial-velocity-fitting">Radial Velocity Fitting</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a><ul>
@@ -74,9 +60,9 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="rvs_api.html">Radial Velocity Generation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spectralmodeling_api.html">Radial Velocity Generation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="orbits_api.html">Radial Velocity Fitting</a></li>
-<li class="toctree-l2"><a class="reference internal" href="spectrographs_api.html">Spectrographs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data_api.html">Data Containers</a></li>
 </ul>
 </li>
 </ul>
@@ -113,8 +99,6 @@
 <h3>Navigation</h3>
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
-<li class="toctree-l1"><a class="reference internal" href="overview.html">Overview</a></li>
-<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>

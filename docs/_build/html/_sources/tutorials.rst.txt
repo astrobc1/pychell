@@ -1,86 +1,40 @@
-.. _tutorials:
+.. _quickstart:
 
 Tutorials
+*********
+
+Reduction
 =========
 
+Below is an example which reduces a single spectrum of Vega using raw spectra from the iSHELL spectrograph in Kgas mode (~2.3 microns). Flat division is performed, but not dark or bias subtraction. Copy the example folder Vega_reduction to a new location of your choice. Open a terminal window in this new location. Run:
 
-RV Fitting
-**********
+``python vega_ishell_reduction_example.py``
 
-Example 1
-+++++++++
+An output directory will be created in an output folder ``Vega``. Each sub folder contains the following:
 
-Here we perform Bayesian inference on a radial-velocity dataset. This example fits RVs of KELT-24, known to host a transiting 5.5 day massive hot Jupiter on a moderately eccentric orbit.
-
-.. literalinclude:: ../examples/KELT-24_rv_fitting/kelt24_example.py
-    :language: python
-
-The resulting best fit parameters from the max likelihood and mcmc sampling are saved to .pkl files. The best fit parameters from the max likelihood fitting are printed to the terminal:
-
-::
-
-    (Parameter)  Name: per1 | Value: 5.551493310923132
-        Priors:
-            Gaussian: [5.5514926, 8.1e-06]
-
-    (Parameter)  Name: tc1 | Value: 2457147.0529 (Locked)
-        Priors:
-            Gaussian: [2457147.0529, 0.002]
-
-    (Parameter)  Name: ecc1 | Value: 0.03424765637223241
-        Priors:
-            Uniform: [1e-10, 1]
-            Gaussian: [0.077, 0.024]
-
-    (Parameter)  Name: w1 | Value: 0.7471046233814415
-        Priors:
-            Gaussian: [0.9599310885968813, 0.2617993877991494]
-
-    (Parameter)  Name: k1 | Value: 441.5047007138727
-        Priors:
-            Positive
-
-    (Parameter)  Name: gamma_SONG | Value: 382.3918526498997
-        Priors:
-            Gaussian: [330.0031415926536, 20]
-
-    (Parameter)  Name: gamma_TRES | Value: 400.17917891086967
-        Priors:
-            Gaussian: [303.8031415926536, 20]
-
-    (Parameter)  Name: gamma_dot | Value: 0.0 (Locked)
-    (Parameter)  Name: gamma_ddot | Value: 0.0 (Locked)
-    (Parameter)  Name: jitter_SONG | Value: 69.62453494177453
-        Priors:
-            Uniform: [1e-10, 100]
-
-    (Parameter)  Name: jitter_TRES | Value: 0.0 (Locked)
-
-The full RV model, data, and residuals.
-
-.. image:: ../examples/KELT-24_rv_fitting/kelt24b_rvs_phased.png
-
-The phased RVs for each planet.
-
-.. image:: ../examples/KELT-24_rv_fitting/kelt24_rvs_full.png
-
-The corner plot from mcmc sampling.
-
-.. image:: ../examples/KELT-24_rv_fitting/KELT-24_corner_20210211_150814.png
+1. **calib** - Any master calibration images.
+3. **spectra** - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_traces, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons, but may still contain blaze modulation.
+4. **trace** - Trace profiles (seeing profiles) and order map information for all relevant full frame science images.
 
 
-Example 2
-+++++++++
+Radial Velocitiy Generation
+===========================
 
-Here we perform the same Bayesian inference on KELT-24but use the webpage GUI.
+Below is an example which fits 4 nights (8 spectra) of Barnard's Star spectra using reduced spectra from iSHELL. Only orders 6, 8, 12, and 15 are fit. The wavelength solution and LSF are constrained from the isotopic methane gas cell.
 
-First we modify our Python script. The majority of the code is identicical. Note we also import pychell.stutils.
+Copy the example folder GJ_699_rvs to a new location of your choice. Open a terminal window in this new location. Run:
 
-.. literalinclude:: ../examples/KELT-24_rv_fitting/kelt24_example_streamlit.py
-    :language: python
+``python gj699_ishell_rvs_example.py``
 
-This file is saved as kelt24_example_streamlit.py. We run it as streamlit run ``kelt24_example_streamlit.py``. This will open a webpage that looks like the following:
+Summaries of fits are printed after each fit. An output directory will also be created in an output folder ``ishell_gj699_example``, with each order contained in its own folder. Each order contains the following sub folders:
 
-.. image:: ../examples/KELT-24_rv_fitting/kelt24_streamlit_interface.png
+1. **ForwardModels** - The spectral model fit for each observation and iteration as PNG plots.
+2. **RVs** - Plots of the individual and per-night (co-added) RVs for each iteration, plots of BIS vs. RVs for each iteration, and the RVs stored in a ``.npz`` file.
+3. **Templates** - Not currently used.
 
-From here one can perform the desired actions. Here, the starting parameters are always what the user specifies in the script. All results are still saved to files, and interactive plots are shown in the browser.
+A ``.pkl`` file of the SpectralRVProb instance is also saved which may be loaded in order to generate wavelength solutions, look at best fit parameters, etc.
+
+
+Radial Velocity Fitting
+=======================
+

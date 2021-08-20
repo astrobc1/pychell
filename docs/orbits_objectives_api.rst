@@ -1,9 +1,9 @@
 pychell API reference
 =====================
 
-Data
-++++
+Likelihoods
++++++++++++
 
-.. automodule:: pychell.orbits.rvdata
+.. automodule:: pychell.orbits.rvobjectives
     :members:
     :show-inheritance:
