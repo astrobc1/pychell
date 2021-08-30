@@ -33,60 +33,15 @@ observatory = {
 
 class PARVIParser(DataParser):
     
-    def categorize_raw_data(self, config):
+    def categorize_raw_data(self, reducer):
 
         # Stores the data as above objects
         data_dict = {}
         
-        # iSHELL science files are files that contain spc or data
-        sci_files1 = glob.glob(self.input_path + '*data*.fits')
-        sci_files2 = glob.glob(self.input_path + '*spc*.fits')
-        sci_files = sci_files1 + sci_files2
-        sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
-        n_sci_files = len(sci_files)
-        
+        # PARVI science files
+        all_files = glob.glob(self.input_path + '*data*.fits')
         data_dict['science'] = [pcdata.RawImage(input_file=sci_files[f], parser=self) for f in range(n_sci_files)]
-            
-        # Darks assumed to contain dark in filename
-        if config['dark_subtraction']:
-            dark_files = glob.glob(self.input_path + '*dark*.fits')
-            n_dark_files = len(dark_files)
-            data_dict['darks'] = [pcdata.RawImage(input_file=dark_files[f], parser=self) for f in range(n_dark_files)]
-            dark_groups = self.group_darks(data_dict['darks'])
-            data_dict['master_darks'] = []
-            for dark_group in dark_groups:
-                master_dark_fname = self.gen_master_dark_filename(dark_group)
-                data_dict['master_darks'].append(pcdata.MasterCalibImage(dark_group, input_file=master_dark_fname, parser=self))
-            
-            for sci in data_dict['science']:
-                self.pair_master_dark(sci, data_dict['master_darks'])
-                
-            for flat in data_dict['flats']:
-                self.pair_master_dark(flat, data_dict['master_darks'])
         
-        # iSHELL flats must contain flat in the filename
-        if config['flat_division']:
-            flat_files = glob.glob(self.input_path + '*flat*.fits')
-            n_flat_files = len(flat_files)
-            data_dict['flats'] = [pcdata.RawImage(input_file=flat_files[f], parser=self) for f in range(n_flat_files)]
-            flat_groups = self.group_flats(data_dict['flats'])
-            data_dict['master_flats'] = []
-            for flat_group in flat_groups:
-                master_flat_fname = self.gen_master_flat_filename(flat_group)
-                data_dict['master_flats'].append(pcdata.MasterCalibImage(flat_group, input_file=master_flat_fname, parser=self))
-            
-            for sci in data_dict['science']:
-                self.pair_master_flat(sci, data_dict['master_flats'])
-            
-        # iSHELL ThAr images must contain arc (not implemented yet)
-        if config['wavelength_calibration']:
-            thar_files = glob.glob(self.input_path + '*arc*.fits')
-            data_dict['wavecals'] = [pcdata.RawImage(input_file=thar_files[f], parser=self) for f in range(len(thar_files))]
-            data_dict['master_wavecals'] = self.group_wavecals(data_dict['wavecals'])
-            for sci in data_dict['science']:
-                self.pair_master_wavecal(sci, data_dict['master_wavecals'])
-                
-                
         # Order map
         data_dict['order_maps'] = []
         for master_flat in data_dict['master_flats']:

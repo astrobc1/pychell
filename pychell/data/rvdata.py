@@ -103,10 +103,11 @@ class CompositeRVData(HomogeneousCompositeSimpleSeries):
     
     def gen_wave_vec(self):
         wave_vec = np.array([], dtype=float)
-        t = self.t
-        ss = np.argsort(t)
+        t = np.array([], dtype=float)
         for data in self.values():
+            t = np.concatenate((t, data.t))
             wave_vec = np.concatenate((wave_vec, np.full(data.t.size, fill_value=data.wavelength)))
+        ss = np.argsort(t)
         wave_vec = wave_vec[ss]
         return wave_vec
     

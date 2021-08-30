@@ -170,6 +170,14 @@ class iSHELLParser(DataParser):
         wls = np.polyval(pcoeffs, np.arange(data.flux.size))
         return wls
         
+        
+    ###############
+    #### MISC. ####
+    ###############
+    
+    @property
+    def slit_or_fiber(self):
+        return "slit"
 
 ################################
 #### REDUCTION / EXTRACTION ####

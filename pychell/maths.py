@@ -1304,3 +1304,34 @@ def poly_filter(y, width, poly_order):
     y_out[ihigh + 1:] = np.nan
     return y_out
         
+def normalize_image(image, window=5, n_knots=60, percentile=0.99):
+    out = np.full_like(image, np.nan)
+    ny, nx = out.shape
+    xx = np.arange(nx)
+    for i in range(nx):
+        good = np.where(np.isfinite(image[:, i]))[0]
+        if good.size < 0.5 * ny:
+            continue
+        out[:, i] = image[:, i] / cspline_fit_fancy(xx, image[:, i], window=window, n_knots=n_knots, percentile=percentile)
+    bad = np.where(out < 0)
+    if bad[0].size > 0:
+        out[bad] = np.nan
+    return out
+
+def cspline_fit_fancy(x, y, window=None, n_knots=50, percentile=0.99):
+    nx = len(x)
+    y_out_init = np.full_like(y, np.nan)
+    good = np.where(np.isfinite(y))[0]
+    x_min, x_max = np.min(x[good]), np.max(x[good])
+    knots = np.linspace(x_min, x_max, num=n_knots)
+    if window is None:
+        window = (x_max - x_min) / (4 * n_knots)
+    for i in range(nx):
+        x_mid = x[i]
+        use = np.where((x > x_mid - window / 2) & (x < x_mid + window / 2))[0]
+        if use.size == 0:
+            continue
+        y_out_init[i] = weighted_median(y[use], percentile=percentile)
+    cspline = cspline_fit(x, y_out_init, knots=knots)
+    y_out = cspline(x)
+    return y_out

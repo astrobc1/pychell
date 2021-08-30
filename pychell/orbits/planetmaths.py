@@ -307,7 +307,7 @@ def planet_signal(t, per, tp, ecc, w, k):
         m = 2 * np.pi * (((t - tp) / per) - np.floor((t - tp) / per))
         return k * np.cos(m + w)
     
-    # Force bounded orbit if ecc > 1
+    # Force bounded orbit if ecc almost blows up
     if ecc > 0.99:
         ecc = 0.99
         

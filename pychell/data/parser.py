@@ -108,6 +108,9 @@ class DataParser:
         image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float)
         return image
     
+    def parse_fibers(self, data):
+        return None
+    
     #####################
     #### CALIBRATION ####
     #####################

@@ -221,7 +221,7 @@ class RVProblem(BayesianProblem):
             
             # Compute the noise model
             if isinstance(like.model.noise_process, CorrelatedNoiseProcess):
-                errors = like.model.compute_data_errors(pars, include_corr_error=True)
+                errors = like.model.compute_data_errors(pars, include_corr_error=False)
             else:
                 errors = like.model.compute_data_errors(pars)
             
@@ -291,7 +291,7 @@ class RVProblem(BayesianProblem):
             plots.append(plot)
         return plots
         
-    def plot_full_rvs(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=500, kernel_window=10, plot_width=1800, plot_height=1200, save=True):
+    def plot_full_rvs(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=500, kernel_window=10, plot_width=1800, plot_height=1200, save=True, color_map="instrument"):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
@@ -365,7 +365,7 @@ class RVProblem(BayesianProblem):
                         if i == 0:
                             gps_hr[noise_label] = np.array([], dtype=float), np.array([], dtype=float)
                         gps_hr[noise_label] = np.concatenate((gps_hr[noise_label][0], _gps_hr[noise_label][0])), np.concatenate((gps_hr[noise_label][1], _gps_hr[noise_label][1]))
-                                              
+
                     # Store
                     time_gp_hr = np.concatenate((time_gp_hr, t_hr_window))
                     
@@ -391,12 +391,20 @@ class RVProblem(BayesianProblem):
                     label = f"<b>{noise_label.replace('_', ' ')}</b>"
                         
                     # Plot the actual GP
-                    for instname in like.model.data:
-                        if instname in noise_label:
-                            _instname = instname
-                            break
+                    if color_map == "instrument":
+                        for instname in like.model.data:
+                            if instname in noise_label:
+                                color_line = pcutils.hex_to_rgba(self.color_map[instname], a=0.6)
+                                color_fill = pcutils.hex_to_rgba(self.color_map[instname], a=0.3)
+                                break
+                    elif color_map == "wavelength":
+                        for wave in np.unique(like.model.noise_process.kernel.wave_vec):
+                            if str(int(wave)) in noise_label:
+                                color_line = pcutils.csscolor_to_rgba(pcutils.PLOTLY_COLORS[color_index], a=0.6)
+                                color_fill = pcutils.csscolor_to_rgba(pcutils.PLOTLY_COLORS[color_index], a=0.3)
+                                color_index += 1
                     fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gp,
-                                                                line=dict(width=0.8, color=pcutils.hex_to_rgba(self.color_map[_instname], a=0.6)),
+                                                                line=dict(width=0.8, color=color_line),
                                                                 name=label, showlegend=False),
                                     row=1, col=1)
                     
@@ -404,8 +412,8 @@ class RVProblem(BayesianProblem):
                     fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
                                                                 y=np.concatenate([gp_upper, gp_lower[::-1]]),
                                                                 fill='toself',
-                                                                line=dict(color=pcutils.hex_to_rgba(self.color_map[_instname], a=0.6), width=1),
-                                                                fillcolor=pcutils.hex_to_rgba(self.color_map[_instname], a=0.5),
+                                                                line=dict(color=color_line, width=1),
+                                                                fillcolor=color_fill,
                                                                 name=label, showlegend=True),
                                     row=1, col=1)
                     color_index += 1
@@ -1001,7 +1009,7 @@ class RVProblem(BayesianProblem):
             
             # Red chi 2
             try:
-                redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest, include_uncorr_error=True)
+                redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest, include_uncorr_error=False)
             except:
                 redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest)
             
