@@ -142,7 +142,7 @@ class IterativeSpectralForwardModel(Model):
         self.model_dl = (1 / self.sregion.pix_per_wave()) / self.model_resolution
         self.model_wave = np.arange(self.sregion.wavemin, self.sregion.wavemax, self.model_dl)
         self.templates_dict = {}
-        if self.star is not None and not self.star.from_flat:
+        if self.star is not None:
             self.templates_dict["star"] = self.star._init_template(data, self.sregion, self.model_dl)
         if self.gas_cell is not None:
             self.templates_dict["gas_cell"] = self.gas_cell._init_template(data, self.sregion, self.model_dl)
@@ -294,3 +294,7 @@ class IterativeSpectralForwardModel(Model):
 ###################################
 
 from .spectral_components import *
+
+##############################
+#### LASER FREQUENCY COMB ####
+##############################

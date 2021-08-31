@@ -160,7 +160,7 @@ class PolyContinuum(Continuum):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, poly_order=4):
+    def __init__(self, poly_order=4, coeffs=None):
         """Initiate a polynomial continuum model.
 
         Args:
@@ -172,9 +172,10 @@ class PolyContinuum(Continuum):
         
         # The polynomial order
         self.poly_order = poly_order
+        self.coeffs = coeffs
             
         # Parameter names
-        for i in range(self.n_poly_pars):
+        for i in range(self.poly_order + 1):
             self.base_par_names.append(f"_poly_{i}")
                 
         self.par_names = [self.name + s for s in self.base_par_names]
@@ -185,17 +186,18 @@ class PolyContinuum(Continuum):
         pars = BoundedParameters()
         
         # Poly parameters
-        for i in range(self.n_poly_pars):
-            pname = f"poly_{i}"
-            if pname in self.blueprint:
-                pars[self.par_names[i]] = BoundedParameter(value=self.blueprint[pname][1],
-                                                        vary=True,
-                                                        lower_bound=self.blueprint[pname][0], upper_bound=self.blueprint[pname][2])
+        if self.coeffs is None:
+            for i in range(self.n_poly_pars):
+                pname = f"poly_{i}"
+                if pname in self.blueprint:
+                    pars[self.par_names[i]] = BoundedParameter(value=self.coeffs[0],
+                                                               vary=True,
+                                                               lower_bound=self.blueprint[pname][0], upper_bound=self.blueprint[pname][2])
             else:
                 prev = pars[self.par_names[i - 1]]
                 pars[self.par_names[i]] = BoundedParameter(value=prev.value/10,
-                                                        vary=True,
-                                                        lower_bound=prev.lower_bound/10, upper_bound=prev.upper_bound/10)
+                                                           vary=True,
+                                                           lower_bound=prev.lower_bound/10, upper_bound=prev.upper_bound/10)
         return pars
     
     
@@ -391,7 +393,7 @@ class AugmentedStar(Star):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, input_file=None):
+    def __init__(self, input_file=None, init_vel=[-3E5, 100, 3E5]):
 
         # Call super method
         super().__init__()
@@ -401,6 +403,9 @@ class AugmentedStar(Star):
         
         # Whether or not the star is from a synthetic source
         self.from_flat = True if self.input_file is None else False
+        
+        # Init vel
+        self.init_vel = init_vel
 
         # Pars
         self.base_par_names += ['_vel']
@@ -410,8 +415,8 @@ class AugmentedStar(Star):
 
     def _init_parameters(self, data):
         pars = BoundedParameters()
-        pars[self.par_names[0]] = BoundedParameter(value=100, vary=True,
-                                                   lower_bound=-3E5, upper_bound=3E5)
+        pars[self.par_names[0]] = BoundedParameter(value=self.init_vel[1], vary=True,
+                                                   lower_bound=self.init_vel[0], upper_bound=self.init_vel[2])
     
         return pars
         
@@ -450,7 +455,7 @@ class AugmentedStar(Star):
             spectral_model.p0[self.par_names[0]].vary = False
         elif iter_index == 1 and self.from_flat:
             spectral_model.p0[self.par_names[0]].vary = True
-            spectral_model.p0[self.par_names[0]].value = -1 * data.bc_vel
+            spectral_model.p0[self.par_names[0]].value = -1 * spectral_model.data.bc_vel
 
 
 #########################

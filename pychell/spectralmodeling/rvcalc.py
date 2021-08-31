@@ -167,7 +167,7 @@ def brute_force_ccf_crude(p0, data, spectral_model):
     pars = copy.deepcopy(p0)
     
     # Velocity grid
-    vels = np.arange(-250000, 250000, 500)
+    vels = np.arange(spectral_model.p0[spectral_model.star.par_names[0]].lower_bound, spectral_model.p0[spectral_model.star.par_names[0]].upper_bound, 500)
 
     # Stores the rms as a function of velocity
     rmss = np.full(vels.size, dtype=float, fill_value=np.nan)

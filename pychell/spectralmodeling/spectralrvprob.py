@@ -128,7 +128,12 @@ class IterativeSpectralRVProb(OptProblem):
         input_files = [self.data_input_path + f for f in np.atleast_1d(np.genfromtxt(self.data_input_path + self.filelist, dtype='<U100', comments='#').tolist())]
         
         # Load in each observation for this order
-        self.data = [SpecData1d(fname, self.order_num, ispec + 1, self.parser, self.crop_pix) for ispec, fname in enumerate(input_files)]
+        data = [SpecData1d(fname, self.order_num, ispec + 1, self.parser, self.crop_pix) for ispec, fname in enumerate(input_files)]
+        
+        # Sort the data
+        jds = np.array([d.parser.compute_midpoint(d) for d in data], dtype=float)
+        ss = np.argsort(jds)
+        self.data = [data[ss[i]] for i in range(len(jds))]
             
         # Estimate the wavelength bounds for this order
         wave_grid = self.parser.estimate_wavelength_solution(self.data[0])
