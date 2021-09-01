@@ -393,7 +393,7 @@ class AugmentedStar(Star):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, input_file=None, init_vel=[-3E5, 100, 3E5]):
+    def __init__(self, input_file=None, vel=[-3E5, 100, 3E5]):
 
         # Call super method
         super().__init__()
@@ -405,7 +405,7 @@ class AugmentedStar(Star):
         self.from_flat = True if self.input_file is None else False
         
         # Init vel
-        self.init_vel = init_vel
+        self.vel = vel
 
         # Pars
         self.base_par_names += ['_vel']
@@ -415,8 +415,8 @@ class AugmentedStar(Star):
 
     def _init_parameters(self, data):
         pars = BoundedParameters()
-        pars[self.par_names[0]] = BoundedParameter(value=self.init_vel[1], vary=True,
-                                                   lower_bound=self.init_vel[0], upper_bound=self.init_vel[2])
+        pars[self.par_names[0]] = BoundedParameter(value=self.vel[1], vary=True,
+                                                   lower_bound=self.vel[0], upper_bound=self.vel[2])
     
         return pars
         

@@ -134,6 +134,8 @@ class IterativeSpectralRVProb(OptProblem):
         jds = np.array([d.parser.compute_midpoint(d) for d in data], dtype=float)
         ss = np.argsort(jds)
         self.data = [data[ss[i]] for i in range(len(jds))]
+        for i in range(len(self.data)):
+            self.data[i].spec_num = i + 1
             
         # Estimate the wavelength bounds for this order
         wave_grid = self.parser.estimate_wavelength_solution(self.data[0])
@@ -470,7 +472,7 @@ class IterativeSpectralRVProb(OptProblem):
         
         # X and Y limits
         plt.xlim(spectral_model.sregion.wavemin / 10 - pad, spectral_model.sregion.wavemax / 10 + pad)
-        plt.ylim(-1.2, 1.1)
+        plt.ylim(-1.3, 1.2)
             
         # The legend for each chunk
         plt.legend(prop={'size': 8}, loc='center left', bbox_to_anchor=(1.0, 0.5))
