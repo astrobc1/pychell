@@ -9,6 +9,7 @@ import numpy as np
 import pychell
 import pychell.maths as pcmath
 import pychell.spectralmodeling.rvcalc as pcrvcalc
+from pychell.spectralmoodeling.spectralmodels import IterativeSpectralForwardModel
 
 # Plots
 import matplotlib.pyplot as plt
@@ -21,65 +22,7 @@ except:
 from optimize.models import Model
 from optimize.knowledge import BoundedParameters, BoundedParameter
 
-#########################
-#### SPECTRAL REGION ####
-#########################
-
-class SpectralRegion:
-    
-    __slots__ = ['pixmin', 'pixmax', 'wavemin', 'wavemax', 'label', 'data_inds']
-    
-    def __init__(self, pixmin, pixmax, wavemin, wavemax, label=None):
-        """Initiate a spectral region.
-
-        Args:
-            pixmin (int): The min pixel.
-            pixmax (int): The max pixel.
-            wavemin (float): The minimum wavelength
-            wavemax (float): The maximum wavelength
-            label (str, optional): A label for this region. Defaults to None.
-        """
-        self.pixmin = pixmin
-        self.pixmax = pixmax
-        self.wavemin = wavemin
-        self.wavemax = wavemax
-        self.label = label
-        self.data_inds = np.arange(self.pixmin, self.pixmax + 1).astype(int)
-        
-    def __len__(self):
-        return self.pix_len()
-    
-    def wave_len(self):
-        return self.wavemax - self.wavemin
-    
-    def pix_len(self):
-        return self.pixmax - self.pixmin + 1
-        
-    def pix_within(self, pixels, pad=0):
-        good = np.where((pixels >= self.pixmin - pad) & (pixels <= self.pixmax + pad))[0]
-        return good
-        
-    def wave_within(self, waves, pad=0):
-        good = np.where((waves >= self.wavemin - pad) & (waves <= self.wavemax + pad))[0]
-        return good
-    
-    def midwave(self):
-        return self.wavemin + self.wave_len() / 2
-    
-    def midpix(self):
-        return self.pixmin + self.pix_len() / 2
-        
-    def pix_per_wave(self):
-        return (self.pixmax - self.pixmin) / (self.wavemax - self.wavemin)
-    
-    def __repr__(self):
-        return f"Spectral Region: Pix: ({self.pixmin}, {self.pixmax}) Wave: ({self.wavemin}, {self.wavemax})"
-
-##################################
-#### COMPOSITE SPECTRAL MODEL ####
-##################################
-
-class IterativeSpectralForwardModel(Model):
+class GlobalIterativeSpectralForwardModel(Model):
     """The primary container for an iterative spectral forward model problem.
     """
     
@@ -261,40 +204,27 @@ class IterativeSpectralForwardModel(Model):
     def summary(self, pars):
         s = ""
         if self.wavelength_solution is not None:
-            s += "--Wavelength Solution--:\n"
+            s += "Wavelength Solution:"
             for pname in self.wavelength_solution.par_names:
                 s += f"  {pars[pname]}\n"
         if self.continuum is not None:
-            s += "--Continuum--:\n"
+            s += "Continuum:"
             for pname in self.continuum.par_names:
                 s += f"  {pars[pname]}\n"
         if self.lsf is not None:
-            s += "--LSF--:\n"
+            s += "LSF:"
             for pname in self.lsf.par_names:
                 s += f"  {pars[pname]}\n"
         if self.star is not None:
-            s += "--Star--:\n"
+            s += "Star:"
             for pname in self.star.par_names:
                 s += f"  {pars[pname]}\n"
         if self.tellurics is not None:
-            s += "--Tellurics--:\n"
+            s += "Tellurics:"
             for pname in self.tellurics.par_names:
                 s += f"  {pars[pname]}\n"
         if self.gas_cell is not None:
-            s += "--Gas Cell--:\n"
+            s += "Gas Cell:"
             for pname in self.gas_cell.par_names:
                 s += f"  {pars[pname]}\n"
         return s
-    
-    
-
-
-###################################
-#### SPECTRAL MODEL COMPONENTS ####
-###################################
-
-from .spectral_components import *
-
-##############################
-#### LASER FREQUENCY COMB ####
-##############################

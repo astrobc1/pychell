@@ -76,6 +76,17 @@ def compute_R2_stat(ydata, ymodel, w=None):
     
     return r2
 
+@njit(nogil=True)
+def outer_diff(x, y):
+    n1 = len(x)
+    n2 = len(y)
+    out = np.zeros((n1, n2))
+    for i in range(n1):
+        for j in range(n2):
+            out[i, j] = np.abs(x[i] - y[j])
+    return out
+
+
 
 def outer_fun(fun, x, y):
     n1 = len(x)

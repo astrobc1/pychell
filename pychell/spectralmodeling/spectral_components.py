@@ -160,7 +160,7 @@ class PolyContinuum(Continuum):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, poly_order=4, coeffs=None):
+    def __init__(self, poly_order=4, coeffs={0: [0.95, 1.0, 1.1], 1: [-1E-3, 1E4, 1E-3]}):
         """Initiate a polynomial continuum model.
 
         Args:
@@ -186,13 +186,11 @@ class PolyContinuum(Continuum):
         pars = BoundedParameters()
         
         # Poly parameters
-        if self.coeffs is None:
-            for i in range(self.n_poly_pars):
-                pname = f"poly_{i}"
-                if pname in self.blueprint:
-                    pars[self.par_names[i]] = BoundedParameter(value=self.coeffs[0],
-                                                               vary=True,
-                                                               lower_bound=self.blueprint[pname][0], upper_bound=self.blueprint[pname][2])
+        for i in range(self.poly_order + 1):
+            if i in self.coeffs:
+                pars[self.par_names[i]] = BoundedParameter(value=self.coeffs[i][0],
+                                                            vary=True,
+                                                            lower_bound=self.coeffs[i][0], upper_bound=self.coeffs[i][2])
             else:
                 prev = pars[self.par_names[i - 1]]
                 pars[self.par_names[i]] = BoundedParameter(value=prev.value/10,
@@ -211,7 +209,7 @@ class PolyContinuum(Continuum):
         poly_pars = np.array([pars[self.par_names[i]].value for i in range(self.poly_order + 1)])
         
         # Build polynomial
-        poly_cont = np.polyval(poly_pars[::-1], wave_final - self.wave_mid)
+        poly_cont = np.polyval(poly_pars[::-1], wave_final - np.nanmean(wave_final))
         
         return poly_cont
 
@@ -908,10 +906,10 @@ class LegPolyWavelengthSolution(WavelengthSolution):
         self.base_par_names = []
         
         # Polynomial lagrange points
-        self.poly_pixel_lagrange_points = np.linspace(self.sregion.pixmin, self.sregion.pixmax, num=self.n_poly_pars).astype(int)
+        self.poly_pixel_lagrange_points = np.linspace(self.sregion.pixmin, self.sregion.pixmax, num=self.poly_order + 1).astype(int)
         self.poly_wave_lagrange_zero_points = wls_estimate[self.poly_pixel_lagrange_points]
         
-        for i in range(self.n_poly_pars):
+        for i in range(self.poly_order + 1):
             self.base_par_names.append('_poly_lagrange_' + str(i + 1))
                 
         self.par_names = [self.name + s for s in self.base_par_names]
@@ -943,7 +941,7 @@ class LegPolyWavelengthSolution(WavelengthSolution):
     
         # Build full polynomial
         wave_sol = np.zeros(self.nx)
-        for i in range(self.n_poly_pars):
+        for i in range(self.poly_order + 1):
             wave_sol += coeffs[i] * eval_legendre(i, pixel_grid)
         
         return wave_sol

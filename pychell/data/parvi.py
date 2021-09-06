@@ -130,11 +130,11 @@ class PARVIParser(DataParser):
 #### REDUCTION / EXTRACTION ####
 ################################
 
-redux_settings = NotImplemented
-
 
 #######################################
 ##### GENERATING RADIAL VELOCITIES ####
 #######################################
 
-lsf_width = [0.05, 0.08, 0.12]
+lsf_linear_coeffs = np.array([0.00167515, 0.08559148])
+lsf_widths = np.polyval(lsf_linear_coeffs, np.arange(46))
+lsf_widths = [[lw*1.0, lw, lw*1.0] for lw in lsf_widths]
