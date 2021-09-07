@@ -131,7 +131,7 @@ class IterativeSpectralRVProb(OptProblem):
         data = [SpecData1d(fname, self.order_num, ispec + 1, self.parser, self.crop_pix) for ispec, fname in enumerate(input_files)]
         
         # Sort the data
-        jds = np.array([d.parser.compute_midpoint(d) for d in data], dtype=float)
+        jds = np.array([d.parser.compute_exposure_midpoint(d) for d in data], dtype=float)
         ss = np.argsort(jds)
         self.data = [data[ss[i]] for i in range(len(jds))]
         for i in range(len(self.data)):

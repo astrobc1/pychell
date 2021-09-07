@@ -241,7 +241,7 @@ class DataParser:
         # Star name
         star_name = target_dict["name"].replace('_', ' ')
         
-        # Compute the jd mid point
+        # Compute the JD UTC mid point (possibly weighted)
         jdmid = self.compute_exposure_midpoint(data)
         
         # BJD

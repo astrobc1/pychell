@@ -113,7 +113,7 @@ class PARVIParser(DataParser):
         data.flux_unc = fits_data[4].data[4, data.order_num - 1, :]
         data.mask = np.ones_like(data.flux)
         
-    def compute_midpoint(self, data):
+    def compute_exposure_midpoint(self, data):
         jds, fluxes = [], []
         # Eventually we will fill fluxes with an arbitrary read value.
         # Then, the mean_jd will be computed with pcmath.weighted_mean(jds[1:], np.diff(fluxes))
@@ -137,4 +137,4 @@ class PARVIParser(DataParser):
 
 lsf_linear_coeffs = np.array([0.00167515, 0.08559148])
 lsf_widths = np.polyval(lsf_linear_coeffs, np.arange(46))
-lsf_widths = [[lw*1.0, lw, lw*1.0] for lw in lsf_widths]
+lsf_widths = [[lw*0.9, lw, lw*1.1] for lw in lsf_widths]
