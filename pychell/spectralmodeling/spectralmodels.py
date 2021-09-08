@@ -232,6 +232,7 @@ class IterativeSpectralForwardModel(Model):
             
         # Convolve
         if self.lsf is not None:
+
             model_flux = self.lsf.convolve_flux(model_flux, pars)
             
             # Renormalize model to remove degeneracy between blaze and lsf

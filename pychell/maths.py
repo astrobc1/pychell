@@ -889,7 +889,8 @@ def cross_correlate2(x1, y1, x2, y2, lags):
         bad = np.where(~np.isfinite(vec_cross))[0]
         if bad.size > 0:
             weights[bad] = 0
-        corrfun[i] = np.nansum(vec_cross * weights) / np.nansum(weights)
+        #corrfun[i] = np.nansum(vec_cross * weights) / np.nansum(weights)
+        corrfun[i] = rmsloss(y1, y2_shifted)
 
     return corrfun
 
@@ -915,7 +916,7 @@ def cross_correlate3(x1, y1, x2, y2, vels):
     for i in range(nvels):
         y2_shifted = doppler_shift(x2, vels[i], wave_out=x1, flux=y2, interp='cubic', kind='exp')
         good = np.where(np.isfinite(y2_shifted) & np.isfinite(y1))[0]
-        if good.size < 500:
+        if good.size < x1.size / 3:
             continue
         corrfun[i] = rmsloss(y1, y2_shifted)
     return corrfun
