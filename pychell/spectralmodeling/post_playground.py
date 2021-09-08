@@ -271,9 +271,15 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
     n_orders = len(specrvprobs)
     do_orders = [specrvprobs[o].order_num for o in range(len(specrvprobs))]
     n_spec = specrvprobs[0].n_spec
-    n_nights = specrvprobs[0].n_nights
+    n_rv_chunks = len(rvs_dict['bjds_nightly'])
     n_iterations = specrvprobs[0].n_iterations
     n_obs_nights = rvs_dict["n_obs_nights"]
+
+    # Overwrite shape of nightly rvs
+    rvs_dict['rvsfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['rvsxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
     
     # Mask rvs from user input
     mask = gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict)
@@ -337,7 +343,7 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
     star_name = specrvprobs[0].target_dict["name"].replace(' ', '_')
     time_tag = datetime.date.today().strftime('%d%m%Y')
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
-    telvec_nightly = np.full(n_nights, spectrograph, dtype='<U20')
+    telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')
     
     # FwM
     fname = f"{path}rvsfwm_{spectrograph}_{star_name}_{time_tag}.txt"
