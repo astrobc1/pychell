@@ -99,40 +99,39 @@ def outer_fun(fun, x, y):
 
 def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
     
-    # Good indices
+    # Compute diffs2
     if weights is not None:
-        good = np.where((weights > 0) & np.isfinite(y))[0]
+        good = np.where(np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights > 0))[0]
+        xx, yy, ww = x[good], y[good], weights[good]
+        diffs2 = ww * (xx - yy)**2
     else:
         good = np.where(np.isfinite(y))[0]
-    
-    # Compute squared diffs
-    diffs2 = (x[good] - y[good])**2
-    
-    # Apply weights
-    if weights is not None:
-        diffs2 *= weights[good]
-        norm = np.copy(weights[good])
+        xx, yy = x[good], y[good]
+        diffs2 = (xx - yy)**2
     
     # Ignore worst N pixels
     if flag_worst > 0:
         ss = np.argsort(diffs2)
         diffs2[ss[-1*flag_worst:]] = np.nan
-        if weights is not None:
-            norm[ss[-1*flag_worst:]] = 0
+        if ww is not None:
+            ww[ss[-1*flag_worst:]] = 0
                 
     # Remove edges
     if remove_edges > 0:
         diffs2[0:remove_edges] = 0
         diffs2[-remove_edges:] = 0
+        if ww is not None:
+            ww[0:remove_edges] = 0
+            ww[-remove_edges:] = 0
         
     # Compute rms
     if weights is not None:
-        _rms = np.sqrt(np.nansum(diffs2) / np.nansum(norm))
+        rms = np.sqrt(np.nansum(diffs2) / np.nansum(ww))
     else:
-        ng = np.where(np.isfinite(diffs2))[0].size
-        _rms = np.sqrt(np.nansum(diffs2) / ng)
+        n_good = diffs2.size
+        rms = np.sqrt(np.nansum(diffs2) / n_good)
 
-    return _rms
+    return rms
 
 def measure_fwhm(x, y):
     
@@ -860,13 +859,14 @@ def cross_correlate1(y1, y2, lags):
 
     return corrfun - np.nanmin(corrfun)
 
-def cross_correlate2(x1, y1, x2, y2, lags):
+def cross_correlate(x1, y1, x2, y2, lags, kind="rms"):
     """Cross-correlation in "pixel" space.
 
     Args:
         y1 (np.ndarray): The array to cross-correlate.
         y2 (np.ndarray): The array to cross-correlate against.
         lags (np.ndarray): An array of lags (shifts), must be integers.
+        kind (str): Which kind of XC to perform. "rms" computes the rms loss at each lag. Otherwise a standard XC is performed. Note this implies the ccf is flipped for "rms"
 
     Returns:
         np.ndarray: The cross-correlation function
@@ -889,8 +889,10 @@ def cross_correlate2(x1, y1, x2, y2, lags):
         bad = np.where(~np.isfinite(vec_cross))[0]
         if bad.size > 0:
             weights[bad] = 0
-        #corrfun[i] = np.nansum(vec_cross * weights) / np.nansum(weights)
-        corrfun[i] = rmsloss(y1, y2_shifted)
+        if kind.lower() == "rms":
+            corrfun[i] = rmsloss(y1, y2_shifted, weights=weights)
+        else:
+            corrfun[i] = np.nansum(vec_cross * weights) / np.nansum(weights)
 
     return corrfun
 
@@ -1316,15 +1318,20 @@ def poly_filter(y, width, poly_order):
     y_out[ihigh + 1:] = np.nan
     return y_out
         
-def normalize_image(image, window=5, n_knots=60, percentile=0.99):
+def normalize_image(image, window=5, n_knots=60, percentile=0.99, downsample=8):
     out = np.full_like(image, np.nan)
     ny, nx = out.shape
     xx = np.arange(nx)
-    for i in range(nx):
+    for i in range(0, nx, downsample):
         good = np.where(np.isfinite(image[:, i]))[0]
         if good.size < 0.5 * ny:
             continue
-        out[:, i] = image[:, i] / cspline_fit_fancy(xx, image[:, i], window=window, n_knots=n_knots, percentile=percentile)
+        x_low = np.max([0, i - downsample / 2])
+        x_high = np.min([i + downsample / 2, nx - 1])
+        inds = np.arange(x_low, x_high + 1).astype(int)
+        continuum_col = cspline_fit_fancy(xx, image[:, i], window=window, n_knots=n_knots, percentile=percentile)
+        for j in inds:
+            out[:, j] = image[:, j] / continuum_col
     bad = np.where(out < 0)
     if bad[0].size > 0:
         out[bad] = np.nan

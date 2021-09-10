@@ -1,5 +1,6 @@
 # Base Python
 import os
+import importlib
 
 from pychell.data.parser import DataParser
 import glob
@@ -16,11 +17,10 @@ import astropy.units as units
 import pychell.maths as pcmath
 
 
-#######################
-#### NAME AND SITE ####
-#######################
+##############
+#### SITE ####
+##############
 
-spectrograph = 'iSHELL'
 observatory = {
     'name': 'IRTF',
     'lat': 19.826218316666665,
@@ -33,6 +33,8 @@ observatory = {
 ######################
 
 class iSHELLParser(DataParser):
+
+    spectrograph = 'iSHELL'
     
     def categorize_raw_data(self, reducer):
 
@@ -169,15 +171,6 @@ class iSHELLParser(DataParser):
         pcoeffs = pcmath.poly_coeffs(quad_pixel_set_points, waves)
         wls = np.polyval(pcoeffs, np.arange(data.flux.size))
         return wls
-        
-        
-    ###############
-    #### MISC. ####
-    ###############
-    
-    @property
-    def slit_or_fiber(self):
-        return "slit"
 
 ################################
 #### REDUCTION / EXTRACTION ####
@@ -187,6 +180,12 @@ class iSHELLParser(DataParser):
 detector_props = [
     {'gain': 1.8, 'dark_current': 0.05, 'read_noise': 8.0}
 ]
+
+# Slit or fiber
+feeder = "slit"
+
+# Max number of traces on the detector
+n_traces = 1
 
 
 #######################################

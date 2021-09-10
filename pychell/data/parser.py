@@ -108,8 +108,12 @@ class DataParser:
         image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float)
         return image
     
-    def parse_fibers(self, data):
-        return None
+    def parse_fiber_num(self, data):
+        raise NotImplementedError(f"Must implement parse_fiber_num method for class {self.__class__.__name__}")
+
+    def classify_traces(self, data):
+        raise NotImplementedError(f"Must implement classify_traces method for class {self.__class__.__name__}")
+
     
     #####################
     #### CALIBRATION ####
@@ -126,7 +130,7 @@ class DataParser:
         return fname
     
     def gen_order_map_filename(self, source):
-        fname = f"{self.output_path}calib{os.sep}{source.base_input_file_noext}_order_map.fits"
+        fname = f"{self.output_path}trace{os.sep}{source.base_input_file_noext}_order_map.fits"
         return fname
     
     def gen_master_calib_header(self, data):
@@ -262,9 +266,6 @@ class DataParser:
     ###############
     #### MISC. ####
     ###############
-    
-    def get_n_orders(self, data):
-        raise NotImplementedError(f"Must implement a get_n_orders method for class {self.__class__.__name__}")
             
     def print_summary(self, data_dict):
     
@@ -300,3 +301,7 @@ class DataParser:
                     print('    ' + f.base_input_file)
                     
             print('')
+
+    @property
+    def spec_module(self):
+        return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")

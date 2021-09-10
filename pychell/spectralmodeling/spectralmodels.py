@@ -248,12 +248,12 @@ class IterativeSpectralForwardModel(Model):
 
         # Interpolate high res model onto data grid
         if wave_final is None:
-            model_flux_lr = pcmath.cspline_interp(model_wave, model_flux, data_wave)
+            model_flux = pcmath.cspline_interp(model_wave, model_flux, data_wave)
         else:
-            model_flux_lr = pcmath.cspline_interp(model_wave, model_flux, wave_final)
+            model_flux = pcmath.cspline_interp(model_wave, model_flux, wave_final)
         
         # Return
-        return data_wave, model_flux_lr
+        return data_wave, model_flux
     
     ###############
     #### MISC. ####

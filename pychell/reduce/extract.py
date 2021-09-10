@@ -51,7 +51,7 @@ class SpectralExtractor:
         n_orders = len(orders_list)
         n_traces = len(orders_list[0])
         
-        # Mask edge pixels as nan (not an actual crop)
+        # Mask edge pixels as nan
         self.mask_image(data_image)
         
         # Also flag regions in between orders
@@ -60,8 +60,8 @@ class SpectralExtractor:
             data_image[bad] = np.nan
             
         # Default storage is an HDUList of length=n_orders.
-        # reduced_data = np.full((n_orders, nx, 3), np.nan)
         reduced_data = np.full((n_orders, n_traces, nx, 3), np.nan)
+        # reduced_data = [] # np.full((n_orders, nx, 3), np.nan)
         traces = []
         
         # Loop over orders, possibly multi-trace
@@ -72,13 +72,13 @@ class SpectralExtractor:
             
             # Orders are composed of multiple traces
             if len(single_order_list) > 1:
-                
+
                 for sub_trace_index, single_trace_dict in enumerate(single_order_list):
                     
                     stopwatch.lap(sub_trace_index)
                     print('    Extracting Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(len(single_order_list)) + ' ...')
                     
-                    reduced_orders[order_index, sub_trace_index, :, :], boxcar_spectra[order_index, sub_trace_index, :], trace_profile_csplines[order_index, sub_trace_index], y_positions[order_index, sub_trace_index, :] = extract_single_trace(data, data_image, trace_map_image, single_trace_dict, config)
+                    reduced_orders[order_index, sub_trace_index, :, :], boxcar_spectra[order_index, sub_trace_index, :], trace_profile_csplines[order_index, sub_trace_index], y_positions[order_index, sub_trace_index, :] = self.extract_trace(data, data_image, trace_map_image, single_trace_dict, config)
                     
                     print('    Extracted Sub Trace ' + str(sub_trace_index + 1) + ' of ' + str(len(single_order_list)) + ' in ' + str(round(stopwatch.time_since(sub_trace_index), 3)) + ' min ')
                     
@@ -333,7 +333,7 @@ class OptimalSlitExtractor(SpectralExtractor):
         yarr = np.arange(ny)
         
         # Create a fiducial high resolution grid centered at zero
-        yarr_hr = np.arange(int(-ny / 2), int(ny / 2) + 1, 1 / self.oversample)
+        yarr_hr = np.arange(int(np.floor(-ny / 2)), int(np.ceil(ny / 2)) + 1, 1 / self.oversample)
         trace_image_rect = np.full((len(yarr_hr), nx), np.nan)
         
         # Remove background and rectify
@@ -342,14 +342,12 @@ class OptimalSlitExtractor(SpectralExtractor):
             if good.size >= 3:
                 col_hr = pcmath.lin_interp(yarr - trace_positions[x], trace_image[:, x], yarr_hr)
                 trace_image_rect[:, x] = col_hr - background[x]
+                bad = np.where(trace_image_rect[:, x] < 0)[0]
+                if bad.size > 0:
+                    trace_image_rect[bad, x] = 0
                 trace_image_rect[:, x] /= np.nansum(trace_image_rect[:, x])
             else:
                 trace_image_rect[:, x] = np.nan
-        
-        # Fix negatives
-        bad = np.where(trace_image_rect < 0)
-        if bad[0].size > 0:
-            trace_image_rect[bad] = np.nan
         
         # Compute trace profile
         trace_profile = np.nanmedian(trace_image_rect, axis=1)
@@ -423,7 +421,7 @@ class OptimalSlitExtractor(SpectralExtractor):
             data_x = trace_image_no_background_smooth[:, x] / np.nanmax(trace_image_no_background_smooth[:, x])
             
             # Perform CCF
-            ccf = pcmath.cross_correlate2(yarr, data_x, trace_profile_cspline.x, trace_profile, lags)
+            ccf = pcmath.cross_correlate(yarr, data_x, trace_profile_cspline.x, trace_profile, lags, kind="xc")
             
             # Bias the ccf
             ccf *= np.exp(-1 * (np.arange(ccf.size) - height / 2)**2 / (2 * lags.size**2)*3)
@@ -468,6 +466,9 @@ class OptimalSlitExtractor(SpectralExtractor):
         # Empty arrays
         background = np.full(nx, np.nan)
         background_err = np.full(nx, np.nan)
+
+        # Smooth image
+        trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
         
         # Loop over columns
         for x in range(nx):
@@ -481,13 +482,13 @@ class OptimalSlitExtractor(SpectralExtractor):
             P /= np.nanmax(P)
             
             # Identify regions low in flux
-            background_locs = np.where(((yarr < trace_positions[x] - aperture / 2) | (yarr > trace_positions[x] + aperture / 2)) & np.isfinite(trace_image[:, x]))[0]
+            background_locs = np.where(((yarr < trace_positions[x] - aperture / 2) | (yarr > trace_positions[x] + aperture / 2)) & np.isfinite(trace_image_smooth[:, x]))[0]
             
             if background_locs.size == 0:
                 continue
             
             # Compute the average counts behind the trace
-            background[x] = np.nanmedian(trace_image[background_locs, x])
+            background[x] = pcmath.weighted_median(trace_image_smooth[background_locs, x], percentile=0.1)
             
             # Check if negative
             if background[x] <= 0 or ~np.isfinite(background[x]):
@@ -498,8 +499,6 @@ class OptimalSlitExtractor(SpectralExtractor):
                 background_err[x] = np.sqrt(background[x] / (background_locs.size - 1))
                 
         # Savgol filter
-        #background = scipy.signal.savgol_filter(background, window_length=7, polyorder=2)
-        #background_err = scipy.signal.savgol_filter(background, window_length=7, polyorder=2)
         
         # Return
         return background, background_err

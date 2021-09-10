@@ -60,6 +60,10 @@ class CubicSplineLSQ(TemplateAugmenter):
         
         # Loop over data and build residuals
         for ispec in range(specrvprob.n_spec):
+
+            # Continue if not good
+            if not specrvprob.data[ispec].is_good:
+                continue
                 
             # Best fit pars
             pars = specrvprob.opt_results[ispec, iter_index]["pbest"]
@@ -173,17 +177,22 @@ class WeightedMedian(TemplateAugmenter):
         # Storage arrays
         nx  = len(current_stellar_template[:, 0])
         residuals_median = np.zeros(nx)
-        residuals = np.zeros(shape=(nx, specrvprob.n_spec), dtype=float)
+        residuals = np.full((nx, specrvprob.n_spec), np.nan)
         weights = np.zeros(shape=(nx, specrvprob.n_spec), dtype=float)
 
         # Loop over spectra
         for ispec in range(specrvprob.n_spec):
+
+            # Continue if not good
+            if not specrvprob.data[ispec].is_good:
+                continue
             
             # Best fit pars
             pars = specrvprob.opt_results[ispec, iter_index]["pbest"]
         
             # Init the chunk
             specrvprob.spectral_model.initialize(pars, specrvprob.data[ispec], iter_index=iter_index)
+
         
             # Generate the low res model
             wave_data, model_lr = specrvprob.spectral_model.build(pars)
@@ -306,6 +315,10 @@ class WeightedMean(TemplateAugmenter):
 
         # Loop over spectra
         for ispec in range(specrvprob.n_spec):
+
+            # Continue if not good
+            if not specrvprob.data[ispec].is_good:
+                continue
             
             # Best fit pars
             pars = specrvprob.opt_results[ispec, iter_index]["pbest"]

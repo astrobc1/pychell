@@ -289,4 +289,3 @@ class DensityClusterTracer(OrderTracer):
         breakpoint()
         order_map.orders_list = orders_list
         order_map.save(order_image)
-

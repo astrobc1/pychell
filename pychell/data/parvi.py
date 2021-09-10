@@ -85,16 +85,15 @@ class PARVIParser(DataParser):
     def parse_exposure_start_time(self, data):
         data.time_obs_start = Time(float(data.header["START"]) / 1E9, format="unix")
         return data.time_obs_start
-        
-    def get_n_traces(self, data):
-        return 2
-    
-    def get_n_orders(self, data):
-        mode = data.header["XDTILT"].lower()
-        if mode == "kgas":
-            return 29
-        else:
-            return None
+
+    def parse_fiber_num(self, data):
+        return int(data.header["FIBER"])
+
+    def classify_traces(self, data):
+        pass
+        # !!HERE!!
+        #fibers = data.
+        #pass
         
     def parse_spec1d(self, data):
         fits_data = fits.open(data.input_file)

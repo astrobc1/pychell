@@ -29,14 +29,11 @@ from joblib import Parallel, delayed
 import pychell.utils as pcutils
 import pychell.maths as pcmath
 import pychell.data as pcdata
-import pychell.reduce.extract as pcextract
-import pychell.reduce.calib as pccalib
-import pychell.reduce.order_map as pcomap
 
 class Reducer:
     pass
 
-class NightlyReducer(Reducer):
+class StandardReducer(Reducer):
     
     ###############################
     #### CONSTRUCTOR + HELPERS ####
@@ -101,22 +98,19 @@ class NightlyReducer(Reducer):
     #### PRIMARY REDUCE / EXTRACT ####
     ##################################
     
-    def reduce_night(self):
+    def reduce(self):
 
         # Start the main clock
         stopwatch = pcutils.StopWatch()
         
-        # GENERATE ALL PRE CALIBRATION IMAGES
+        # Generate master bias, dark, flat
         self.generate_master_calib_images()
         
-        # TRACE ORDERS FOR ALL IMAGES
+        # Trace all orders (possibly multiple traces per order)
         self.trace()
         
-        # EXTRACT ALL IMAGES
+        # Extract all images
         self.extract()
-        
-        # POST-CALIBRATION FOR ALL 1d SPECTRA
-        self.post_calibrate_data()
         
         # Run Time
         print(f"COMPLETE! TOTAL TIME: {round(stopwatch.time_since() / 3600, 2)} hours")
@@ -126,7 +120,7 @@ class NightlyReducer(Reducer):
     
     def trace(self):
         for order_map in self.data["order_maps"]:
-            self.tracer.trace(order_map, self)
+            self.tracer.trace(order_map, self.n_cores)
         
     def extract(self):
         
@@ -143,9 +137,6 @@ class NightlyReducer(Reducer):
             print("Extracting Science Spectra In Series ...", flush=True)
             for i, data in enumerate(self.data["science"]):
                 self.extractor.extract_image(self, data, i + 1)
-    
-    def post_calibrate_data(self):
-        pass
     
     ###############
     #### MISC. ####
