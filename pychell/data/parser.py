@@ -219,6 +219,8 @@ class DataParser:
     def estimate_wavelength_solution(self, data):
         if hasattr(data, "apriori_wave_grid"):
             return data.apriori_wave_grid
+        else:
+            raise NotImplementedError(f"Must implement a method estimate_wavelength_solution for {self.__class__.__name__} or provide the attribute apriori_wave_grid with the data")
         
     #########################
     #### MISC. REDUCTION ####

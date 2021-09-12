@@ -33,7 +33,9 @@ class OrderTracer:
     pass
     
 class PredeterminedTrace(OrderTracer):
-    pass
+    
+    def __init__(self, data):
+        self.data = data
 
 class DensityClusterTracer(OrderTracer):
     

@@ -643,8 +643,8 @@ def weighted_median(data, weights=None, percentile=0.5):
     weights_s = weights[inds]
     percentile = percentile * np.nansum(weights)
     if np.any(weights > percentile):
-        good = np.where(weights == np.nanmax(weights))[0][0]
-        w_median = data[good]
+        good = np.where(weights_s == np.nanmax(weights_s))[0][0]
+        w_median = data_s[good]
     else:
         cs_weights = np.nancumsum(weights_s)
         idx = np.where(cs_weights <= percentile)[0][-1]
@@ -652,6 +652,7 @@ def weighted_median(data, weights=None, percentile=0.5):
             w_median = np.nanmean(data_s[idx:idx+2])
         else:
             w_median = data_s[idx+1]
+
     return w_median
 
 # This calculates the unbiased weighted standard deviation of array x with weights w
@@ -1354,3 +1355,17 @@ def cspline_fit_fancy(x, y, window=None, n_knots=50, percentile=0.99):
     cspline = cspline_fit(x, y_out_init, knots=knots)
     y_out = cspline(x)
     return y_out
+
+# lf = l0 * e^(dv/c)
+# dl = l0 * (e^(dv/c) - 1)
+# dl / l0 = (e^(dv/c) - 1)
+# dl / l0 + 1 = e^(dv/c)
+# ln(dl / l0 + 1) = dv/c
+# c * ln(dl / l0 - 1) = dv
+def dl_to_dv(dl, l):
+    return cs.c * np.log(dl / l + 1)
+
+# dl = l0 * (e^(dv/c) - 1)
+def dv_to_dl(dv, l):
+    return l * (np.exp(dv / cs.c) - 1)
+

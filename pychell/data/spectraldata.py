@@ -105,28 +105,12 @@ class RawImage(Echellogram):
             self.parse_header()
             
         # Parse the image number
-        try:
-            self.parser.parse_image_num(self)
-        except:
-            print("Unknown image number")
+        self.parser.parse_image_num(self)
         
         # Parse the date of the observation
-        try:
-            self.parser.parse_utdate(self)
-        except:
-            print("Unknown UT date")
+        self.parser.parse_utdate(self)
             
-        # Determine the number of traces per order
-        try:
-            self.n_traces = self.parser.get_n_trace()
-        except:
-            self.n_traces = 1
-            
-        # Determine the number of orders
-        try:
-            self.n_orders = self.parser.get_n_orders()
-        except:
-            self.n_orders = 1
+        
         
     def parse_data(self):
         return self.parser.parse_image(self)
