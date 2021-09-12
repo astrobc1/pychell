@@ -78,7 +78,7 @@ class LFCWavelengthSolution:
         lfc_centers_wave = np.array(lfc_centers_wave)
 
         # Interpolate
-        knots = np.linspace(np.min(lfc_centers_pix) + 0.0001, np.max(lfc_centers_pix) - 0.0001, num=19)
+        knots = np.linspace(np.min(lfc_centers_pix) + 0.0001, np.max(lfc_centers_pix) - 0.0001, num=9)
         #wavelength_solution = scipy.interpolate.CubicSpline(lfc_centers_pix, lfc_centers_wave, extrapolate=False, knots=knots)(xarr)
         wavelength_solution = scipy.interpolate.LSQUnivariateSpline(lfc_centers_pix, lfc_centers_wave, t=knots, ext=3)(xarr)
         bad = np.where((xarr < knots[0]) | (xarr > knots[-1]))[0]
