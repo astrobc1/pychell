@@ -78,12 +78,14 @@ class LFCWavelengthSolution:
         lfc_centers_wave = np.array(lfc_centers_wave)
 
         # Interpolate
-        knots = np.linspace(np.min(lfc_centers_pix) + 0.0001, np.max(lfc_centers_pix) - 0.0001, num=9)
+        #knots = np.linspace(np.min(lfc_centers_pix) + 0.0001, np.max(lfc_centers_pix) - 0.0001, num=9)
         #wavelength_solution = scipy.interpolate.CubicSpline(lfc_centers_pix, lfc_centers_wave, extrapolate=False, knots=knots)(xarr)
-        wavelength_solution = scipy.interpolate.LSQUnivariateSpline(lfc_centers_pix, lfc_centers_wave, t=knots, ext=3)(xarr)
-        bad = np.where((xarr < knots[0]) | (xarr > knots[-1]))[0]
-        if bad.size > 0:
-            wavelength_solution[bad] = np.nan
+        #wavelength_solution = scipy.interpolate.LSQUnivariateSpline(lfc_centers_pix, lfc_centers_wave, t=knots, ext=3)(xarr)
+        #bad = np.where((xarr < knots[0]) | (xarr > knots[-1]))[0]
+        #if bad.size > 0:
+        #    wavelength_solution[bad] = np.nan
+
+        wavelength_solution = np.polyfit(lfc_centers_pix, lfc_centers_wave, 4)
 
         return wavelength_solution
 
@@ -97,7 +99,7 @@ class LFCWavelengthSolution:
 
 class LFCLSF:
 
-    def __init__(self, f0, df, n_knots):
+    def __init__(self, f0, df, n_knots, dl):
         self.f0 = f0
         self.df = df
         self.n_knots = n_knots
@@ -153,8 +155,11 @@ class LFCLSF:
         # Spline fit
         knots = np.linspace(np.nanmin(waves_all) + 0.0001, np.nanmax(waves_all) - 0.0001, num=self.n_knots)
         cspline_fit = LSQUnivariateSpline(waves_all, flux_all, t=knots[1:-1], k=3, ext=0)
-        fiducial_grid = np.linspace(knots.min(), knots.max(), num=16*n_knots)
-        lsf = cspline_fit(fiducial_grid)
+
+        # Final grid
+        #dw = knots.max() - knots.min()
+        #fiducial_grid = np.arange( + self.dl, self.dl)
+        #lsf = cspline_fit(fiducial_grid)
 
         return fiducial_grid, lsf
 
