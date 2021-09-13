@@ -85,7 +85,8 @@ class LFCWavelengthSolution:
         #if bad.size > 0:
         #    wavelength_solution[bad] = np.nan
 
-        wavelength_solution = np.polyfit(lfc_centers_pix, lfc_centers_wave, 4)
+        pfit = np.polyfit(lfc_centers_pix, lfc_centers_wave, 4)
+        wavelength_solution = np.polyval(pfit, xarr)
 
         return wavelength_solution
 
