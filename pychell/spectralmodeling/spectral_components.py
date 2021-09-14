@@ -150,6 +150,18 @@ class Continuum(EmpiricalMult):
                 maskcp = mask_new
         return cont
 
+    @staticmethod
+    def estimate_continuum(wave, flux, window=None, n_knots=4):
+        good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
+        w, f = wave[good], flux[good]
+        f = pcmath.median_filter1d(f, width=5)
+        continuum = np.full(len(wave), np.nan)
+        if window is None:
+            window = (np.max(w) - np.min(w)) / (2 * n_knots)
+        continuum[good] = pcmath.cspline_fit_fancy(w, f, window, n_knots, percentile=0.99)
+        return continuum
+
+
 class PolyContinuum(Continuum):
     """Blaze transmission model through a polynomial.
     """
@@ -713,11 +725,18 @@ class PerfectLSF(LSF):
     name = "perfect_lsf"
 
     def build(self, pars=None):
-        return self.default_lsf
+        return self.data.apriori_lsf
     
     def convolve_flux(self, raw_flux, pars=None, lsf=None):
-        lsf = build(pars=pars)
-        return super().convolve_flux(raw_flux, lsf=lsf)     
+        lsf = self.build(pars=pars)
+        return super().convolve_flux(raw_flux, lsf=lsf)
+
+    ####################
+    #### INITIALIZE ####
+    ####################
+    
+    def initialize(self, spectral_model, iter_index=None):
+        self.data = spectral_model.data
 
 
 ####################

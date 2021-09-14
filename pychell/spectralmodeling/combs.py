@@ -11,9 +11,19 @@ import pychell.maths as pcmath
 
 class LFCWavelengthSolution:
 
-    def __init__(self, f0, df):
+    def __init__(self, f0, df, poly_order=None, n_knots=None, peak_separation=None):
         self.f0 = f0
         self.df = df
+        if poly_order is None and n_knots is None:
+            self.poly_order = 4
+            self.n_knots = None
+        elif n_knots is not None:
+            self.n_knots = n_knots
+            self.poly_order = None
+        else:
+            self.n_knots = 9
+            self.poly_order = None
+        self.peak_separation = peak_separation
 
     def compute_wls(self, wave_estimate, lfc_flux):
 
@@ -45,7 +55,7 @@ class LFCWavelengthSolution:
         lfc_flux_norm = lfc_flux_no_bg / continuum
 
         # Estimate peaks in pixel space (just indices)
-        peaks = scipy.signal.find_peaks(lfc_flux_norm, height=np.zeros(nx) + 0.5, distance=5)[0]
+        peaks = scipy.signal.find_peaks(lfc_flux_norm, height=np.full(nx, 0.5), distance=self.peak_separation)[0]
         peaks = np.sort(peaks)
 
         # Estimate spacing between peaks, assume linear trend across order
@@ -78,15 +88,15 @@ class LFCWavelengthSolution:
         lfc_centers_wave = np.array(lfc_centers_wave)
 
         # Interpolate
-        #knots = np.linspace(np.min(lfc_centers_pix) + 0.0001, np.max(lfc_centers_pix) - 0.0001, num=9)
-        #wavelength_solution = scipy.interpolate.CubicSpline(lfc_centers_pix, lfc_centers_wave, extrapolate=False, knots=knots)(xarr)
-        #wavelength_solution = scipy.interpolate.LSQUnivariateSpline(lfc_centers_pix, lfc_centers_wave, t=knots, ext=3)(xarr)
-        #bad = np.where((xarr < knots[0]) | (xarr > knots[-1]))[0]
-        #if bad.size > 0:
-        #    wavelength_solution[bad] = np.nan
-
-        pfit = np.polyfit(lfc_centers_pix, lfc_centers_wave, 4)
-        wavelength_solution = np.polyval(pfit, xarr)
+        if self.n_knots is not None:
+            knots = np.linspace(np.min(lfc_centers_pix) + 0.0001, np.max(lfc_centers_pix) - 0.0001, num=self.n_knots)
+            wavelength_solution = scipy.interpolate.LSQUnivariateSpline(lfc_centers_pix, lfc_centers_wave, t=knots, ext=3)(xarr)
+            bad = np.where((xarr < knots[0]) | (xarr > knots[-1]))[0]
+            if bad.size > 0:
+                wavelength_solution[bad] = np.nan
+        else:
+            pfit = np.polyfit(lfc_centers_pix, lfc_centers_wave, 4)
+            wavelength_solution = np.polyval(pfit, xarr)
 
         return wavelength_solution
 
@@ -104,6 +114,7 @@ class LFCLSF:
         self.f0 = f0
         self.df = df
         self.n_knots = n_knots
+        self.dl = dl
         
 
     def compute_lsf(self, lfc_wave, lfc_flux):
@@ -132,16 +143,16 @@ class LFCLSF:
         lfc_flux_norm = lfc_flux_no_bg / continuum
 
         # Peak spacing in wavelength space
-        peak_spacing = np.polyval(np.polyfit(lfc_centers_wave_theoretical[1:], np.diff(lfc_centers_wave_theoretical), 1), lfc_wave)
+        peak_spacing = np.polyval(np.polyfit(lfc_centers_wave_theoretical[1:], np.diff(lfc_centers_wave_theoretical), 1), lfc_centers_wave_theoretical)
 
         # Loop over theoretical peaks and shift
         waves_all = []
         flux_all = []
         for i in range(len(lfc_centers_wave_theoretical)):
-            use = np.where((lfc_wave >= lfc_centers_wave_theoretical[i] - peak_spacing[lfc_centers_wave_theoretical[i]] / 2) & (lfc_wave < lfc_centers_wave_theoretical[i] + peak_spacing[lfc_centers_wave_theoretical[i]] / 2))[0]
+            use = np.where((lfc_wave >= lfc_centers_wave_theoretical[i] - peak_spacing[i] / 2) & (lfc_wave < lfc_centers_wave_theoretical[i] + peak_spacing[i] / 2))[0]
             if len(use) >= 5:
                 waves_all += list(lfc_wave[use] - lfc_centers_wave_theoretical[i])
-                flux_all += list(lfc_flux[use])
+                flux_all += list(lfc_flux_norm[use])
         
         # Prep for Spline fit
         waves_all = np.array(waves_all, dtype=float)
@@ -155,12 +166,21 @@ class LFCLSF:
 
         # Spline fit
         knots = np.linspace(np.nanmin(waves_all) + 0.0001, np.nanmax(waves_all) - 0.0001, num=self.n_knots)
-        cspline_fit = LSQUnivariateSpline(waves_all, flux_all, t=knots[1:-1], k=3, ext=0)
+        cspline_fit = LSQUnivariateSpline(waves_all, flux_all, t=knots[1:-1], k=3, ext=3)
 
         # Final grid
-        #dw = knots.max() - knots.min()
-        #fiducial_grid = np.arange( + self.dl, self.dl)
-        #lsf = cspline_fit(fiducial_grid)
+        nx = int(np.ceil((knots[-1] - knots[0]) / self.dl))
+        if nx % 2 == 0:
+            nx += 1
+        fiducial_grid = np.arange(int(-nx / 2), int(nx / 2) + 1) * self.dl
+        lsf = cspline_fit(fiducial_grid)
+        bad = np.where(lsf < 0)[0]
+        if bad.size > 0:
+            lsf[bad] = 0
+
+        # Normalize
+        lsf -= np.nanmin(lsf)
+        lsf /= np.nansum(lsf)
 
         return fiducial_grid, lsf
 

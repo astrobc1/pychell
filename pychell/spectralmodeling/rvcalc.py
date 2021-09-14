@@ -80,25 +80,24 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
     if spectral_model.tellurics is not None:
         
         # Build the telluric flux
-        tell_flux = spectral_model.tellurics.build(pars, spectral_model.templates_dict['tellurics'], spectral_model.model_wave)
-        tell_flux = spectral_model.lsf.convolve_flux(tell_flux, pars=pars)
-        data_wave = spectral_model.wavelength_solution.build(pars)
-        tell_flux = pcmath.lin_interp(spectral_model.model_wave, tell_flux, data_wave)
+        if spectral_model.tellurics is not None:
+            tell_flux = spectral_model.tellurics.build(pars, spectral_model.templates_dict['tellurics'], spectral_model.model_wave)
+            tell_flux = spectral_model.lsf.convolve_flux(tell_flux, pars=pars)
+            data_wave = spectral_model.wavelength_solution.build(pars)
+            tell_flux = pcmath.lin_interp(spectral_model.model_wave, tell_flux, data_wave)
         
-        # Make telluric weights
-        tell_weights = tell_flux**4
-        bad = np.where(~np.isfinite(tell_flux) | (tell_flux < 0.25))[0]
-        tell_weights[bad] = 0
+            # Make telluric weights
+            tell_weights = tell_flux**4
+            bad = np.where(~np.isfinite(tell_flux) | (tell_flux < 0.25))[0]
+            tell_weights[bad] = 0
         
-        # Combine weights
-        weights_init *= tell_weights
+            # Combine weights
+            weights_init *= tell_weights
         
     # Star weights depend on the information content
     if spectral_model.lsf is not None:
-        width = pars[spectral_model.lsf.par_names[0]].value
-    else:
-        width = 1E-5
-    rvc, _ = compute_rv_content(spectral_model.templates_dict['star'][:, 0], spectral_model.templates_dict['star'][:, 1], snr=100, blaze=True, ron=0, width=width)
+        lsf = spectral_model.lsf.data.apriori_lsf
+    rvc, _ = compute_rv_content(spectral_model.templates_dict['star'][:, 0], spectral_model.templates_dict['star'][:, 1], snr=100, blaze=True, ron=0, lsf=lsf)
     star_weights = 1 / rvc**2
     
     for i in range(vels.size):
