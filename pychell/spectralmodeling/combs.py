@@ -65,7 +65,7 @@ class LFCWavelengthSolution:
         # Only consider peaks with significant flux
         good_peaks = []
         for peak in peaks:
-            if lfc_flux_no_bg[peak] >= 0.1 * lfc_peak_max:
+            if lfc_flux_no_bg[peak] >= 0.2 * lfc_peak_max:
                 good_peaks.append(peak)
         good_peaks = np.array(good_peaks)
 
@@ -74,15 +74,19 @@ class LFCWavelengthSolution:
 
         for i in range(len(good_peaks)):
             use = np.where((xarr >= good_peaks[i] - peak_spacing[good_peaks[i]] / 2) & (xarr < good_peaks[i] + peak_spacing[good_peaks[i]] / 2))[0]
-            p0 = np.array([np.nanmax(lfc_flux_no_bg[use]), good_peaks[i], len(use) / 4])
-            opt_result = scipy.optimize.minimize(self.fit_peak, p0, args=(xarr[use], lfc_flux_no_bg[use]), method='Nelder-Mead')
+            p0 = np.array([np.nanmax(lfc_flux_no_bg[use]) / 2, good_peaks[i], len(use) / 4])
+            bounds = [(1E-5, np.nanmax(lfc_flux_no_bg[use])), (p0[1] - self.peak_separation / 2, p0[1] + self.peak_separation / 2), (0.25 * p0[2], 4*p0[2])]
+            opt_result = scipy.optimize.minimize(self.fit_peak, p0, args=(xarr[use], lfc_flux_no_bg[use]), method='Nelder-Mead', bounds=bounds)
             pbest = opt_result.x
             lfc_centers_pix[i] = pbest[1]
 
         # Determine which LFC spot matches each peak
         lfc_centers_wave = []
         for i in range(len(lfc_centers_pix)):
-            diffs = np.abs(wave_estimate[int(np.round(lfc_centers_pix[i]))] - lfc_centers_wave_theoretical)
+            try:
+                diffs = np.abs(wave_estimate[int(np.round(lfc_centers_pix[i]))] - lfc_centers_wave_theoretical)
+            except:
+                breakpoint()
             k = np.argmin(diffs)
             lfc_centers_wave.append(lfc_centers_wave_theoretical[k])
 
