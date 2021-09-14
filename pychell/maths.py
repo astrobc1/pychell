@@ -241,7 +241,7 @@ def cspline_fit(x, y, knots, weights=None):
         weights = np.ones_like(y)
     good = np.where(np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights > 0))[0]
     xx, yy, ww = x[good], y[good], weights[good]
-    _cspline_fit = scipy.interpolate.LSQUnivariateSpline(xx, yy, t=knots[1:-1], w=ww, k=3, ext=1)
+    _cspline_fit = scipy.interpolate.LSQUnivariateSpline(xx, yy, t=knots, w=ww, k=3, ext=1)
     return _cspline_fit
 
 @njit
@@ -1341,9 +1341,9 @@ def normalize_image(image, window=5, n_knots=60, percentile=0.99, downsample=8):
 def cspline_fit_fancy(x, y, window=None, n_knots=50, percentile=0.99):
     nx = len(x)
     y_out_init = np.full_like(y, np.nan)
-    good = np.where(np.isfinite(y))[0]
+    good = np.where(np.isfinite(x) & np.isfinite(y))[0]
     x_min, x_max = np.min(x[good]), np.max(x[good])
-    knots = np.linspace(x_min, x_max, num=n_knots)
+    knots = np.linspace(x_min + 1E-5, x_max - 1E-5, num=n_knots)
     if window is None:
         window = (x_max - x_min) / (4 * n_knots)
     for i in range(nx):

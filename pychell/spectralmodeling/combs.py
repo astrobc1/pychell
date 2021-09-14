@@ -21,18 +21,19 @@ class LFCWavelengthSolution:
             self.n_knots = n_knots
             self.poly_order = None
         else:
-            self.n_knots = 9
-            self.poly_order = None
+            self.poly_order = poly_order
+            self.n_knots = None
         self.peak_separation = peak_separation
 
     def compute_wls(self, wave_estimate, lfc_flux):
 
         # Identify bad pixels in lfc flux
-        lfc_flux_smooth = pcmath.median_filter1d(lfc_flux, width=3)
-        rel_errors = (lfc_flux - lfc_flux_smooth) / lfc_flux_smooth
-        bad = np.where(np.abs(rel_errors) > 6 * np.nanstd(rel_errors))[0]
+        lfc_flux_cp = np.copy(lfc_flux)
+        lfc_flux_smooth = pcmath.median_filter1d(lfc_flux_cp, width=3)
+        rel_errors = (lfc_flux_cp - lfc_flux_smooth) / lfc_flux_smooth
+        bad = np.where(np.abs(rel_errors) > 9 * np.nanstd(rel_errors))[0]
         if bad.size > 0:
-            lfc_flux[bad] = np.nan
+            lfc_flux_cp[bad] = np.nan
 
         # Pixel grid
         nx = len(wave_estimate)
@@ -46,16 +47,16 @@ class LFCWavelengthSolution:
         lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[good]
 
         # Estimate and remove background flux
-        background = pcmath.cspline_fit_fancy(wave_estimate, lfc_flux, window=1.25, n_knots=100, percentile=0)
-        lfc_flux_no_bg = lfc_flux - background
-        lfc_peak_max = np.nanmax(lfc_flux_no_bg)
+        background = pcmath.cspline_fit_fancy(wave_estimate, lfc_flux_cp, window=1.25, n_knots=100, percentile=0)
+        lfc_flux_no_bg = lfc_flux_cp - background
+        lfc_peak_max = pcmath.weighted_median(lfc_flux_no_bg, percentile=0.75)
 
         # Estimate continuum
         continuum = pcmath.cspline_fit_fancy(wave_estimate, lfc_flux_no_bg, window=1.0, n_knots=200, percentile=0.99)
         lfc_flux_norm = lfc_flux_no_bg / continuum
 
         # Estimate peaks in pixel space (just indices)
-        peaks = scipy.signal.find_peaks(lfc_flux_norm, height=np.full(nx, 0.5), distance=self.peak_separation)[0]
+        peaks = scipy.signal.find_peaks(lfc_flux_norm, height=np.full(nx, 0.5), distance=0.8*self.peak_separation)[0]
         peaks = np.sort(peaks)
 
         # Estimate spacing between peaks, assume linear trend across order
@@ -64,7 +65,7 @@ class LFCWavelengthSolution:
         # Only consider peaks with significant flux
         good_peaks = []
         for peak in peaks:
-            if lfc_flux_no_bg[peak] >= 0.2 * lfc_peak_max:
+            if lfc_flux_no_bg[peak] >= 0.1 * lfc_peak_max:
                 good_peaks.append(peak)
         good_peaks = np.array(good_peaks)
 
@@ -89,9 +90,9 @@ class LFCWavelengthSolution:
 
         # Interpolate
         if self.n_knots is not None:
-            knots = np.linspace(np.min(lfc_centers_pix) + 0.0001, np.max(lfc_centers_pix) - 0.0001, num=self.n_knots)
-            wavelength_solution = scipy.interpolate.LSQUnivariateSpline(lfc_centers_pix, lfc_centers_wave, t=knots, ext=3)(xarr)
-            bad = np.where((xarr < knots[0]) | (xarr > knots[-1]))[0]
+            knots = np.linspace(np.min(lfc_centers_pix) + 1E-5, np.max(lfc_centers_pix) - 1E-5, num=self.n_knots)
+            wavelength_solution = pcmath.cspline_fit(lfc_centers_pix, lfc_centers_wave, knots)(xarr)
+            bad = np.where((xarr < knots[0]) | (xarr > knots[-1]) | (wavelength_solution == 0))[0]
             if bad.size > 0:
                 wavelength_solution[bad] = np.nan
         else:
@@ -120,11 +121,12 @@ class LFCLSF:
     def compute_lsf(self, lfc_wave, lfc_flux):
 
         # Identify bad pixels in lfc flux
-        lfc_flux_smooth = pcmath.median_filter1d(lfc_flux, width=3)
-        rel_errors = (lfc_flux - lfc_flux_smooth) / lfc_flux_smooth
-        bad = np.where(np.abs(rel_errors) > 6 * np.nanstd(rel_errors))[0]
+        lfc_flux_cp = np.copy(lfc_flux)
+        lfc_flux_smooth = pcmath.median_filter1d(lfc_flux_cp, width=3)
+        rel_errors = (lfc_flux_cp - lfc_flux_smooth) / lfc_flux_smooth
+        bad = np.where(np.abs(rel_errors) > 9 * np.nanstd(rel_errors))[0]
         if bad.size > 0:
-            lfc_flux[bad] = np.nan
+            lfc_flux_cp[bad] = np.nan
 
         # Generate theoretical LFC peaks
         lfc_centers_freq_theoretical = np.arange(self.f0 - 10000 * self.df, self.f0 + 10001 * self.df, self.df)
@@ -134,8 +136,8 @@ class LFCLSF:
         lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[good]
 
         # Estimate and remove background flux
-        background = pcmath.cspline_fit_fancy(lfc_wave, lfc_flux, window=1.25, n_knots=100, percentile=0)
-        lfc_flux_no_bg = lfc_flux - background
+        background = pcmath.cspline_fit_fancy(lfc_wave, lfc_flux_cp, window=1.25, n_knots=100, percentile=0)
+        lfc_flux_no_bg = lfc_flux_cp - background
         lfc_peak_max = np.nanmax(lfc_flux_no_bg)
 
         # Estimate continuum
