@@ -96,7 +96,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
         
     # Star weights depend on the information content
     if spectral_model.lsf is not None:
-        lsf = spectral_model.lsf.data.apriori_lsf
+        lsf = spectral_model.lsf.build(pars)
     rvc, _ = compute_rv_content(spectral_model.templates_dict['star'][:, 0], spectral_model.templates_dict['star'][:, 1], snr=100, blaze=True, ron=0, lsf=lsf)
     star_weights = 1 / rvc**2
     

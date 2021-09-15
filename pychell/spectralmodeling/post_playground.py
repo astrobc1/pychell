@@ -422,13 +422,13 @@ def parameter_corrs(path, specrvprobs, rvs_dict):
     for o in range(n_orders):
         
         # Get varied parameters
-        pars_first_order = specrvprobs[o].opt_results[0, -1]["pbest"]
-        pars_first_order_numpy = pars_first_order.unpack()
-        varied_inds = np.where(pars_first_order_numpy["vary"])[0]
+        pars_first_obs = specrvprobs[o].opt_results[0, -1]["pbest"]
+        pars_first_obs_numpy = pars_first_obs.unpack()
+        varied_inds = np.where(pars_first_obs_numpy["vary"])[0]
         n_vary = len(varied_inds)
         pars = np.empty(shape=(n_spec, n_iterations, n_vary), dtype=object)
         par_vals = np.full(shape=(n_spec, n_iterations, n_vary), dtype=float, fill_value=np.nan)
-        par_names_vary = [pars_first_order_numpy["name"][i] for i in range(len(pars_first_order)) if pars_first_order_numpy["vary"][i]]
+        par_names_vary = [pars_first_obs_numpy["name"][i] for i in range(len(pars_first_obs)) if pars_first_obs_numpy["vary"][i]]
         for ispec in range(n_spec):
             for j in range(n_iterations):
                 for k in range(n_vary):
@@ -438,6 +438,7 @@ def parameter_corrs(path, specrvprobs, rvs_dict):
         n_cols = 5
         n_rows = int(np.ceil(n_vary / n_cols))
         fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(20, 15), dpi=400)
+        axarr = np.atleast_2d(axarr)
         
         for row in range(n_rows):
             for col in range(n_cols):
@@ -448,19 +449,20 @@ def parameter_corrs(path, specrvprobs, rvs_dict):
                     axarr[row, col].set_visible(False)
                     continue
                 
-                # Views to arrays
-                rvs0, rvslast = rvs_dict['rvsfwm'][o, :, 0], rvs_dict['rvsfwm'][o, :, -1]
-                pars0, parslast = par_vals[:, 0, k], par_vals[:, -1, k]
-                
-                axarr[row, col].scatter(rvs0, pars0, marker='o', s=1, c='red', alpha=0.7)
+                if not specrvprobs[0].spectral_model.star.from_flat:
+                    rvs0 = rvs_dict['rvsfwm'][o, :, 0]
+                    pars0 = par_vals[:, 0, k]
+                    axarr[row, col].scatter(rvs0, pars0, marker='o', s=1, c='red', alpha=0.7)
+                    good0 = np.where(np.isfinite(rvs0) & np.isfinite(pars0))[0]
+
+                rvslast = rvs_dict['rvsfwm'][o, :, -1]
+                parslast = par_vals[:, -1, k]
                 axarr[row, col].scatter(rvslast, parslast, marker='o', s=1, c='black', alpha=0.7)
                 axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
                 axarr[row, col].set_ylabel(par_names_vary[k].replace('_', ' '), fontsize=4)
                 axarr[row, col].tick_params(axis='both', which='major', labelsize=4)
-                good0 = np.where(np.isfinite(rvs0) & np.isfinite(pars0))[0]
                 goodlast = np.where(np.isfinite(rvslast) & np.isfinite(parslast))[0]
-                axarr[row, col].text(np.max(rvs0[good0]), np.max(pars0[good0]), f"pcc 1={round(scipy.stats.pearsonr(rvs0[good0], pars0[good0])[0], 2)}", horizontalalignment="right")
-                axarr[row, col].text(np.max(rvs0[good0]), np.min(pars0[good0]), f"pcc {n_iterations}={round(scipy.stats.pearsonr(rvslast[goodlast], parslast[goodlast])[0], 2)}", horizontalalignment="right")
+                axarr[row, col].text(np.max(rvslast[goodlast]), np.min(parslast[goodlast]), f"pcc {n_iterations}={round(scipy.stats.pearsonr(rvslast[goodlast], parslast[goodlast])[0], 2)}", horizontalalignment="right")
                 
         plt.tight_layout()
         fname = f"{path}Order{specrvprobs[o].order_num}{os.sep}parameter_corrs_ord{specrvprobs[o].order_num}.png"
@@ -560,7 +562,7 @@ def compute_rv_contents(specrvprobs, templates=None):
         # Compute RVC for this iteration
         for j in range(n_iterations):
 
-            if specrvprobs[0].spectral_model.star.from_flat:
+            if specrvprobs[0].spectral_model.star.from_flat and j == 0:
                 continue
         
             # Use parameters for the first osbervation - Doesn't so much matter here.

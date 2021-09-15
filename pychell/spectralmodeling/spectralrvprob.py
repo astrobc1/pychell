@@ -337,7 +337,7 @@ class IterativeSpectralRVProb(OptProblem):
     @staticmethod
     def optimize_and_plot_observation(p0, data, spectral_model, obj, optimizer, iter_index, output_path, tag, star_name, verbose):
         
-        if data.is_good:
+        if data.is_good and p0.num_varied > 0:
             
             # Time the fit
             stopwatch = pcutils.StopWatch()
