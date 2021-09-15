@@ -193,11 +193,6 @@ class IterativeSpectralForwardModel(Model):
             self.gas_cell.initialize(self, iter_index)
         if self.fringing is not None:
             self.fringing.initialize(self, iter_index)
-            
-        # Determine initial stellar vel if necessary
-        if iter_index == 0 and not self.star.from_flat:
-            init_vel = pcrvcalc.brute_force_ccf_crude(self.p0, self.data, self)
-            self.p0[self.star.par_names[0]].value = init_vel
     
     ##################
     #### BUILDERS ####

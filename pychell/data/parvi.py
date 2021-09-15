@@ -127,6 +127,9 @@ class PARVIParser(DataParser):
 ##### GENERATING RADIAL VELOCITIES ####
 #######################################
 
+# RV Zero point [m/s] (approx)
+rv_zero_point = -5604.0
+
 # LSF widths (temporary)
 lsf_linear_coeffs = np.array([0.00167515, 0.08559148])
 lsf_widths = np.polyval(lsf_linear_coeffs, np.arange(46))

@@ -7,6 +7,7 @@ from scipy.special import eval_legendre
 
 # pychell
 import pychell.maths as pcmath
+import pychell.utils as pcutils
 
 # Optimize
 from optimize.models import Model
@@ -122,19 +123,27 @@ class Continuum(EmpiricalMult):
         y = np.copy(flux)
         
         # Smooth the flux first
-        y = pcmath.median_filter1d(y, 7, preserve_nans=True)
+        y = pcmath.median_filter1d(y, 3, preserve_nans=True)
         
         # Create a Vander Matrix to solve
         V = np.vander(x - np.nanmean(x), poly_order + 1)
         
         # Mask to update
         maskcp = np.copy(mask)
+
+        # Make sure the mask is correct
+        bad = np.where(~np.isfinite(x) | ~np.isfinite(y))[0]
+        if bad.size > 0:
+            maskcp[bad] = 0
         
         # Iteratively solve for continuum
         for i in range(max_iters):
+
+            # Get good indices
+            good = np.where(maskcp)[0]
             
             # Solve for continuum
-            w = np.linalg.solve(np.dot(V[maskcp].T, V[maskcp]), np.dot(V[maskcp].T, y[maskcp]))
+            w = np.linalg.solve(np.dot(V[good].T, V[good]), np.dot(V[good].T, y[good]))
             cont = np.dot(V, w)
             residuals = y - cont
             
@@ -148,6 +157,7 @@ class Continuum(EmpiricalMult):
                 break
             else:
                 maskcp = mask_new
+                
         return cont
 
     @staticmethod
@@ -403,7 +413,7 @@ class AugmentedStar(Star):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, input_file=None, vel=[-3E5, 100, 3E5]):
+    def __init__(self, input_file=None, star_name=None, vel_bounds=[-5000, 5000]):
 
         # Call super method
         super().__init__()
@@ -413,9 +423,12 @@ class AugmentedStar(Star):
         
         # Whether or not the star is from a synthetic source
         self.from_flat = True if self.input_file is None else False
-        
-        # Init vel
-        self.vel = vel
+
+        # Star info
+        self.star_name = star_name
+
+        # Vel bounds
+        self.vel_bounds = vel_bounds
 
         # Pars
         self.base_par_names += ['_vel']
@@ -425,8 +438,16 @@ class AugmentedStar(Star):
 
     def _init_parameters(self, data):
         pars = BoundedParameters()
-        pars[self.par_names[0]] = BoundedParameter(value=self.vel[1], vary=True,
-                                                   lower_bound=self.vel[0], upper_bound=self.vel[2])
+        if not self.from_flat:
+            rv_absolute = pcutils.get_stellar_rv(self.star_name)
+            spec_module = data[0].parser.spec_module
+            rv_zero_point = spec_module.rv_zero_point
+            v = rv_absolute + rv_zero_point
+        else:
+            v = 100
+        pars[self.par_names[0]] = BoundedParameter(value=v, vary=True,
+                                                   lower_bound=v + self.vel_bounds[0],
+                                                   upper_bound=v + self.vel_bounds[1])
     
         return pars
         
@@ -465,7 +486,23 @@ class AugmentedStar(Star):
             spectral_model.p0[self.par_names[0]].vary = False
         elif iter_index == 1 and self.from_flat:
             spectral_model.p0[self.par_names[0]].vary = True
-            spectral_model.p0[self.par_names[0]].value = -1 * spectral_model.data.bc_vel
+            v = -1 * spectral_model.data.bc_vel
+            spectral_model.p0[self.par_names[0]].value = v
+            spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
+            spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
+        elif iter_index > 1 and self.from_flat:
+            v = -1 * spectral_model.data.bc_vel
+            spectral_model.p0[self.par_names[0]].value = v
+            spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
+            spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
+        else:
+            rv_absolute = pcutils.get_stellar_rv(self.star_name)
+            spec_module = spectral_model.data.parser.spec_module
+            rv_zero_point = spec_module.rv_zero_point
+            v = rv_absolute + rv_zero_point - spectral_model.data.bc_vel
+            spectral_model.p0[self.par_names[0]].value = v
+            spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
+            spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
 
 
 #########################

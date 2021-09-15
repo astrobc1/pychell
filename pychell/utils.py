@@ -11,6 +11,7 @@ import pathlib
 import logging
 import pychell
 from itertools import chain, combinations
+from barycorrpy.utils import get_stellar_data
 from datetime import datetime
 import glob
 import os
@@ -175,3 +176,10 @@ def nightly_iteration(n_obs_nights):
 
 def list_diff(l1, l2):
     return [i for i in l1 + l2 if i not in l1 or i not in l2]
+
+
+def get_stellar_rv(star_name):
+    result = get_stellar_data(star_name)
+    rv = result[0]["rv"]
+    return rv
+

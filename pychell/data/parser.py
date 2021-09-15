@@ -242,10 +242,10 @@ class DataParser:
     #### BARYCENTENTER CORRECTIONS ####
     ###################################
     
-    def compute_barycenter_corrections(self, data, observatory, target_dict):
+    def compute_barycenter_corrections(self, data, observatory, star_name):
         
         # Star name
-        star_name = target_dict["name"].replace('_', ' ')
+        star_name = star_name.replace('_', ' ')
         
         # Compute the JD UTC mid point (possibly weighted)
         jdmid = self.compute_exposure_midpoint(data)
@@ -306,4 +306,4 @@ class DataParser:
 
     @property
     def spec_module(self):
-        return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
+        return importlib.import_module(self.__module__)

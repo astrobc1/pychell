@@ -246,7 +246,7 @@ def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, t
     
     # Write to files for radvel
     spectrograph = specrvprobs[0].spectrograph
-    star_name = specrvprobs[0].target_dict["name"].replace(' ', '_')
+    star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
     time_tag = datetime.date.today().strftime('%d%m%Y')
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
     telvec_nightly = np.full(n_nights, spectrograph, dtype='<U20')
@@ -290,6 +290,9 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
     # Re-combine nightly rvs for each order with the mask
     for o in range(n_orders):
         for j in range(n_iterations):
+
+            if (j == 0 and specrvprobs[0].spectral_model.star.from_flat):
+                continue
             
             # FwM RVs
             rvsfwm = rvs_dict['rvsfwm'][o, :, j]
@@ -340,7 +343,7 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
     
     # Write to files for radvel
     spectrograph = specrvprobs[0].spectrograph
-    star_name = specrvprobs[0].target_dict["name"].replace(' ', '_')
+    star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
     time_tag = datetime.date.today().strftime('%d%m%Y')
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
     telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')
@@ -556,6 +559,9 @@ def compute_rv_contents(specrvprobs, templates=None):
         
         # Compute RVC for this iteration
         for j in range(n_iterations):
+
+            if specrvprobs[0].spectral_model.star.from_flat:
+                continue
         
             # Use parameters for the first osbervation - Doesn't so much matter here.
             pars = specrvprobs[o].opt_results[0, j]['pbest']

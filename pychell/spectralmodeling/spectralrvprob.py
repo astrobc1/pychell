@@ -44,7 +44,7 @@ class IterativeSpectralRVProb(OptProblem):
                  data_input_path, filelist,
                  spectral_model,
                  augmenter,
-                 tag, output_path, target_dict,
+                 tag, output_path,
                  bc_corrs=None,
                  optimizer=None, obj=None,
                  n_cores=1, verbose=True):
@@ -58,7 +58,6 @@ class IterativeSpectralRVProb(OptProblem):
             augmenter (TemnplateAugmenter): The template augmenter object.
             tag (str): A tag to uniquely identify this run in the outputs. The full tag will be spectrograph_tag.
             output_path (str): The output path. All outputs wioll be stored within a single sub folder within output_path, which will also contain multiple sub folders.
-            target_dict (dict): The information for this target. For now, only the name key is used to generate the barycenter corrections (BJDs and barycenter velocity corrections) using Simbad to obtain the necessary inormation.
             bc_corrs (np.ndarray, optional): The barycenter corrections may be passed manually as a two column numpy array; shape=(n_observations, 2). Defaults to None and the barycenter correcitons are computed with barycorrpy from information pulled form Simbad.
             optimizer (Optimizer, optional): The optimizer to use. Defaults to None.
             obj (SpectralObjective, optional): The objective function to ultimiately extremize. Defaults to None.
@@ -103,9 +102,6 @@ class IterativeSpectralRVProb(OptProblem):
         # Initialize the spectral model
         self._init_spectral_model()
         self.p0cp = copy.deepcopy(self.p0)
-        
-        # The target dictionary
-        self.target_dict = target_dict
         
         # The template augmenter
         self.augmenter = augmenter
@@ -154,8 +150,7 @@ class IterativeSpectralRVProb(OptProblem):
 
     def _init_spectral_model(self):
         self.spectral_model._init_templates(self.data)
-        if self.spectral_model.star is not None and not self.spectral_model.star.from_flat:
-            self.stellar_templates[0] = np.copy(self.spectral_model.templates_dict["star"])
+        self.stellar_templates[0] = np.copy(self.spectral_model.templates_dict["star"])
         self.spectral_model._init_parameters(self.data)
 
     def _init_rvs(self, bc_corrs=None):
@@ -172,7 +167,7 @@ class IterativeSpectralRVProb(OptProblem):
             self.rvs_dict["bjds"] = np.full(self.n_spec, np.nan)
             self.rvs_dict["bc_vels"] = np.full(self.n_spec, np.nan)
             for i in range(self.n_spec):
-                self.rvs_dict["bjds"][i], self.rvs_dict["bc_vels"][i] = self.parser.compute_barycenter_corrections(self.data[i], observatory, self.target_dict)
+                self.rvs_dict["bjds"][i], self.rvs_dict["bc_vels"][i] = self.parser.compute_barycenter_corrections(self.data[i], observatory, self.spectral_model.star.star_name)
         else:
             bc_corrs = np.atleast_2d(bc_corrs)
             for i in range(self.n_spec):
@@ -205,7 +200,7 @@ class IterativeSpectralRVProb(OptProblem):
         
     def _print_init_summary(self):
         print("***************************************", flush=True)
-        print(f"** Target: {self.target_dict['name'].replace('_', ' ')}", flush=True)
+        print(f"** Target: {self.spectral_model.star.star_name.replace('_', ' ')}", flush=True)
         print(f"** Spectrograph: {self.spec_module.observatory['name']} / {self.spectrograph}", flush=True)
         print(f"** Observations: {self.n_spec} spectra, {self.n_nights} nights", flush=True)
         print(f"** Image Order: {self.order_num}", flush=True)
@@ -285,9 +280,12 @@ class IterativeSpectralRVProb(OptProblem):
         # Save forward model outputs
         print("Saving results ... ", flush=True)
         self.save_to_pickle()
+
+        # Save stellar tempalates
+        self.save_stellar_templates()
         
         # End the clock!
-        print(f"Completed order {self.order_num} Runtime: {round(stopwatch.time_since(name='ti_main') / 3600, 2)} hours", flush=True)
+        print(f"Completed Order {self.order_num}! Runtime: {round(stopwatch.time_since(name='ti_main') / 3600, 2)} hours", flush=True)
         
     def optimize_all_observations(self, iter_index):
             
@@ -305,7 +303,7 @@ class IterativeSpectralRVProb(OptProblem):
                     p0s.append(self.opt_results[ispec, iter_index - 1]["pbest"])
             
             # Call the parallel job via joblib.
-            self.opt_results[:, iter_index] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.optimize_and_plot_observation)(p0s[ispec], self.data[ispec], self.spectral_model, self.obj, self.optimizer, iter_index, self.output_path, self.tag, self.target_dict["name"], self.verbose) for ispec in range(self.n_spec))
+            self.opt_results[:, iter_index] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.optimize_and_plot_observation)(p0s[ispec], self.data[ispec], self.spectral_model, self.obj, self.optimizer, iter_index, self.output_path, self.tag, self.spectral_model.star.star_name, self.verbose) for ispec in range(self.n_spec))
 
         else:
 
@@ -322,15 +320,16 @@ class IterativeSpectralRVProb(OptProblem):
                 self.opt_results[ispec, iter_index] = self.optimize_and_plot_observation(p0, self.data[ispec], self.spectral_model,
                                                                                          self.obj, self.optimizer, iter_index,
                                                                                          self.output_path,
-                                                                                         self.tag, self.target_dict["name"], self.verbose)
+                                                                                         self.tag, self.spectral_model.star.star_name, self.verbose)
         
         # Store rvs
-        rvsfwm = np.full(self.n_spec, np.nan)
-        for ispec in range(self.n_spec):
-            pbest = self.opt_results[ispec, iter_index]["pbest"]
-            true_star_vel_tdb = pbest[self.spectral_model.star.par_names[0]].value + self.data[ispec].bc_vel
-            rvsfwm[ispec] = true_star_vel_tdb
-        self.rvs_dict["rvsfwm"][:, iter_index] = rvsfwm
+        if not (iter_index == 0 and self.spectral_model.star.from_flat):
+            rvsfwm = np.full(self.n_spec, np.nan)
+            for ispec in range(self.n_spec):
+                pbest = self.opt_results[ispec, iter_index]["pbest"]
+                true_star_vel_tdb = pbest[self.spectral_model.star.par_names[0]].value + self.data[ispec].bc_vel
+                rvsfwm[ispec] = true_star_vel_tdb
+            self.rvs_dict["rvsfwm"][:, iter_index] = rvsfwm
         
         # Print finished
         print(f"Fitting Finished in {round((stopwatch.time_since())/60, 3)} min ", flush=True)
@@ -613,7 +612,7 @@ class IterativeSpectralRVProb(OptProblem):
                      marker='X', linewidth=0, alpha=0.8, label='XC [nightly]', color='darkorange', elinewidth=1)
         
         # Plot labels
-        plt.title(f"{self.target_dict['name'].replace('_', ' ')}, Order {self.order_num}, Iteration {iter_index + 1}")
+        plt.title(f"{self.spectral_model.star.star_name.replace('_', ' ')}, Order {self.order_num}, Iteration {iter_index + 1}")
         ax = plt.gca()
         ax.ticklabel_format(useOffset=False, style='plain')
         plt.xlabel(f"BJD - {time_offset}")
@@ -636,7 +635,7 @@ class IterativeSpectralRVProb(OptProblem):
                      marker='o', lw=0, elinewidth=1)
         
         # Annotate
-        plt.title(f"{self.target_dict['name'].replace('_', ' ')} XC BIS Correlation, Order {self.order_num}, Iteration {iter_index + 1}")
+        plt.title(f"{self.spectral_model.star.star_name.replace('_', ' ')} XC BIS Correlation, Order {self.order_num}, Iteration {iter_index + 1}")
         plt.xlabel('XC RV [m/s]')
         plt.ylabel('BIS [m/s]')
         plt.tight_layout()
@@ -647,7 +646,7 @@ class IterativeSpectralRVProb(OptProblem):
     @staticmethod
     def cross_correlate_observation(p0, data, spectral_model, iter_index):
         
-        if data.is_good:
+        if data.is_good or (spectral_model.star.from_flat and iter_index == 0):
         
             # Initialize
             spectral_model.initialize(p0, data, iter_index)
@@ -752,4 +751,8 @@ class IterativeSpectralRVProb(OptProblem):
         fname = f"{self.output_path}Order{self.order_num}{os.sep}{self.tag}_spectralrvprob_ord{self.order_num}.pkl"
         with open(fname, 'wb') as f:
             pickle.dump(self, f)
+
+    def save_stellar_templates(self):
+        fname = f"{self.output_path}Order{self.order_num}{os.sep}{self.tag}_stellar_templates_{self.order_num}.npz"
+        np.savez(fname, self.stellar_templates)
     
