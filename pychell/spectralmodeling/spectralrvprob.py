@@ -310,7 +310,7 @@ class IterativeSpectralRVProb(OptProblem):
             # Fit one observation at a time
             for ispec in range(self.n_spec):
                 
-                # Get the initial parameters for this spectrum and chunk, further modified later on before optimizing
+                # Get the initial parameters for this spectrum, further modified before optimizing
                 if iter_index == 0:
                     p0 = self.p0
                 else:

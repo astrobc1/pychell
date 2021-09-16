@@ -344,7 +344,7 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
     # Write to files for radvel
     spectrograph = specrvprobs[0].spectrograph
     star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
-    time_tag = datetime.date.today().strftime('%d%m%Y')
+    time_tag = pcutils.gendatestr(time=False)
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
     telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')
     
