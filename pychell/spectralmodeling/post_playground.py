@@ -552,9 +552,17 @@ def compute_rv_contents(specrvprobs, templates=None):
     
     # The nightly S/N, for each iteration
     nightly_snrs = compute_nightly_snrs(specrvprobs)
+
     
     # Compute RVC for each order and iteration
     for o in range(n_orders):
+
+        # Find first good observation
+        k = 0
+        for data in specrvprobs[o].data:
+            if data.is_good:
+                k = data.spec_num - 1
+                break
         
         # Original templates
         templates_dictcp = copy.deepcopy(specrvprobs[o].spectral_model.templates_dict)
@@ -566,7 +574,7 @@ def compute_rv_contents(specrvprobs, templates=None):
                 continue
         
             # Use parameters for the first osbervation - Doesn't so much matter here.
-            pars = specrvprobs[o].opt_results[0, j]['pbest']
+            pars = specrvprobs[o].opt_results[k, j]['pbest']
             
             # Set the star in the templates dict
             specrvprobs[o].spectral_model.templates_dict["star"] = np.copy(specrvprobs[o].stellar_templates[j])

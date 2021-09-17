@@ -133,7 +133,7 @@ rv_zero_point = -5604.0
 # LSF widths (temporary)
 lsf_linear_coeffs = np.array([0.00167515, 0.08559148])
 lsf_widths = np.polyval(lsf_linear_coeffs, np.arange(46))
-lsf_widths = [[lw*0.8, lw, lw*1.2] for lw in lsf_widths]
+lsf_widths = [[lw*0.7, lw, lw*1.3] for lw in lsf_widths]
 
 # Approximate wavelength solution coefficnents for each order
 # The LFC is then used to update a given exposure

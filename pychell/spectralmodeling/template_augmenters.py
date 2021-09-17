@@ -21,13 +21,13 @@ import scipy.interpolate # Cubic spline LSQ fitting
 
 class TemplateAugmenter:
     
-    def __init__(self, use_nights=None, downweight_tellurics=True, max_thresh=None):
+    def __init__(self, use_nights=None, downweight_tellurics=False, max_thresh=None):
         self.use_nights = use_nights
         self.downweight_tellurics = downweight_tellurics
         self.max_thresh = max_thresh
         
     def augment_templates(self, specrvprob, iter_index):
-        pass
+        raise NotImplementedError(f"Must implement the method augment_templates for {self.__class__.__name__}")
 
 class CubicSplineLSQ(TemplateAugmenter):
     
@@ -149,6 +149,7 @@ class CubicSplineLSQ(TemplateAugmenter):
         # Update the template
         specrvprob.spectral_model.templates_dict['star'][:, 1] = new_flux
     
+
 class WeightedMedian(TemplateAugmenter):
 
     def augment_templates(self, specrvprob, iter_index):
@@ -192,7 +193,6 @@ class WeightedMedian(TemplateAugmenter):
         
             # Init the chunk
             specrvprob.spectral_model.initialize(pars, specrvprob.data[ispec], iter_index=iter_index)
-
         
             # Generate the low res model
             wave_data, model_lr = specrvprob.spectral_model.build(pars)
@@ -200,13 +200,12 @@ class WeightedMedian(TemplateAugmenter):
             # Residuals
             residuals_lr = specrvprob.data[ispec].flux - model_lr
 
-            # Shift to a pseudo rest frame. All must start from same frame
+            # Shift to a pseudo rest frame
             if specrvprob.spectral_model.star.from_flat and iter_index == 0:
                 vel = specrvprob.data[ispec].bc_vel
             else:
                 vel = -1 * pars[specrvprob.spectral_model.star.par_names[0]].value
-                
-            # Shift residuals
+
             wave_star_rest = pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None)
             residuals[:, ispec] = pcmath.cspline_interp(wave_star_rest, residuals_lr, current_stellar_template[:, 0])
 
@@ -254,25 +253,7 @@ class WeightedMedian(TemplateAugmenter):
         # Augment the template
         new_flux = current_stellar_template[:, 1] + residuals_median
         
-        # Perform cspline lsq regression
-        # Generate knots
-        good = np.where(np.isfinite(new_flux))[0]
-        wave_min, wave_max = current_stellar_template[good[0], 0], current_stellar_template[good[-1], 0]
-        knots = np.linspace(wave_min, wave_max, num=specrvprob.spectral_model.sregion.pix_len())
-        
-        # Remove bad knots
-        bad_knots = []
-        for iknot in range(len(knots) - 1):
-            n = np.where((wave_star_rest > knots[iknot]) & (wave_star_rest < knots[iknot+1]))[0].size
-            if n == 0:
-                bad_knots.append(iknot)
-        knots = np.delete(knots, bad_knots)
-        
-        # Fit with cubic spline
-        spline_fitter = scipy.interpolate.LSQUnivariateSpline(current_stellar_template[:, 0], new_flux, t=knots[1:-1], k=3, ext=0)
-        new_flux = spline_fitter(current_stellar_template[:, 0])
-        
-        # Force the max to be less than 1.
+        # Force the max to be less than given thresh.
         if self.max_thresh is not None:
             bad = np.where(new_flux > self.max_thresh)[0]
             if bad.size > 0:
@@ -281,7 +262,7 @@ class WeightedMedian(TemplateAugmenter):
         # Update the template
         specrvprob.spectral_model.templates_dict['star'][:, 1] = new_flux
         
-        
+
 class WeightedMean(TemplateAugmenter):
 
     def augment_templates(self, specrvprob, iter_index):
@@ -309,8 +290,8 @@ class WeightedMean(TemplateAugmenter):
 
         # Storage arrays
         nx  = len(current_stellar_template[:, 0])
-        residuals_median = np.zeros(nx)
-        residuals = np.zeros(shape=(nx, specrvprob.n_spec), dtype=float)
+        residuals_mean = np.zeros(nx)
+        residuals = np.full((nx, specrvprob.n_spec), np.nan)
         weights = np.zeros(shape=(nx, specrvprob.n_spec), dtype=float)
 
         # Loop over spectra
@@ -332,13 +313,12 @@ class WeightedMean(TemplateAugmenter):
             # Residuals
             residuals_lr = specrvprob.data[ispec].flux - model_lr
 
-            # Shift to a pseudo rest frame. All must start from same frame
+            # Shift to a pseudo rest frame
             if specrvprob.spectral_model.star.from_flat and iter_index == 0:
                 vel = specrvprob.data[ispec].bc_vel
             else:
                 vel = -1 * pars[specrvprob.spectral_model.star.par_names[0]].value
-                
-            # Shift residuals
+
             wave_star_rest = pcmath.doppler_shift(wave_data, vel, flux=None, wave_out=None, interp=None)
             residuals[:, ispec] = pcmath.cspline_interp(wave_star_rest, residuals_lr, current_stellar_template[:, 0])
 
@@ -353,9 +333,9 @@ class WeightedMean(TemplateAugmenter):
             else:
                 weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec]
             
-            # Final weights
-            weights_hr = pcmath.cspline_interp(wave_star_rest, weights_lr, current_stellar_template[:, 0])
-            bad = np.where(weights_hr < 0)[0]
+            # Interpolate to a high res grid
+            weights_hr = pcmath.lin_interp(wave_star_rest, weights_lr, current_stellar_template[:, 0])
+            bad = np.where((weights_hr < 0) | ~np.isfinite(weights_hr))[0]
             if bad.size > 0:
                 weights_hr[bad] = 0
             weights[:, ispec] = weights_hr
@@ -368,25 +348,25 @@ class WeightedMean(TemplateAugmenter):
         for ix in range(nx):
             ww, rr = weights[ix, :], residuals[ix, :]
             if np.nansum(ww) == 0:
-                residuals_median[ix] = 0
+                residuals_mean[ix] = 0
             else:
                 good = np.where((ww > 0) & np.isfinite(ww))[0]
                 if good.size == 0:
-                    residuals_median[ix] = 0
+                    residuals_mean[ix] = 0
                 elif good.size == 1:
-                    residuals_median[ix] = rr[good[0]]
+                    residuals_mean[ix] = rr[good[0]]
                 else:
-                    residuals_median[ix] = pcmath.weighted_mean(rr, ww)
+                    residuals_mean[ix] = pcmath.weighted_mean(rr, ww)
 
         # Change any nans to zero just in case
-        bad = np.where(~np.isfinite(residuals_median))[0]
+        bad = np.where(~np.isfinite(residuals_mean))[0]
         if bad.size > 0:
-            residuals_median[bad] = 0
+            residuals_mean[bad] = 0
 
         # Augment the template
-        new_flux = current_stellar_template[:, 1] + residuals_median
+        new_flux = current_stellar_template[:, 1] + residuals_mean
         
-        # Force the max to be less than 1.
+        # Force the max to be less than given thresh.
         if self.max_thresh is not None:
             bad = np.where(new_flux > self.max_thresh)[0]
             if bad.size > 0:
