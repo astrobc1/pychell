@@ -201,6 +201,10 @@ gas_cell_file = "methane_gas_cell_ishell_kgas.npz"
 # LSF width
 lsf_width = [0.08, 0.11, 0.15]
 
+# RV Zero point (approx)
+rv_zero_point = -6817.0
+
+
 # Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
 quad_pixel_set_points = [199, 1023.5, 1847]
 

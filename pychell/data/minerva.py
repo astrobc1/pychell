@@ -159,4 +159,6 @@ redux_settings = NotImplemented
 ##### GENERATING RADIAL VELOCITIES ####
 #######################################
 
+rv_zero_point = -2410.0
+
 lsf_width = [0.016, 0.0229, 0.0245]

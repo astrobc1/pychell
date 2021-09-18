@@ -164,28 +164,31 @@ def rvs_quicklook(path, rvs_dict, do_orders, iter_indices=None):
     # BJDs nightly
     bjds_nightly = rvs_dict["bjds_nightly"]
     
-    # Combine RVs
-    
     # Plot each order
     for o in range(n_orders):
-        breakpoint()
-        rvs = rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]] - np.nanmedian(rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]])
-        rverr = rvs_dict["rvserrfwm_nightly"][o, :, iter_indices[o]]
+        rvs = rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]] - np.nanmean(rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]])
+        rverr = rvs_dict["uncfwm_nightly"][o, :, iter_indices[o]]
         plt.errorbar(bjds_nightly, rvs, yerr=rverr, marker='o', lw=0, elinewidth=0.5, label=f"Order {do_orders[o]}")
-    
-    # Coadded
-    plt.errorbar(bjds_nightly, rvs, yerr=rverr, marker='o', lw=0, elinewidth=0.5, label=f"Order {do_orders[o]}")
+
+    plt.legend()
+    plt.show()
   
   
-def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None, n_flag_iters=3):
+def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None, n_flag_iters=3, thresh=4):
     
     # Numbers
     n_orders = len(specrvprobs)
     do_orders = [specrvprobs[o].order_num for o in range(len(specrvprobs))]
     n_spec = specrvprobs[0].n_spec
-    n_nights = specrvprobs[0].n_nights
+    n_rv_chunks = len(rvs_dict['bjds_nightly'])
     n_iterations = specrvprobs[0].n_iterations
     n_obs_nights = rvs_dict["n_obs_nights"]
+
+    # Overwrite shape of nightly rvs
+    rvs_dict['rvsfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['rvsxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
     
     # Mask rvs from user input
     mask = gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict)
@@ -224,16 +227,11 @@ def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, t
     for i in range(n_flag_iters):
         result_fwm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, n_obs_nights)
         rvs, unc, rvsn, uncn = (*result_fwm,)
-        
-        plt.errorbar(rvs_dict["bjds_nightly"], rvsn - np.nanmedian(rvsn), yerr=uncn, marker='o', lw=0, elinewidth=0.5, label="Iter 1, FwM")
-        for o in range(n_orders):
-            plt.plot(rvs_dict["bjds"], rvsfwm_single_iter[o, :], marker='.', lw=0, label=f"Order {do_orders[o]}")
-        plt.show()
     
         # Flag bad RVs
         for inight, f, l in pcutils.nightly_iteration(n_obs_nights):
             wstddev = pcmaths.weighted_stddev(rvsfwm_single_iter[:, f:l].flatten(), weights_single_iter[:, f:l].flatten())
-            bad = np.where(np.abs(rvsfwm_single_iter[:, f:l] - rvsn[inight]) > 4 * wstddev)
+            bad = np.where(np.abs(rvsfwm_single_iter[:, f:l] - rvsn[inight]) > thresh * wstddev)
             if bad[0].size > 0:
                 rvsfwm_single_iter[:, f:l][bad] = np.nan
                 weights_single_iter[:, f:l][bad] = 0
@@ -247,9 +245,9 @@ def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, t
     # Write to files for radvel
     spectrograph = specrvprobs[0].spectrograph
     star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
-    time_tag = datetime.date.today().strftime('%d%m%Y')
+    time_tag = pcutils.gendatestr(time=False)
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
-    telvec_nightly = np.full(n_nights, spectrograph, dtype='<U20')
+    telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')
     
     # FwM
     fname = f"{path}rvsfwm_{spectrograph}_{star_name}_{time_tag}.txt"

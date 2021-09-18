@@ -381,7 +381,7 @@ def bin_rvs_to_nights(jds, rvs, unc, err_type="empirical"):
     """
     
     # Get nightly JDs
-    jds_nightly, n_obs_nights = get_nightly_jds(jds, sep=0.5)
+    jds_nightly, n_obs_nights = gen_nightly_jds(jds, sep=0.5)
     
     # Number of nights
     n_nights = len(n_obs_nights)

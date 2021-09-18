@@ -138,11 +138,11 @@ def measure_fwhm(x, y):
     max_loc = np.nanargmax(y)
     max_val = np.nanmax(y)
     
-    left = np.where(x < x[max_loc] & (y < 0.7 * max_val))[0]
-    right = np.where(x > x[max_loc] & (y < 0.7 * max_val))[0]
+    left = np.where((x < x[max_loc]) & (y < 0.7 * max_val))[0]
+    right = np.where((x > x[max_loc]) & (y < 0.7 * max_val))[0]
     
-    left_x = intersection(x[left], y[left], 0.5 * max_val, precision = 1000)
-    right_x = intersection(x[right], y[right], 0.5 * max_val, precision = 1000)
+    left_x = intersection(x[left], y[left], 0.5 * max_val, precision = 1000)[0]
+    right_x = intersection(x[right], y[right], 0.5 * max_val, precision = 1000)[0]
     fwhm = right_x - left_x
     
     return fwhm
@@ -160,7 +160,7 @@ def Rfromlsf(wave, fwhm=None, sigma=None):
         return wave / sigmatofwhm(sigma)
     
     
-def rolling_clip(x, y, weights=None, width=None, method='median', n_sigma=3):
+def rolling_clip(x, y, weights=None, width=None, method='median', n_sigma=4):
     
     # Mask must be the length of x
     mask = np.ones_like(x)
