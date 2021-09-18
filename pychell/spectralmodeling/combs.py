@@ -153,22 +153,23 @@ class LFCGaussianFitter(LFCAnalyzer):
 
     def compute_lsf_width(self, lfc_wave, lfc_flux):
 
-        
+        # Flag bad pixels
+        lfc_flux = self.flag_bad_pixels(lfc_flux)
+
+        # Pixel grid
+        nx = len(lfc_wave)
+        xarr = np.arange(nx).astype(float)
 
         # Generate theoretical LFC peaks
-        lfc_centers_freq_theoretical = np.arange(self.f0 - 10000 * self.df, self.f0 + 10001 * self.df, self.df)
-        lfc_centers_wave_theoretical = cs.c / lfc_centers_freq_theoretical
-        lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[::-1] * 1E10
-        good = np.where((lfc_centers_wave_theoretical > np.nanmin(lfc_wave)) & (lfc_centers_wave_theoretical < np.nanmax(lfc_wave)))
-        lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[good]
+        lfc_centers_wave_theoretical = self.gen_theoretical_peaks(lfc_wave)
 
-        # Estimate and remove background flux
-        background = pcmath.cspline_fit_fancy(lfc_wave, lfc_flux_cp, window=1.25, n_knots=100, percentile=0)
-        lfc_flux_no_bg = lfc_flux_cp - background
-        lfc_peak_max = np.nanmax(lfc_flux_no_bg)
-
+        # Remove background flux
+        background = self.estimate_background(lfc_wave, lfc_flux)
+        lfc_flux_no_bg = lfc_flux - background
+        lfc_peak_max = pcmath.weighted_median(lfc_flux_no_bg, percentile=0.75)
+        
         # Estimate continuum
-        continuum = pcmath.cspline_fit_fancy(lfc_wave, lfc_flux_no_bg, window=1.0, n_knots=200, percentile=0.99)
+        continuum = self.estimate_continuum(lfc_wave, lfc_flux_no_bg)
         lfc_flux_norm = lfc_flux_no_bg / continuum
 
         # Peak spacing in wavelength space
