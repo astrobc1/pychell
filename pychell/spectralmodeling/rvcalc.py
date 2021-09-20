@@ -74,25 +74,22 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
     rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     
     # Starting weights are flux uncertainties and bad pixels. If flux unc are uniform, they have no effect.
-    weights_init = np.copy(spectral_model.data.mask * spectral_model.data.flux_unc)
-    
-    # Heavily downweight tellurics, fully mask regions of heavy absorption
+    weights_init = np.copy(spectral_model.data.mask) # * spectral_model.data.flux_unc)
+        
+    # Build the telluric flux
     if spectral_model.tellurics is not None:
-        
-        # Build the telluric flux
-        if spectral_model.tellurics is not None:
-            tell_flux = spectral_model.tellurics.build(pars, spectral_model.templates_dict['tellurics'], spectral_model.model_wave)
-            tell_flux = spectral_model.lsf.convolve_flux(tell_flux, pars=pars)
-            data_wave = spectral_model.wavelength_solution.build(pars)
-            tell_flux = pcmath.lin_interp(spectral_model.model_wave, tell_flux, data_wave)
-        
-            # Make telluric weights
-            tell_weights = tell_flux**4
-            bad = np.where(~np.isfinite(tell_flux) | (tell_flux < 0.25))[0]
-            tell_weights[bad] = 0
-        
-            # Combine weights
-            weights_init *= tell_weights
+        tell_flux = spectral_model.tellurics.build(pars, spectral_model.templates_dict['tellurics'], spectral_model.model_wave)
+        tell_flux = spectral_model.lsf.convolve_flux(tell_flux, pars=pars)
+        data_wave = spectral_model.wavelength_solution.build(pars)
+        tell_flux = pcmath.lin_interp(spectral_model.model_wave, tell_flux, data_wave)
+    
+        # Make telluric weights
+        tell_weights = tell_flux**20
+        bad = np.where(~np.isfinite(tell_flux) | (tell_flux < 0.25))[0]
+        tell_weights[bad] = 0
+    
+        # Combine weights
+        weights_init *= tell_weights
         
     # Star weights depend on the information content
     if spectral_model.lsf is not None:
@@ -421,68 +418,6 @@ def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights):
         rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
             
     return rvs_nightly, unc_nightly
-          
-def compute_nightly_rvs_from_all(rvs, weights, n_obs_nights, flag_outliers=False, thresh=5):
-    """Computes nightly RVs for a single order.
-
-    Args:
-        rvs (np.ndarray): The individual rvs array of shape (n_orders, n_obs).
-        weights (np.ndarray): The weights, also of length (n_orders, n_obs).
-    """
-    
-    # The number of spectra and nights
-    n_orders, n_spec = rvs.shape
-    n_nights = len(n_obs_nights)
-    
-    # Initialize the nightly rvs and uncertainties
-    rvs_nightly = np.full(n_nights, np.nan)
-    unc_nightly = np.full(n_nights, np.nan)
-    
-    for i, f, l in nightly_iterable(n_obs_nights):
-        rr = rvs[:, f:l].flatten()
-        ww = weights[:, f:l].flatten()
-        rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
-    return rvs_nightly, unc_nightly
-
-def compute_relative_rvs_from_nights(rvs, rvs_nightly, unc_nightly, weights, n_obs_nights):
-    """Combines RVs considering the differences between all the data points
-
-    Args:
-        rvs (np.ndarray): RVs
-        weights (np.ndarray): Corresponding uncertainties
-    """
-    
-    # Numbers
-    n_orders, n_obs = rvs.shape
-    n_nights = len(n_obs_nights)
-    
-    # Define the differences
-    rvlij = np.zeros((n_orders, n_nights, n_nights))
-    unclij = np.zeros((n_orders, n_nights, n_nights))
-    for l in range(n_orders):
-        for i in range(n_nights):
-            for j in range(n_nights):
-                rvlij[l, i, j] = rvs_nightly[l, i] - rvs_nightly[l, j]
-                unclij[l, i, j] = unc_nightly[l, i] * unc_nightly[l, j]
-                
-                
-    wlij = np.zeros((n_orders, n_nights, n_nights))
-    for l in range(n_orders):
-        for i in range(n_nights):
-            for j in range(n_nights):
-                wlij[l, i, j] = (1 / unclij[l, i, j]**2) / np.nansum(1 / unclij[l, i, :]**2)
-
-    # Average over differences
-    rvli = np.nansum(wlij * rvlij, axis=2)
-    
-    # Average over orders
-    uncli = np.copy(unc_nightly)
-    wli = (1 / uncli**2) / np.nansum(1 / uncli**2, axis=0)
-            
-    rvi = np.nansum(wli * rvli, axis=0) / np.nansum(wli, axis=0)
-    unci = np.sqrt((1 / np.nansum(1 / uncli**2, axis=0)) / n_orders)
-        
-    return np.copy(rvs[0, :]), np.zeros(n_obs) + 10, rvi, unci
 
 def combine_relative_rvs(rvs, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points.
@@ -529,14 +464,15 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
         
     # Per-observation RVs
     for i in range(n_spec):
-        rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rvli[:, i].flatten(), wli[:, i].flatten())
+        rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rvli[:, i].flatten(), wli[:, i].flatten(), err_type="empirical")
         
     # Per-night RVs
     for i, f, l in pcutils.nightly_iteration(n_obs_nights):
         rr = rvs_single_out[f:l]
         uncc = unc_single_out[f:l]
-        ww = 1 / uncc**2
-        rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr, ww, yerr=uncc)
+        rr = rvli[:, f:l].flatten()
+        ww = wli[:, f:l].flatten()
+        rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr, ww, err_type="empirical")
         
     return rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out
 
@@ -544,39 +480,33 @@ def combine_rvs_weighted_mean(rvs, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points.
     
     Args:
-        rvs (np.ndarray): RVs of shape n_orders, n_obs, n_chunks
+        rvs (np.ndarray): RVs of shape n_orders, n_spec
         weights (np.ndarray): Corresponding uncertainties of the same shape.
     """
     
     # Numbers
-    n_orders, n_obs, n_chunks = rvs.shape
+    n_orders, n_spec = rvs.shape
     n_nights = len(n_obs_nights)
     
-    # Rephrase problem as n_quasi_orders = n_orders * n_chunks
-    n_tot_chunks = n_orders * n_chunks
-    
     # Output arrays
-    rvs_single_out = np.full(n_obs, fill_value=np.nan)
-    unc_single_out = np.full(n_obs, fill_value=np.nan)
+    rvs_single_out = np.full(n_spec, fill_value=np.nan)
+    unc_single_out = np.full(n_spec, fill_value=np.nan)
     rvs_nightly_out = np.full(n_nights, fill_value=np.nan)
     unc_nightly_out = np.full(n_nights, fill_value=np.nan)
     
     # Offset each order and chunk
     rvs_offset = np.copy(rvs)
     for o in range(n_orders):
-        for ichunk in range(n_chunks):
-            rvs_offset[o, :, ichunk] = rvs[o, :, ichunk] - pcmath.weighted_mean(rvs[o, :, ichunk], weights[o, :, ichunk])
+        rvs_offset[o, :] = rvs[o, :] - pcmath.weighted_mean(rvs[o, :].flatten(), weights[o, :].flatten())
             
-    for i in range(n_obs):
-        rr = rvs_offset[:, i, :].flatten()
-        ww = weights[:, i, :].flatten()
-        rvs_single_out[i], rvs_single_out[i] = pcmath.weighted_combine(rr, ww)
+    for i in range(n_spec):
+        rr = rvs_offset[:, i]
+        ww = weights[:, i]
+        rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rr.flatten(), ww.flatten())
         
     for i, f, l in pcutils.nightly_iteration(n_obs_nights):
-        rr = rvs_offset[:, f:l, :].flatten()
-        ww = weights[:, f:l, :].flatten()
-        rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr, ww)
-            
-    rvs_out = {"rvs": rvs_single_out, "unc": unc_single_out, "rvs_nightly": rvs_nightly_out, "unc_nightly" : unc_nightly_out}
+        rr = rvs_offset[:, f:l]
+        ww = weights[:, f:l]
+        rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr.flatten(), ww.flatten())
         
-    return rvs_out
+    return rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out

@@ -18,7 +18,7 @@ from optimize.knowledge import BoundedParameters
 # Pychell deps
 import pychell.spectralmodeling.rvcalc as pcrvcalc
 import pychell.utils as pcutils
-import pychell.maths as pcmaths
+import pychell.maths as pcmath
 
 #################
 #### PARSING ####
@@ -149,8 +149,7 @@ def combine_bis(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
     rvs_dict['uncbis_nightly_out'] = result[3]
     
     
-    
-def rvs_quicklook(path, rvs_dict, do_orders, iter_indices=None):
+def rvs_quicklook(path, rvs_dict, do_orders, iter_indices=None, plot_orders=False):
     
     # Numbers
     n_orders, n_spec, n_iterations = rvs_dict["rvsfwm"].shape
@@ -165,10 +164,11 @@ def rvs_quicklook(path, rvs_dict, do_orders, iter_indices=None):
     bjds_nightly = rvs_dict["bjds_nightly"]
     
     # Plot each order
-    for o in range(n_orders):
-        rvs = rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]] - np.nanmean(rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]])
-        rverr = rvs_dict["uncfwm_nightly"][o, :, iter_indices[o]]
-        plt.errorbar(bjds_nightly, rvs, yerr=rverr, marker='o', lw=0, elinewidth=0.5, label=f"Order {do_orders[o]}")
+    if plot_orders:
+        for o in range(n_orders):
+            rvs = rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]] - np.nanmean(rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]])
+            rverr = rvs_dict["uncfwm_nightly"][o, :, iter_indices[o]]
+            plt.errorbar(bjds_nightly, rvs, yerr=rverr, marker='o', lw=0, elinewidth=0.5, label=f"Order {do_orders[o]}")
 
     plt.legend()
     plt.show()
@@ -230,7 +230,7 @@ def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, t
     
         # Flag bad RVs
         for inight, f, l in pcutils.nightly_iteration(n_obs_nights):
-            wstddev = pcmaths.weighted_stddev(rvsfwm_single_iter[:, f:l].flatten(), weights_single_iter[:, f:l].flatten())
+            wstddev = pcmath.weighted_stddev(rvsfwm_single_iter[:, f:l].flatten(), weights_single_iter[:, f:l].flatten())
             bad = np.where(np.abs(rvsfwm_single_iter[:, f:l] - rvsn[inight]) > thresh * wstddev)
             if bad[0].size > 0:
                 rvsfwm_single_iter[:, f:l][bad] = np.nan
@@ -373,7 +373,118 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
     with open(fname, 'w+') as f:
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
+
+def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None):
+
+    # Numbers
+    n_orders = len(specrvprobs)
+    do_orders = [specrvprobs[o].order_num for o in range(len(specrvprobs))]
+    n_spec = specrvprobs[0].n_spec
+    n_rv_chunks = len(rvs_dict['bjds_nightly'])
+    n_iterations = specrvprobs[0].n_iterations
+    n_obs_nights = rvs_dict["n_obs_nights"]
+
+    # Overwrite shape of nightly rvs
+    rvs_dict['rvsfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['rvsxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    
+    # Mask rvs from user input
+    mask = gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict)
+    
+    # Parse fit metrics
+    fit_metrics = parse_fit_metrics(specrvprobs)
+    
+    # Re-combine nightly rvs for each order with the mask
+    for o in range(n_orders):
+        for j in range(n_iterations):
+
+            if (j == 0 and specrvprobs[0].spectral_model.star.from_flat):
+                continue
+            
+            # FwM RVs
+            rvsfwm = rvs_dict['rvsfwm'][o, :, j]
+            weights = mask[o, :, j] / fit_metrics[o, :, j]**2
+            rvs_dict['rvsfwm_nightly'][o, :, j], rvs_dict['uncfwm_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsfwm, weights, n_obs_nights)
+            
+            # XC RVs
+            rvsxc = rvs_dict['rvsxc'][o, :, j]
+            rvs_dict['rvsxc_nightly'][o, :, j], rvs_dict['uncxc_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsxc, weights, n_obs_nights)
         
+    # Summary of rvs
+    print_rv_summary(rvs_dict, do_orders, iter_indices)
+    
+    # Which iterations to use for each order
+    if iter_indices is None:
+        iter_indices = [n_iterations - 1] * n_orders
+
+    # Generate weights
+    weights = gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices, templates=templates)
+    
+    # Combine RVs for NM
+    rvsfwm_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+    weights_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+    for o in range(n_orders):
+        rvsfwm_single_iter[o, :] = rvs_dict["rvsfwm"][o, :, iter_indices[o]] - pcmath.weighted_mean(rvs_dict["rvsfwm"][o, :, iter_indices[o]], weights[o, :, iter_indices[o]])
+        weights_single_iter[o, :] = weights[o, :, iter_indices[o]]
+    result_fwm = pcrvcalc.combine_rvs_weighted_mean(rvsfwm_single_iter, weights_single_iter, n_obs_nights)
+
+    # Add to dictionary
+    rvs_dict['rvsfwm_out'] = result_fwm[0]
+    rvs_dict['uncfwm_out'] = result_fwm[1]
+    rvs_dict['rvsfwm_nightly_out'] = result_fwm[2]
+    rvs_dict['uncfwm_nightly_out'] = result_fwm[3]
+
+    # Combine RVs for XC
+    rvsxc_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+    weights_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+    for o in range(n_orders):
+        rvsxc_single_iter[o, :] = rvs_dict["rvsxc"][o, :, iter_indices[o]] - pcmath.weighted_mean(rvs_dict["rvsxc"][o, :, iter_indices[o]], weights[o, :, iter_indices[o]])
+        weights_single_iter[o, :] = weights[o, :, iter_indices[o]]
+    result_xc = pcrvcalc.combine_rvs_weighted_mean(rvsxc_single_iter, weights_single_iter, n_obs_nights)
+
+    # Add to dictionary
+    rvs_dict['rvsxc_out'] = result_xc[0]
+    rvs_dict['uncxc_out'] = result_xc[1]
+    rvs_dict['rvsxc_nightly_out'] = result_xc[2]
+    rvs_dict['uncxc_nightly_out'] = result_xc[3]
+    
+    # Write to files for radvel
+    spectrograph = specrvprobs[0].spectrograph
+    star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
+    time_tag = pcutils.gendatestr(time=False)
+    telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
+    telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')
+    
+    # FwM
+    fname = f"{path}rvsfwm_{spectrograph}_{star_name}_{time_tag}.txt"
+    good = np.where(np.isfinite(rvs_dict['rvsfwm_out']) & np.isfinite(rvs_dict['uncfwm_out']))[0]
+    t, rvs, unc, telvec = rvs_dict['bjds'][good], rvs_dict['rvsfwm_out'][good], rvs_dict['uncfwm_out'][good], telvec_single[good]
+    with open(fname, 'w+') as f:
+        f.write("time,mnvel,errvel,tel\n")
+        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
+    fname = f"{path}rvsfwm_nightly_{spectrograph}_{star_name}_{time_tag}.txt"
+    good = np.where(np.isfinite(rvs_dict['rvsfwm_nightly_out']) & np.isfinite(rvs_dict['uncfwm_nightly_out']))[0]
+    t, rvs, unc, telvec = rvs_dict['bjds_nightly'][good], rvs_dict['rvsfwm_nightly_out'][good], rvs_dict['uncfwm_nightly_out'][good], telvec_nightly[good]
+    with open(fname, 'w+') as f:
+        f.write("time,mnvel,errvel,tel\n")
+        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
+        
+    # XC
+    fname = f"{path}rvsxc_{spectrograph}_{star_name}_{time_tag}.txt"
+    good = np.where(np.isfinite(rvs_dict['rvsxc_out']) & np.isfinite(rvs_dict['uncxc_out']))[0]
+    t, rvs, unc, telvec = rvs_dict['bjds'][good], rvs_dict['rvsxc_out'][good], rvs_dict['uncxc_out'][good], telvec_single[good]
+    with open(fname, 'w+') as f:
+        f.write("time,mnvel,errvel,tel\n")
+        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
+    fname = f"{path}rvsxc_nightly_{spectrograph}_{star_name}_{time_tag}.txt"
+    good = np.where(np.isfinite(rvs_dict['rvsxc_nightly_out']) & np.isfinite(rvs_dict['uncxc_nightly_out']))[0]
+    t, rvs, unc, telvec = rvs_dict['bjds_nightly'][good], rvs_dict['rvsxc_nightly_out'][good], rvs_dict['uncxc_nightly_out'][good], telvec_nightly[good]
+    with open(fname, 'w+') as f:
+        f.write("time,mnvel,errvel,tel\n")
+        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
+
 def plot_final_rvs(path, specrvprobs, rvs_dict, which="xc"):
         
     # Unpack rvs
@@ -410,7 +521,7 @@ def plot_final_rvs(path, specrvprobs, rvs_dict, which="xc"):
     plt.savefig(f"{path}rvs_{specrvprobs[0].spectrograph.lower().replace(' ', '_')}_{specrvprobs[0].target_dict['name'].lower().replace(' ', '_')}.png")
     plt.show()
 
-def parameter_corrs(path, specrvprobs, rvs_dict):
+def parameter_corrs(path, specrvprobs, rvs_dict, n_cols=4):
     
     n_orders = len(specrvprobs)
     n_iterations = specrvprobs[0].n_iterations
@@ -433,9 +544,8 @@ def parameter_corrs(path, specrvprobs, rvs_dict):
                     pars[ispec, j, k] = specrvprobs[o].opt_results[ispec, j]['pbest'][par_names_vary[k]]
                     par_vals[ispec, j, k] = pars[ispec, j, k].value
         
-        n_cols = 5
         n_rows = int(np.ceil(n_vary / n_cols))
-        fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(20, 15), dpi=400)
+        fig, axarr = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(20, 10), dpi=400)
         axarr = np.atleast_2d(axarr)
         
         for row in range(n_rows):
@@ -450,16 +560,16 @@ def parameter_corrs(path, specrvprobs, rvs_dict):
                 if not specrvprobs[0].spectral_model.star.from_flat:
                     rvs0 = rvs_dict['rvsfwm'][o, :, 0]
                     pars0 = par_vals[:, 0, k]
-                    axarr[row, col].scatter(rvs0, pars0, marker='o', s=1, c='red', alpha=0.7)
                     good0 = np.where(np.isfinite(rvs0) & np.isfinite(pars0))[0]
+                    axarr[row, col].scatter(rvs0[good0], pars0[good0], marker='o', s=1, c='red', alpha=0.8)
 
                 rvslast = rvs_dict['rvsfwm'][o, :, -1]
                 parslast = par_vals[:, -1, k]
-                axarr[row, col].scatter(rvslast, parslast, marker='o', s=1, c='black', alpha=0.7)
-                axarr[row, col].set_xlabel('RV [m/s]', fontsize=4)
-                axarr[row, col].set_ylabel(par_names_vary[k].replace('_', ' '), fontsize=4)
-                axarr[row, col].tick_params(axis='both', which='major', labelsize=4)
                 goodlast = np.where(np.isfinite(rvslast) & np.isfinite(parslast))[0]
+                axarr[row, col].scatter(rvslast[goodlast], parslast[goodlast], marker='o', s=4, c='black', alpha=0.8)
+                axarr[row, col].set_xlabel('RV [m/s]', fontsize=16)
+                axarr[row, col].set_ylabel(par_names_vary[k].replace('_', ' '), fontsize=16)
+                axarr[row, col].tick_params(axis='both', which='major', labelsize=16)
                 axarr[row, col].text(np.max(rvslast[goodlast]), np.min(parslast[goodlast]), f"pcc {n_iterations}={round(scipy.stats.pearsonr(rvslast[goodlast], parslast[goodlast])[0], 2)}", horizontalalignment="right")
                 
         plt.tight_layout()

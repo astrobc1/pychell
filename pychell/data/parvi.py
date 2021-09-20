@@ -127,7 +127,7 @@ class PARVIParser(DataParser):
 ##### GENERATING RADIAL VELOCITIES ####
 #######################################
 
-# RV Zero point [m/s] (approx, fiber 3)
+# RV Zero point [m/s] (approx, fiber 3, Sci)
 rv_zero_point = -5604.0
 
 # LFC - Sci (fiber 1 - fiber 3)
