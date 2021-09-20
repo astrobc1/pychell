@@ -18,7 +18,7 @@ import scipy.signal
 from numba import jit, njit, prange
 
 # Pychell modules
-import pychell.maths as pcmaths
+import pychell.maths as pcmath
 import pychell.data as pcdata
 
 class PreCalibrator:
@@ -73,7 +73,7 @@ class PreCalibrator:
             if self.do_dark:
                 master_dark = individuals[i].master_dark.parse_image()
                 flats_cube[i, :, :] -= master_dark
-            flats_cube[i, :, :] /= pcmaths.weighted_median(flats_cube[i, :, :], percentile=self.flat_percentile)
+            flats_cube[i, :, :] /= pcmath.weighted_median(flats_cube[i, :, :], percentile=self.flat_percentile)
             bad = np.where((flats_cube[i, :, :] < 0) | (flats_cube[i, :, :] > self.flat_percentile * 100))
             if bad[0].size > 0:
                 flats_cube[i, :, :][bad] = np.nan
@@ -142,7 +142,7 @@ class PreCalibrator:
             master_flat_image = data.master_flat.parse_image()
             ny, nx = master_flat_image.shape
             master_flat_image[bad_trace] = np.nan
-            master_flat_image_smooth = pcmaths.median_filter2d(master_flat_image, width=3, preserve_nans=True)
+            master_flat_image_smooth = pcmath.median_filter2d(master_flat_image, width=3, preserve_nans=True)
             blaze_init = np.full(nx, np.nan)
             for x in range(nx):
                 good = np.where(np.isfinite(master_flat_image_smooth[:, x]))[0]
@@ -152,7 +152,7 @@ class PreCalibrator:
                 med_flux = np.nanmedian(master_flat_image_smooth[:, x])
                 good = np.where(master_flat_image_smooth[:, x] > 0.75 * med_flux)[0]
                 blaze_init[x] = np.nanmedian(master_flat_image_smooth[good, x])
-            blaze = pcmaths.poly_filter(blaze_init, width=1021, poly_order=3)
+            blaze = pcmath.poly_filter(blaze_init, width=1021, poly_order=3)
             master_flat_image /= np.outer(np.ones(ny), blaze)
             data_image_out /= master_flat_image
         return data_image_out
@@ -198,7 +198,7 @@ class FringingPreCalibrator(PreCalibrator):
             master_flat_image = data.master_flat.parse_image()
             ny, nx = master_flat_image.shape
             master_flat_image[bad_trace] = np.nan
-            master_flat_image_smooth = pcmaths.median_filter2d(master_flat_image, width=3, preserve_nans=True)
+            master_flat_image_smooth = pcmath.median_filter2d(master_flat_image, width=3, preserve_nans=True)
             blaze_init = np.full(nx, np.nan)
             for x in range(nx):
                 good = np.where(np.isfinite(master_flat_image_smooth[:, x]))[0]
@@ -208,9 +208,9 @@ class FringingPreCalibrator(PreCalibrator):
                 med_flux = np.nanmedian(master_flat_image_smooth[:, x])
                 good = np.where(master_flat_image_smooth[:, x] > 0.75 * med_flux)[0]
                 blaze_init[x] = np.nanmedian(master_flat_image_smooth[good, x])
-            blaze = pcmaths.poly_filter(blaze_init, width=1021, poly_order=3)
+            blaze = pcmath.poly_filter(blaze_init, width=1021, poly_order=3)
             fringing_init = blaze_init / blaze
-            fringing = pcmaths.poly_filter(fringing_init, width=21, poly_order=3)
+            fringing = pcmath.poly_filter(fringing_init, width=21, poly_order=3)
             if self.remove_fringing_from_flat:
                 master_flat_image /= np.outer(np.ones(ny), fringing)
             if self.remove_blaze_from_flat:

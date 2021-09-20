@@ -10,8 +10,8 @@ import pychell.maths as pcmath
 import pychell.utils as pcutils
 
 # Optimize
-from optimize.models import Model
-from optimize.knowledge import BoundedParameters, BoundedParameter
+from optimize import Model
+from optimize import BoundedParameters, BoundedParameter
 
 
 ####################

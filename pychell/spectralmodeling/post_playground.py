@@ -174,7 +174,7 @@ def rvs_quicklook(path, rvs_dict, do_orders, iter_indices=None, plot_orders=Fals
     plt.show()
   
   
-def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None, n_flag_iters=3, thresh=4):
+def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None, n_flag_iters=10, thresh=4):
     
     # Numbers
     n_orders = len(specrvprobs)
@@ -225,12 +225,16 @@ def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, t
         
     # Iteratively Combine and flag RVs
     for i in range(n_flag_iters):
+        print(f"Combining RVs, iteration {i+1}")
         result_fwm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, n_obs_nights)
         rvs, unc, rvsn, uncn = (*result_fwm,)
     
         # Flag bad RVs
         for inight, f, l in pcutils.nightly_iteration(n_obs_nights):
-            wstddev = pcmath.weighted_stddev(rvsfwm_single_iter[:, f:l].flatten(), weights_single_iter[:, f:l].flatten())
+            rr, ww = rvsfwm_single_iter[:, f:l].flatten(), weights_single_iter[:, f:l].flatten()
+            if np.nansum(ww) == 0:
+                continue
+            wstddev = pcmath.weighted_stddev(rr, ww)
             bad = np.where(np.abs(rvsfwm_single_iter[:, f:l] - rvsn[inight]) > thresh * wstddev)
             if bad[0].size > 0:
                 rvsfwm_single_iter[:, f:l][bad] = np.nan
@@ -244,7 +248,10 @@ def combine_rvs2(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, t
     
     # Write to files for radvel
     spectrograph = specrvprobs[0].spectrograph
-    star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
+    try:
+        star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
+    except:
+        star_name = specrvprobs[0].target_dict['name']
     time_tag = pcutils.gendatestr(time=False)
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
     telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')
@@ -341,7 +348,10 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
     
     # Write to files for radvel
     spectrograph = specrvprobs[0].spectrograph
-    star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
+    try:
+        star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
+    except:
+        star_name = specrvprobs[0].target_dict['name']
     time_tag = pcutils.gendatestr(time=False)
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
     telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')

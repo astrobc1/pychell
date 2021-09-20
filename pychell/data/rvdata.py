@@ -1,5 +1,5 @@
 # Optimize deps
-from optimize.data import SimpleSeries, HomogeneousCompositeSimpleSeries
+from optimize.data import SimpleSeries, CompositeSimpleSeries
 
 # Maths
 import numpy as np
@@ -73,7 +73,7 @@ class RVData(SimpleSeries):
         return data
 
 
-class CompositeRVData(HomogeneousCompositeSimpleSeries):
+class CompositeRVData(CompositeSimpleSeries):
 
     @classmethod
     def from_radvel_file(cls, fname, wavelengths=None):

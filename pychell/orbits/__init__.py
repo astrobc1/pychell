@@ -1,7 +1,7 @@
 name = 'orbits'
 
 # optimize
-from optimize.knowledge import BayesianParameters, BayesianParameter, priors
+from optimize import BayesianParameters, BayesianParameter, priors
 from optimize.optimizers import IterativeNelderMead, SciPyMinimizer
 from optimize.kernels import QuasiPeriodic
 from optimize.samplers import ZeusSampler, emceeSampler
@@ -12,4 +12,3 @@ from pychell.orbits.rvmodels import *
 from pychell.orbits.rvnoise import *
 from pychell.orbits.rvobjectives import *
 from pychell.orbits.rvprob import *
-from pychell.orbits.planetmaths import *

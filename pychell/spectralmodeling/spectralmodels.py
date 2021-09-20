@@ -18,8 +18,8 @@ except:
     print("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
 
 # Optimize
-from optimize.models import Model
-from optimize.knowledge import BoundedParameters, BoundedParameter
+from optimize import Model
+from optimize import BoundedParameters, BoundedParameter
 
 #########################
 #### SPECTRAL REGION ####

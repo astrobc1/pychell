@@ -6,7 +6,7 @@ import numpy as np
 import numba
 
 # optimize deps
-from optimize.models import DeterministicModel, NoiseBasedModel, GPBasedModel
+from optimize.models import DeterministicModel, NoiseModel
 
 # Pychell deps
 import pychell.orbits.planetmaths as planetmath
@@ -22,7 +22,7 @@ class KeplerianRVModel(DeterministicModel):
     #####################
     
     def __init__(self, data=None, planets_dict=None):
-        super().__init__(data=data ,name="Keplerian Model")
+        super().__init__(data=data, label="Keplerian Model")
         self.planets_dict = {} if planets_dict is None else planets_dict
         
     ##################
@@ -124,7 +124,7 @@ class RVTrend(DeterministicModel):
     #####################
     
     def __init__(self, poly_order, data=None, time_zero=None):
-        super().__init__(data=data, name="RV Trend Model")
+        super().__init__(data=data, label="RV Trend Model")
         self.poly_order = poly_order
         self.time_zero = np.nanmedian(data.t) if time_zero is None else time_zero
     
@@ -176,14 +176,14 @@ class RVTrend(DeterministicModel):
 #### STANDARD RV MODEL (NO GP) ####
 ###################################
 
-class CompositeRVModel(NoiseBasedModel):
+class CompositeRVModel(NoiseModel):
     
     #####################
     #### CONSTRUCTOR ####
     #####################
     
-    def __init__(self, data=None, planets_dict=None, noise_process=None, poly_order=0, time_zero=None, name="Composite RV Model"):
-        super().__init__(data=data, name=name)
+    def __init__(self, data=None, planets_dict=None, noise_process=None, poly_order=0, time_zero=None, label="Composite RV Model"):
+        super().__init__(data=data, label=label)
         self.kep_model = KeplerianRVModel(data=data, planets_dict=planets_dict)
         self.trend_model = RVTrend(data=data, poly_order=poly_order, time_zero=time_zero)
         self.noise_process = noise_process
@@ -271,14 +271,14 @@ class CompositeRVModel(NoiseBasedModel):
 #### GP BASED RV MODEL ####
 ###########################
 
-class CompositeGPRVModel(CompositeRVModel, GPBasedModel):
+class CompositeGPRVModel(CompositeRVModel, NoiseModel):
     
     #####################
     #### CONSTRUCTOR ####
     #####################
     
-    def __init__(self, data=None, planets_dict=None, noise_process=None, poly_order=0, time_zero=None, name="rvs"):
-        super().__init__(data=data, name=name)
+    def __init__(self, data=None, planets_dict=None, noise_process=None, poly_order=0, time_zero=None, label="rvs"):
+        super().__init__(data=data, label=label)
         self.kep_model = KeplerianRVModel(data=data, planets_dict=planets_dict)
         self.trend_model = RVTrend(data=data, poly_order=poly_order, time_zero=time_zero)
         self.noise_process = noise_process

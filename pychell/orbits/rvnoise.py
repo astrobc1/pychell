@@ -5,7 +5,8 @@ import optimize.noise as optnoise
 from numba import njit, prange
 
 # Import optimize kernels into namespace
-from optimize.noise import WhiteNoiseProcess, GaussianProcess, CorrelatedNoiseKernel
+from optimize.noise import WhiteNoiseProcess, GaussianProcess
+from optimize.kernels import CorrelatedNoiseKernel
 
 # Import rv kernels into namespace
 from pychell.orbits.rvkernels import ChromaticKernelJ1, ChromaticKernelJ2, ChromaticKernelJ3
@@ -27,7 +28,7 @@ class RVJitter(WhiteNoiseProcess):
         """
     
         # Get intrinsic data errors
-        errors = self.data.get_apriori_errors()
+        errors = self.data.get_errors()
         
         # Add jitter in quadrature
         for label in self.data:
@@ -52,7 +53,7 @@ class RVGP(GaussianProcess):
         """
         
         # Get intrinsic data errors
-        errors = self.data.get_apriori_errors()
+        errors = self.data.get_errors()
         
         # Add per-instrument jitter terms in quadrature
         for data in self.data.values():
@@ -83,7 +84,7 @@ class ChromaticProcessJ1(GaussianProcess):
         """
         
         # Get intrinsic data errors
-        errors = self.data.get_apriori_errors()
+        errors = self.data.get_errors()
         
         # Add per-instrument jitter terms in quadrature
         for data in self.data.values():
@@ -222,7 +223,7 @@ class ChromaticProcessJ2(GaussianProcess):
         """
         
         # Get intrinsic data errors
-        errors = self.data.get_apriori_errors()
+        errors = self.data.get_errors()
         
         # Add per-instrument jitter terms in quadrature
         for data in self.data.values():
@@ -365,7 +366,7 @@ class ChromaticProcessJ3(GaussianProcess):
         """
         
         # Get intrinsic data errors
-        errors = self.data.get_apriori_errors()
+        errors = self.data.get_errors()
         
         # Add per-instrument jitter terms in quadrature
         for data in self.data.values():
