@@ -16,6 +16,11 @@ class LFCAnalyzer:
 
     def flag_bad_pixels(self, lfc_flux, width=3, thresh=9):
 
+        # First remove negatives
+        bad = np.where(lfc_flux < 0)[0]
+        if bad.size > 0:
+            lfc_flux[bad] = np.nan
+
         # Identify bad pixels in lfc flux
         lfc_flux_out = np.copy(lfc_flux)
         lfc_flux_smooth = pcmath.median_filter1d(lfc_flux, width=width)
