@@ -251,10 +251,10 @@ class DataParser:
         jdmid = self.compute_exposure_midpoint(data)
         
         # BJD
-        bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=False)[0][0]
+        bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
         
         # bc vel
-        bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=False)[0][0]
+        bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
         
         # Add to data
         data.bjd = bjd

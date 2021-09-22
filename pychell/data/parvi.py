@@ -106,14 +106,14 @@ class PARVIParser(DataParser):
         data.mask = np.ones_like(data.flux)
         
     def compute_exposure_midpoint(self, data):
-        jds, fluxes = [], []
+        jdsi, jdsf = [], []
         # Eventually we will fill fluxes with an arbitrary read value.
-        # Then, the mean_jd will be computed with pcmath.weighted_mean(jds[1:], np.diff(fluxes))
         for key in data.header:
             if key.startswith("TIMEI"):
-                jds.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
-        jds = np.array(jds)
-        mean_jd = np.nanmean(jds)
+                jdsi.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
+            if key.startswith("TIMEF"):
+                jdsf.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
+        mean_jd = (np.nanmax(jdsf_mean) - np.nanmin(jdsi_mean)) / 2 + np.nanmin(jdsi_mean)
         return mean_jd
 
 
