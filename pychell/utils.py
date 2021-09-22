@@ -179,7 +179,7 @@ def list_diff(l1, l2):
 
 
 def get_stellar_rv(star_name):
-    result = get_stellar_data(star_name)
+    result = get_stellar_data(star_name.replace("_", " "))
     rv = result[0]["rv"]
     return rv
 
