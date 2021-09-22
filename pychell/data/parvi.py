@@ -113,7 +113,7 @@ class PARVIParser(DataParser):
                 jdsi.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
             if key.startswith("TIMEF"):
                 jdsf.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
-        mean_jd = (np.nanmax(jdsf_mean) - np.nanmin(jdsi_mean)) / 2 + np.nanmin(jdsi_mean)
+        mean_jd = (np.nanmax(jdsf) - np.nanmin(jdsi)) / 2 + np.nanmin(jdsi)
         return mean_jd
 
 
