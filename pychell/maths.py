@@ -202,15 +202,16 @@ def rolling_clip(x, y, weights=None, width=None, method='median', n_sigma=4):
  
     return mask
 
-def doppler_shift(wave, vel, wave_out=None, flux=None, interp='cspline', kind='exp'):
+def doppler_shift(wave, vel, wave_out=None, flux=None, interp='cspline', kind='sr'):
     
     if wave_out is None:
         wave_out = wave
         
-    if kind == 'exp':
-        wave_shifted = _dop_shift_exponential(wave, vel)
-    else:
+    if kind == 'sr':
         wave_shifted = _dop_shift_SR(wave, vel)
+    else:
+        wave_shifted = _dop_shift_exponential(wave, vel)
+        
     
     if interp is None and flux is None:
         return wave_shifted
