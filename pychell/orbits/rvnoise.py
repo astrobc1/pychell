@@ -72,8 +72,8 @@ class RVGP(GaussianProcess):
 
 class ChromaticProcessJ1(GaussianProcess):
     
-    def __init__(self, data=None, name=None, par_names=None):
-        super().__init__(data=data, name=name, kernel=ChromaticKernelJ1(data=data, par_names=par_names))
+    def __init__(self, data=None, label=None, par_names=None):
+        super().__init__(data=data, label=label, kernel=ChromaticKernelJ1(data=data, par_names=par_names))
                     
     def compute_data_errors(self, pars, include_corr_error=False, linpred=None):
         """Computes the errors added in quadrature for all datasets corresponding to this kernel.
@@ -211,8 +211,8 @@ class ChromaticProcessJ1(GaussianProcess):
         
 class ChromaticProcessJ2(GaussianProcess):
     
-    def __init__(self, data=None, name=None, par_names=None, wavelength0=550):
-        super().__init__(data=data, name=name, kernel=ChromaticKernelJ2(data=data, par_names=par_names, wavelength0=wavelength0))
+    def __init__(self, data=None, label=None, par_names=None, wavelength0=550):
+        super().__init__(data=data, label=label, kernel=ChromaticKernelJ2(data=data, par_names=par_names, wavelength0=wavelength0))
                     
     def compute_data_errors(self, pars, include_corr_error=False, linpred=None):
         """Computes the errors added in quadrature for all datasets corresponding to this kernel.
@@ -354,8 +354,8 @@ class ChromaticProcessJ2(GaussianProcess):
 
 class ChromaticProcessJ3(GaussianProcess):
     
-    def __init__(self, data=None, name=None, par_names=None):
-        super().__init__(data=data, name=name, kernel=ChromaticKernelJ3(data=data, par_names=par_names))
+    def __init__(self, data=None, label=None, par_names=None):
+        super().__init__(data=data, label=label, kernel=ChromaticKernelJ3(data=data, par_names=par_names))
                     
     def compute_data_errors(self, pars, include_corr_error=False, linpred=None):
         """Computes the errors added in quadrature for all datasets corresponding to this kernel.
