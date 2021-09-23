@@ -7,6 +7,9 @@ import scipy.interpolate
 import scipy.stats
 from scipy.constants import c as SPEED_OF_LIGHT
 
+# Plotting
+import matplotlib.pyplot as plt
+
 # Pychell deps
 import pychell.maths as pcmath
 import pychell.utils as pcutils
@@ -59,7 +62,7 @@ def gen_nightly_jds(jds, sep=0.5):
 #### CROSS-CORRELATION ROUTINES ####
 ####################################
 
-def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
+def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_000):
     
     # Copy init params
     pars = copy.deepcopy(p0)
@@ -68,13 +71,13 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
     v0 = p0[spectral_model.star.par_names[0]].value
     
     # Make a grid +/- 2 km/s
-    vels = np.arange(v0 - 2000, v0 + 2000, vel_step)
+    vels = np.arange(v0 - vel_width / 2, v0 + vel_width / 2, vel_step)
 
     # Stores the rms as a function of velocity
     rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     
     # Starting weights are flux uncertainties and bad pixels. If flux unc are uniform, they have no effect.
-    weights_init = np.copy(spectral_model.data.mask) # * spectral_model.data.flux_unc)
+    weights_init = np.copy(spectral_model.data.mask * spectral_model.data.flux_unc)
         
     # Build the telluric flux
     if spectral_model.tellurics is not None:
@@ -84,7 +87,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
         tell_flux = pcmath.lin_interp(spectral_model.model_wave, tell_flux, data_wave)
     
         # Make telluric weights
-        tell_weights = tell_flux**20
+        tell_weights = tell_flux**4
         bad = np.where(~np.isfinite(tell_flux) | (tell_flux < 0.25))[0]
         tell_weights[bad] = 0
     
@@ -95,7 +98,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
     if spectral_model.lsf is not None:
         lsf = spectral_model.lsf.build(pars)
     rvc, _ = compute_rv_content(spectral_model.templates_dict['star'][:, 0], spectral_model.templates_dict['star'][:, 1], snr=100, blaze=True, ron=0, lsf=lsf)
-    star_weights = 1 / rvc**2
+    star_weights = 1 / rvc**4
     
     for i in range(vels.size):
         
@@ -109,7 +112,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
         star_weights_shifted = pcmath.doppler_shift(spectral_model.templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='linear', wave_out=wave_data)
         
         # Final weights
-        weights = weights_init * star_weights_shifted
+        weights = weights_init * star_weights_shifted * tell_weights
         
         # Compute the RMS
         rmss[i] = pcmath.rmsloss(spectral_model.data.flux, model_lr, weights=weights)
@@ -117,23 +120,14 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
     # Extract the best rv
     M = np.nanargmin(rmss)
     vels_for_rv = vels + spectral_model.data.bc_vel
-    xcorr_rv_init = vels[M] + spectral_model.data.bc_vel
+    xcorr_rv_init = vels_for_rv[M]
 
-    # Fit with a Polynomial
-    # Include 10 points on each side of min vel (5 total points)
-    try:
-        use = np.arange(M - 2, M + 3).astype(int)
-        pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
-        xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
-    except:
-        xcorr_rv = np.nan
-
-    # Uncertainty in xc rv
-    try:
-        xcorr_rv_unc = ccf_uncertainty(vels_for_rv, rmss, xcorr_rv_init, np.sum(spectral_model.data.mask))
-    except:
-        xcorr_rv_unc = np.nan
-        
+    # Fit the CCF
+    lsf = spectral_model.lsf.build(p0)
+    wave_data = spectral_model.wavelength_solution.build(p0)
+    fwhm_G = pcmath.dl_to_dv(pcmath.measure_fwhm(spectral_model.lsf.x, lsf), np.nanmean(wave_data))
+    xcorr_rv, xcorr_rv_unc = fit_ccf_voigt(vels_for_rv, rmss, fwhm_G, np.sum(spectral_model.data.mask))
+    
     # BIS from rms surface
     try:
         _, bis = compute_bis(vels_for_rv, rmss, xcorr_rv, n_bs=1000)
@@ -142,20 +136,52 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=10):
 
     return xcorr_rv, xcorr_rv_unc, bis, vels_for_rv, rmss
 
-def ccf_uncertainty(cc_vels, ccf, v0, n):
+def fit_ccf_voigt(vels, rmss, fwhm_G, n):
+    ccf = -1 * rmss
+    ccf -= np.nanmin(ccf)
+    ccf /= np.nanmax(ccf)
+    p0 = np.array([1.0, vels[np.nanargmax(ccf)], 2_000, 0.1]) # amp, mu, fwhm_L, offset
+    bounds = [(0.5, 2.5), (p0[1] - 2E3, p0[1] + 2E3), (1_000, 100_000), (-0.5, 0.5)]
+    fit_result = scipy.optimize.minimize(_fit_ccf_voigt, x0=p0, bounds=bounds, args=(vels, ccf, fwhm_G), method="Nelder-Mead")
+    pbest = fit_result.x
+    xcorr_rv, xcorr_rv_unc = pbest[1], pbest[2] / 2.355 / np.sqrt(n)
+    return xcorr_rv, xcorr_rv_unc
+
+def _fit_ccf_voigt(pars, vels, ccf, fwhm_G):
+    voigt_model = pcmath.voigt(vels, pars[0], pars[1], fwhm_G, pars[2]) + pars[3]
+    return pcmath.rmsloss(ccf, voigt_model)
+
+
+# def compute_ccf_uncertainty(p0, spectral_model, iter_index, vels, vel_step, m):
+
+#     # Copy initial pars
+#     pars = copy.deepcopy(p0)
     
-    # First normalize the RMS function
-    ccff = -1 * ccf
-    baseline = pcmath.weighted_median(ccff, percentile=0.05)
-    ccff -= baseline
-    ccff /= np.nanmax(ccff)
-    use = np.where(ccff > 0.05)[0]
-    init_pars = np.array([1, v0, 1000])
-    solver = NelderMead(pcmath.rms_loss_creator(pcmath.lorentz), init_pars, args_to_pass=(cc_vels[use], ccff[use]))
-    result = solver.solve()
-    best_pars = result['xmin']
-    unc = (best_pars[2] / 2.355) / np.sqrt(n)
-    return unc
+#     # Data flux and uncertainty
+#     data_flux = spectral_model.data.flux
+#     data_flux_unc = spectral_model.data.flux_unc
+
+#     # Compute chi2 at vm-1
+#     pars[spectral_model.star.par_names[0]].value = vels[m-1]
+#     _, model_flux = spectral_model.build(pars)
+#     chi2vmm1 = np.nansum(((data_flux - model_flux) / data_flux_unc)**2)
+
+#     # Compute chi2 at vm
+#     pars[spectral_model.star.par_names[0]].value = vels[m]
+#     _, model_flux = spectral_model.build(pars)
+#     chi2vm = np.nansum(((data_flux - model_flux) / data_flux_unc)**2)
+
+#     # Compute chi2 at vm+1
+#     pars[spectral_model.star.par_names[0]].value = vels[m+1]
+#     _, model_flux = spectral_model.build(pars)
+#     chi2vmp1 = np.nansum(((data_flux - model_flux) / data_flux_unc)**2)
+
+#     # RV uncertainty
+#     breakpoint()
+#     rv_unc = np.sqrt(2 * vel_step**2 / (chi2vmm1 - 2 * chi2vm + chi2vmp1))
+
+#     # Return
+#     return rv_unc
     
 def brute_force_ccf_crude(p0, data, spectral_model):
     

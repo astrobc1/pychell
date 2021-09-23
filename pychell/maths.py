@@ -11,6 +11,7 @@ import numpy as np
 import scipy.ndimage.filters
 
 from astropy.coordinates import SkyCoord
+import astropy.modeling.functional_models
 import astropy.units as units
 
 # Graphics for debugging
@@ -1149,6 +1150,10 @@ def shiftint1d(x, n, cval=np.nan):
     else:
         result[:] = x
     return result
+
+def voigt(x, amp, mu, sigma, fwhm_L):
+    return astropy.modeling.functional_models.Voigt1D(x_0=mu, amplitude_L=amp, fwhm_G=sigmatofwhm(sigma), fwhm_L=fwhm_L)(x)
+
 
 @njit
 def lorentz(x, amp, mu, fwhm):
