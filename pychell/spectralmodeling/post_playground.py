@@ -495,7 +495,7 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
 
-def plot_final_rvs(path, specrvprobs, rvs_dict, which="xc"):
+def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False):
         
     # Unpack rvs
     bjds, bjds_nightly = rvs_dict['bjds'], rvs_dict['bjds_nightly']
@@ -505,31 +505,36 @@ def plot_final_rvs(path, specrvprobs, rvs_dict, which="xc"):
         rvs_single, unc_single, rvs_nightly, unc_nightly = rvs_dict['rvsxc_out'], rvs_dict['uncxc_out'], rvs_dict['rvsxc_nightly_out'], rvs_dict['uncxc_nightly_out']
         
     # Figure
-    fig = plt.figure(figsize=(8, 4), dpi=100)
+    fig = plt.figure(figsize=(8, 4), dpi=300)
     
     # Single rvs
-    plt.errorbar(bjds - 2450000, rvs_single-np.nanmedian(rvs_single),
+    plt.errorbar(bjds - 2450000, rvs_single,
                  yerr=unc_single,
-                 linewidth=0, elinewidth=1, marker='.', markersize=10, markerfacecolor='pink',
-                 color='green', alpha=0.8)
+                 linewidth=0, elinewidth=1, marker='o', markersize=4, markerfacecolor=pcutils.COLORS_HEX_GADFLY[2],
+                 color=pcutils.COLORS_HEX_GADFLY[2], mec='black', alpha=0.7, label="Single exposure")
 
     # Nightly RVs
-    plt.errorbar(bjds_nightly - 2450000, rvs_nightly-np.nanmedian(rvs_nightly),
+    plt.errorbar(bjds_nightly - 2450000, rvs_nightly,
                  yerr=unc_nightly,
-                 linewidth=0, elinewidth=2, marker='o', markersize=10, markerfacecolor='blue',
-                 color='grey', alpha=0.9)
+                 linewidth=0, elinewidth=2, marker='o', markersize=8, markerfacecolor=pcutils.COLORS_HEX_GADFLY[0],
+                 color='black', mec='black', alpha=0.9, label="Co-added")
     
     # Title
-    plt.title(f"{specrvprobs[0].target_dict['name'].replace('_', ' ')}, {specrvprobs[0].spectrograph} Relative RVs")
+    plt.title(f"{specrvprobs[0].spectral_model.star.star_name.replace('_', ' ')}, {specrvprobs[0].spectrograph} Relative RVs")
     
     # Labels
-    plt.xlabel("BJD - 2450000")
-    plt.ylabel('RV [m/s]')
+    plt.xlabel("BJD - 2450000", fontsize=16)
+    plt.ylabel('RV [m/s]', fontsize=16)
+
+    # Legend
+    plt.legend()
+
     ax = plt.gca()
     ax.ticklabel_format(useOffset=False, style='plain')
     plt.tight_layout()
-    plt.savefig(f"{path}rvs_{specrvprobs[0].spectrograph.lower().replace(' ', '_')}_{specrvprobs[0].target_dict['name'].lower().replace(' ', '_')}.png")
-    plt.show()
+    plt.savefig(f"{path}rvs_{specrvprobs[0].spectrograph.lower().replace(' ', '_')}_{specrvprobs[0].spectral_model.star.star_name.lower().replace(' ', '_')}.png")
+    if show:
+        plt.show()
 
 def parameter_corrs(path, specrvprobs, rvs_dict, n_cols=4):
     
