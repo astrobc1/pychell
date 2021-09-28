@@ -1,9 +1,10 @@
-# Base Python libraries
+# Base Python
 import os
 
-# Import numpy
+# Maths
 import numpy as np
 
+# pychell deps
 import pychell.orbits as pco
 
 # Path name 
@@ -12,7 +13,7 @@ fname = 'kelt24_rvs.txt'
 star_name = 'KELT-24'
 mstar = 1.460
 mstar_unc = [0.059, 0.055]
-jitter_dict = {'MINERVANorth': 10, 'SONG': 30, 'TRES': 0}
+jitter_dict = {'SONG': 30, 'TRES': 0}
 
 # All data in one dictionary
 data = pco.CompositeRVData.from_radvel_file(fname, wavelengths=None)
@@ -57,7 +58,7 @@ for instname in data:
     pname = f"jitter_{instname}"
     pars[pname] = pco.BayesianParameter(value=jitter_dict[instname], vary=jitter_dict[instname] > 0)
     if pars[pname].vary:
-        pars[pname].add_prior(pco.priors.JeffreysG(1E-10, 100))
+        pars[pname].add_prior(pco.priors.JeffreysSG(1E-10, 100))
     
 
 # Posterior
