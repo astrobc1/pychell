@@ -32,10 +32,10 @@ import pychell.data as pcdata
 class OrderTracer:
     pass
     
-class PredeterminedTrace(OrderTracer):
+#class PredeterminedTrace(OrderTracer):
     
-    def __init__(self, data):
-        self.data = data
+    #def __init__(self, filename):
+        #self.data = pcdata.ImageMap()
 
 class DensityClusterTracer(OrderTracer):
     
@@ -159,7 +159,7 @@ class DensityClusterTracer(OrderTracer):
                 _inds = np.where(inds[1] == i)[0]
                 if len(_inds) > 3:
                     dys[i] = np.max(inds[0][_inds]) - np.min(inds[0][_inds])
-            height = int(np.nanmax(dys))
+            height = int(np.nanmedian(dys)) - 4
             orders_list.append([{'label': good_labels[l], 'height': height, 'pcoeffs': pfit, 'feeder': feeder, 'fiber': fiber}])
             order_center = np.polyval(pfit, xarr)
             for x in range(nx):

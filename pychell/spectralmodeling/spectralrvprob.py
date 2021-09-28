@@ -589,16 +589,14 @@ class IterativeSpectralRVProb(OptProblem):
         bjdsn = rvs_dict["bjds_nightly"]
         
         # Individual Forward Model
-        plt.errorbar(bjds - time_offset,
-                    rvs_dict['rvsfwm'][:, iter_index] - np.nanmedian(rvs_dict['rvsfwm'][:, iter_index]),
-                    yerr=rvs_dict['uncxc'][:, iter_index],
-                    marker='.', linewidth=0, alpha=0.7, color=(0.1, 0.8, 0.1), label="FwM [indiv]")
+        plt.plot(bjds - time_offset,
+                 rvs_dict['rvsfwm'][:, iter_index] - np.nanmedian(rvs_dict['rvsfwm'][:, iter_index]),
+                 marker='.', linewidth=0, alpha=0.7, color=(0.1, 0.8, 0.1), label="FwM [indiv]")
 
         # Individual XC
-        plt.errorbar(bjds - time_offset,
-                    rvs_dict['rvsxc'][:, iter_index] - np.nanmedian(rvs_dict['rvsxc'][:, iter_index]),
-                    yerr=rvs_dict['uncxc'][:, iter_index],
-                    marker='.', linewidth=0, color='black', alpha=0.6, label="XC [indiv]")
+        plt.plot(bjds - time_offset,
+                 rvs_dict['rvsxc'][:, iter_index] - np.nanmedian(rvs_dict['rvsxc'][:, iter_index]),
+                 marker='.', linewidth=0, color='black', alpha=0.6, label="XC [indiv]")
         
         
         # Nightly Forward Model

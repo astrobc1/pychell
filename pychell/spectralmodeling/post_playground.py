@@ -147,8 +147,7 @@ def combine_bis(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
     rvs_dict['uncbis_out'] = result[1]
     rvs_dict['bis_nightly_out'] = result[2]
     rvs_dict['uncbis_nightly_out'] = result[3]
-    
-    
+      
 def rvs_quicklook(path, rvs_dict, do_orders, iter_indices=None, plot_orders=False):
     
     # Numbers
@@ -172,7 +171,6 @@ def rvs_quicklook(path, rvs_dict, do_orders, iter_indices=None, plot_orders=Fals
 
     plt.legend()
     plt.show()
-  
   
 def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None, n_flag_iters=10, thresh=4):
     
@@ -495,7 +493,7 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
 
-def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False):
+def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False, time_offset=2450000):
         
     # Unpack rvs
     bjds, bjds_nightly = rvs_dict['bjds'], rvs_dict['bjds_nightly']
@@ -508,13 +506,13 @@ def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False):
     fig = plt.figure(figsize=(8, 4), dpi=300)
     
     # Single rvs
-    plt.errorbar(bjds - 2450000, rvs_single,
+    plt.errorbar(bjds - time_offset, rvs_single,
                  yerr=unc_single,
                  linewidth=0, elinewidth=1, marker='o', markersize=4, markerfacecolor=pcutils.COLORS_HEX_GADFLY[2],
                  color=pcutils.COLORS_HEX_GADFLY[2], mec='black', alpha=0.7, label="Single exposure")
 
     # Nightly RVs
-    plt.errorbar(bjds_nightly - 2450000, rvs_nightly,
+    plt.errorbar(bjds_nightly - time_offset, rvs_nightly,
                  yerr=unc_nightly,
                  linewidth=0, elinewidth=2, marker='o', markersize=8, markerfacecolor=pcutils.COLORS_HEX_GADFLY[0],
                  color='black', mec='black', alpha=0.9, label="Co-added")
@@ -523,7 +521,7 @@ def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False):
     plt.title(f"{specrvprobs[0].spectral_model.star.star_name.replace('_', ' ')}, {specrvprobs[0].spectrograph} Relative RVs")
     
     # Labels
-    plt.xlabel("BJD - 2450000", fontsize=16)
+    plt.xlabel(f"BJD - {time_offset}", fontsize=16)
     plt.ylabel('RV [m/s]', fontsize=16)
 
     # Legend
@@ -592,6 +590,53 @@ def parameter_corrs(path, specrvprobs, rvs_dict, n_cols=4):
         plt.savefig(fname)
         plt.close()
 
+def rvprec_vs_snr(path, specrvprobs, rvs_dict, bad_rvs_dict, show=False):
+
+    # Numbers
+    n_iterations = specrvprobs[0].n_iterations
+    n_spec = specrvprobs[0].n_spec
+    n_orders = len(specrvprobs)
+
+    # Single exposures RMS
+    rmss = parse_fit_metrics(specrvprobs)
+
+    # Single exposures snr
+    snrs_single = 1 / rmss
+
+    # Nightly SNR
+    snrs_nightly = compute_nightly_snrs(specrvprobs, rvs_dict)
+
+    # Convert to resolution elt
+    ang_per_pix = np.zeros(len(specrvprobs), dtype=float)
+    fwhms = np.zeros(len(specrvprobs), dtype=float)
+    for o in range(n_orders):
+        pbest = specrvprobs[o].opt_results[0, -1]["pbest"]
+        fwhms[o] = pcmath.sigmatofwhm(pbest["hermite_lsf_width"].value)
+        wave_data, _ = specrvprobs[o].spectral_model.build(pbest)
+        good = np.where(np.isfinite(wave_data))[0]
+        ang_per_pix[o] = (wave_data[-1] - wave_data[0]) / (good[-1] - good[0])
+        snrs_single[o, :, :] = snrs_single[o, :, :] * np.sqrt(fwhms[o] / ang_per_pix[o])
+        snrs_nightly[o, :, :] = snrs_nightly[o, :, :] * np.sqrt(fwhms[o] / ang_per_pix[o])
+
+    # Average over orders
+    snrs_nightly = np.nanmean(snrs_nightly[:, :, -1], axis=0)
+
+    # Average over orders
+    snrs_single = np.nanmean(snrs_single[:, :, -1], axis=0)
+
+    # Combine RVs
+    combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=n_orders * [n_iterations - 1])
+
+    # Uncertainty of single exposure rvs
+    unc_single = rvs_dict["uncfwm_out"]
+
+    # Uncertainty of nightly rvs
+    unc_nightly = rvs_dict["uncfwm_nightly_out"]
+
+    return snrs_single, unc_single, snrs_nightly, unc_nightly
+    
+
+
 ###############
 #### MISC. ####
 ###############
@@ -602,8 +647,7 @@ def spec_indices_from_night(night_index, n_obs_night):
     else:
         s = np.cumsum(n_obs_night)[night_index - 1]
         return np.arange(s, s + n_obs_night[night_index]).astype(int)
-    
-    
+     
 def gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict):
     
     # Numbers
@@ -650,7 +694,7 @@ def gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices, templates):
         
     # RV content weights
     weights_rvcont = np.zeros((n_orders, n_spec, n_iterations))
-    rvconts = compute_rv_contents(specrvprobs, templates)
+    rvconts = compute_rv_contents(specrvprobs, rvs_dict, templates)
     for o in range(n_orders):
         for j in range(n_iterations):
             weights_rvcont[o, :, j] = 1 / rvconts[o, j]**2
@@ -660,7 +704,7 @@ def gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices, templates):
 
     return weights
 
-def compute_rv_contents(specrvprobs, templates=None):
+def compute_rv_contents(specrvprobs, rvs_dict, templates=None):
     
     if templates is None:
         templates = ["star"]
@@ -674,7 +718,7 @@ def compute_rv_contents(specrvprobs, templates=None):
     rvcs = np.zeros((n_orders, n_iterations))
     
     # The nightly S/N, for each iteration
-    nightly_snrs = compute_nightly_snrs(specrvprobs)
+    nightly_snrs = compute_nightly_snrs(specrvprobs, rvs_dict)
 
     
     # Compute RVC for each order and iteration
@@ -736,14 +780,14 @@ def compute_rv_contents(specrvprobs, templates=None):
     # Return
     return rvcs
 
-def compute_nightly_snrs(specrvprobs):
+def compute_nightly_snrs(specrvprobs, rvs_dict):
     
     # Numbers
     n_orders = len(specrvprobs)
     n_spec = specrvprobs[0].n_spec
-    n_nights = specrvprobs[0].n_nights
+    n_nights = len(rvs_dict["n_obs_nights"])
     n_iterations = specrvprobs[0].n_iterations
-    n_obs_nights = specrvprobs[0].rvs_dict["n_obs_nights"]
+    n_obs_nights = rvs_dict["n_obs_nights"]
 
     # Parse the rms
     rms = parse_fit_metrics(specrvprobs)

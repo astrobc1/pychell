@@ -111,14 +111,14 @@ def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
     if flag_worst > 0:
         ss = np.argsort(diffs2)
         diffs2[ss[-1*flag_worst:]] = np.nan
-        if ww is not None:
+        if weights is not None:
             ww[ss[-1*flag_worst:]] = 0
                 
     # Remove edges
     if remove_edges > 0:
         diffs2[0:remove_edges] = 0
         diffs2[-remove_edges:] = 0
-        if ww is not None:
+        if weights is not None:
             ww[0:remove_edges] = 0
             ww[-remove_edges:] = 0
         
@@ -1153,6 +1153,23 @@ def shiftint1d(x, n, cval=np.nan):
 
 def voigt(x, amp, mu, sigma, fwhm_L):
     return astropy.modeling.functional_models.Voigt1D(x_0=mu, amplitude_L=amp, fwhm_G=sigmatofwhm(sigma), fwhm_L=fwhm_L)(x)
+
+
+# lorentz convolved with an arbitrary kernel
+def generalized_voigt(x, amp, mu_L, fwhm_L, kernel):
+    
+    # Normalize kernel
+    kernel = np.nansum(kernel)
+
+    # Build lorentz
+    _lorentz = lorentz(x, amp, mu, fwhm_L)
+
+    # Convolve with kernel
+    out = convolve_flux(x, _lorentz, lsf=kernel)
+
+    return out
+
+    
 
 
 @njit

@@ -8,6 +8,7 @@ import pickle
 import numpy as np
 import scipy.interpolate
 import scipy.signal
+from astropy.io import fits
 
 # Graphics
 import matplotlib.pyplot as plt
@@ -271,7 +272,7 @@ class OptimalSlitExtractor(SpectralExtractor):
         good = np.where(np.isfinite(trace_positions))[0]
         pfit = np.polyfit(xarr[good], trace_positions[good], self.trace_pos_poly_order)
         trace_positions = np.polyval(pfit, xarr)
-        
+
         # Iteratively refine trace positions and profile.
         for i in range(self.n_trace_iterations):
             
@@ -369,6 +370,13 @@ class OptimalSlitExtractor(SpectralExtractor):
         trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x - trace_max_pos,
                                                               trace_profile_cspline(trace_profile_cspline.x), extrapolate=False)
 
+        # Further remove the minimum of the trace profile
+        trace_profile = trace_profile_cspline(trace_profile_cspline.x)
+        trace_profile -= np.nanmin(trace_profile)
+        trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x,
+                                                              trace_profile, extrapolate=False)
+
+
         # Return
         return trace_profile_cspline
     
@@ -386,7 +394,6 @@ class OptimalSlitExtractor(SpectralExtractor):
         for x in range(nx):
             trace_image_no_background[:, x] = trace_image[:, x] - background[x]
             
-        
         trace_image_no_background_smooth = pcmath.median_filter2d(trace_image_no_background, width=3, preserve_nans=False)
         
         # Trace profile
@@ -425,7 +432,7 @@ class OptimalSlitExtractor(SpectralExtractor):
             
             # Bias the ccf
             ccf *= np.exp(-1 * (np.arange(ccf.size) - height / 2)**2 / (2 * lags.size**2)*3)
-            
+
             # Normalize to max=1
             ccf /= np.nanmax(ccf)
             
@@ -488,7 +495,7 @@ class OptimalSlitExtractor(SpectralExtractor):
                 continue
             
             # Compute the average counts behind the trace
-            background[x] = pcmath.weighted_median(trace_image_smooth[background_locs, x], percentile=0.1)
+            background[x] = pcmath.weighted_median(trace_image_smooth[background_locs, x], percentile=0.25)
             
             # Check if negative
             if background[x] <= 0 or ~np.isfinite(background[x]):
@@ -507,7 +514,7 @@ class OptimalSlitExtractor(SpectralExtractor):
     #### ACTUAL OPTIMAL EXTRACTION ####
     ###################################
     
-    def optimal_extraction(self, trace_image, badpix_mask, trace_profile_cspline, trace_positions, detector_props, data, aperture, dark_subtraction=False, background=None, background_err=None):
+    def optimal_extraction(self, trace_image, badpix_mask, trace_profile_cspline, trace_positions, detector_props, data, aperture, background=None, background_err=None):
 
         # Image dims
         ny, nx = trace_image.shape
@@ -533,14 +540,14 @@ class OptimalSlitExtractor(SpectralExtractor):
             bad = np.where(data_x < 0)[0]
             if bad.size > 0:
                 badpix_x[bad] = 0
+                data_x[bad] = np.nan
                 
             # Check if column is worth extracting
             if np.nansum(badpix_x) <= 1:
                 continue
             
             # Effective read noise
-            eff_read_noise = self.compute_read_noise(detector_props, x, trace_positions[x],
-                                                     exp_time, dark_subtraction=dark_subtraction)
+            eff_read_noise = self.compute_read_noise(detector_props, x, trace_positions[x], exp_time)
             
             # Shift Trace Profile
             P = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x],
@@ -632,20 +639,17 @@ class OptimalSlitExtractor(SpectralExtractor):
     def compute_aperture(self, trace_image, badpix_mask, trace_profile_cspline, trace_positions, background):
         trace_profile_x, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
         trace_profile /= np.nanmax(trace_profile)
-        good = np.where(trace_profile > 0.025)[0]
+        good = np.where(trace_profile > 0.05)[0]
         x_start, x_end = trace_profile_x[np.min(good)], trace_profile_x[np.max(good)]
         return x_end - x_start
         
-    def compute_read_noise(self, detector_props, x, y, exp_time, dark_subtraction=False):
+    def compute_read_noise(self, detector_props, x, y, exp_time):
     
         # Get the detector
         detector = self.get_detector(detector_props, x, y)
     
         # Detector read noise
-        if dark_subtraction:
-            eff_read_noise = detector['read_noise']
-        else:
-            return detector['read_noise'] + detector['dark_current'] * exp_time
+        return detector['read_noise'] + detector['dark_current'] * exp_time
         
     def get_detector(self, detector_props, x, y):
         if len(detector_props) == 1:

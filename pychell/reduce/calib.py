@@ -210,7 +210,7 @@ class FringingPreCalibrator(PreCalibrator):
                 blaze_init[x] = np.nanmedian(master_flat_image_smooth[good, x])
             blaze = pcmath.poly_filter(blaze_init, width=1021, poly_order=3)
             fringing_init = blaze_init / blaze
-            fringing = pcmath.poly_filter(fringing_init, width=21, poly_order=3)
+            fringing = pcmath.poly_filter(fringing_init, width=31, poly_order=3)
             if self.remove_fringing_from_flat:
                 master_flat_image /= np.outer(np.ones(ny), fringing)
             if self.remove_blaze_from_flat:

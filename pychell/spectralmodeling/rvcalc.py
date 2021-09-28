@@ -122,11 +122,12 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
     vels_for_rv = vels + spectral_model.data.bc_vel
     xcorr_rv_init = vels_for_rv[M]
 
-    # Fit the CCF
-    lsf = spectral_model.lsf.build(p0)
-    wave_data = spectral_model.wavelength_solution.build(p0)
-    fwhm_G = pcmath.dl_to_dv(pcmath.measure_fwhm(spectral_model.lsf.x, lsf), np.nanmean(wave_data))
-    xcorr_rv, xcorr_rv_unc = fit_ccf_voigt(vels_for_rv, rmss, fwhm_G, np.sum(spectral_model.data.mask))
+    # Fit (M-2, M-1, M, M+1, M+2) with parabola
+    use = np.arange(M - 2, M + 3).astype(int)
+    pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
+    xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
+    xcorr_rv_unc = np.nan # For now
+
     
     # BIS from rms surface
     try:
@@ -136,20 +137,20 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
 
     return xcorr_rv, xcorr_rv_unc, bis, vels_for_rv, rmss
 
-def fit_ccf_voigt(vels, rmss, fwhm_G, n):
-    ccf = -1 * rmss
-    ccf -= np.nanmin(ccf)
-    ccf /= np.nanmax(ccf)
-    p0 = np.array([1.0, vels[np.nanargmax(ccf)], 2_000, 0.1]) # amp, mu, fwhm_L, offset
-    bounds = [(0.5, 2.5), (p0[1] - 2E3, p0[1] + 2E3), (1_000, 100_000), (-0.5, 0.5)]
-    fit_result = scipy.optimize.minimize(_fit_ccf_voigt, x0=p0, bounds=bounds, args=(vels, ccf, fwhm_G), method="Nelder-Mead")
-    pbest = fit_result.x
-    xcorr_rv, xcorr_rv_unc = pbest[1], pbest[2] / 2.355 / np.sqrt(n)
-    return xcorr_rv, xcorr_rv_unc
+# def fit_ccf(vels, rmss, n):
+#     ccf = -1 * rmss
+#     ccf -= np.nanmin(ccf)
+#     ccf /= np.nanmax(ccf)
+#     p0 = np.array([1.0, vels[np.nanargmax(ccf)], 2_000, 0.1]) # amp, mu, fwhm_L, offset
+#     bounds = [(0.5, 2.5), (p0[1] - 2E3, p0[1] + 2E3), (1_000, 100_000), (-0.5, 0.5)]
+#     fit_result = scipy.optimize.minimize(_fit_ccf_voigt, x0=p0, bounds=bounds, args=(vels, ccf, fwhm_G), method="Nelder-Mead")
+#     pbest = fit_result.x
+#     xcorr_rv, xcorr_rv_unc = pbest[1], pbest[2] / 2.355 / np.sqrt(n)
+#     return xcorr_rv, xcorr_rv_unc
 
-def _fit_ccf_voigt(pars, vels, ccf, fwhm_G):
-    voigt_model = pcmath.voigt(vels, pars[0], pars[1], fwhm_G, pars[2]) + pars[3]
-    return pcmath.rmsloss(ccf, voigt_model)
+# def _fit_ccf(pars, vels, ccf, fwhm_G):
+#     model = pcmath.generalized_voigt(vels, pars[0], pars[1], fwhm_G, pars[2]) + pars[3]
+#     return pcmath.rmsloss(ccf, model)
 
 
 # def compute_ccf_uncertainty(p0, spectral_model, iter_index, vels, vel_step, m):

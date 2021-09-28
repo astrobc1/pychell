@@ -224,7 +224,7 @@ class CompositeRVModel(NoiseModel):
         t = self.data.t
         
         # The raw data rvs
-        data_arr = self.data.get_trainable()
+        data_arr = np.copy(self.data.get_trainable())
         
         # Remove the offsets from the data
         data_arr -= self.trend_model.build_trend_zero(pars, t)
@@ -301,7 +301,7 @@ class CompositeGPRVModel(CompositeRVModel, NoiseModel):
         t = self.data.t
         
         # The raw data rvs
-        data_arr = self.data.get_trainable()
+        data_arr = np.copy(self.data.get_trainable())
         
         # Remove the offsets from the data
         data_arr -= self.trend_model.build_trend_zero(pars, t)
