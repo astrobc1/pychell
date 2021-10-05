@@ -494,18 +494,21 @@ class OptimalSlitExtractor(SpectralExtractor):
             if background_locs.size == 0:
                 continue
             
-            # Compute the average counts behind the trace
-            background[x] = pcmath.weighted_median(trace_image_smooth[background_locs, x], percentile=0.25)
+            # Compute the median counts behind the trace
+            background[x] = np.nanmedian(trace_image_smooth[background_locs, x])
             
             # Check if negative
             if background[x] <= 0 or ~np.isfinite(background[x]):
                 background[x] = np.nan
                 background_err[x] = np.nan
             else:
-                # Error according to Poisson stats
+                # Error
                 background_err[x] = np.sqrt(background[x] / (background_locs.size - 1))
-                
-        # Savgol filter
+
+        # Background smoothing
+        background = pcmath.poly_filter(background, width=11, poly_order=3)
+        background_err = pcmath.poly_filter(background_err, width=11, poly_order=3)
+
         
         # Return
         return background, background_err

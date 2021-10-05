@@ -8,7 +8,6 @@ from astropy.io import fits
 
 # Pychell deps
 import pychell.maths as pcmath
-import pychell.reduce.order_map as pcomap
 
 # Optimize deps
 from optimize.data import Dataset
@@ -102,16 +101,23 @@ class RawImage(Echellogram):
         
         # Parse the header
         if self.parser is not None:
-            self.parse_header()
-            
+            try:
+                self.parse_header()
+            except:
+                print(f"Warning! Could not parse header for {self}")
+
         # Parse the image number
-        self.parser.parse_image_num(self)
-        
+        try:
+            self.parser.parse_image_num(self)
+        except:
+            print(f"Warning! Could not parse image number for {self}")
+
         # Parse the date of the observation
-        self.parser.parse_utdate(self)
-            
-        
-        
+        try:
+            self.parser.parse_utdate(self)
+        except:
+            print(f"Warning! Could not parse UT date for {self}")
+
     def parse_data(self):
         return self.parser.parse_image(self)
     
@@ -141,12 +147,13 @@ class MasterCalibImage(Echellogram):
     def __repr__(self):
         return f"Master Calibration Image: {self.base_input_file}"
 
-class ImageMap(Echellogram):
+class OrderMap(Echellogram):
     
-    def __init__(self, input_file=None, source=None, parser=None, order_map_fun=None, orders_list=None):
+    def __init__(self, input_file=None, source=None, parser=None):
             
         super().__init__(input_file=input_file)
         
+        # Python pickle containing info for each trace
         self.input_file_orders_list = self.input_file_noext + ".pkl"
         
         # The source for the image map (ie, slit flat, fiber flat)
@@ -154,12 +161,6 @@ class ImageMap(Echellogram):
         
         # The parser
         self.parser = parser
-        
-        # orders_list (len=n_orders)
-        self.orders_list = orders_list
-        
-    def trace_orders(self, config):
-        self.order_map_fun(self, config)
     
     def load_map_image(self):
         return self.parse_image()
@@ -182,7 +183,7 @@ class ImageMap(Echellogram):
         self.save_orders_list()
         
     def __repr__(self):
-        return f"Image map: {self.base_input_file}"
+        return f"Order map: {self.base_input_file}"
 
 
 #####################

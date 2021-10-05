@@ -148,31 +148,7 @@ def combine_bis(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
     rvs_dict['bis_nightly_out'] = result[2]
     rvs_dict['uncbis_nightly_out'] = result[3]
       
-def rvs_quicklook(path, rvs_dict, do_orders, iter_indices=None, plot_orders=False):
-    
-    # Numbers
-    n_orders, n_spec, n_iterations = rvs_dict["rvsfwm"].shape
-    n_obs_nights = rvs_dict["n_obs_nights"]
-    n_nights = len(n_obs_nights)
-    
-    # Which iterations to use for each order
-    if iter_indices is None:
-        iter_indices = [n_iterations - 1] * n_orders
-        
-    # BJDs nightly
-    bjds_nightly = rvs_dict["bjds_nightly"]
-    
-    # Plot each order
-    if plot_orders:
-        for o in range(n_orders):
-            rvs = rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]] - np.nanmean(rvs_dict["rvsfwm_nightly"][o, :, iter_indices[o]])
-            rverr = rvs_dict["uncfwm_nightly"][o, :, iter_indices[o]]
-            plt.errorbar(bjds_nightly, rvs, yerr=rverr, marker='o', lw=0, elinewidth=0.5, label=f"Order {do_orders[o]}")
-
-    plt.legend()
-    plt.show()
-  
-def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None, n_flag_iters=10, thresh=4):
+def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, n_flag_iters=10, thresh=4):
     
     # Numbers
     n_orders = len(specrvprobs)
@@ -212,7 +188,7 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
         iter_indices = [n_iterations - 1] * n_orders
 
     # Generate weights
-    weights = gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices, templates=templates)
+    weights = gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices)
     
     # Get RVs for single iteration
     rvsfwm_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
@@ -268,7 +244,7 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
   
-def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None):
+def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
     
     # Numbers
     n_orders = len(specrvprobs)
@@ -314,7 +290,7 @@ def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, te
         iter_indices = [n_iterations - 1] * n_orders
 
     # Generate weights
-    weights = gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices, templates=templates)
+    weights = gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices)
     
     # Combine RVs for NM
     rvsfwm_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
@@ -635,6 +611,57 @@ def rvprec_vs_snr(path, specrvprobs, rvs_dict, bad_rvs_dict, show=False):
 
     return snrs_single, unc_single, snrs_nightly, unc_nightly
     
+def compute_empirical_rvprec(path, specrvprobs, rvs_dict, templates=None, iter_indices=None, inject_blaze=True):
+
+    # Numbers
+    n_orders = len(specrvprobs)
+    n_spec = specrvprobs[0].n_spec
+    n_nights = len(rvs_dict["n_obs_nights"])
+
+    # Compute rv contents for each night
+    rvcontents_theo_single_exposures = compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=inject_blaze)
+    
+    # Really want to compare within a night
+    rvcontents_theo = np.zeros(shape=(n_orders, n_nights), dtype=float)
+    rvcontents_emp = np.zeros(shape=(n_orders, n_nights), dtype=float)
+
+    # Extract the desired iteration
+    for o in range(n_orders):
+        for i, f, l in pcutils.nightly_iteration(rvs_dict['n_obs_nights']):
+            rvcontents_theo[o, i] = np.nansum(1 / rvcontents_theo_single_exposures[o, f:l, iter_indices[o]]**2)**-0.5
+
+            # Empirical are just the per-order error bars, co-added across exposures
+            rvcontents_emp[o, i] = rvs_dict["uncfwm_nightly"][o, i, iter_indices[o]]
+
+    # Average theoretical and empirical across nights
+    rvcontents_theo = np.nanmean(rvcontents_theo, axis=1)
+    rvcontents_emp = np.nanmean(rvcontents_emp, axis=1)
+    
+    # Mean wavelength of each order
+    mean_waves = np.zeros(n_orders, dtype=float)
+
+    for o in range(n_orders):
+
+        # Find first good observation
+        k = 0
+        for data in specrvprobs[o].data:
+            if data.is_good:
+                k = data.spec_num - 1
+                break
+
+        # Build the best fit model for the kth observation to find the mean wavelength
+        pbest = specrvprobs[o].opt_results[k, iter_indices[o]]["pbest"]
+        specrvprobs[o].spectral_model.initialize(pbest, specrvprobs[o].data[k], iter_indices[o])
+        wave_data = specrvprobs[o].spectral_model.wavelength_solution.build(pbest)
+        mean_waves[o] = np.nanmean(wave_data)
+
+    # Sort according to wavelength
+    ss = np.argsort(mean_waves)
+    mean_waves = mean_waves[ss]
+    rvcontents_emp = rvcontents_emp[ss]
+    rvcontents_theo = rvcontents_theo[ss]
+
+    return mean_waves, rvcontents_emp, rvcontents_theo
 
 
 ###############
@@ -678,49 +705,118 @@ def gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict):
         
     return mask
 
-def gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices, templates):
+def gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices):
     
     # Numbers
     n_orders = len(specrvprobs)
     n_spec = specrvprobs[0].n_spec
     n_iterations = specrvprobs[0].n_iterations
     
-    # RMS weights
-    fit_metrics = parse_fit_metrics(specrvprobs)
-    weights_fit = 1 / fit_metrics**2
-    bad = np.where(weights_fit < 100)
-    if bad[0].size > 0:
-        weights_fit[bad] = 0
-        
     # RV content weights
-    weights_rvcont = np.zeros((n_orders, n_spec, n_iterations))
-    rvconts = compute_rv_contents(specrvprobs, rvs_dict, templates)
+    weights = np.zeros((n_orders, n_spec, n_iterations))
+    rvconts = compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=True)
     for o in range(n_orders):
         for j in range(n_iterations):
-            weights_rvcont[o, :, j] = 1 / rvconts[o, j]**2
+            weights[o, :, j] = 1 / rvconts[o, :, j]**2
     
-    # Combine weights, multiplicatively
-    weights = weights_rvcont * weights_fit * mask
+    # Mask weights
+    weights *= mask
 
     return weights
 
-def compute_rv_contents(specrvprobs, rvs_dict, templates=None):
+# def compute_rv_contents(specrvprobs, rvs_dict, templates=None, snr=100, blaze=True):
     
-    if templates is None:
-        templates = ["star"]
+#     if templates is None:
+#         templates = ["star"]
+        
+#     # Numbers
+#     n_orders = len(specrvprobs)
+#     n_spec = specrvprobs[0].n_spec
+#     n_iterations = specrvprobs[0].n_iterations
+            
+#     # The RV contents, for each iteration (lower is "better")
+#     rvcs = np.zeros((n_orders, n_iterations))
+    
+#     # The nightly S/N, for each iteration
+#     nightly_snrs = compute_nightly_snrs(specrvprobs, rvs_dict)
+
+#     # Compute RVC for each order and iteration
+#     for o in range(n_orders):
+
+#         # Find first good observation
+#         k = 0
+#         for data in specrvprobs[o].data:
+#             if data.is_good:
+#                 k = data.spec_num - 1
+#                 break
+        
+#         # Original templates
+#         templates_dictcp = copy.deepcopy(specrvprobs[o].spectral_model.templates_dict)
+        
+#         # Compute RVC for this iteration
+#         for j in range(n_iterations):
+
+#             if specrvprobs[0].spectral_model.star.from_flat and j == 0:
+#                 continue
+        
+#             # Use parameters for the first osbervation - Doesn't so much matter here.
+#             pars = specrvprobs[o].opt_results[k, j]['pbest']
+            
+#             # Set the star in the templates dict
+#             specrvprobs[o].spectral_model.templates_dict["star"] = np.copy(specrvprobs[o].stellar_templates[j])
+        
+#             # Alias the model wave grid
+#             model_wave = specrvprobs[o].spectral_model.model_wave
+        
+#             # Data wave grid
+#             data_wave = specrvprobs[o].spectral_model.wavelength_solution.build(pars)
+        
+#             # LSF
+#             if specrvprobs[o].spectral_model.lsf is not None:
+#                 lsf = specrvprobs[o].spectral_model.lsf.build(pars)
+        
+#             # RV Content for each template individually
+#             rvcs_per_template = np.zeros(len(templates))
+        
+#             # Loop over templates
+#             for i, template_key in enumerate(templates):
+            
+#                 # Build the high res template
+#                 template_flux = getattr(specrvprobs[o].spectral_model, template_key).build(pars, specrvprobs[o].spectral_model.templates_dict[template_key], model_wave)
+            
+#                 # Compute content for this template
+#                 _, rvcs_per_template[i] = pcrvcalc.compute_rv_content(model_wave, template_flux, snr=snr, blaze=blaze, ron=0, wave_to_sample=data_wave)
+           
+#             # Add in quadrature
+#             rvcs[o, j] = np.sqrt(np.nansum(rvcs_per_template**2))
+            
+#         # Reset templates dict
+#         specrvprobs[o].spectral_model.templates_dict = templates_dictcp
+        
+#     # Return
+#     return rvcs
+
+
+def compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=False):
+
+    # SNR0
+    snr0 = 100
         
     # Numbers
     n_orders = len(specrvprobs)
     n_spec = specrvprobs[0].n_spec
+    n_nights = len(rvs_dict["n_obs_nights"])
     n_iterations = specrvprobs[0].n_iterations
-            
-    # The RV contents, for each iteration (lower is "better")
-    rvcs = np.zeros((n_orders, n_iterations))
-    
-    # The nightly S/N, for each iteration
-    nightly_snrs = compute_nightly_snrs(specrvprobs, rvs_dict)
 
-    
+    # The RV contents, for each iteration (lower is "better")
+    rvcontents = np.zeros((n_orders, n_spec, n_iterations), dtype=float)
+
+    # The mean wavelength of each order
+    mean_waves = np.zeros(n_orders, dtype=float)
+
+    # S/N
+    snrs_single = 1 / parse_fit_metrics(specrvprobs)
+
     # Compute RVC for each order and iteration
     for o in range(n_orders):
 
@@ -730,6 +826,18 @@ def compute_rv_contents(specrvprobs, rvs_dict, templates=None):
             if data.is_good:
                 k = data.spec_num - 1
                 break
+
+        # Use parameters for the kth osbervation, last iter - Doesn't so much matter here.
+        pars = specrvprobs[o].opt_results[k, -1]['pbest']
+
+        # Initialize
+        specrvprobs[o].spectral_model.initialize(pars, specrvprobs[o].data[k], -1)
+
+        # Data wave grid
+        data_wave_k = specrvprobs[o].spectral_model.wavelength_solution.build(pars)
+
+        # Mean wavelength
+        mean_waves[o] = np.nanmean(data_wave_k)
         
         # Original templates
         templates_dictcp = copy.deepcopy(specrvprobs[o].spectral_model.templates_dict)
@@ -737,48 +845,36 @@ def compute_rv_contents(specrvprobs, rvs_dict, templates=None):
         # Compute RVC for this iteration
         for j in range(n_iterations):
 
+            # Skip first iteration if starting from flat
             if specrvprobs[0].spectral_model.star.from_flat and j == 0:
                 continue
-        
-            # Use parameters for the first osbervation - Doesn't so much matter here.
-            pars = specrvprobs[o].opt_results[k, j]['pbest']
+
+            # Best fit pars for the kth observation
+            pars = specrvprobs[o].opt_results[k, j]["pbest"]
+
+            # Initialize the kth observation
+            specrvprobs[o].spectral_model.initialize(pars, specrvprobs[o].data[k], j)
+
+            # Data wave grid
+            data_wave = specrvprobs[o].spectral_model.wavelength_solution.build(pars)
             
             # Set the star in the templates dict
             specrvprobs[o].spectral_model.templates_dict["star"] = np.copy(specrvprobs[o].stellar_templates[j])
         
             # Alias the model wave grid
             model_wave = specrvprobs[o].spectral_model.model_wave
-        
-            # Data wave grid
-            data_wave = specrvprobs[o].spectral_model.wavelength_solution.build(pars)
-        
-            # LSF
-            if specrvprobs[o].spectral_model.lsf is not None:
-                lsf = specrvprobs[o].spectral_model.lsf.build(pars)
-        
-            # RV Content for each template individually
-            rvcs_per_template = np.zeros(len(templates))
-        
-            # Loop over templates
-            for i, template_key in enumerate(templates):
-            
-                # Build the high res template
-                template_flux = getattr(specrvprobs[o].spectral_model, template_key).build(pars, specrvprobs[o].spectral_model.templates_dict[template_key], model_wave)
-            
-                # The S/N for this observation
-                snr = np.nanmedian(nightly_snrs[o, :, j])
-            
-                # Compute content for this template
-                _, rvcs_per_template[i] = pcrvcalc.compute_rv_content(model_wave, template_flux, snr=snr, blaze=True, ron=0, wave_to_sample=data_wave)
-           
-            # Add in quadrature
-            rvcs[o, j] = np.sqrt(np.nansum(rvcs_per_template**2))
+
+            # Formula: derivative comes from gas cell / stellar flux, but overall flux further accounts for tellurics and blaze
+            _, rvcontents[o, :, j] = pcrvcalc.compute_rv_content(pars, specrvprobs[o].spectral_model, inject_blaze=inject_blaze, snr=snr0)
+
+            # Scale to S/N
+            rvcontents[o, :, j] *= (snr0 / snrs_single[o, :, j])
             
         # Reset templates dict
         specrvprobs[o].spectral_model.templates_dict = templates_dictcp
         
     # Return
-    return rvcs
+    return rvcontents
 
 def compute_nightly_snrs(specrvprobs, rvs_dict):
     

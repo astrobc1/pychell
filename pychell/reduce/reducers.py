@@ -106,7 +106,7 @@ class StandardReducer(Reducer):
         # Generate master bias, dark, flat
         self.generate_master_calib_images()
         
-        # Trace all orders (possibly multiple traces per order)
+        # Trace all orders
         self.trace()
         
         # Extract all images

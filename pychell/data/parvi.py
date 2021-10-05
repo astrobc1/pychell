@@ -122,6 +122,8 @@ class PARVIParser(DataParser):
 #### REDUCTION / EXTRACTION ####
 ################################
 
+# Slit or fiber
+feeder = "fiber"
 
 #######################################
 ##### GENERATING RADIAL VELOCITIES ####

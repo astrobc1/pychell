@@ -60,9 +60,7 @@ class DataParser:
         # skycals
         raise NotImplementedError(f"Must implement a categorize_raw_data method for class {self.__class__.__name__}")
     
-    def categorize_traces(self, data):
-        raise NotImplementedError(f"Must implement a categorize_traces method for class {self.__class__.__name__}")
-    
+
     ################################
     #### PARSE OBSERVATION INFO ####
     ################################
@@ -84,7 +82,7 @@ class DataParser:
         # Parse the sky coord and time of obs
         self.parse_sky_coord(data)
         self.parse_exposure_start_time(data)
-        self.parse_target(data)
+        self.parse_object(data)
         self.parse_itime(data)
         
         return data.header
@@ -114,7 +112,9 @@ class DataParser:
     def classify_traces(self, data):
         raise NotImplementedError(f"Must implement classify_traces method for class {self.__class__.__name__}")
 
-    
+    def parse_object(self, data):
+        raise NotImplementedError(f"Must implement parse_object method for class {self.__class__.__name__}")
+
     #####################
     #### CALIBRATION ####
     #####################

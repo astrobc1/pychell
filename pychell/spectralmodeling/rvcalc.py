@@ -70,35 +70,23 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
     # Get current star vel
     v0 = p0[spectral_model.star.par_names[0]].value
     
-    # Make a grid +/- 2 km/s
+    # Make a vel grid
     vels = np.arange(v0 - vel_width / 2, v0 + vel_width / 2, vel_step)
 
     # Stores the rms as a function of velocity
     rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
     
-    # Starting weights are flux uncertainties and bad pixels. If flux unc are uniform, they have no effect.
-    weights_init = np.copy(spectral_model.data.mask * spectral_model.data.flux_unc)
-        
-    # Build the telluric flux
-    if spectral_model.tellurics is not None:
-        tell_flux = spectral_model.tellurics.build(pars, spectral_model.templates_dict['tellurics'], spectral_model.model_wave)
-        tell_flux = spectral_model.lsf.convolve_flux(tell_flux, pars=pars)
-        data_wave = spectral_model.wavelength_solution.build(pars)
-        tell_flux = pcmath.lin_interp(spectral_model.model_wave, tell_flux, data_wave)
-    
-        # Make telluric weights
-        tell_weights = tell_flux**4
-        bad = np.where(~np.isfinite(tell_flux) | (tell_flux < 0.25))[0]
-        tell_weights[bad] = 0
-    
-        # Combine weights
-        weights_init *= tell_weights
-        
-    # Star weights depend on the information content
-    if spectral_model.lsf is not None:
-        lsf = spectral_model.lsf.build(pars)
-    rvc, _ = compute_rv_content(spectral_model.templates_dict['star'][:, 0], spectral_model.templates_dict['star'][:, 1], snr=100, blaze=True, ron=0, lsf=lsf)
-    star_weights = 1 / rvc**4
+    # Starting weights are bad pixels
+    weights_init = spectral_model.data.mask
+
+    # Wavelength grid for the data
+    wave_data = spectral_model.wavelength_solution.build(pars)
+
+    # Compute RV info content
+    rvc_per_pix, _ = compute_rv_content(p0, spectral_model, inject_blaze=True, snr=100) # S/N here doesn't matter
+
+    # Weights are 1 / rv info^2
+    star_weights = 1 / rvc_per_pix**2
     
     for i in range(vels.size):
         
@@ -106,13 +94,13 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
         pars[spectral_model.star.par_names[0]].value = vels[i]
         
         # Build the model
-        wave_data, model_lr = spectral_model.build(pars)
+        _, model_lr = spectral_model.build(pars)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        star_weights_shifted = pcmath.doppler_shift(spectral_model.templates_dict['star'][:, 0], vels[i], flux=star_weights, interp='linear', wave_out=wave_data)
+        star_weights_shifted = pcmath.doppler_shift(wave_data, vels[i], flux=star_weights, interp='linear')
         
         # Final weights
-        weights = weights_init * star_weights_shifted * tell_weights
+        weights = weights_init * star_weights_shifted
         
         # Compute the RMS
         rmss[i] = pcmath.rmsloss(spectral_model.data.flux, model_lr, weights=weights)
@@ -124,12 +112,14 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
 
     # Fit (M-2, M-1, M, M+1, M+2) with parabola
     use = np.arange(M - 2, M + 3).astype(int)
-    pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
-    xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
+    try:
+        pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
+        xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
+    except:
+        xcorr_rv = np.nan
     xcorr_rv_unc = np.nan # For now
 
-    
-    # BIS from rms surface
+    # BIS from rms curve
     try:
         _, bis = compute_bis(vels_for_rv, rmss, xcorr_rv, n_bs=1000)
     except:
@@ -137,53 +127,6 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
 
     return xcorr_rv, xcorr_rv_unc, bis, vels_for_rv, rmss
 
-# def fit_ccf(vels, rmss, n):
-#     ccf = -1 * rmss
-#     ccf -= np.nanmin(ccf)
-#     ccf /= np.nanmax(ccf)
-#     p0 = np.array([1.0, vels[np.nanargmax(ccf)], 2_000, 0.1]) # amp, mu, fwhm_L, offset
-#     bounds = [(0.5, 2.5), (p0[1] - 2E3, p0[1] + 2E3), (1_000, 100_000), (-0.5, 0.5)]
-#     fit_result = scipy.optimize.minimize(_fit_ccf_voigt, x0=p0, bounds=bounds, args=(vels, ccf, fwhm_G), method="Nelder-Mead")
-#     pbest = fit_result.x
-#     xcorr_rv, xcorr_rv_unc = pbest[1], pbest[2] / 2.355 / np.sqrt(n)
-#     return xcorr_rv, xcorr_rv_unc
-
-# def _fit_ccf(pars, vels, ccf, fwhm_G):
-#     model = pcmath.generalized_voigt(vels, pars[0], pars[1], fwhm_G, pars[2]) + pars[3]
-#     return pcmath.rmsloss(ccf, model)
-
-
-# def compute_ccf_uncertainty(p0, spectral_model, iter_index, vels, vel_step, m):
-
-#     # Copy initial pars
-#     pars = copy.deepcopy(p0)
-    
-#     # Data flux and uncertainty
-#     data_flux = spectral_model.data.flux
-#     data_flux_unc = spectral_model.data.flux_unc
-
-#     # Compute chi2 at vm-1
-#     pars[spectral_model.star.par_names[0]].value = vels[m-1]
-#     _, model_flux = spectral_model.build(pars)
-#     chi2vmm1 = np.nansum(((data_flux - model_flux) / data_flux_unc)**2)
-
-#     # Compute chi2 at vm
-#     pars[spectral_model.star.par_names[0]].value = vels[m]
-#     _, model_flux = spectral_model.build(pars)
-#     chi2vm = np.nansum(((data_flux - model_flux) / data_flux_unc)**2)
-
-#     # Compute chi2 at vm+1
-#     pars[spectral_model.star.par_names[0]].value = vels[m+1]
-#     _, model_flux = spectral_model.build(pars)
-#     chi2vmp1 = np.nansum(((data_flux - model_flux) / data_flux_unc)**2)
-
-#     # RV uncertainty
-#     breakpoint()
-#     rv_unc = np.sqrt(2 * vel_step**2 / (chi2vmm1 - 2 * chi2vm + chi2vmp1))
-
-#     # Return
-#     return rv_unc
-    
 def brute_force_ccf_crude(p0, data, spectral_model):
     
     # Copy the parameters
@@ -304,86 +247,141 @@ def detrend_rvs(rvs, vec, thresh=None, poly_order=1):
 #### RV INFO CONTENT ####
 #########################
 
-def compute_rv_content(wave, flux, snr=100, blaze=False, ron=0, R=None, width=None, sampling=None, wave_to_sample=None, lsf=None):
-    """Computes the radial-velocity information content per pixel and for a whole swath.
+def compute_rv_content(pars, spectral_model, inject_blaze=True, snr=100):
 
-    Args:
-        wave (np.ndarray): The wavelength grid in units of Angstroms.
-        flux (np.ndarray): The flux, normalized to ~ 1.
-        snr (int, optional): The peak snr per 1d-pixel. Defaults to 100.
-        blaze (bool, optional): Whether or not to modulate by a pseudo blaze function. The pseudo blaze is a polynomial where the end points 
-        ron (int, optional): The read out noise of the detector. Defaults to 0.
-        R (int, optional): The resolution to convolve the templates. Defaults to 80000.
-        width (int, optional): The LSF width to convolve the templates if R is not set. R=80000
-        sampling (float, optional): The desired sampling to compute the rv content on. Ideally, the input grid is sampled much higher than the detector grid for proper convolution, and sampling corresponds approximately to the detector grid.
-    Returns:
-        np.ndarray: The "rv information content" at each pixel.
-        np.ndarray: The rv content for the whole swath.
-    """
+    # Data wave grid
+    data_wave = spectral_model.wavelength_solution.build(pars)
+
+    # Model wave grid
+    model_wave = spectral_model.model_wave
+
+    # Star flux on model data wave grid
+    star_flux = spectral_model.star.build(pars, spectral_model.templates_dict["star"], model_wave)
+
+    # Convolve stellar flux
+    if spectral_model.lsf is not None:
+        lsf = spectral_model.lsf.build(pars)
+        star_flux = pcmath.convolve_flux(model_wave, star_flux, lsf=lsf)
     
-    nx_in = wave.size
-    fluxmod = np.copy(flux)
-    wavemod = np.copy(wave)
+    # Interpolate star flux onto data grid
+    star_flux = pcmath.cspline_interp(model_wave, star_flux, data_wave)
+
+    # Gas cell flux on model wave grid for kth observation
+    if spectral_model.gas_cell is not None:
+        gas_flux = spectral_model.gas_cell.build(pars, spectral_model.templates_dict["gas_cell"], model_wave)
+        if spectral_model.lsf is not None:
+            gas_flux = pcmath.convolve_flux(model_wave, gas_flux, lsf=lsf)
+        
+        # Interpolate gas cell flux onto data grid
+        gas_flux = pcmath.cspline_interp(model_wave, gas_flux, data_wave)
     
-    # Convert to PE
-    fluxmod *= snr**2
-    
-    # Convolve
-    if R is not None or width is not None:
-        fluxmod = pcmath.convolve_flux(wavemod, fluxmod, R=R, width=width)
-    elif lsf is not None:
-        fluxmod = pcmath.convolve_flux(wavemod, fluxmod, lsf=lsf)
-        
-    # Blaze modulation
-    if blaze:
-        good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
-        ng = good.size
-        x, y = np.array([wavemod[good[0]], wavemod[good[int(ng/2)]], wavemod[good[-1]]]), np.array([0.2, 1, 0.2])
-        pfit = pcmath.poly_coeffs(x, y)
-        blz = np.polyval(pfit, wavemod)
-        fluxmod *= blz
-        
-    # Downsample to detector grid
-    if sampling is not None:
-        good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
-        wave_new = np.arange(wavemod[0], wavemod[-1] + sampling, sampling)
-        fluxmod = pcmath.cspline_interp(wavemod[good], fluxmod[good], wave_new)
-        wavemod = wave_new
-    elif wave_to_sample is not None:
-        good1 = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
-        good2 = np.where(np.isfinite(wave_to_sample))
-        bad2 = np.where(~np.isfinite(wave_to_sample))
-        fluxnew = np.full(wave_to_sample.size, fill_value=np.nan)
-        fluxnew[good2] = pcmath.cspline_interp(wavemod[good1], fluxmod[good1], wave_to_sample[good2])
-        fluxmod = fluxnew
-        wavemod = wave_to_sample
-        
-    # Compute rv content
-    nx = wavemod.size
-    rvc_per_pix = np.full(nx, dtype=np.float64, fill_value=np.nan)
-    good = np.where(np.isfinite(wavemod) & np.isfinite(fluxmod))[0]
-    ng = good.size
-    flux_spline = scipy.interpolate.CubicSpline(wavemod[good], fluxmod[good], extrapolate=False)
-    for i in range(nx):
-        
-        if i not in good:
-            continue
-        
-        # Derivative
-        slope = flux_spline(wavemod[i], 1)
-        
-        # Compute rvc per pixel
-        if not np.isfinite(slope) or slope == 0:
-            continue
-        
-        rvc_per_pix[i] = SPEED_OF_LIGHT * np.sqrt(fluxmod[i] + ron**2) / (wavemod[i] * np.abs(slope))
-    
-    good = np.where(np.isfinite(rvc_per_pix))[0]
-    if good.size == 0:
-        return np.nan, np.nan
     else:
-        rvc_tot = np.nansum(1 / rvc_per_pix[good]**2)**-0.5
-        return rvc_per_pix, rvc_tot
+        gas_flux = None
+
+    # Telluric flux on model wave grid for kth observation
+    if spectral_model.tellurics is not None:
+        tell_flux = spectral_model.tellurics.build(pars, spectral_model.templates_dict["tellurics"], model_wave)
+        if spectral_model.lsf is not None:
+            tell_flux = pcmath.convolve_flux(model_wave, tell_flux, lsf=lsf)
+
+        # Interpolate telluric flux onto data grid
+        tell_flux = pcmath.cspline_interp(model_wave, tell_flux, data_wave)
+    
+    else:
+        tell_flux = None
+
+    # Inject a blaze function
+    if inject_blaze:
+        pfit = np.polyfit([np.nanmin(data_wave), np.nanmean(data_wave), np.nanmax(data_wave)], [0.3, 1.0, 0.3], 2)
+        blaze = np.polyval(pfit, data_wave)
+    else:
+        blaze = np.ones_like(data_wave)
+
+    # Find good pixels
+    good = np.where(np.isfinite(data_wave) & np.isfinite(star_flux))[0]
+
+    # Create a spline for the stellar flux to compute derivatives
+    cspline_star = scipy.interpolate.CubicSpline(data_wave[good], star_flux[good], extrapolate=False)
+
+    # Stores rv content for star
+    rvc_per_pix_star = np.full(len(data_wave), np.nan)
+
+    # Create a spline for the gas cell flux to compute derivatives
+    if gas_flux is not None:
+
+        # Find good pixels
+        good = np.where(np.isfinite(data_wave) & np.isfinite(gas_flux))[0]
+
+        cspline_gas = scipy.interpolate.CubicSpline(data_wave[good], gas_flux[good], extrapolate=False)
+
+        # Stores rv content for gas cell
+        rvc_per_pix_gas = np.full(len(data_wave), np.nan)
+
+    # Loop over pixels
+    for i in range(len(data_wave)):
+
+        # Skip if this pixel is not used
+        if not np.isfinite(data_wave[i]):
+            continue
+
+        # Compute stellar flux at this wavelength
+        Ai = star_flux[i] * blaze[i]
+
+        # Include gas and tell flux
+        if gas_flux is not None:
+           Ai *= gas_flux[i]
+        if tell_flux is not None:
+           Ai *= tell_flux[i]
+
+        # Scale to S/N (assumes gain = 1)
+        Ai = Ai * snr**2
+
+        # Compute derivative of stellar flux and gas flux
+        dAi_dw_star = cspline_star(data_wave[i], 1) * blaze[i]
+        if gas_flux is not None:
+            dAi_dw_star *= gas_flux[i]
+        if tell_flux is not None:
+            dAi_dw_star *= tell_flux[i]
+
+        # Make sure slope is finite
+        if not np.isfinite(dAi_dw_star):
+            continue
+
+        # Scale to S/N
+        dAi_dw_star *= snr**2
+
+        # Compute stellar rv content
+        rvc_per_pix_star[i] = SPEED_OF_LIGHT * np.sqrt(Ai) / (data_wave[i] * np.abs(dAi_dw_star))
+
+        # Compute derivative of gas cell flux
+        if gas_flux is not None:
+            dAi_dw_gas = cspline_gas(data_wave[i], 1) * blaze[i]
+
+            dAi_dw_gas *= star_flux[i]
+            
+            if tell_flux is not None:
+                dAi_dw_gas *= tell_flux[i]
+
+            # Scale to S/N
+            dAi_dw_gas *= snr**2
+
+            # Compute gas cell rv content
+            rvc_per_pix_gas[i] = SPEED_OF_LIGHT * np.sqrt(Ai) / (data_wave[i] * np.abs(dAi_dw_gas))
+
+    
+    # Full RV Content per pixel
+    if gas_flux is not None:
+        rvc_per_pix = np.sqrt(rvc_per_pix_star**2 + rvc_per_pix_gas**2)
+    else:
+        rvc_per_pix = rvc_per_pix_star
+
+    # Full RV Content
+    rvc_tot = np.nansum(1 / rvc_per_pix**2)**-0.5
+
+    # Return
+    return rvc_per_pix, rvc_tot
+
+
 
 
 #######################
@@ -466,7 +464,7 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
         for i in range(n_spec):
             for j in range(n_spec):
                 rvlij[l, i, j] = rvs[l, i] - rvs[l, j]
-                wlij[l, i, j] = weights[l, i] * weights[l, j]
+                wlij[l, i, j] = np.sqrt(weights[l, i] * weights[l, j])
 
     # Average over differences
     rvli = np.full(shape=(n_orders, n_spec), fill_value=np.nan)

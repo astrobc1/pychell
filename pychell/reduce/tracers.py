@@ -32,10 +32,10 @@ import pychell.data as pcdata
 class OrderTracer:
     pass
     
-#class PredeterminedTrace(OrderTracer):
+class PredeterminedTrace(OrderTracer):
     
-    #def __init__(self, filename):
-        #self.data = pcdata.ImageMap()
+    def __init__(self, filename):
+        self.data = pcdata.ImageMap()
 
 class DensityClusterTracer(OrderTracer):
     
@@ -43,13 +43,14 @@ class DensityClusterTracer(OrderTracer):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, n_orders=None, trace_pos_poly_order=2, refine_position=False, order_spacing=10, mask_left=200, mask_right=200, mask_top=20, mask_bottom=20, downsample=4):
+    def __init__(self, n_orders=None, trace_pos_poly_order=2, refine_position=False, order_spacing=10, mask_left=200, mask_right=200, mask_top=20, mask_bottom=20, downsample=4, height=10):
         self.trace_pos_poly_order = trace_pos_poly_order
         self.refine_position = refine_position
         self.order_spacing = order_spacing
         self.mask_left = mask_left
         self.mask_right = mask_right
         self.n_orders = n_orders
+        self.height = height
         self.mask_top = mask_top
         self.mask_bottom = mask_bottom
         self.downsample = downsample
@@ -64,12 +65,6 @@ class DensityClusterTracer(OrderTracer):
         
         # Load flat field image
         source_image = order_map.source.parse_image()
-
-        # Feeder
-        feeder = order_map.parser.spec_module.feeder
-
-        # Fiber
-        fiber = order_map.parser.parse_fiber_num(order_map.source) if feeder.lower() == "fiber" else None
     
         # Image dimensions
         ny, nx = source_image.shape
@@ -115,7 +110,7 @@ class DensityClusterTracer(OrderTracer):
         order_locs_lr_labeled = np.full(shape=(ny, nx_lr), fill_value=np.nan)
         for l in range(good_points_lr[:, 0].size):
             order_locs_lr_labeled[good_lr[0][l], good_lr[1][l]] = labels[l]
-
+        
         # Compute the number of points per label
         n_points_per_label = np.zeros(labels_unique_init.size, dtype=int)
         for l in range(labels_unique_init.size):
@@ -123,7 +118,7 @@ class DensityClusterTracer(OrderTracer):
             n_points_per_label[l] = inds[0].size
 
         # Now flag the bad labels
-        thresh = 0.8 * pcmath.weighted_median(n_points_per_label, percentile=0.9)
+        thresh = 0.75 * np.nanmedian(n_points_per_label)
         good = np.where(n_points_per_label > thresh)[0]
         bad = np.where(n_points_per_label <= thresh)[0]
         good_labels = labels_unique_init[good]
@@ -141,31 +136,23 @@ class DensityClusterTracer(OrderTracer):
             inds = np.where(order_locs_lr_labeled == good_labels[l])
             order_locs_lr_labeled_final[inds] = ss[l] + 1
             
-
         # Overwrite good labels
         good_labels = np.unique(order_locs_lr_labeled_final[np.where(np.isfinite(order_locs_lr_labeled_final))])
 
         # Initiate the order image and orders list
         order_image = np.full_like(source_image, np.nan)
         orders_list = []
-
         # Loop over good labels and fill image
         xarr = np.arange(nx)
         for l in range(len(good_labels)):
             inds = np.where(order_locs_lr_labeled_final == good_labels[l])
             pfit = np.polyfit(self.downsample * inds[1], inds[0], 2)
-            dys = np.full(nx_lr, np.nan)
-            for i in range(len(inds[1])):
-                _inds = np.where(inds[1] == i)[0]
-                if len(_inds) > 3:
-                    dys[i] = np.max(inds[0][_inds]) - np.min(inds[0][_inds])
-            height = int(np.nanmedian(dys)) - 4
-            orders_list.append([{'label': good_labels[l], 'height': height, 'pcoeffs': pfit, 'feeder': feeder, 'fiber': fiber}])
+            orders_list.append([{'label': good_labels[l], 'height': self.height, 'pcoeffs': pfit}])
             order_center = np.polyval(pfit, xarr)
             for x in range(nx):
                 ymid = order_center[x]
-                y_low = int(np.floor(ymid - height / 2))
-                y_high = int(np.ceil(ymid + height / 2))
+                y_low = int(np.floor(ymid - self.height / 2))
+                y_high = int(np.ceil(ymid + self.height / 2))
                 if y_low < self.mask_bottom or y_high > ny - self.mask_top - 1:
                     continue
                 order_image[y_low:y_high + 1, x] = good_labels[l]

@@ -33,8 +33,6 @@ observatory = {
 ######################
 
 class iSHELLParser(DataParser):
-
-    spectrograph = 'iSHELL'
     
     def categorize_raw_data(self, reducer):
 
@@ -92,7 +90,7 @@ class iSHELLParser(DataParser):
         data['order_maps'] = []
         for master_flat in data['master_flats']:
             order_map_fname = self.gen_order_map_filename(source=master_flat)
-            data['order_maps'].append(pcdata.ImageMap(input_file=order_map_fname, source=master_flat,  parser=self, order_map_fun='trace_orders_from_flat_field'))
+            data['order_maps'].append(pcdata.OrderMap(input_file=order_map_fname, source=master_flat,  parser=self))
         for sci_data in data['science']:
             self.pair_order_map(sci_data, data['order_maps'])
         
@@ -115,7 +113,7 @@ class iSHELLParser(DataParser):
         data.itime = data.header["ITIME"]
         return data.itime    
     
-    def parse_target(self, data):
+    def parse_object(self, data):
         data.target = data.header["OBJECT"]
         return data.target
         
