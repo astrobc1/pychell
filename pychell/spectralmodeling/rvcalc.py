@@ -7,6 +7,9 @@ import scipy.interpolate
 import scipy.stats
 from scipy.constants import c as SPEED_OF_LIGHT
 
+# Numba
+from numba import jit
+
 # Plotting
 import matplotlib.pyplot as plt
 
@@ -110,22 +113,42 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
     vels_for_rv = vels + spectral_model.data.bc_vel
     xcorr_rv_init = vels_for_rv[M]
 
-    # Fit (M-2, M-1, M, M+1, M+2) with parabola
+    # Fit (M-2, M-1, M, M+1, M+2) with parabola to determine true minimum
+    # Fit full ccf curve with gaussian to determine uncertainty, but don't use to determine min since the ccf may be asymmetric, etc.
     use = np.arange(M - 2, M + 3).astype(int)
     try:
         pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
         xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
+        n = np.nansum(spectral_model.data.mask)
+        xcorr_rv_unc, skew = compute_ccf_unc_and_skew(vels_for_rv, rmss, n)
     except:
         xcorr_rv = np.nan
-    xcorr_rv_unc = np.nan # For now
+        xcorr_rv_unc = np.nan
+        skew = np.nan
 
-    # BIS from rms curve
-    try:
-        _, bis = compute_bis(vels_for_rv, rmss, xcorr_rv, n_bs=1000)
-    except:
-        bis = np.nan
+    return xcorr_rv, xcorr_rv_unc, skew, vels_for_rv, rmss
 
-    return xcorr_rv, xcorr_rv_unc, bis, vels_for_rv, rmss
+def compute_ccf_unc_and_skew(vels, rmss, n):
+    p0 = [1.0, vels[np.nanargmin(rmss)], 5000, 10, 0.1] # amp, mean, sigma, alpha (~skewness), offset
+    bounds = [(0.8, 1.2), (p0[1] - 2000, p0[1] + 2000), (100, 1E5), (-100, 100), (-0.5, 0.5)]
+    opt_result = scipy.optimize.minimize(fit_ccf_skewnorm, x0=p0, bounds=bounds, args=(vels, rmss), method="Nelder-Mead")
+    ccf_unc = opt_result.x[2] / np.sqrt(n)
+    alpha = opt_result.x[3]
+    delta = alpha / np.sqrt(1 + alpha**2)
+    skewness = (4 - np.pi) / 2 * (delta * np.sqrt(2 / np.pi))**3 / (1 - 2 * delta**2 / np.pi)**1.5
+    return ccf_unc, skewness
+
+def fit_ccf_skewnorm(pars, vels, rmss):
+    y = -1 * rmss - np.nanmin(-1 * rmss)
+    y /= np.nanmax(y)
+    model = pcmath.skew_normal(vels, pars[1], pars[2], pars[3])
+    model /= np.nanmax(model)
+    model = pars[0] * model + pars[4]
+    residuals = y - model
+    n_good = np.where(np.isfinite(residuals))[0].size
+    rms = np.sqrt(np.nansum(residuals**2) / n_good)
+    return rms
+
 
 def brute_force_ccf_crude(p0, data, spectral_model):
     
@@ -382,8 +405,6 @@ def compute_rv_content(pars, spectral_model, inject_blaze=True, snr=100):
     return rvc_per_pix, rvc_tot
 
 
-
-
 #######################
 #### CO-ADDING RVS ####
 #######################
@@ -460,23 +481,21 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
     # Determine differences and weights tensors
     rvlij = np.full((n_orders, n_spec, n_spec), np.nan)
     wlij = np.full((n_orders, n_spec, n_spec), np.nan)
+    wli = np.full((n_orders, n_spec), np.nan)
     for l in range(n_orders):
         for i in range(n_spec):
+            wli[l, i] = np.copy(weights[l, i])
             for j in range(n_spec):
                 rvlij[l, i, j] = rvs[l, i] - rvs[l, j]
                 wlij[l, i, j] = np.sqrt(weights[l, i] * weights[l, j])
 
     # Average over differences
     rvli = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    uncli = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
     for l in range(n_orders):
         for i in range(n_spec):
             rr = rvlij[l, i, :]
             ww = wlij[l, i, :]
-            rvli[l, i], uncli[l, i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
-    
-    # Weights
-    wli = (1 / uncli**2) / np.nansum(1 / uncli**2, axis=0)
+            rvli[l, i], _ = pcmath.weighted_combine(rr, ww)
     
     # Output arrays
     rvs_single_out = np.full(n_spec, fill_value=np.nan)
@@ -489,17 +508,16 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
         
     # Per-observation RVs
     for i in range(n_spec):
-        rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rvli[:, i].flatten(), wli[:, i].flatten(), err_type="empirical")
+        rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rvli[:, i].flatten(), wli[:, i].flatten())
         
     # Per-night RVs
     for i, f, l in pcutils.nightly_iteration(n_obs_nights):
-        rr = rvs_single_out[f:l]
-        uncc = unc_single_out[f:l]
         rr = rvli[:, f:l].flatten()
         ww = wli[:, f:l].flatten()
         rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr, ww, err_type="empirical")
         
     return rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out
+
 
 def combine_rvs_weighted_mean(rvs, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points.

@@ -9,58 +9,43 @@ from astropy.io import fits
 # Pychell deps
 import pychell.maths as pcmath
 
-# Optimize deps
-from optimize.data import Dataset
-
 ####################
 #### BASE TYPES ####
 ####################
 
-class SpecData(Dataset):
+class SpecData:
     
     def __init__(self, input_file=None):
-        super().__init__()
         self.input_file = input_file
-        self.base_input_file = os.path.basename(self.input_file)
-        self.get_file_type()
-    
-    # Determine image extension (if any) and remove
-    def get_file_type(self):
-        if self.base_input_file.endswith('.fits'):
-            self.input_file_noext = self.input_file[0:-5]
-        elif self.base_input_file.endswith('.fz'):
-            self.input_file_noext = self.input_file[0:-3]
-        else:
-            k = self.input_file.rfind('.')
-            if k == -1: # no extentsion!
-                self.input_file_noext = self.base_input_file
-            else: # found extension!
-                self.input_file_noext = self.base_input_file[0:k]
-                
-        self.base_input_file_noext = os.path.basename(self.input_file_noext)
         
     def parse_header(self):
         self.header = fits.open(self.input_file)[0].header
         return self.header
-        
-    def __repr__(self):
-        return f"Spectrum: {self.base_input_file}"
     
     def __eq__(self, other):
         return self.input_file == other.input_file
 
-    def __gt__(self, other):
-        return self.time_obs_start > other.time_obs_start
-        
-    def __lt__(self, other):
-        return self.time_obs_start < other.time_obs_start
+    @property
+    def base_input_file(self):
+        return os.path.basename(self.input_file)
+
+    @property
+    def input_file_noext(self):
+        return os.path.splitext(self.base_input_file)[0]
+
+    @property
+    def base_input_file_noext(self):
+        return os.path.basename(self.input_file_noext)
+
+    @property
+    def input_path(self):
+        return os.path.split(self.input_file)[0] + os.sep
+
 
 class Echellogram(SpecData):
     
-    # Given a n iterable of SpecDataImage objects
-    # this parses the images from their respective files and returns them as a cube
     @staticmethod
-    def generate_cube(data_list):
+    def generate_cube(data):
         """Generates a data-cube (i.e., stack) of images.
 
         Args:
@@ -68,37 +53,35 @@ class Echellogram(SpecData):
         Returns:
             data_cube (np.ndarray): The generated data cube, with shape=(n_images, ny, nx).
         """
-        n_data = len(data_list)
-        data0 = data_list[0].parse_image()
+        n_data = len(data)
+        data0 = data[0].parse_image()
         ny, nx = data0.shape
         data_cube = np.empty(shape=(n_data, ny, nx), dtype=float)
         data_cube[0, :, :] = data0
         for idata in range(1, n_data):
-            data_cube[idata, :, :] = data_list[idata].parse_image()
+            data_cube[idata, :, :] = data[idata].parse_image()
             
         return data_cube
         
     def parse_image(self):
         return self.parser.parse_image(self)
     
-    def __repr__(self):
-        return f"Echellogram: {self.base_input_file}"
-
-
-######################
-#### ECHELLOGRAMS ####
-######################
-
-class RawImage(Echellogram):
+    def parse_header(self):
+        return self.parser.parse_image_header(self)
     
-    def __init__(self, input_file=None, parser=None):
+    def __repr__(self):
+        return self.base_input_file
+
+class RawEchellogram(Echellogram):
+
+    def __init__(self, input_file, parser):
         
         # Call super init
-        super().__init__(input_file=input_file)
-        
+        super().__init__(input_file)
+
         # Store the parser
         self.parser = parser
-        
+
         # Parse the header
         if self.parser is not None:
             try:
@@ -118,72 +101,29 @@ class RawImage(Echellogram):
         except:
             print(f"Warning! Could not parse UT date for {self}")
 
-    def parse_data(self):
-        return self.parser.parse_image(self)
-    
-    def parse_header(self):
-        return self.parser.parse_image_header(self)
-    
-    def __repr__(self):
-        return self.base_input_file
+class MasterCal(Echellogram):
 
-class MasterCalibImage(Echellogram):
-    
-    def __init__(self, individuals, input_file=None, parser=None):
-        
-        # Store the individual names
-        self.individuals = individuals
-            
-        super().__init__(input_file=input_file)
-        
-        self.parser = parser
-        
-        self.parser.gen_master_calib_header(self)
-        
-    def save(self, master_image):
-        hdu = fits.PrimaryHDU(master_image, header=self.header)
-        hdu.writeto(self.input_file, overwrite=True)
-        
-    def __repr__(self):
-        return f"Master Calibration Image: {self.base_input_file}"
+    def __init__(self, group, output_path):
 
-class OrderMap(Echellogram):
-    
-    def __init__(self, input_file=None, source=None, parser=None):
-            
-        super().__init__(input_file=input_file)
+        # The individual frames
+        self.group = group
+
+        # The input filename
+        input_file = output_path + self.parser.gen_master_calib_filename(self)
         
-        # Python pickle containing info for each trace
-        self.input_file_orders_list = self.input_file_noext + ".pkl"
-        
-        # The source for the image map (ie, slit flat, fiber flat)
-        self.source = source
-        
-        # The parser
-        self.parser = parser
-    
-    def load_map_image(self):
-        return self.parse_image()
-    
-    def load_orders_list(self):
-        with open(self.input_file_orders_list, 'rb') as handle:
-            orders_list = pickle.load(self.orders_list, handle)
-        self.orders_list = orders_list
-    
-    def save_map_image(self, order_map_image):
-        hdu = fits.PrimaryHDU(order_map_image, header=self.source.header)
-        hdu.writeto(self.input_file, overwrite=True)
-        
-    def save_orders_list(self):
-        with open(self.input_file_orders_list, 'wb') as handle:
-            pickle.dump(self.orders_list, handle)
-    
-    def save(self, order_map_image):
-        self.save_map_image(order_map_image)
-        self.save_orders_list()
-        
-    def __repr__(self):
-        return f"Order map: {self.base_input_file}"
+        # Call super init
+        super().__init__(input_file)
+
+        # Create a header
+        self.header = self.parser.gen_master_calib_header(self)
+
+    @property
+    def parser(self):
+        return self.group[0].parser
+
+    def save(self, image):
+        fits.writeto(self.input_file, image, self.header, overwrite=True)
+
 
 
 #####################

@@ -1,11 +1,12 @@
 # Base Python
 import os
 import importlib
+import copy
 
 from pychell.data.parser import DataParser
 import glob
 from astropy.io import fits
-import pychell.data.spectraldata as pcdata
+import pychell.data.spectraldata as pcspecdata
 
 # Maths
 import numpy as np
@@ -40,69 +41,62 @@ class iSHELLParser(DataParser):
         data = {}
         
         # iSHELL science files are files that contain spc or data
-        sci_files1 = glob.glob(self.data_input_path + "*data*.fits")
-        sci_files2 = glob.glob(self.data_input_path + "*spc*.fits")
-        sci_files = sci_files1 + sci_files2
-        sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
-        n_sci_files = len(sci_files)
-        data['science'] = [pcdata.RawImage(input_file=sci_files[f], parser=self) for f in range(n_sci_files)]
-            
-        # Darks assumed to contain dark in filename
-        if reducer.pre_calib.do_dark:
-            dark_files = glob.glob(self.data_input_path + '*dark*.fits')
-            n_dark_files = len(dark_files)
-            data['darks'] = [pcdata.RawImage(input_file=dark_files[f], parser=self) for f in range(n_dark_files)]
-            dark_groups = self.group_darks(data['darks'])
-            data['master_darks'] = []
-            for dark_group in dark_groups:
-                master_dark_fname = self.gen_master_dark_filename(dark_group)
-                data['master_darks'].append(pcdata.MasterCalibImage(dark_group, input_file=master_dark_fname, parser=self))
-            
-            for sci in data['science']:
-                self.pair_master_dark(sci, data['master_darks'])
-                
-            for flat in data['flats']:
-                self.pair_master_dark(flat, data['master_darks'])
-        
-        # iSHELL flats must contain flat in the filename
-        if reducer.pre_calib.do_flat:
-            flat_files = glob.glob(self.data_input_path + '*flat*.fits')
-            n_flat_files = len(flat_files)
-            data['flats'] = [pcdata.RawImage(input_file=flat_files[f], parser=self) for f in range(n_flat_files)]
-            flat_groups = self.group_flats(data['flats'])
-            data['master_flats'] = []
-            for flat_group in flat_groups:
-                master_flat_fname = self.gen_master_flat_filename(flat_group)
-                data['master_flats'].append(pcdata.MasterCalibImage(flat_group, input_file=master_flat_fname, parser=self))
-            
-            for sci in data['science']:
-                self.pair_master_flat(sci, data['master_flats'])
-            
-        # iSHELL ThAr images must contain arc (not implemented yet)
-        if reducer.post_calib is not None and reducer.post_calib.do_wave:
-            thar_files = glob.glob(self.data_input_path + '*arc*.fits')
-            data['wavecals'] = [pcdata.RawImage(input_file=thar_files[f], parser=self) for f in range(len(thar_files))]
-            data['master_wavecals'] = self.group_wavecals(data['wavecals'])
-            for sci in data['science']:
-                self.pair_master_wavecal(sci, data['master_wavecals'])
-                
-        # Order map
-        data['order_maps'] = []
-        for master_flat in data['master_flats']:
-            order_map_fname = self.gen_order_map_filename(source=master_flat)
-            data['order_maps'].append(pcdata.OrderMap(input_file=order_map_fname, source=master_flat,  parser=self))
-        for sci_data in data['science']:
-            self.pair_order_map(sci_data, data['order_maps'])
-        
-        self.print_summary(data)
+        sci_files = glob.glob(reducer.data_input_path + "*data*.fits") + glob.glob(reducer.data_input_path + "*spc*.fits")
 
+        sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
+        data['science'] = [pcspecdata.RawEchellogram(input_file=sci_file, parser=self) for sci_file in sci_files]
+
+        if reducer.pre_calib is not None:
+            
+            # Darks assumed to contain dark in filename
+            if reducer.pre_calib.do_dark:
+                dark_files = glob.glob(reducer.data_input_path + '*dark*.fits')
+                data['darks'] = [pcspecdata.RawEchellogram(input_file=dark_files[f], parser=self) for f in range(len(dark_files))]
+                dark_groups = self.group_darks(data['darks'])
+                data['master_darks'] = [pcspecdata.MasterCal(dark_group, reducer.output_path + "calib" + os.sep) for dark_groups in dark_group]
+                
+                for sci in data['science']:
+                    self.pair_master_dark(sci, data['master_darks'])
+                    
+                for flat in data['flats']:
+                    self.pair_master_dark(flat, data['master_darks'])
+        
+            # iSHELL flats must contain flat in the filename
+            if reducer.pre_calib.do_flat:
+                flat_files = glob.glob(reducer.data_input_path + '*flat*.fits')
+                n_flat_files = len(flat_files)
+                data['flats'] = [pcspecdata.RawEchellogram(input_file=flat_files[f], parser=self) for f in range(n_flat_files)]
+                flat_groups = self.group_flats(data['flats'])
+                data['master_flats'] = [pcspecdata.MasterCal(flat_group, reducer.output_path + "calib" + os.sep) for flat_group in flat_groups]
+                
+                for sci in data['science']:
+                    self.pair_master_flat(sci, data['master_flats'])
+            
+        # iSHELL ThAr images must contain arc (not implemented yet!)
+        # if reducer.wave_cal is not None:
+        #     thar_files = glob.glob(reducer.data_input_path + '*arc*.fits')
+        #     data['wavecals'] = [pcspecdata.RawImage(input_file=thar_files[f], parser=self) for f in range(len(thar_files))]
+        #     wavecal_groups = self.group_wavecals(data['wavecals'])
+                
+        # Order maps for iSHELL are the flat fields closest in time and space (RA+Dec) to the science target
+        data['order_maps'] = data['master_flats']
+        for sci_data in data['science']:
+            self.pair_order_maps(sci_data, data['order_maps'])
+
+        # Which to extract
+        data['extract'] = data['science']
+        
+
+        # Print reduction summary
+        self.print_reduction_summary(data)
+
+        # Return the data dict
         return data
     
-    def pair_order_map(self, data, order_maps):
+    def pair_order_maps(self, data, order_maps):
         for order_map in order_maps:
-            if order_map.source == data.master_flat:
-                data.order_map = order_map
-                return
+            if order_map == data.master_flat:
+                data.order_maps = [order_map]
 
     def parse_image_num(self, data):
         string_list = data.base_input_file.split('.')
@@ -111,11 +105,11 @@ class iSHELLParser(DataParser):
         
     def parse_itime(self, data):
         data.itime = data.header["ITIME"]
-        return data.itime    
+        return data.itime
     
     def parse_object(self, data):
-        data.target = data.header["OBJECT"]
-        return data.target
+        data.object = data.header["OBJECT"]
+        return data.object
         
     def parse_utdate(self, data):
         utdate = "".join(data.header["DATE_OBS"].split('-'))
@@ -129,16 +123,24 @@ class iSHELLParser(DataParser):
     def parse_exposure_start_time(self, data):
         data.time_obs_start = Time(float(data.header['TCS_UTC']) + 2400000.5, scale='utc', format='jd')
         return data.time_obs_start
-        
-    def get_n_traces(self, data):
-        return 1
-    
-    def get_n_orders(self, data):
-        mode = data.header["XDTILT"].lower()
-        if mode == "kgas":
-            return 29
+
+    def gen_master_calib_filename(self, master_cal):
+        fname0 = master_cal.group[0].base_input_file.lower()
+        if "dark" in fname0:
+            return f"master_dark_{master_cal.group[0].utdate}{group[0].itime}s.fits"
+        elif "flat" in fname0:
+            img_nums = np.array([self.parse_image_num(d) for d in master_cal.group], dtype=int)
+            img_start, img_end = img_nums.min(), img_nums.max()
+            return f"master_flat_{master_cal.group[0].utdate}imgs{img_start}-{img_end}.fits"
         else:
-            return None
+            return f"master_calib_{master_cal.group[0].utdate}.fits"
+
+    def gen_master_calib_header(self, master_cal):
+        master_cal.skycoord = master_cal.group[0].skycoord
+        master_cal.time_obs_start = master_cal.group[0].time_obs_start
+        master_cal.object = master_cal.group[0].object
+        master_cal.itime = master_cal.group[0].itime
+        return copy.deepcopy(master_cal.group[0].header)
         
     def parse_spec1d(self, data):
         
@@ -159,6 +161,7 @@ class iSHELLParser(DataParser):
         self.correct_readmath(data, image)
         return image
 
+
     #########################
     #### BASIC WAVE INFO ####
     #########################
@@ -175,15 +178,9 @@ class iSHELLParser(DataParser):
 ################################
 
 # List of detectors.
-detector_props = [
-    {'gain': 1.8, 'dark_current': 0.05, 'read_noise': 8.0}
-]
-
-# Slit or fiber
-feeder = "slit"
-
-# Max number of traces on the detector
-n_traces = 1
+read_noise = 8.0
+dark_current = 0.05
+gain = 1.8
 
 
 #######################################

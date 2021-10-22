@@ -25,7 +25,7 @@ import sklearn.cluster
 import numpy as np
 
 # Pychell
-import pychell.data as pcdata
+import pychell.data.spectraldata as pcspecdata
 import pychell.maths as pcmath
 
 
@@ -33,31 +33,11 @@ class DataParser:
     """Base class for parsing/generating information from spectrograph specific data files.
     """
     
-    #####################
-    #### CONSTRUCTOR ####
-    #####################
-    
-    def __init__(self, data_input_path, output_path=None):
-        """Construct a parser object.
-
-        Args:
-            data_input_path (str): The full path to the data to be parsed.
-            output_path (str, optional): The output path for writing any calibration files, only used for the reduce module. Defaults to None.
-        """
-        self.data_input_path = data_input_path
-        self.output_path = output_path
-    
     #############################
     #### CATEGORIZE RAW DATA ####
     #############################
     
     def categorize_raw_data(self):
-        # Allowed entries in data_dict:
-        # flats, darks, bias
-        # master_flats, master_darks, master_bias
-        # science
-        # wavecals
-        # skycals
         raise NotImplementedError(f"Must implement a categorize_raw_data method for class {self.__class__.__name__}")
     
 
@@ -105,28 +85,31 @@ class DataParser:
     def parse_image(self, data):
         image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float)
         return image
-    
-    def parse_fiber_num(self, data):
-        raise NotImplementedError(f"Must implement parse_fiber_num method for class {self.__class__.__name__}")
-
-    def classify_traces(self, data):
-        raise NotImplementedError(f"Must implement classify_traces method for class {self.__class__.__name__}")
 
     def parse_object(self, data):
         raise NotImplementedError(f"Must implement parse_object method for class {self.__class__.__name__}")
 
-    #####################
-    #### CALIBRATION ####
-    #####################
+    def parse_fiber_nums(self, data):
+        return None
+
+    ##############################
+    #### CALIBRATION GROUPING ####
+    ##############################
+
+    def gen_master_bias_filename(self, group):
+        fname = f"master_bias_{group[0].utdate}.fits"
+        return fname
     
     def gen_master_dark_filename(self, group):
-        fname = f"{self.output_path}{os.sep} calib {os.sep}master_dark_{group[0].utdate}{group[0].itime}s.fits"
+        img_nums = np.array([int(d.image_num) for d in group])
+        img_start, img_end = np.min(img_nums), np.max(img_nums)
+        fname = f"master_dark_{group[0].utdate}{group[0].itime}s_imgs{img_start}-{img_end}.fits"
         return fname
     
     def gen_master_flat_filename(self, group):
-        img_nums = np.array([int(f.image_num) for f in group])
-        img_start, img_end = str(np.min(img_nums)), str(np.max(img_nums))
-        fname = f"{self.output_path}calib{os.sep}master_flat_{group[0].utdate}_imgs{img_start}-{img_end}.fits"
+        img_nums = np.array([int(d.image_num) for d in group])
+        img_start, img_end = np.min(img_nums), np.max(img_nums)
+        fname = f"master_flat_{group[0].utdate}_imgs{img_start}-{img_end}.fits"
         return fname
     
     def gen_order_map_filename(self, source):
@@ -134,9 +117,9 @@ class DataParser:
         return fname
     
     def gen_master_calib_header(self, data):
-        data.header = copy.deepcopy(data.individuals[0].header)
-        data.skycoord = copy.deepcopy(data.individuals[0].skycoord)
-        data.time_obs_start = copy.deepcopy(data.individuals[0].time_obs_start)
+        data.header = copy.deepcopy(data.group[0].header)
+        data.skycoord = copy.deepcopy(data.group[0].skycoord)
+        data.time_obs_start = copy.deepcopy(data.group[0].time_obs_start)
     
     def pair_master_dark(self, data, master_darks):
         n_masker_darks = len(master_darks)
@@ -212,16 +195,18 @@ class DataParser:
     def pair_order_map(self, data):
         pass
         
+
     #########################
     #### BASIC WAVE INFO ####
     #########################
     
-    def estimate_wavelength_solution(self, data):
-        if hasattr(data, "apriori_wave_grid"):
+    def estimate_wls(self, data):
+        if hasattr(data, "wave"):
             return data.apriori_wave_grid
         else:
-            raise NotImplementedError(f"Must implement a method estimate_wavelength_solution for {self.__class__.__name__} or provide the attribute apriori_wave_grid with the data")
-        
+            raise NotImplementedError(f"Must implement a method estimate_wls for {self.__class__.__name__} or provide the attribute 'wave' with the data")
+
+
     #########################
     #### MISC. REDUCTION ####
     #########################
@@ -232,12 +217,14 @@ class DataParser:
         if hasattr(data, "header"):
             if 'NDR' in data.header:
                 data_image /= float(data.header['NDR'])
+            if 'BZERO' in data.header:
+                data_image -= float(data.header['BZERO'])
+            if 'BSCALE' in data.header:
+                data_image /= float(data.header['BSCALE'])
     
-    def save_reduced_orders(self, data, reduced_data):
-        fname = f"{self.output_path}spectra{os.sep}{data.base_input_file_noext}_{data.target}_reduced.fits"
-        hdu = fits.PrimaryHDU(reduced_data, header=data.header)
-        hdu.writeto(fname, overwrite=True)
-    
+    def compile_reduced_outputs(self, reducer):
+        pass
+
     ###################################
     #### BARYCENTENTER CORRECTIONS ####
     ###################################
@@ -264,15 +251,19 @@ class DataParser:
     
     def compute_exposure_midpoint(self, data):
         return self.parse_exposure_start_time(data).jd + self.parse_itime(data) / (2 * 86400)
-        
+
+
     ###############
     #### MISC. ####
     ###############
+
+    def compile_reduced_outputs(self, reducer):
+        pass
             
-    def print_summary(self, data_dict):
+    def print_reduction_summary(self, data):
     
-        n_sci_tot = len(data_dict['science'])
-        targets_all = np.array([data_dict['science'][i].target for i in range(n_sci_tot)], dtype='<U50')
+        n_sci_tot = len(data['science'])
+        targets_all = np.array([data['science'][i].object for i in range(n_sci_tot)], dtype='<U50')
         targets_unique = np.unique(targets_all)
         for i in range(len(targets_unique)):
             
@@ -280,29 +271,21 @@ class DataParser:
             
             locs_this_target = np.where(targets_all == target)[0]
             
-            sci_this_target = [data_dict['science'][j] for j in locs_this_target]
+            sci_this_target = [data['science'][j] for j in locs_this_target]
             
             print('Target: ' + target)
             print('    N Exposures: ' + str(locs_this_target.size))
             if hasattr(sci_this_target[0], 'master_bias'):
-                print('    Master Bias File(s): ')
-                print('    ' + data_dict['science'].master_bias.base_input_file)
+                print('  Master Bias: ')
+                print('    ' + str(sci_this_target[0].master_bias))
                 
             if hasattr(sci_this_target[0], 'master_dark'):
-                darks_this_target_all = np.array([sci.master_dark for sci in sci_this_target], dtype=pcdata.RawImage)
-                darks_unique = np.unique(darks_this_target_all)
-                print('  Master Dark File(s): ')
-                for d in darks_unique:
-                    print('    ' + d.base_input_file)
+                print('  Master Dark: ')
+                print('    ' + str(sci_this_target[0].master_dark))
                 
             if hasattr(sci_this_target[0], 'master_flat'):
-                flats_this_target_all = np.array([sci.master_flat for sci in sci_this_target], dtype=pcdata.RawImage)
-                flats_unique = np.unique(flats_this_target_all)
-                print('  Master Flat File(s): ')
-                for f in flats_unique:
-                    print('    ' + f.base_input_file)
-                    
-            print('')
+                print('  Master Flat: ')
+                print('    ' + str(sci_this_target[0].master_flat))
 
     @property
     def spec_module(self):

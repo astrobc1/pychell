@@ -1,20 +1,23 @@
 # Base Python
 import os
-
-from pychell.data.parser import DataParser
+import copy
 import glob
-from astropy.io import fits
-import pychell.data as pcdata
 
 # Maths
 import numpy as np
+
+# Astropy
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as units
+from astropy.io import fits
 import scipy.constants as cs
 
 # Pychell deps
+from pychell.data.parser import DataParser
 import pychell.maths as pcmath
+import pychell.data.spectraldata as pcspecdata
+
 
 #######################
 #### NAME AND SITE ####
@@ -37,46 +40,122 @@ class PARVIParser(DataParser):
     def categorize_raw_data(self, reducer):
 
         # Stores the data as above objects
-        data_dict = {}
-        
-        # PARVI science files
-        all_files = glob.glob(self.input_path + '*data*.fits')
-        data_dict['science'] = [pcdata.RawImage(input_file=sci_files[f], parser=self) for f in range(n_sci_files)]
-        
-        # Order map
-        data_dict['order_maps'] = []
-        for master_flat in data_dict['master_flats']:
-            order_map_fname = self.gen_order_map_filename(source=master_flat)
-            data_dict['order_maps'].append(pcdata.ImageMap(input_file=order_map_fname, source=master_flat,  parser=self, order_map_fun='trace_orders_from_flat_field'))
-        for sci_data in data_dict['science']:
-            self.pair_order_map(sci_data, data_dict['order_maps'])
-        
-        self.print_summary(data_dict)
+        data = {}
 
-        return data_dict
+        # Classify files
+        all_files = glob.glob(reducer.data_input_path + '*.fits')
+        lfc_files = glob.glob(reducer.data_input_path + '*LFC_*.fits') + glob.glob(reducer.data_input_path + '*LFCSTABILITY_*.fits')
+        dark_files = glob.glob(reducer.data_input_path + '*DARK*.fits')
+        full_flat_files = glob.glob(reducer.data_input_path + '*FULLFLAT*.fits')
+        badpix_files = glob.glob(reducer.data_input_path + "*BadPixels*.fits")
+        fiber_flat_files = glob.glob(reducer.data_input_path + '*FIBERFLAT*.fits') + glob.glob(reducer.data_input_path + '*FIBREFLAT*.fits')
+        sci_files = list(set(all_files) - set(lfc_files) - set(dark_files) - set(full_flat_files) - set(badpix_files) - set(fiber_flat_files))
+
+        # Create Echellograms from raw data
+        data['science'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in sci_files]
+        data['fiber_flats'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in fiber_flat_files]
+        data['darks'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in dark_files]
+        data['flats'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in full_flat_files]
+        data['lfc'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in lfc_files]
+        
+        # Master Darks
+        data['master_darks'] = [pcspecdata.MasterCal(group, reducer.output_path + "calib" + os.sep) for group in self.group_darks(data['darks'])]
+
+        # Master Flats
+        data['master_flats'] = [pcspecdata.MasterCal(group, reducer.output_path + "calib" + os.sep) for group in self.group_flats(data['flats'])]
+
+        # Master fiber flats (only one)
+        #data['master_fiber_flats'] = [pcspecdata.MasterCalibrationFrame(data['fiber_flats'], output_path + "calib" + os.sep)]
+
+        # Order maps
+        data['order_maps'] = data['fiber_flats']
+
+        # Which to extract
+        data['extract'] = data['science'] + data['fiber_flats'] + data['lfc']
+
+        # Pair order maps for the spectra to extract
+        for d in data['extract']:
+            self.pair_order_maps(d, data['extract'])
+
+        # Pair darks with full frame flats
+        for flat in data['flats']:
+            self.pair_master_dark(flat, data['master_darks'])
+
+        # Pair darks and flats with all extract (sci, LFC, fiber flats)
+        for sci in data['extract']:
+            self.pair_master_dark(sci, data['master_darks'])
+            self.pair_master_flat(sci, data['master_flats'])
+
+        # Bad pixel mask (only one, load into memory)
+        data['badpix_mask'] = 1 - fits.open(badpix_files[0])[0].data.astype(float)
+            
+
+        #self.print_summary(data)
+
+        return data
+
+    def group_darks(self, darks):
+        return [darks]
+
+    def group_flats(self, flats):
+        return [flats]
+
+    def gen_master_calib_filename(self, master_cal):
+        fname0 = master_cal.group[0].base_input_file.lower()
+        if "dark" in fname0:
+            return f"master_dark_{master_cal.group[0].utdate}{master_cal.group[0].itime}s.fits"
+        elif "fiberflat" in fname0 or "fibreflat" in fname0:
+            return f"master_fiberflat_{master_cal.group[0].utdate}.fits"
+        elif "fullflat" in fname0:
+            return f"master_fullflat_{master_cal.group[0].utdate}.fits"
+        elif "lfc" in fname0:
+            return f"master_lfc_{master_cal.group[0].utdate}.fits"
+        else:
+            return f"master_calib_{master_cal.group[0].utdate}.fits"
+
+    def gen_master_calib_header(self, master_cal):
+        return copy.deepcopy(master_cal.group[0].header)
     
-    def pair_order_map(self, data, order_maps):
-        for order_map in order_maps:
-            if order_map.source == data.master_flat:
-                data.order_map = order_map
-                return
+    def parse_image(self, data):
+        image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float).T
+        return image
+
+    def pair_master_dark(self, data, master_darks):
+        data.master_dark = master_darks[0]
+    
+    def pair_master_flat(self, data, master_flats):
+        data.master_flat = master_flats[0]
+    
+    def pair_order_maps(self, data, order_maps):
+        fibers_sci = [int(f) for f in str(self.parse_fiber_nums(data))]
+        fibers_order_maps = [int(self.parse_fiber_nums(order_map)) for order_map in order_maps]
+        n_fibers_sci = len(fibers_sci)
+        order_maps_out = []
+        for fiber in fibers_sci:
+            k = fibers_order_maps.index(fiber)
+            if k == -1:
+                raise ValueError(f"No fiber flat corresponding to {data}")
+            else:
+                order_maps_out.append(order_maps[k])
+        data.order_maps = order_maps_out
 
     def parse_image_num(self, data):
-        string_list = data.base_input_file.split('.')
-        data.image_num = string_list[4]
-        return data.image_num
+        return 1
         
-    def parse_target(self, data):
-        data.target = data.header["OBJECT"]
-        return data.target
+    def parse_object(self, data):
+        data.object = data.header["OBJECT"]
+        return data.object
         
     def parse_utdate(self, data):
-        utdate = "".join(data.header["DATE_OBS"].split('-'))
+        utdate = "".join(data.header["P200_UTC"].split('T')[0].split("-"))
         data.utdate = utdate
         return data.utdate
         
     def parse_sky_coord(self, data):
-        data.skycoord = SkyCoord(ra=data.header['TCS_RA'], dec=data.header['TCS_DEC'], unit=(units.hourangle, units.deg))
+        if data.header['P200RA'] is not None and data.header['P200DEC'] is not None:
+            data.skycoord = SkyCoord(ra=data.header['P200RA'], dec=data.header['P200DEC'], unit=(units.hourangle, units.deg))
+        else:
+            data.skycoord = SkyCoord(ra=np.nan, dec=np.nan, unit=(units.hourangle, units.deg))
         return data.skycoord
     
     def parse_itime(self, data):
@@ -87,14 +166,8 @@ class PARVIParser(DataParser):
         data.time_obs_start = Time(float(data.header["START"]) / 1E9, format="unix")
         return data.time_obs_start
 
-    def parse_fiber_num(self, data):
+    def parse_fiber_nums(self, data):
         return int(data.header["FIBER"])
-
-    def classify_traces(self, data):
-        pass
-        # !!HERE!!
-        #fibers = data.
-        #pass
         
     def parse_spec1d(self, data):
         fits_data = fits.open(data.input_file)
@@ -116,14 +189,65 @@ class PARVIParser(DataParser):
         mean_jd = (np.nanmax(jdsf) - np.nanmin(jdsi)) / 2 + np.nanmin(jdsi)
         return mean_jd
 
+    def compile_reduced_outputs(self, reducer, wls, lsf):
+
+        # Parse files
+        all_files = glob.glob(f"{reducer.output_path}spectra{os.sep}*.fits")
+        fiber_flat_files = glob.glob(f"{reducer.output_path}spectra{os.sep}*FIBREFLAT*.fits") + glob.glob(f"{reducer.output_path}spectra{os.sep}*FIBERFLAT*.fits")
+        lfc_files = glob.glob(f"{reducer.output_path}spectra{os.sep}*LFC*.fits")
+        sci_files = list((set(all_files) - set(fiber_flat_files)) - set(lfc_files))
+
+        # Loop over files
+        for sci_file in sci_files:
+
+            # Load sci file
+            sci_data = fits.open(sci_file)[0].data
+
+            # Numbers
+            n_orders = sci_data.shape[0]
+            n_fibers = sci_data.shape[1]
+            nx = sci_data.shape[2]
+
+            # Initiate output array
+            data_out = np.full((n_orders, 3, nx, 5), np.nan) # Last dim is wave, flux, flux_unc, continuum, badpix
+
+            # Fill wls
+            data_out[0, :, :, 0] = wls
+
+            # Fill science
+            data_out[1:, 0, :, :] = sci_data[:, 0, :, :]
+
+            # Fill fiber flat
+            fiber_nums = [int(fits.open(f)[0].header["FIBER"]) for f in fiber_flat_files]
+            k = fiber_nums.index(1)
+            data_out[:, 1, :, :] = fits.open(fiber_flat_files[k])[0].data[:, 0, :, :]
+
+            # Fill simult LFC
+            data_out[:, 2, :, :] = sci_data[:, 1, :, :]
+
+            # Save
+            fname = f"{sci_file[-4:]}_final.fits"
+            fits.writeto(fname, data_out, overwrite=True)
+
+    ###################
+    #### WAVE INFO ####
+    ###################
+    
+    def estimate_wavelength_solution(self, data, order_num, fiber_num=None):
+        if fiber_num == 1:
+            pcoeffs = wls_coeffs_fiber1[order_num - 1]
+        else:
+            pcoeffs = wls_coeffs_fiber3[order_num - 1]
+        wls = np.polyval(pcoeffs, np.arange(2048))
+        return wls
 
 
 ################################
 #### REDUCTION / EXTRACTION ####
 ################################
 
-# Slit or fiber
-feeder = "fiber"
+read_noise = 0.0
+
 
 #######################################
 ##### GENERATING RADIAL VELOCITIES ####
@@ -132,17 +256,17 @@ feeder = "fiber"
 # RV Zero point [m/s] (approx, fiber 3, Sci)
 rv_zero_point = -5604.0
 
-# LFC - Sci (fiber 1 - fiber 3)
-fiber_diffs = np.array([-199.44961138537522, -152.2491592284224, -114.68619418459653, -85.05641027978223, -61.90739659769577, -44.00913351316186, -30.32698141833805, -19.997039483497606, -12.303753058397945, -6.659649465161012, -2.587083164676585, 0.2981273963817932, 2.30128752374409, 3.6617533271036304, 4.564311154865238, 5.149120693380538, 5.5203310798655325, 5.753477292074987, 5.901761821585354, 6.001324197120766, 6.0755982825650205, 6.138854411912023, 6.199020320850822, 6.259871468100101, 6.322677684843512, 6.387389119568016, 6.453440127304845, 6.520245053295908, 6.587454742971423, 6.6550370320943895, 6.723238384657834, 6.792477202179819, 6.8632120667730705, 6.935820238522258, 7.0105130339068005, 7.087305185200315, 7.166044832419973, 7.246499328898394, 7.328479436474287, 7.411970620603972, 7.497224888425416, 7.584749783191777, 7.675112578840279, 7.768457204678464, 7.863608744934647, 7.956615241830514])
+# LFC info
+f0 = cs.c / (1559.91370 * 1E-9) # freq of pump line [Hz]
+df = 10.0000000 * 1E9 # spacing of peaks [Hz]
+
+# Approximate quadratic length solution coeffs as a starting point
+wls_coeffs_fiber1 = np.array([np.array([-4.55076143e-06,  6.46954257e-02,  1.13576849e+04]), np.array([-4.58074699e-06,  6.52405082e-02,  1.14478637e+04]), np.array([-4.61025893e-06,  6.57787741e-02,  1.15394862e+04]), np.array([-4.63939424e-06,  6.63119836e-02,  1.16325870e+04]), np.array([-4.66824865e-06,  6.68418161e-02,  1.17272020e+04]), np.array([-4.69691659e-06,  6.73698714e-02,  1.18233684e+04]), np.array([-4.72549113e-06,  6.78976716e-02,  1.19211242e+04]), np.array([-4.75406395e-06,  6.84266626e-02,  1.20205092e+04]), np.array([-4.78272524e-06,  6.89582156e-02,  1.21215642e+04]), np.array([-4.81156368e-06,  6.94936289e-02,  1.22243315e+04]), np.array([-4.84066635e-06,  7.00341299e-02,  1.23288548e+04]), np.array([-4.87011868e-06,  7.05808770e-02,  1.24351795e+04]), np.array([-4.90000437e-06,  7.11349613e-02,  1.25433523e+04]), np.array([-4.93040529e-06,  7.16974093e-02,  1.26534218e+04]), np.array([-4.96140147e-06,  7.22691846e-02,  1.27654382e+04]), np.array([-4.99307094e-06,  7.28511908e-02,  1.28794536e+04]), np.array([-5.02548968e-06,  7.34442733e-02,  1.29955218e+04]), np.array([-5.05873155e-06,  7.40492227e-02,  1.31136989e+04]), np.array([-5.09286815e-06,  7.46667771e-02,  1.32340427e+04]), np.array([-5.12796873e-06,  7.52976250e-02,  1.33566134e+04]), np.array([-5.16410012e-06,  7.59424087e-02,  1.34814734e+04]), np.array([-5.20132656e-06,  7.66017272e-02,  1.36086876e+04]), np.array([-5.23970961e-06,  7.72761399e-02,  1.37383230e+04]), np.array([-5.27930803e-06,  7.79661700e-02,  1.38704496e+04]), np.array([-5.32017762e-06,  7.86723086e-02,  1.40051400e+04]), np.array([-5.36237113e-06,  7.93950185e-02,  1.41424695e+04]), np.array([-5.40593803e-06,  8.01347386e-02,  1.42825167e+04]), np.array([-5.45092442e-06,  8.08918885e-02,  1.44253631e+04]), np.array([-5.49737285e-06,  8.16668733e-02,  1.45710936e+04]), np.array([-5.54532210e-06,  8.24600885e-02,  1.47197965e+04]), np.array([-5.59480705e-06,  8.32719259e-02,  1.48715640e+04]), np.array([-5.64585843e-06,  8.41027786e-02,  1.50264918e+04]), np.array([-5.69850265e-06,  8.49530480e-02,  1.51846799e+04]), np.array([-5.75276153e-06,  8.58231494e-02,  1.53462324e+04]), np.array([-5.80865210e-06,  8.67135196e-02,  1.55112579e+04]), np.array([-5.86618631e-06,  8.76246238e-02,  1.56798699e+04]), np.array([-5.92537078e-06,  8.85569635e-02,  1.58521866e+04]), np.array([-5.98620651e-06,  8.95110850e-02,  1.60283316e+04]), np.array([-6.04868857e-06,  9.04875880e-02,  1.62084340e+04]), np.array([-6.11280573e-06,  9.14871353e-02,  1.63926289e+04]), np.array([-6.17854020e-06,  9.25104625e-02,  1.65810573e+04]), np.array([-6.24586713e-06,  9.35583892e-02,  1.67738669e+04]), np.array([-6.31475434e-06,  9.46318306e-02,  1.69712124e+04]), np.array([-6.38516178e-06,  9.57318091e-02,  1.71732556e+04]), np.array([-6.45704113e-06,  9.68594683e-02,  1.73801661e+04]), np.array([-6.53033529e-06,  9.80160868e-02,  1.75921219e+04])], dtype=np.ndarray)
+
+wls_coeffs_fiber3 = np.array([np.array([-4.81010182e-06,  6.66206799e-02,  1.13620147e+04]), np.array([-4.80483769e-06,  6.68866934e-02,  1.14523351e+04]), np.array([-4.80246198e-06,  6.71772470e-02,  1.15440898e+04]), np.array([-4.80288294e-06,  6.74916068e-02,  1.16373143e+04]), np.array([-4.80601059e-06,  6.78290739e-02,  1.17320451e+04]), np.array([-4.81175682e-06,  6.81889840e-02,  1.18283200e+04]), np.array([-4.82003546e-06,  6.85707081e-02,  1.19261778e+04]), np.array([-4.83076234e-06,  6.89736526e-02,  1.20256587e+04]), np.array([-4.84385541e-06,  6.93972596e-02,  1.21268042e+04]), np.array([-4.85923479e-06,  6.98410069e-02,  1.22296572e+04]), np.array([-4.87682291e-06,  7.03044085e-02,  1.23342619e+04]), np.array([-4.89654453e-06,  7.07870147e-02,  1.24406641e+04]), np.array([-4.91832694e-06,  7.12884125e-02,  1.25489110e+04]), np.array([-4.94209998e-06,  7.18082261e-02,  1.26590518e+04]), np.array([-4.96779618e-06,  7.23461166e-02,  1.27711369e+04]), np.array([-4.99535093e-06,  7.29017832e-02,  1.28852190e+04]), np.array([-5.02470251e-06,  7.34749625e-02,  1.30013522e+04]), np.array([-5.05579230e-06,  7.40654300e-02,  1.31195928e+04]), np.array([-5.08856489e-06,  7.46729997e-02,  1.32399991e+04]), np.array([-5.12296820e-06,  7.52975246e-02,  1.33626317e+04]), np.array([-5.15895370e-06,  7.59388975e-02,  1.34875531e+04]), np.array([-5.19647649e-06,  7.65970512e-02,  1.36148283e+04]), np.array([-5.23549555e-06,  7.72719590e-02,  1.37445250e+04]), np.array([-5.27597386e-06,  7.79636352e-02,  1.38767131e+04]), np.array([-5.31787862e-06,  7.86721356e-02,  1.40114654e+04]), np.array([-5.36118145e-06,  7.93975584e-02,  1.41488575e+04]), np.array([-5.40585863e-06,  8.01400444e-02,  1.42889682e+04]), np.array([-5.45189125e-06,  8.08997776e-02,  1.44318790e+04]), np.array([-5.49926555e-06,  8.16769864e-02,  1.45776750e+04]), np.array([-5.54797310e-06,  8.24719438e-02,  1.47264448e+04]), np.array([-5.59801110e-06,  8.32849684e-02,  1.48782805e+04]), np.array([-5.64938267e-06,  8.41164251e-02,  1.50332779e+04]), np.array([-5.70209714e-06,  8.49667260e-02,  1.51915372e+04]), np.array([-5.75617040e-06,  8.58363314e-02,  1.53531626e+04]), np.array([-5.81162521e-06,  8.67257508e-02,  1.55182627e+04]), np.array([-5.86849160e-06,  8.76355435e-02,  1.56869510e+04]), np.array([-5.92680722e-06,  8.85663203e-02,  1.58593459e+04]), np.array([-5.98661780e-06,  8.95187444e-02,  1.60355711e+04]), np.array([-6.04797757e-06,  9.04935325e-02,  1.62157557e+04]), np.array([-6.11094972e-06,  9.14914563e-02,  1.64000347e+04]), np.array([-6.17560694e-06,  9.25133440e-02,  1.65885495e+04]), np.array([-6.24203190e-06,  9.35600816e-02,  1.67814477e+04]), np.array([-6.31031792e-06,  9.46326148e-02,  1.69788840e+04]), np.array([-6.38056947e-06,  9.57319503e-02,  1.71810205e+04]), np.array([-6.45290292e-06,  9.68591582e-02,  1.73880269e+04]), np.array([-6.52744721e-06,  9.80153735e-02,  1.76000812e+04])], dtype=np.ndarray)
+
 
 # LSF widths (temporary)
 lsf_linear_coeffs = np.array([0.00167515, 0.08559148])
 lsf_widths = np.polyval(lsf_linear_coeffs, np.arange(46))
 lsf_widths = [[lw*0.7, lw, lw*1.3] for lw in lsf_widths]
-
-# Approximate wavelength solution coefficnents for each order, fiber 1 (LFC)
-wls_coeffs = [np.array([7.20697948e-06, 3.67460556e-02, 1.12286214e+04]), np.array([5.05581638e-06, 4.24663111e-02, 1.13501810e+04]), np.array([3.22528768e-06, 4.73711982e-02, 1.14667250e+04]), np.array([1.67690770e-06, 5.15643447e-02, 1.15794400e+04]), np.array([3.75534581e-07, 5.51396921e-02, 1.16893427e+04]), np.array([-7.10802964e-07,  5.81820837e-02,  1.17972991e+04]), np.array([-1.61107682e-06,  6.07678378e-02,  1.19040438e+04]), np.array([-2.35142842e-06,  6.29653049e-02,  1.20101966e+04]), np.array([-2.95533525e-06,  6.48354095e-02,  1.21162779e+04]), np.array([-3.44377496e-06,  6.64321764e-02,  1.22227231e+04]), np.array([-3.83538672e-06,  6.78032403e-02,  1.23298942e+04]), np.array([-4.14662982e-06,  6.89903401e-02,  1.24380922e+04]), np.array([-4.39193925e-06,  7.00297962e-02,  1.25475660e+04]), np.array([-4.58387820e-06,  7.09529713e-02,  1.26585223e+04]), np.array([-4.73328709e-06,  7.17867142e-02,  1.27711326e+04]), np.array([-4.84942915e-06,  7.25537869e-02,  1.28855405e+04]), np.array([-4.94013215e-06,  7.32732739e-02,  1.30018676e+04]), np.array([-5.01192617e-06,  7.39609738e-02,  1.31202183e+04]), np.array([-5.07017706e-06,  7.46297729e-02,  1.32406847e+04]), np.array([-5.11921536e-06,  7.52900004e-02,  1.33633496e+04]), np.array([-5.16246045e-06,  7.59497651e-02,  1.34882899e+04]), np.array([-5.20253946e-06,  7.66152723e-02,  1.36155790e+04]), np.array([-5.24140082e-06,  7.72911219e-02,  1.37452888e+04]), np.array([-5.28042184e-06,  7.79805856e-02,  1.38774911e+04]), np.array([-5.32051014e-06,  7.86858642e-02,  1.40122593e+04]), np.array([-5.36219842e-06,  7.94083236e-02,  1.41496685e+04]), np.array([-5.40573212e-06,  8.01487089e-02,  1.42897968e+04]), np.array([-5.45114946e-06,  8.09073365e-02,  1.44327255e+04]), np.array([-5.49835342e-06,  8.16842630e-02,  1.45785395e+04]), np.array([-5.54717499e-06,  8.24794307e-02,  1.47273271e+04]), np.array([-5.59742715e-06,  8.32927882e-02,  1.48791809e+04]), np.array([-5.64894883e-06,  8.41243860e-02,  1.50341969e+04]), np.array([-5.70163833e-06,  8.49744455e-02,  1.51924756e+04]), np.array([-5.75547508e-06,  8.58434015e-02,  1.53541213e+04]), np.array([-5.81052925e-06,  8.67319152e-02,  1.55192427e+04]), np.array([-5.86695809e-06,  8.76408587e-02,  1.56879531e+04]), np.array([-5.92498805e-06,  8.85712681e-02,  1.58603707e+04]), np.array([-5.98488157e-06,  8.95242649e-02,  1.60366187e+04]), np.array([-6.04688747e-06,  9.05009435e-02,  1.62168261e+04]), np.array([-6.11117352e-06,  9.15022230e-02,  1.64011279e+04]), np.array([-6.17773991e-06,  9.25286629e-02,  1.65896656e+04]), np.array([-6.24631195e-06,  9.35802387e-02,  1.67825877e+04]), np.array([-6.31621058e-06,  9.46560766e-02,  1.69800498e+04]), np.array([-6.38619856e-06,  9.57541455e-02,  1.71822150e+04]), np.array([-6.45430063e-06,  9.68709018e-02,  1.73892538e+04]), np.array([-6.51759531e-06,  9.80008858e-02,  1.76013435e+04])]
-
-# LFC info
-f0 = cs.c / (1559.91370 * 1E-9) # freq of pump line [Hz]
-df = 10.0000000 * 1E9 # spacing of peaks [Hz]

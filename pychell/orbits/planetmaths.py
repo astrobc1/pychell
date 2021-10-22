@@ -75,7 +75,10 @@ def bin_phased_rvs(phases, rvs, unc, nbins=10):
         w /= np.nansum(w)
         binned_phases[i] = np.nanmean(phases[inds])
         binned_rvs[i] = pcmath.weighted_mean(rvs[inds], w)
-        binned_unc[i] = pcmath.weighted_stddev(rvs[inds], w) / np.sqrt(n)
+        if len(inds) == 1:
+            binned_unc[i] = rvs[inds[0]]
+        else:
+            binned_unc[i] = pcmath.weighted_stddev(rvs[inds], w) / np.sqrt(n)
 
     return binned_phases, binned_rvs, binned_unc
 

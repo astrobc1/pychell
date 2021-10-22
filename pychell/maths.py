@@ -7,6 +7,7 @@ import sys
 # Science/Math
 import scipy.interpolate # spline interpolation
 from scipy import constants as cs # cs.c = speed of light in m/s
+import scipy.stats
 import numpy as np
 import scipy.ndimage.filters
 
@@ -22,23 +23,6 @@ from numba import jit, njit, prange
 import numba
 import numba.types as nt
 from llc import jit_filter_function
-
-#@njit(nogil=True)
-def intersect1d(x, y):
-    result = []
-    for xx in x:
-        for yy in y:
-            if xx == yy:
-                result.append(xx)
-    return np.array(result, dtype=int)
-
-#@njit
-def where_good1d(*arrays):
-    n_arrays = len(arrays)
-    good = np.where(np.isfinite(arrays[0]))[0]
-    for i in range(1, n_arrays):
-        good = intersect1d(good, np.where(np.isfinite(arrays[i]))[0])
-    return good
 
 def compute_R2_stat(ydata, ymodel, w=None):
     """Computes the weighted R2 stat.
@@ -76,6 +60,15 @@ def compute_R2_stat(ydata, ymodel, w=None):
 
 @njit(nogil=True)
 def outer_diff(x, y):
+    """Computes the matrix D_ij = abs(xi-yj)
+
+    Args:
+        x (np.ndarray): The x variable.
+        y (np.ndarray): The y variable.
+
+    Returns:
+        np.ndarray: The distance matrix D_ij.
+    """
     n1 = len(x)
     n2 = len(y)
     out = np.zeros((n1, n2))
@@ -84,9 +77,18 @@ def outer_diff(x, y):
             out[i, j] = np.abs(x[i] - y[j])
     return out
 
-
-
+@njit
 def outer_fun(fun, x, y):
+    """Generalized outer function (like an outer product). Creates the matrix D_ij = fun(xi, yj)
+
+    Args:
+        fun (function): A function decorated with numba.jit.
+        x (np.ndarray): The x variable.
+        y (np.ndarray): The y variable.
+
+    Returns:
+        np.ndarray: The matrix D_ij.
+    """
     n1 = len(x)
     n2 = len(x)
     out = np.zeros((n1, n2))
@@ -95,7 +97,20 @@ def outer_fun(fun, x, y):
             out[i, j] = fun(x[i], y[j])
     return out
 
+
 def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
+    """Convenient method to compute the weighted RMS between two vectors x and y.
+
+    Args:
+        x (np.ndarray): The x variable (1d).
+        y (np.ndarray): The y variable (1d).
+        weights (np.ndarray, optional): The weights. Defaults to uniform weights.
+        flag_worst (int, optional): Flag the largest outliers (with weights applied). Defaults to 0.
+        remove_edges (int, optional): Ignore the edges. Defaults to 0.
+
+    Returns:
+        float: The weighted RMS.
+    """
     
     # Compute diffs2
     if weights is not None:
@@ -132,6 +147,15 @@ def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
     return rms
 
 def measure_fwhm(x, y):
+    """Measures the fwhm of a signal.
+
+    Args:
+        x (np.ndarray): The grid the signal is sampled on.
+        y (np.ndarray): The signal.
+
+    Returns:
+        float: The full width half max of the signal in units of x.
+    """
     
     max_loc = np.nanargmax(y)
     max_val = np.nanmax(y)
@@ -146,64 +170,41 @@ def measure_fwhm(x, y):
     return fwhm
 
 def sigmatofwhm(sigma):
+    """Converts sigma to fwhm assuming a normal distribution.
+
+    Args:
+        sigma (float): The standard deviation of a distribution.
+
+    Returns:
+        float: The full width half max of the distribution.
+    """
     return sigma * np.sqrt(8 * np.log(2))
 
 def fwhmtosigma(fwhm):
+    """Converts fwhm to sigma assuming a normal distribution.
+
+    Args:
+        fwhm (float): The full width half max of the distribution.
+
+    Returns:
+        (float): The standard deviation of a distribution.
+    """
     return fwhm / np.sqrt(8 * np.log(2))
 
-def Rfromlsf(wave, fwhm=None, sigma=None):
-    if fwhm is not None:
-        return wave / fwhm
-    else:
-        return wave / sigmatofwhm(sigma)
-    
-    
-def rolling_clip(x, y, weights=None, width=None, method='median', n_sigma=4):
-    
-    # Mask must be the length of x
-    mask = np.ones_like(x)
-    
-    # Create a mask and weights
-    if weights is None:
-        weights = np.ones_like(x)
-    good = np.where(np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights >= 0))[0]
-    n_good = len(good)
-    xx, yy, ww = x[good], y[good], weights[good]
-    
-    # Start and last x value
-    x_start = np.nanmin(x)
-    x_end = np.nanmax(x)
-    delta_x = x_start - x_end
-    
-    # Want n_per_bin ~ 10
-    if width is None:
-        n_per_bin = 10
-        width = n_per_bin * delta_x / n_good
-        
-    # Bins
-    n_bins = int(delta_x / width)
-    bins = np.linspace(x_end - width / 1000, x_start + width / 1000, num=n_bins + 1)
-    
-    # Loop over bins and flag
-    for i in range(len(bins) - 1):
-        use = np.where((xx >= bins[i]) & (xx <= bins[i+1]))[0]
-        if use.size >= n_per_bin / 2:
-            if method == 'median':
-                wmed = weighted_median(yy[use], weights=ww[use], percentile=0.5)
-                wavg = wmed
-                meddev = weighted_median(yy[use] - wmed, weights=ww[use], percentile=0.5)
-                wstddev = meddev * 1.4826
-            else:
-                wavg = weighted_mean(yy[use], ww[use])
-                wstddev = weighted_stddev(yy[use], ww[use])
-                
-            bad = np.where(np.abs(yy[use] - wavg) > n_sigma * wstddev)[0]
-            if bad.size > 0:
-                mask[use[bad]] = 0
- 
-    return mask
-
 def doppler_shift(wave, vel, wave_out=None, flux=None, interp='cspline', kind='sr'):
+    """Doppler shifts a signal.
+
+    Args:
+        wave (np.ndarray): The "rest-frame" wavelength.
+        vel (float): The velocity in m/s.
+        wave_out (np.ndarray, optional): The wave vector for the outputs. Defaults to wave.
+        flux (np.ndarray, optional): The spectrum corresponding to wave. Defaults to None.
+        interp (str, optional): The kind of interpolation. Defaults to 'cspline' (cubic spline).
+        kind (str, optional): The kind of Doppler-shift. Defaults to 'sr' (special relativity).
+
+    Returns:
+        np.ndarray: The Doppler shifted wave vector if flux is None, or the Doppler shifted flux on the wave_out grid otherwise.
+    """
     
     if wave_out is None:
         wave_out = wave
@@ -227,15 +228,45 @@ def doppler_shift(wave, vel, wave_out=None, flux=None, interp='cspline', kind='s
         flux_out = np.interp(wave_out, wave_shifted[good], flux[good], left=np.nan, right=np.nan)
     return flux_out
     
-
 def lin_interp(x, y, xnew):
+    """Alias for np.interp with np.nan as left and right values.
+
+    Args:
+        x (np.ndarray): The x grid of the current signal.
+        y (np.ndarray): The y grid of the current signal.
+        xnew (np.ndarray): The new grid to sample y on.
+
+    Returns:
+        np.ndarray: The signal y sampled on xnew.
+    """
     return np.interp(xnew, x, y, left=np.nan, right=np.nan)
 
 def cspline_interp(x, y, xnew):
+    """Alias for scipy.interpolate.CubicSpline.
+
+    Args:
+        x (np.ndarray): The x grid of the current signal.
+        y (np.ndarray): The y grid of the current signal.
+        xnew (np.ndarray): The new grid to sample y on.
+
+    Returns:
+        np.ndarray: The signal y sampled on xnew.
+    """
     good = np.where(np.isfinite(x) & np.isfinite(y))[0]
     return scipy.interpolate.CubicSpline(x[good], y[good], extrapolate=False)(xnew)
 
 def cspline_fit(x, y, knots, weights=None):
+    """Fits a signal with scipy.interpolate.LSQUnivariateSpline.
+
+    Args:
+        x (np.ndarray): The x grid.
+        y (np.ndarray): The y grid.
+        knots (np.ndarray): The knots.
+        weights (np.ndarray, optional): The weights. Defaults to uniform weights.
+
+    Returns:
+        LSQUnivariateSpline: The nominal spline fit.
+    """
     if weights is None:
         weights = np.ones_like(y)
     good = np.where(np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights > 0))[0]
@@ -245,11 +276,29 @@ def cspline_fit(x, y, knots, weights=None):
 
 @njit
 def _dop_shift_SR(wave, vel):
-    z = vel / cs.c
-    return wave * np.sqrt((1 + z) / (1 - z))
+    """Doppler-shift according to the SR equation.
+
+    Args:
+        wave (np.ndarray or float): The input wavelengths.
+        vel (float): The velocity in m/s.
+
+    Returns:
+        np.ndarray or float: The Doppler-shifted wavelength.
+    """
+    beta = vel / cs.c
+    return wave * np.sqrt((1 + beta) / (1 - beta))
 
 @njit
 def _dop_shift_exponential(wave, vel):
+    """Doppler-shift according to a differential non-SR equation, lambda_f = lambda_0 * exp(v / c).
+
+    Args:
+        wave (np.ndarray or float): The input wavelengths.
+        vel (float): The velocity in m/s.
+
+    Returns:
+        np.ndarray or float: The Doppler-shifted wavelength.
+    """
     return wave * np.exp(vel / cs.c)
 
 @jit_filter_function
@@ -267,7 +316,6 @@ def fmedian(x):
     else:
         return np.nanmedian(x)
 
-# Fast median filter 1d over a fixed box width in "pixels"
 def median_filter1d(x, width, preserve_nans=True):
     """Computes a median 1d filter.
 
@@ -293,7 +341,6 @@ def median_filter1d(x, width, preserve_nans=True):
         
     return out
 
-# Returns a gaussian
 @njit
 def gauss(x, amp, mu, sigma):
     """Constructs a standard Gaussian
@@ -309,29 +356,6 @@ def gauss(x, amp, mu, sigma):
     """
     return amp * np.exp(-0.5 * ((x - mu) / sigma)**2)
 
-
-def fix_nans(x, y):
-    """A crude method of replacing bad pixels. Only pixels with nan or inf and bounded on both ends by at least one "good" data point are replaced.
-
-    Args:
-        x (np.ndarray): The independent variable.
-        y (np.ndarray): The dependent variable containing bad pixels as either nan or inf.
-
-    Returns:
-        np.ndarray: The fixed dependent variable.
-    """
-    bad_all = np.where(~np.isfinite(y))[0]
-    good = np.where(np.isfinite(y))[0]
-    y_fixed = np.copy(y)
-    f, l = good[0], good[-1]
-    actual_bad = np.where((bad_all > f) & (bad_all < l))[0]
-    if actual_bad.size > 0:
-        actual_bad = bad_all[actual_bad]
-    y_fixed[actual_bad] = scipy.interpolate.CubicSpline(x[good], y[good], extrapolate=False)(x[actual_bad])
-    
-    return y_fixed
-
-# Robust stddev (almost the mad)
 def robust_stddev(x):
     """Computes the robust standard deviation of a data set.
 
@@ -371,7 +395,6 @@ def robust_stddev(x):
     else:
         return 0
 
-
 def median_filter2d(x, width, preserve_nans=True):
     """Computes a median 2d filter.
 
@@ -398,6 +421,17 @@ def median_filter2d(x, width, preserve_nans=True):
 
 @njit
 def convolve1d(x, k, padleft, padright):
+    """Numerical convolution for a 1d signal.
+
+    Args:
+        x (np.ndarray): The input signal, must be uniform spacing.
+        k (np.ndarray): The kernel, must have the same grid spacing as x.
+        padleft (int): The left pad.
+        padright (int): The right pad.
+
+    Returns:
+        np.ndarray: The convolved signal.
+    """
 
     # Length of each
     nx = len(x)
@@ -552,34 +586,7 @@ def convolve_flux(wave, flux, R=None, width=None, interp=None, lsf=None, croplsf
     
     return fluxc
 
-@njit
-def width_from_R(R, ml):
-    return ml / (2 * np.sqrt(2 * np.log(2)) * R)
 
-@njit
-def R_from_width(width, ml):
-    return ml / (2 * np.sqrt(2 * np.log(2)) * width)
-
-# Works but is slow as all crap.
-@jit
-def _convolve(x, k):
-    nx = x.size
-    nk = k.size
-    n_pad = int(nk / 2)
-    xp = np.zeros(int(nx + 2 * n_pad), dtype=float)
-    xp[n_pad:-n_pad] = x
-    xp[0:n_pad] = x[-1]
-    xp[-n_pad:] = x[0]
-    xc = np.zeros(nx, dtype=float)
-    kf = k[::-1]
-    for i in range(nx):
-        s = 0.0
-        for j in range(nk):
-            s += kf[j] * xp[i + j]
-        xc[i] = s
-    return xc
-    
-# Returns the hermite polynomial of degree deg over the variable x
 def hermfun(x, deg):
     """Computes Hermite Gaussian Functions via the recursion relation.
 
@@ -594,17 +601,18 @@ def hermfun(x, deg):
     herm1 = np.sqrt(2) * herm0 * x
     if deg == 0:
         herm = herm0
+        return herm
     elif deg == 1:
-        herm = np.array([herm0, herm1]).T
+        return np.array([herm0, herm1], dtype=float).T
     else:
         herm = np.zeros(shape=(x.size, deg+1), dtype=float)
         herm[:, 0] = herm0
         herm[:, 1] = herm1
         for k in range(2, deg+1):
             herm[:, k] = np.sqrt(2 / k) * (x * herm[:, k-1] - np.sqrt((k - 1) / 2) * herm[:, k-2])
-    return herm
+        return herm
 
-# This calculates the median absolute deviation of array x
+@njit
 def mad(x):
     """Computes the true median absolute deviation.
 
@@ -616,7 +624,6 @@ def mad(x):
     """
     return np.nanmedian(np.abs(x - np.nanmedian(x)))
 
-# This calculates the weighted percentile of a data set.
 def weighted_median(data, weights=None, percentile=0.5):
     """Computes the weighted percentile of a data set
 
@@ -654,7 +661,7 @@ def weighted_median(data, weights=None, percentile=0.5):
 
     return w_median
 
-# This calculates the unbiased weighted standard deviation of array x with weights w
+@njit
 def weighted_stddev(x, w):
     """Computes the weighted standard deviation of a dataset with bias correction.
 
@@ -672,24 +679,6 @@ def weighted_stddev(x, w):
     var = np.nansum(dev ** 2 * weights) / bias_estimator
     return np.sqrt(var)
 
-def weighted_stddev_mumod(x, w, mu):
-    """Computes the weighted standard deviation of a dataset with bias correction.
-
-    Args:
-        x (np.ndarray): The input array.
-        w (np.ndarray): The weights.
-        mu (np.ndarray): The mean.
-
-    Returns:
-        float: The weighted standard deviation.
-    """
-    weights = w / np.nansum(w)
-    dev = x - mu
-    bias_estimator = 1.0 - np.nansum(weights ** 2) / np.nansum(weights) ** 2
-    var = np.nansum(dev ** 2 * weights) / bias_estimator
-    return np.sqrt(var)
-
-# This calculates the weighted mean of array x with weights w
 @jit
 def weighted_mean(x, w):
     """Computes the weighted mean of a dataset.
@@ -703,7 +692,8 @@ def weighted_mean(x, w):
     """
     return np.nansum(x * w) / np.nansum(w)
 
-def weighted_combine(y, w, yerr=None, err_type="poisson"):
+@njit
+def weighted_combine(y, w, yerr=None, err_type="empirical"):
     """Performs a weighted coadd.
 
     Args:
@@ -740,121 +730,9 @@ def weighted_combine(y, w, yerr=None, err_type="poisson"):
         # With >= 3 useful points, the mean is the weighted mean.
         # Error is computed from err_type
         yc = weighted_mean(y[good].flatten(), w[good].flatten())
-        if err_type.lower() == "poisson":
-            if yerr is not None:
-                yc_unc = np.nanmean(yerr[good].flatten()) / np.sqrt(n_good)
-            else:
-                yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
-        else:
-            yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
+        yc_unc = weighted_stddev(y[good].flatten(), w[good].flatten()) / np.sqrt(n_good)
         
     return yc, yc_unc
-
-# Rolling function f over a window given w of y given the independent variable x
-def rolling_fun_true_window(f, x, y, w):
-    """Computes a filter over the data using windows determined from a proper independent variable.
-
-    Args:
-        f (function): The desired filter, must take a numpy array as input.
-        x (np.ndarray): The independent variable.
-        y (np.ndarray): The dependent variable.
-        w (float): Window size (in units of x)
-
-    Returns:
-        np.ndarray: The filtered array.
-    """
-    output = np.empty(x.size, dtype=np.float64)
-
-    for i in range(output.size):
-        locs = np.where((x > x[i] - w/2) & (x <= x[i] + w/2))
-        if len(locs) == 0:
-            output[i] = np.nan
-        else:
-            output[i] = f(y[locs])
-
-    return output
-
-
-# Rolling function f over a window given w of y given the independent variable x
-def rolling_stddev_overcols(image, nbins):
-    """Computes a filter over the data using windows determined from a proper independent variable.
-
-    Args:
-        f (function): The desired filter, must take a numpy array as input.
-        x (np.ndarray): The independent variable.
-        y (np.ndarray): The dependent variable.
-        w (float): Window size (in units of x)
-
-    Returns:
-        np.ndarray: The filtered array.
-    """
-    
-    ny, nx = image.shape
-    
-    xarr = np.arange(nx) # redundant and to remind me of potential modifications
-    goody, goodx = np.where(np.isfinite(image))
-    f, l = xarr[goodx[0]], xarr[goodx[-1]]
-    bins = np.linspace(f, l, num=nbins + 1)
-    output = np.full(nbins, dtype=np.float64, fill_value=np.nan)
-    for i in range(nbins):
-        locs = np.where((xarr >= bins[i]) & (xarr < bins[i+1]))[0]
-        if len(locs) == 0:
-            output[i] = np.nan
-        else:
-            output[i] = np.nanstd(image[:, locs])
-
-    return output, bins
-
-
-
-# Locates the closest value to a given value in an array
-# Returns the value and index.
-def find_closest(x, val):
-    """Finds the index and corresponding value in x which is closest to some val.
-
-    Args:
-        x (np.ndarray): The array to search.
-        val (float): The value to be closest to.
-
-    Returns:
-        int: The index of the closest member
-        float: The value at that index.
-    """
-    diffs = np.abs(x - val)
-    loc = np.nanargmin(diffs)
-    return loc, x[loc]
-
-# Cross correlation for trace profile
-def cross_correlate1(y1, y2, lags):
-    """Cross-correlation in "pixel" space.
-
-    Args:
-        y1 (np.ndarray): The array to cross-correlate.
-        y2 (np.ndarray): The array to cross-correlate against.
-        lags (np.ndarray): An array of lags (shifts), must be integers.
-
-    Returns:
-        np.ndarray: The cross-correlation function
-    """
-    # Shifts y2 and compares it to y1
-    n1 = y1.size
-    n2 = y2.size
-  
-    nlags = lags.size
-    
-    corrfun = np.zeros(nlags, dtype=float)
-    corrfun[:] = np.nan
-    for i in range(nlags):
-        #ylag = shiftint1d(y2, -1*lags[i], cval=np.nan)
-        ylag = np.roll(y2, -1*lags[i])
-        vec_cross = y1 * ylag
-        weights = np.ones(n1, dtype=np.float64)
-        bad = np.where(~np.isfinite(vec_cross))[0]
-        if bad.size > 0:
-            weights[bad] = 0
-        corrfun[i] = np.nansum(vec_cross * weights) / np.nansum(weights)
-
-    return corrfun - np.nanmin(corrfun)
 
 def cross_correlate(x1, y1, x2, y2, lags, kind="rms"):
     """Cross-correlation in "pixel" space.
@@ -893,37 +771,18 @@ def cross_correlate(x1, y1, x2, y2, lags, kind="rms"):
 
     return corrfun
 
-def cross_correlate3(x1, y1, x2, y2, vels):
-    """Cross-correlation in "pixel" space.
+def intersection(x, y, yval, precision=1):
+    """Computes the intersection (x value) of signal y with yval.
 
     Args:
-        y1 (np.ndarray): The array to cross-correlate.
-        y2 (np.ndarray): The array to cross-correlate against.
-        lags (np.ndarray): An array of lags (shifts), must be integers.
+        x (np.ndarray): The x vector.
+        y (np.ndarray): The y vector.
+        yval (float): The value to intersect.
+        precision (int, optional): The precision of the intersection, effectively oversampling (not accuracy). Defaults to 1.
 
     Returns:
-        np.ndarray: The cross-correlation function
+        float: The x value that corresponds to the intersection with yval.
     """
-    # Shifts y2 and compares it to y1
-    n1 = y1.size
-    n2 = y2.size
-
-    nvels = vels.size
-    
-    corrfun = np.zeros(nvels, dtype=float)
-    corrfun[:] = np.nan
-    for i in range(nvels):
-        y2_shifted = doppler_shift(x2, vels[i], wave_out=x1, flux=y2, interp='cubic', kind='exp')
-        good = np.where(np.isfinite(y2_shifted) & np.isfinite(y1))[0]
-        if good.size < x1.size / 3:
-            continue
-        corrfun[i] = rmsloss(y1, y2_shifted)
-    return corrfun
-
-def intersection(x, y, yval, precision=None):
-    
-    if precision is None:
-        precision = 1
     
     if precision > 1:
         dx = np.nanmedian(np.abs(np.diff(x)))
@@ -942,48 +801,18 @@ def intersection(x, y, yval, precision=None):
         index, _ = find_closest(y, yval)
         
         return x[index], y[index]
-    
-# Calculates the reduced chi squared
-def reduced_chi_square(x, err):
-    """Computes the reduced chi-square statistic
+
+def legpoly_coeffs(x, y, deg=None):
+    """Computes the Legendre polynomial coefficients given a set of x and y points.
 
     Args:
-        x (np.ndarray): The input array.
-        err (np.ndarray): The associated errors.
+        x (np.ndarray): The x vector.
+        y (np.ndarray): The y vector.
+        deg (int, optional): [description]. Defaults to len(x) - 1.
 
     Returns:
-        float: The reduced chi-square statistic.
+        np.ndarray: The nominal Legendre polynomial coefficients.
     """
-    # Define the weights as 1 over the square of the error bars. 
-    weights = 1.0 / err**2
-
-    # Calculate the reduced chi square defined around the weighted mean, 
-    # assuming we are not fitting to any parameters.
-    redchisq = (1.0 / (x.size-1)) * np.nansum((x - weighted_mean(x, weights))**2 / err**2)
-
-    return redchisq
-
-# Given 3 data points this returns the polynomial coefficients via matrix inversion, effectively
-# In theory equivalent to np.polyval(x, y, deg=2)
-@jit
-def quad_coeffs(x, y):
-    """Computes quadratic coefficients given three points.
-
-    Args:
-        x (np.ndarray): The x points.
-        y (np.ndarray): The corresponding y points.
-
-    Returns:
-        np.ndarray: The quadratic coefficients [quad, lin, zero]
-    """
-    a0 = (-x[2] * y[1] * x[0]**2 + x[1] * y[2] * x[0]**2 + x[2]**2 * y[1] * x[0] - x[1]**2 * y[2] * x[0] - x[1] * x[2]**2 * y[0] + x[1]**2 * x[2] * y[0])/((x[0] - x[1]) * (x[0] - x[2]) * (x[1] - x[2]))
-    a1 = (y[1] * x[0]**2 - y[2] * x[0]**2 - x[1]**2 * y[0] + x[2]**2 * y[0] - x[2]**2 * y[1] + x[1]**2 * y[2]) / ((x[0] - x[1]) * (x[0] - x[2]) * (x[1] - x[2]))
-    a2 = (x[1] * y[0] - x[2] * y[0] - x[0] * y[1] + x[2] * y[1] + x[0] * y[2] - x[1] * y[2]) / ((x[1] - x[0]) * (x[1] - x[2]) * (x[2] - x[0]))
-    p = np.array([a2, a1, a0])
-    return p
-
-
-def leg_coeffs(x, y, deg=None):
     if deg is None:
         deg = len(x) - 1
     V = np.polynomial.legendre.legvander(x, deg)
@@ -991,141 +820,21 @@ def leg_coeffs(x, y, deg=None):
     return coeffs
 
 def poly_coeffs(x, y):
+    """Computes the polynomial coefficients (of order len(x)) given a set of x and y points.
+
+    Args:
+        x (np.ndarray): The x vector.
+        y (np.ndarray): The y vector.
+
+    Returns:
+        np.ndarray: The nominal polynomial coefficients.
+    """
     V = np.vander(x)
     coeffs = np.linalg.solve(V, y)
     return coeffs
 
-def mask_to_binary(x, l):
-    """Converts a mask array of indices to a binary array.
-
-    Args:
-        x (np.ndarray): The array of indices.
-        l (int): The length of the boolean array
-
-    Returns:
-       np.ndarray : The boolean mask.
-    """
-    binary = np.zeros(l, dtype=bool)
-    if len(x) == 0:
-        return binary
-    for i in range(l):
-        if i in x:
-            binary[i] = True
-    return binary.astype(bool)
-
-def estimate_continuum(x, y, width=7, n_knots=14, cont_val=0.9):
-    """Estimates the continuum of a spectrum with cubic splines.
-
-    Args:
-        x (np.ndarray): The input spectrum.
-        y (np.ndarray): The input spectrum
-        width (int, optional): The distance between knots in units of x. Defaults to 7, assuming Angstroms.
-        n_knots (int, optional): The number of knots to estimat ethe continuum with. Defaults to 14.
-        cont_val (float, optional): The percentile of the continuum. Defaults to 0.9, assuming a max-normalized spectrum.
-
-    Returns:
-        np.ndarray: The estimated continuum.
-    """
-    nx = x.size
-    continuum_coarse = np.ones(nx, dtype=np.float64)
-    for ix in range(nx):
-        use = np.where((x > x[ix]-width/2) & (x < x[ix]+width/2))[0]
-        if np.all(~np.isfinite(y[use])):
-            continuum_coarse[ix] = np.nan
-        else:
-            continuum_coarse[ix] = weighted_median(y[use], weights=None, percentile=cont_val)
-    
-    good = np.where(np.isfinite(y))[0]
-    knot_points = x[np.linspace(good[0], good[-1], num=n_knots).astype(int)]
-    interp_fun = scipy.interpolate.CubicSpline(knot_points, continuum_coarse[np.linspace(good[0], good[-1], num=14).astype(int)], extrapolate=False, bc_type='not-a-knot')
-    continuum = interp_fun(x)
-    return continuum
-
-
-# Horizontal median of a 2d image
-def horizontal_median(image, width):
-    """Computes the median filter for each row in an image.
-
-    Args:
-        image (np.ndarray): The input image.
-        width (int): The width of the filter in pixels.
-
-    Returns:
-        np.ndarray: The filtered image.
-    """
-    ny, nx = image.shape
-    out_image = np.empty(shape=(ny, nx), dtype=np.float64)
-    for i in range(ny):
-        out_image[i, :] = median_filter1d(image[i, :], width)
-    return out_image
-
-# Vertical median of a 2d image
-def vertical_median(image, width):
-    """Computes the median filter for each column in an image.
-
-    Args:
-        image (np.ndarray): The input image.
-        width (int): The width of the filter in pixels.
-
-    Returns:
-        np.ndarray: The filtered image.
-    """
-    ny, nx = image.shape
-    out_image = np.empty(shape=(ny, nx), dtype=np.float64)
-    for i in range(nx):
-        out_image[:, i] = median_filter1d(image[:, i], width)
-    return out_image
-
-# Out of bounds of image
-@njit
-def outob(x, y, nx, ny):
-    """Shorthand to determine if a point is within bounds of a 2d image.
-
-    Args:
-        x (int): The x point to test.
-        y (int): The y point to test.
-        nx (int): The number of array columns.
-        ny (int): The number of array rows.
-
-    Returns:
-        bool: Whether or not the point is within bounds
-    """
-    return x + 1 > nx or x + 1 < 1 or y + 1 > ny or y + 1 < 1
-
-def chen_kipping(m):
-    
-	MJ = 317.828133 # in earth masses
-	RJ = 11.209 # in earth radii
-
-	if m <= 2.04:
-		return 1.008 * m**0.279
-	elif m > 2.04 and m <= 0.414*MJ:
-		return 0.80811 * m**0.589
-	else:
-		return 17.739 * m ** -0.044
-
-# def chen_kipping_inv(rad):
-    
-# 	MJ = 317.828133 # in earth masses	RJ = 11.209 # in earth radii
-
-# 	if m <= 2.04:
-# 		return 1.008 * m**0.279
-# 	elif m > 2.04 and m <= 0.414*MJ:
-# 		return 0.80811 * m**0.589
-# 	else:
-# 		return 17.739 * m ** -0.044
-
-
-def rvsemiamplitude(mstar, mplanet=None, ecc=0, sini=None, rplanet=None):
-    if sini is None:
-        sini = 1
-    MJ_TO_MSUN = 1 / 1047.7
-    k = (28.4329  / np.sqrt(1 - ecc**2)) * mplanet*sini * (mplanet * MJ_TO_MSUN + mstar)**(-2/3) * per**(-1/3)
-    return k
-
-# Returns a modified gaussian
 def gauss_modified(x, amp, mu, sigma, p):
-    """Constructs a modified Gaussian (variable exponent)
+    """Constructs a modified Gaussian (variable exponent p)
 
     Args:
         x (np.ndarray): The independent variable.
@@ -1152,11 +861,34 @@ def shiftint1d(x, n, cval=np.nan):
     return result
 
 def voigt(x, amp, mu, sigma, fwhm_L):
+    """Alias for astropy.modeling.functional_models.Voigt1D.
+
+    Args:
+        x (np.ndarray): The x vector.
+        amp_L (float): The amplitude of the Lorentzian.
+        mu_L (float): The mean of the Lorentzian.
+        fwhm_L (float): The full width half max of the Lorentzian.
+
+    Returns:
+        np.ndarray: The Voigt profile.
+    """
     return astropy.modeling.functional_models.Voigt1D(x_0=mu, amplitude_L=amp, fwhm_G=sigmatofwhm(sigma), fwhm_L=fwhm_L)(x)
 
 
 # lorentz convolved with an arbitrary kernel
 def generalized_voigt(x, amp, mu_L, fwhm_L, kernel):
+    """Generalized Voigt profile a Lorentzian convolved with an arbitrary kernel.
+
+    Args:
+        x (np.ndarray): The x vector.
+        amp_L (float): The amplitude of the Lorentzian.
+        mu_L (float): The mean of the Lorentzian.
+        fwhm_L (float): The full width half max of the Lorentzian.
+        kernel (np.ndarray): The kernel to convolve with.
+
+    Returns:
+        np.ndarray: The generalized Voigt signal.
+    """
     
     # Normalize kernel
     kernel = np.nansum(kernel)
@@ -1169,16 +901,41 @@ def generalized_voigt(x, amp, mu_L, fwhm_L, kernel):
 
     return out
 
-    
+def normal(x):
+    return gauss(x, 1 / np.sqrt(2 * np.pi), 0, 1)
 
+
+def skew_normal(x, loc, scale, alpha):
+    xx = (x - loc) / scale
+    return (2 / scale) * normal(xx) * scipy.stats.norm.cdf(alpha * xx)
 
 @njit
 def lorentz(x, amp, mu, fwhm):
+    """Computes a Lorentzian function.
+
+    Args:
+        x (np.ndarray or float): The x variable.
+        amp ([type]): The amplitude.
+        mu ([type]): The mean.
+        fwhm ([type]): The full width half max.
+
+    Returns:
+        np.ndarray: The Lorentzian.
+    """
     xx = (x - mu) / (fwhm / 2)
     return amp / (1 + xx**2)
 
+def poly_filter(y, width, poly_order=3):
+    """Filters a signal with polynomials.
 
-def poly_filter(y, width, poly_order):
+    Args:
+        y (np.ndarray): The signal to filter.
+        width (int): The rolling width in pixels, must be odd.
+        poly_order (int, optional): The polynomial order. Defaults to 3.
+
+    Returns:
+        [type]: [description]
+    """
     width = int(width)
     assert width > poly_order
     assert width % 2 == 1
@@ -1203,12 +960,24 @@ def poly_filter(y, width, poly_order):
     return y_out
         
 def normalize_image(image, window=5, n_knots=60, percentile=0.99, downsample=8):
+    """Normalizes the traces of an echellogram which are roughly aligned with detector rows.
+
+    Args:
+        image (np.ndarray): The echellogram.
+        window (int, optional): The size of the rolling window. Defaults to 5.
+        n_knots (int, optional): The number cubic spline knots. Defaults to 60.
+        percentile (float, optional): The percentile of the continuum in the rolling window. Defaults to 0.99.
+        downsample (int, optional): How many columns to group together (higher is faster but less precise). Defaults to 8.
+
+    Returns:
+        np.ndarray: The normalized image.
+    """
     out = np.full_like(image, np.nan)
     ny, nx = out.shape
     xx = np.arange(nx)
     for i in range(0, nx, downsample):
         good = np.where(np.isfinite(image[:, i]))[0]
-        if good.size < 0.5 * ny:
+        if good.size < 0.1 * ny:
             continue
         x_low = np.max([0, i - downsample / 2])
         x_high = np.min([i + downsample / 2, nx - 1])
@@ -1222,6 +991,18 @@ def normalize_image(image, window=5, n_knots=60, percentile=0.99, downsample=8):
     return out
 
 def cspline_fit_fancy(x, y, window=None, n_knots=50, percentile=0.99):
+    """Robust at fitting certain signals present in a dataset.
+
+    Args:
+        x (np.ndarray): The x vector.
+        y (np.ndarray): The y vector.
+        window (float, optional): The window size. Defaults to (x_max - x_min) / (4 * n_knots).
+        n_knots (int, optional): The number of spline knots to fit the median signal by. Defaults to 50.
+        percentile (float, optional): The percentile of the signal in the rolling window. Defaults to 0.99.
+
+    Returns:
+        np.ndarray: The desired signal.
+    """
     nx = len(x)
     y_out_init = np.full_like(y, np.nan)
     good = np.where(np.isfinite(x) & np.isfinite(y))[0]
@@ -1245,10 +1026,12 @@ def cspline_fit_fancy(x, y, window=None, n_knots=50, percentile=0.99):
 # dl / l0 + 1 = e^(dv/c)
 # ln(dl / l0 + 1) = dv/c
 # c * ln(dl / l0 - 1) = dv
+@njit
 def dl_to_dv(dl, l):
     return cs.c * np.log(dl / l + 1)
 
 # dl = l0 * (e^(dv/c) - 1)
+@njit
 def dv_to_dl(dv, l):
     return l * (np.exp(dv / cs.c) - 1)
 

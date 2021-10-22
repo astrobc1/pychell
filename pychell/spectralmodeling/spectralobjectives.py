@@ -4,10 +4,7 @@ import numpy as np
 # Pychell deps
 import pychell.maths as pcmath
 
-# Optimize deps
-from optimize.objectives import ObjectiveFunction
-
-class SpectralObjectiveFunction(ObjectiveFunction):
+class SpectralObjectiveFunction:
     
     def __init__(self, flag_n_worst_pixels=10, remove_edges=4):
         """Constructs the objective function.

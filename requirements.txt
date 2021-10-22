@@ -14,3 +14,4 @@ streamlit>=0.82.1
 plotly>=4.14.1
 emcee>=3.0.2
 webcolors>=1.11.1
+pyreduce-astro>=0.5.8

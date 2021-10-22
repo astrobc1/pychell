@@ -18,7 +18,6 @@ except:
     print("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
 
 # Optimize
-from optimize import Model
 from optimize import BoundedParameters, BoundedParameter
 
 #########################
@@ -79,7 +78,7 @@ class SpectralRegion:
 #### COMPOSITE SPECTRAL MODEL ####
 ##################################
 
-class IterativeSpectralForwardModel(Model):
+class IterativeSpectralForwardModel:
     """The primary container for an iterative spectral forward model problem.
     """
     
@@ -133,7 +132,7 @@ class IterativeSpectralForwardModel(Model):
         self.gas_cell = gas_cell
         self.fringing = fringing
         
-    def _init_templates(self, data):
+    def init_templates(self, data):
         data_wave_grid = data[0].parser.estimate_wavelength_solution(data[0])
         good = np.where(data[0].mask == 1)[0]
         if good.size == 0:
@@ -143,34 +142,34 @@ class IterativeSpectralForwardModel(Model):
         self.model_wave = np.arange(self.sregion.wavemin, self.sregion.wavemax, self.model_dl)
         self.templates_dict = {}
         if self.star is not None:
-            self.templates_dict["star"] = self.star._init_template(data, self.sregion, self.model_dl)
+            self.templates_dict["star"] = self.star.init_template(data, self.sregion, self.model_dl)
         if self.gas_cell is not None:
-            self.templates_dict["gas_cell"] = self.gas_cell._init_template(data, self.sregion, self.model_dl)
+            self.templates_dict["gas_cell"] = self.gas_cell.init_template(data, self.sregion, self.model_dl)
         if self.tellurics is not None:
-            self.templates_dict["tellurics"] = self.tellurics._init_template(data, self.sregion, self.model_dl)
+            self.templates_dict["tellurics"] = self.tellurics.init_template(data, self.sregion, self.model_dl)
         
-    def _init_parameters(self, data):
+    def init_parameters(self, data):
         self.p0 = BoundedParameters()
         if self.wavelength_solution is not None:
-            self.p0.update(self.wavelength_solution._init_parameters(data))
+            self.p0.update(self.wavelength_solution.init_parameters(data))
         if self.lsf is not None:
-            self.p0.update(self.lsf._init_parameters(data))
+            self.p0.update(self.lsf.init_parameters(data))
         if self.continuum is not None:
-            self.p0.update(self.continuum._init_parameters(data))
+            self.p0.update(self.continuum.init_parameters(data))
         if self.star is not None:
-            self.p0.update(self.star._init_parameters(data))
+            self.p0.update(self.star.init_parameters(data))
         if self.gas_cell is not None:
-            self.p0.update(self.gas_cell._init_parameters(data))
+            self.p0.update(self.gas_cell.init_parameters(data))
         if self.tellurics is not None:
-            self.p0.update(self.tellurics._init_parameters(data))
+            self.p0.update(self.tellurics.init_parameters(data))
         if self.fringing is not None:
-            self.p0.update(self.fringing._init_parameters(data))
+            self.p0.update(self.fringing.init_parameters(data))
     
     ####################
     #### INITIALIZE ####
     ####################
     
-    def initialize(self, p0, data, iter_index):
+    def initialize(self, p0, data, iter_index, stellar_templates):
         
         # Store the data
         self.data = data
@@ -186,6 +185,7 @@ class IterativeSpectralForwardModel(Model):
         if self.lsf is not None:
             self.lsf.initialize(self, iter_index)
         if self.star is not None:
+            self.templates_dict['star'] = stellar_templates[iter_index]
             self.star.initialize(self, iter_index)
         if self.tellurics is not None:
             self.tellurics.initialize(self, iter_index)
@@ -282,15 +282,9 @@ class IterativeSpectralForwardModel(Model):
                 s += f"  {pars[pname]}\n"
         return s
     
-    
-
 
 ###################################
 #### SPECTRAL MODEL COMPONENTS ####
 ###################################
 
-from .spectral_components import *
-
-##############################
-#### LASER FREQUENCY COMB ####
-##############################
+from .spectralcomponents import *

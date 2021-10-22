@@ -25,14 +25,11 @@ try:
 except:
     print("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
 
-# Optimize
-from optimize.frameworks import OptProblem
-
 ######################
 #### PRIMARY TYPE ####
 ######################
 
-class IterativeSpectralRVProb(OptProblem):
+class IterativeSpectralRVProb:
     """The primary container for a spectral forward model problem where the goal is to provide precise RVs.
     """
     
@@ -71,7 +68,7 @@ class IterativeSpectralRVProb(OptProblem):
         # Verbose
         self.verbose = verbose
         
-        # Input path
+        # Data input path
         self.data_input_path = data_input_path
         self.filelist = filelist
         
@@ -83,7 +80,6 @@ class IterativeSpectralRVProb(OptProblem):
 
         # The spectrogaph
         self.spectrograph = spectrograph
-        self._init_spectrograph()
         
         # Full tag is spectrograph_ + tag
         self.tag = f"{self.spectrograph.lower()}_{tag}"
@@ -93,14 +89,14 @@ class IterativeSpectralRVProb(OptProblem):
         self.create_output_paths()
         
         # Initialize the data
-        self._init_data()
+        self.init_data()
         
         # Optimize results
         self.opt_results = np.empty(shape=(self.n_spec, self.n_iterations), dtype=dict)
         self.stellar_templates = np.empty(self.n_iterations, dtype=np.ndarray)
         
         # Initialize the spectral model
-        self._init_spectral_model()
+        self.init_spectral_model()
         self.p0cp = copy.deepcopy(self.p0)
         
         # The template augmenter
@@ -113,12 +109,19 @@ class IterativeSpectralRVProb(OptProblem):
         self.optimizer = optimizer
         
         # Init RVs
-        self._init_rvs(bc_corrs=bc_corrs)
+        self.init_rvs(bc_corrs=bc_corrs)
         
         # Print summary
-        self._print_init_summary()
+        self.print_init_summary()
             
-    def _init_data(self):
+    def init_data(self):
+
+        # Alias the spectrograph module
+        spec_module = self.spec_module
+        
+        # Construct the data parser
+        parser_class = getattr(spec_module, f"{self.spectrograph}Parser")
+        self.parser = parser_class()
         
         # List of input files
         input_files = [self.data_input_path + f for f in np.atleast_1d(np.genfromtxt(self.data_input_path + self.filelist, dtype='<U100', comments='#').tolist())]
@@ -139,21 +142,12 @@ class IterativeSpectralRVProb(OptProblem):
         pixmin, pixmax = np.max([good[0] - 5, 0]), np.min([good[-1] + 5, len(self.data[0].mask) - 1])
         wavemin, wavemax = wave_grid[pixmin], wave_grid[pixmax]
 
-    def _init_spectrograph(self):
-        
-        # Load the spectrograph module
-        spec_module = self.spec_module
-        
-        # Construct the data parser
-        parser_class = getattr(spec_module, f"{self.spectrograph}Parser")
-        self.parser = parser_class(self.data_input_path, self.output_path)
-
-    def _init_spectral_model(self):
-        self.spectral_model._init_templates(self.data)
+    def init_spectral_model(self):
+        self.spectral_model.init_templates(self.data)
         self.stellar_templates[0] = np.copy(self.spectral_model.templates_dict["star"])
-        self.spectral_model._init_parameters(self.data)
+        self.spectral_model.init_parameters(self.data)
 
-    def _init_rvs(self, bc_corrs=None):
+    def init_rvs(self, bc_corrs=None):
         
         # Get the spectrograph observatory
         spec_module = self.spec_module
@@ -190,15 +184,15 @@ class IterativeSpectralRVProb(OptProblem):
         self.rvs_dict["rvsxc_nightly"] = np.full((self.n_nights, self.n_iterations), np.nan)
         self.rvs_dict["uncxc_nightly"] = np.full((self.n_nights, self.n_iterations), np.nan)
         
-        # BIS info
-        self.rvs_dict['bis'] = np.full((self.n_spec, self.n_iterations), np.nan)
-        self.rvs_dict['bis_nightly'] = np.full((self.n_nights, self.n_iterations), np.nan)
-        self.rvs_dict['uncbis_nightly'] = np.full((self.n_nights, self.n_iterations), np.nan)
+        # skew info
+        self.rvs_dict['skew'] = np.full((self.n_spec, self.n_iterations), np.nan)
+        self.rvs_dict['skew_nightly'] = np.full((self.n_nights, self.n_iterations), np.nan)
+        self.rvs_dict['uncskew_nightly'] = np.full((self.n_nights, self.n_iterations), np.nan)
         
         # xc grid info
         self.rvs_dict['xcorrs'] = np.empty(shape=(self.n_spec, self.n_iterations), dtype=np.ndarray)
         
-    def _print_init_summary(self):
+    def print_init_summary(self):
         print("***************************************", flush=True)
         print(f"** Target: {self.spectral_model.star.star_name.replace('_', ' ')}", flush=True)
         print(f"** Spectrograph: {self.spec_module.observatory['name']} / {self.spectrograph}", flush=True)
@@ -303,7 +297,7 @@ class IterativeSpectralRVProb(OptProblem):
                     p0s.append(self.opt_results[ispec, iter_index - 1]["pbest"])
             
             # Call the parallel job via joblib.
-            self.opt_results[:, iter_index] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.optimize_and_plot_observation)(p0s[ispec], self.data[ispec], self.spectral_model, self.obj, self.optimizer, iter_index, self.output_path, self.tag, self.spectral_model.star.star_name, self.verbose) for ispec in range(self.n_spec))
+            self.opt_results[:, iter_index] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.optimize_and_plot_observation)(p0s[ispec], self.data[ispec], self.spectral_model, self.obj, self.optimizer, iter_index, self.output_path, self.tag, self.verbose, self.stellar_templates) for ispec in range(self.n_spec))
 
         else:
 
@@ -320,7 +314,8 @@ class IterativeSpectralRVProb(OptProblem):
                 self.opt_results[ispec, iter_index] = self.optimize_and_plot_observation(p0, self.data[ispec], self.spectral_model,
                                                                                          self.obj, self.optimizer, iter_index,
                                                                                          self.output_path,
-                                                                                         self.tag, self.spectral_model.star.star_name, self.verbose)
+                                                                                         self.tag, self.verbose,
+                                                                                         self.stellar_templates)
         
         # Store rvs
         if not (iter_index == 0 and self.spectral_model.star.from_flat):
@@ -335,7 +330,7 @@ class IterativeSpectralRVProb(OptProblem):
         print(f"Fitting Finished in {round((stopwatch.time_since())/60, 3)} min ", flush=True)
             
     @staticmethod
-    def optimize_and_plot_observation(p0, data, spectral_model, obj, optimizer, iter_index, output_path, tag, star_name, verbose):
+    def optimize_and_plot_observation(p0, data, spectral_model, obj, optimizer, iter_index, output_path, tag, verbose, stellar_templates):
         
         if data.is_good and p0.num_varied > 0:
             
@@ -346,7 +341,7 @@ class IterativeSpectralRVProb(OptProblem):
             p0.sanity_lock()
         
             # Initialize model
-            spectral_model.initialize(p0, data, iter_index)
+            spectral_model.initialize(p0, data, iter_index, stellar_templates)
         
             # Store the objective with the model
             spectral_model.obj = obj
@@ -367,7 +362,7 @@ class IterativeSpectralRVProb(OptProblem):
                 print(f" Best Fit Parameters:\n{spectral_model.summary(opt_result['pbest'])}", flush=True)
 
             # Plot
-            IterativeSpectralRVProb.plot_spectral_model(opt_result["pbest"], data, spectral_model, iter_index, output_path, tag, star_name)
+            IterativeSpectralRVProb.plot_spectral_model(opt_result["pbest"], data, spectral_model, iter_index, output_path, tag, spectral_model.star.star_name)
             
         else:
             opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
@@ -520,13 +515,13 @@ class IterativeSpectralRVProb(OptProblem):
                 p0s.append(self.opt_results[ispec, iter_index]["pbest"])
 
             # Run in parallel
-            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.cross_correlate_observation)(p0s[ispec], self.data[ispec], self.spectral_model, iter_index) for ispec in range(self.n_spec))
+            ccf_results = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.cross_correlate_observation)(p0s[ispec], self.data[ispec], self.spectral_model, iter_index, self.stellar_templates) for ispec in range(self.n_spec))
             
             for ispec in range(self.n_spec):
                 if np.isfinite(ccf_results[ispec][0]):
                     self.rvs_dict['rvsxc'][ispec, iter_index] = ccf_results[ispec][0]
                     self.rvs_dict['uncxc'][ispec, iter_index] = ccf_results[ispec][1]
-                    self.rvs_dict['bis'][ispec, iter_index] = ccf_results[ispec][2]
+                    self.rvs_dict['skew'][ispec, iter_index] = ccf_results[ispec][2]
                     self.rvs_dict['xcorrs'][ispec, iter_index] = np.array([ccf_results[ispec][3], ccf_results[ispec][4]]).T
                 else:
                     self.data[ispec].is_good = False
@@ -538,11 +533,11 @@ class IterativeSpectralRVProb(OptProblem):
                 
                 p0 = self.opt_results[ispec, iter_index]["pbest"]
                     
-                ccf_results = self.cross_correlate_observation(p0, self.data[ispec], self.spectral_model, iter_index)
+                ccf_results = self.cross_correlate_observation(p0, self.data[ispec], self.spectral_model, iter_index, self.stellar_templates)
                 if np.isfinite(ccf_results[0]):
                     self.rvs_dict['rvsxc'][ispec, iter_index] = ccf_results[0]
                     self.rvs_dict['uncxc'][ispec, iter_index] = ccf_results[1]
-                    self.rvs_dict['bis'][ispec, iter_index] = ccf_results[2]
+                    self.rvs_dict['skew'][ispec, iter_index] = ccf_results[2]
                     self.rvs_dict['xcorrs'][ispec, iter_index] = np.array([ccf_results[3], ccf_results[4]]).T
                 else:
                     self.data[ispec].is_good = False
@@ -569,10 +564,10 @@ class IterativeSpectralRVProb(OptProblem):
         self.rvs_dict['rvsxc_nightly'][:, iter_index] = rvsxc_nightly
         self.rvs_dict['uncxc_nightly'][:, iter_index] = uncxc_nightly
         
-        # The XC BIS
-        bis_nightly, uncbis_nightly = pcrvcalc.compute_nightly_rvs_single_order(self.rvs_dict['bis'][:, iter_index], weights, self.rvs_dict['n_obs_nights'])
-        self.rvs_dict['bis_nightly'][:, iter_index] = bis_nightly
-        self.rvs_dict['uncbis_nightly'][:, iter_index] = uncbis_nightly
+        # The XC skew
+        skew_nightly, uncskew_nightly = pcrvcalc.compute_nightly_rvs_single_order(self.rvs_dict['skew'][:, iter_index], weights, self.rvs_dict['n_obs_nights'])
+        self.rvs_dict['skew_nightly'][:, iter_index] = skew_nightly
+        self.rvs_dict['uncskew_nightly'][:, iter_index] = uncskew_nightly
 
     def plot_rvs(self, iter_index, time_offset=2450000):
         """Plots all RVs and cross-correlation analysis after forward modeling all spectra.
@@ -627,29 +622,29 @@ class IterativeSpectralRVProb(OptProblem):
         plt.savefig(fname)
         plt.close()
         
-        # Plot the BIS vs. XC RV
+        # Plot the skew vs. XC RV
         plt.figure(1, figsize=(12, 7), dpi=200)
         
-        plt.errorbar(rvs_dict['rvsxc_nightly'][:, iter_index], rvs_dict['bis_nightly'][:, iter_index],
-                     xerr=rvs_dict['uncxc_nightly'][:, iter_index], yerr=rvs_dict['uncbis_nightly'][:, iter_index],
+        plt.errorbar(rvs_dict['rvsxc_nightly'][:, iter_index], rvs_dict['skew_nightly'][:, iter_index],
+                     xerr=rvs_dict['uncxc_nightly'][:, iter_index], yerr=rvs_dict['uncskew_nightly'][:, iter_index],
                      marker='o', lw=0, elinewidth=1)
         
         # Annotate
-        plt.title(f"{self.spectral_model.star.star_name.replace('_', ' ')} XC BIS Correlation, Order {self.order_num}, Iteration {iter_index + 1}")
+        plt.title(f"{self.spectral_model.star.star_name.replace('_', ' ')} XC skew Correlation, Order {self.order_num}, Iteration {iter_index + 1}")
         plt.xlabel('XC RV [m/s]')
-        plt.ylabel('BIS [m/s]')
+        plt.ylabel('skew')
         plt.tight_layout()
-        fname = f"{self.output_path}Order{self.order_num}{os.sep}RVs{os.sep}{self.tag}_BIS_ord{self.order_num}_iter{iter_index + 1}.png"
+        fname = f"{self.output_path}Order{self.order_num}{os.sep}RVs{os.sep}{self.tag}_skew_ord{self.order_num}_iter{iter_index + 1}.png"
         plt.savefig(fname)
         plt.close()
 
     @staticmethod
-    def cross_correlate_observation(p0, data, spectral_model, iter_index):
+    def cross_correlate_observation(p0, data, spectral_model, iter_index, stellar_templates):
         
         if data.is_good or (spectral_model.star.from_flat and iter_index == 0):
         
             # Initialize
-            spectral_model.initialize(p0, data, iter_index)
+            spectral_model.initialize(p0, data, iter_index, stellar_templates)
         
             # Run the CCF
             ccf_result = pcrvcalc.brute_force_ccf(p0, spectral_model, iter_index)
