@@ -748,6 +748,6 @@ class IterativeSpectralRVProb:
             pickle.dump(self, f)
 
     def save_stellar_templates(self):
-        fname = f"{self.output_path}Order{self.order_num}{os.sep}{self.tag}_stellar_templates_{self.order_num}.npz"
+        fname = f"{self.output_path}Order{self.order_num}{os.sep}Templates{os.sep}{self.tag}_stellar_templates_{self.order_num}.npz"
         np.savez(fname, self.stellar_templates)
     

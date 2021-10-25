@@ -446,7 +446,7 @@ class AugmentedStar(Star):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, input_file=None, star_name=None, vel_bounds=[-5000, 5000]):
+    def __init__(self, input_file=None, star_name=None, vel_bounds=[-10_000, 10_000]):
 
         # Call super method
         super().__init__()
@@ -678,7 +678,7 @@ class LSF(SpectralComponent):
 
     ##################
     #### BUILDERS ####
-    ################## 
+    ##################
 
     def convolve_flux(self, raw_flux, pars=None, lsf=None, interp=False):
         if lsf is None and pars is None:
@@ -808,7 +808,7 @@ class PolyWls(WavelengthSolution):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, poly_order=2, set_point=[-0.5, 0.05, 0.5]):
+    def __init__(self, poly_order=2, set_point=[-0.5, 0.01, 0.5]):
         """Initiate a polynomial wavelength solution model.
 
         Args:
@@ -888,7 +888,7 @@ class SplineWls(WavelengthSolution):
     
     name = "spline_wls"
 
-    def __init__(self, n_splines=6, spline=[-0.5, 0.1, 0.5]):
+    def __init__(self, n_splines=6, spline=[-0.5, 0.01, 0.5]):
         """Initiate a spline wavelength solution model.
 
         Args:
@@ -958,7 +958,7 @@ class PChipWls(WavelengthSolution):
     
     name = "pchip_wls"
 
-    def __init__(self, n_splines=6, spline=[-0.5, 0.1, 0.5]):
+    def __init__(self, n_splines=6, spline=[-0.5, 0.01, 0.5]):
         """Initiate a spline wavelength solution model.
 
         Args:

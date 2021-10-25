@@ -70,9 +70,10 @@ def parse_rvs(path, do_orders):
     rvs_dict['rvsfwm_nightly'] = np.full(shape=(n_orders, n_nights, n_iterations), fill_value=np.nan)
     rvs_dict['uncfwm_nightly'] = np.full(shape=(n_orders, n_nights, n_iterations), fill_value=np.nan)
     rvs_dict['rvsxc'] = np.full(shape=(n_orders, n_spec, n_iterations), fill_value=np.nan)
+    rvs_dict['uncxc'] = np.full(shape=(n_orders, n_spec, n_iterations), fill_value=np.nan)
     rvs_dict['rvsxc_nightly'] = np.full(shape=(n_orders, n_nights, n_iterations), fill_value=np.nan)
     rvs_dict['uncxc_nightly'] = np.full(shape=(n_orders, n_nights, n_iterations), fill_value=np.nan)
-    rvs_dict['bis'] = np.full(shape=(n_orders, n_spec, n_iterations), fill_value=np.nan)
+    rvs_dict['skew'] = np.full(shape=(n_orders, n_spec, n_iterations), fill_value=np.nan)
 
     # Load in rvs for each order
     for o in range(n_orders):
@@ -83,9 +84,10 @@ def parse_rvs(path, do_orders):
         rvs_dict['rvsfwm_nightly'][o, :] = rvfile['rvsfwm_nightly']
         rvs_dict['uncfwm_nightly'][o, :] = rvfile['uncfwm_nightly']
         rvs_dict['rvsxc'][o, :, :] = rvfile['rvsxc']
+        rvs_dict['uncxc'][o, :, :] = rvfile['uncxc']
         rvs_dict['rvsxc_nightly'][o, :, :] = rvfile['rvsxc_nightly']
         rvs_dict['uncxc_nightly'][o, :, :] = rvfile['uncxc_nightly']
-        rvs_dict['bis'][o, :, :] = rvfile['bis']
+        rvs_dict['skew'][o, :, :] = rvfile['skew']
 
     return rvs_dict
     
@@ -714,10 +716,10 @@ def gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices):
     
     # RV content weights
     weights = np.zeros((n_orders, n_spec, n_iterations))
-    rvconts = compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=True)
+    rvsxc_unc = rvs_dict['uncxc']
     for o in range(n_orders):
         for j in range(n_iterations):
-            weights[o, :, j] = 1 / rvconts[o, :, j]**2
+            weights[o, :, j] = 1 / rvsxc_unc[o, :, j]**2
     
     # Mask weights
     weights *= mask

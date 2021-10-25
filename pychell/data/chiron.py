@@ -126,12 +126,6 @@ class CHIRONParser(pcdataparser.DataParser):
     def parse_exposure_start_time(self, data):
         data.time_obs_start = Time(data.header['DATE-OBS'])
         return data.time_obs_start
-        
-    def get_n_traces(self, data):
-        return 1
-    
-    def get_n_orders(self, data):
-        return 62
     
     def parse_itime(self, data):
         data.itime = data.header["EXPTIME"]
@@ -158,6 +152,8 @@ class CHIRONParser(pcdataparser.DataParser):
 #######################################
 
 lsf_width = [0.009, 0.014, 0.018]
+
+rv_zero_point = -8_000.0
 
 ###############
 #### MISC. ####
