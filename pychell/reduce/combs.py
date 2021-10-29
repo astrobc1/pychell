@@ -10,6 +10,10 @@ import pychell.maths as pcmath
 
 class LFCAnalyzer:
 
+    ####################
+    #### INITIALIZE ####
+    ####################
+
     def __init__(self, f0, df, peak_separation=None, wls_poly_order=None, n_wls_knots=None, n_lsf_knots=6, lsf_wave_spacing=0.01):
         self.f0 = f0
         self.df = df
@@ -26,22 +30,10 @@ class LFCAnalyzer:
         self.n_lsf_knots = n_lsf_knots
         self.lsf_wave_spacing = lsf_wave_spacing
 
-    def gen_theoretical_peaks(self, lfc_wave, n_left=10_000, n_right=10_000):
-        lfc_centers_freq_theoretical = np.arange(self.f0 - n_left * self.df, self.f0 + (n_right + 1) * self.df, self.df)
-        lfc_centers_wave_theoretical = cs.c / lfc_centers_freq_theoretical
-        lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[::-1] * 1E10
-        good = np.where((lfc_centers_wave_theoretical > np.nanmin(lfc_wave) - 2) & (lfc_centers_wave_theoretical < np.nanmax(lfc_wave) + 2))
-        lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[good]
-        return lfc_centers_wave_theoretical
-
-    def estimate_background(self, lfc_wave, lfc_flux):
-        background = pcmath.generalized_median_filter1d(lfc_flux, width=int(2 * self.peak_separation), percentile=0.01)
-        return background
-
-    def estimate_continuum(self, lfc_wave, lfc_flux):
-        continuum = pcmath.generalized_median_filter1d(lfc_flux, width=int(2 * self.peak_separation), percentile=0.99)
-        return continuum
-
+    
+    #########################
+    #### PRIMARY METHODS ####
+    #########################
 
     def compute_lsf_all(self, times_sci, times_cal, wls_cal_scifiber, lfc_cal_scifiber, do_orders=None):
 
@@ -73,7 +65,7 @@ class LFCAnalyzer:
 
             if order_index + 1 not in do_orders:
                 continue
-            
+
             lsfwidths_sci_scifiber[order_index, :] = np.interp(times_sci, times_cal, lsfwidths_cal_scifiber[order_index, :], left=lsfwidths_cal_scifiber[order_index, 0], right=lsfwidths_cal_scifiber[order_index, -1])
         
         return lsfwidths_sci_scifiber
@@ -280,6 +272,26 @@ class LFCAnalyzer:
 
         return wavelength_solution
 
+    
+    #################
+    #### HELPERS ####
+    #################
+
+    def gen_theoretical_peaks(self, lfc_wave, n_left=10_000, n_right=10_000):
+        lfc_centers_freq_theoretical = np.arange(self.f0 - n_left * self.df, self.f0 + (n_right + 1) * self.df, self.df)
+        lfc_centers_wave_theoretical = cs.c / lfc_centers_freq_theoretical
+        lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[::-1] * 1E10
+        good = np.where((lfc_centers_wave_theoretical > np.nanmin(lfc_wave) - 2) & (lfc_centers_wave_theoretical < np.nanmax(lfc_wave) + 2))
+        lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[good]
+        return lfc_centers_wave_theoretical
+
+    def estimate_background(self, lfc_wave, lfc_flux):
+        background = pcmath.generalized_median_filter1d(lfc_flux, width=int(2 * self.peak_separation), percentile=0.01)
+        return background
+
+    def estimate_continuum(self, lfc_wave, lfc_flux):
+        continuum = pcmath.generalized_median_filter1d(lfc_flux, width=int(2 * self.peak_separation), percentile=0.99)
+        return continuum
 
     @staticmethod
     def flag_bad_pixels(lfc_flux, smooth_width=3, sigma_thresh=9):
