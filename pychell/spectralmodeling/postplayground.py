@@ -145,10 +145,10 @@ def combine_bis(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
     result = pcrvcalc.combine_relative_rvs(bis_single_iter, weights_single_iter, n_obs_nights)
 
     # Add to dictionary
-    rvs_dict['bis_out'] = result[0]
+    rvs_dict['skew_out'] = result[0]
     rvs_dict['uncbis_out'] = result[1]
-    rvs_dict['bis_nightly_out'] = result[2]
-    rvs_dict['uncbis_nightly_out'] = result[3]
+    rvs_dict['skew_nightly_out'] = result[2]
+    rvs_dict['uncskew_nightly_out'] = result[3]
       
 def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, n_flag_iters=10, thresh=4):
     
@@ -695,7 +695,7 @@ def gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict):
             mask[:, inds, :] = 0
             rvs_dict['rvsfwm'][:, inds, :] = np.nan
             rvs_dict['rvsxc'][:, inds, :] = np.nan
-            rvs_dict['bis'][:, inds, :] = np.nan
+            rvs_dict['skew'][:, inds, :] = np.nan
     
     # Mask individual spectra
     if 'bad_spec' in bad_rvs_dict:
@@ -703,7 +703,7 @@ def gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict):
             mask[:, i, :] = 0
             rvs_dict['rvsfwm'][:, i, :] = np.nan
             rvs_dict['rvsxc'][:, i, :] = np.nan
-            rvs_dict['bis'][:, i, :] = np.nan
+            rvs_dict['skew'][:, i, :] = np.nan
         
     return mask
 

@@ -23,7 +23,7 @@ import pychell.data.spectraldata as pcspecdata
 #### NAME AND SITE ####
 #######################
 
-spectrograph = "PARVI"
+spectrograph = "PARVI2"
 observatory = {
     "name" : "Palomar",
     "lat": 33.3537819182,
@@ -35,7 +35,7 @@ observatory = {
 #### DATA PARSING ####
 ######################
 
-class PARVIParser(DataParser):
+class PARVI2Parser(DataParser):
     
     def categorize_raw_data(self, reducer):
 
@@ -163,7 +163,7 @@ class PARVIParser(DataParser):
         return data.itime
         
     def parse_exposure_start_time(self, data):
-        data.time_obs_start = Time(float(data.header["TIMEI00"]) / 1E9, format="unix")
+        data.time_obs_start = Time(float(data.header["START"]) / 1E9, format="unix")
         return data.time_obs_start
 
     def parse_fiber_nums(self, data):
@@ -189,18 +189,59 @@ class PARVIParser(DataParser):
         mean_jd = (np.nanmax(jdsf) - np.nanmin(jdsi)) / 2 + np.nanmin(jdsi)
         return mean_jd
 
+    def compile_reduced_outputs(self, reducer, wls, lsf):
+
+        # Parse files
+        all_files = glob.glob(f"{reducer.output_path}spectra{os.sep}*.fits")
+        fiber_flat_files = glob.glob(f"{reducer.output_path}spectra{os.sep}*FIBREFLAT*.fits") + glob.glob(f"{reducer.output_path}spectra{os.sep}*FIBERFLAT*.fits")
+        lfc_files = glob.glob(f"{reducer.output_path}spectra{os.sep}*LFC*.fits")
+        sci_files = list((set(all_files) - set(fiber_flat_files)) - set(lfc_files))
+
+        # Loop over files
+        for sci_file in sci_files:
+
+            # Load sci file
+            sci_data = fits.open(sci_file)[0].data
+
+            # Numbers
+            n_orders = sci_data.shape[0]
+            n_fibers = sci_data.shape[1]
+            nx = sci_data.shape[2]
+
+            # Initiate output array
+            data_out = np.full((n_orders, 3, nx, 5), np.nan) # Last dim is wave, flux, flux_unc, continuum, badpix
+
+            # Fill wls
+            data_out[0, :, :, 0] = wls
+
+            # Fill science
+            data_out[1:, 0, :, :] = sci_data[:, 0, :, :]
+
+            # Fill fiber flat
+            fiber_nums = [int(fits.open(f)[0].header["FIBER"]) for f in fiber_flat_files]
+            k = fiber_nums.index(1)
+            data_out[:, 1, :, :] = fits.open(fiber_flat_files[k])[0].data[:, 0, :, :]
+
+            # Fill simult LFC
+            data_out[:, 2, :, :] = sci_data[:, 1, :, :]
+
+            # Save
+            fname = f"{sci_file[-4:]}_final.fits"
+            fits.writeto(fname, data_out, overwrite=True)
+
     ###################
     #### WAVE INFO ####
     ###################
     
     @staticmethod
-    def estimate_wavelength_solution(data=None, order_num=None, fiber_num=None):
+    def estimate_wavelength_solution(data, order_num=None, fiber_num=None):
+        breakpoint()
         if order_num is None:
             order_num = data.order_num
         if fiber_num == 1:
-            pcoeffs = wls_coeffs_fiber1[order_num - 1 + 24]
+            pcoeffs = wls_coeffs_fiber1[order_num - 1]
         else:
-            pcoeffs = wls_coeffs_fiber3[order_num - 1 + 24]
+            pcoeffs = wls_coeffs_fiber3[order_num - 1]
         wls = np.polyval(pcoeffs, np.arange(2048))
         return wls
 

@@ -37,7 +37,7 @@ class DataParser:
     #### CATEGORIZE RAW DATA ####
     #############################
     
-    def categorize_raw_data(self):
+    def categorize_raw_data(self, reducer):
         raise NotImplementedError(f"Must implement a categorize_raw_data method for class {self.__class__.__name__}")
     
 
@@ -92,35 +92,16 @@ class DataParser:
     def parse_fiber_nums(self, data):
         return None
 
-    ##############################
-    #### CALIBRATION GROUPING ####
-    ##############################
+    #####################
+    #### CALIBRATION ####
+    #####################
 
-    def gen_master_bias_filename(self, group):
-        fname = f"master_bias_{group[0].utdate}.fits"
-        return fname
-    
-    def gen_master_dark_filename(self, group):
-        img_nums = np.array([int(d.image_num) for d in group])
-        img_start, img_end = np.min(img_nums), np.max(img_nums)
-        fname = f"master_dark_{group[0].utdate}{group[0].itime}s_imgs{img_start}-{img_end}.fits"
-        return fname
-    
-    def gen_master_flat_filename(self, group):
-        img_nums = np.array([int(d.image_num) for d in group])
-        img_start, img_end = np.min(img_nums), np.max(img_nums)
-        fname = f"master_flat_{group[0].utdate}_imgs{img_start}-{img_end}.fits"
-        return fname
-    
-    def gen_order_map_filename(self, source):
-        fname = f"{self.output_path}trace{os.sep}{source.base_input_file_noext}_order_map.fits"
-        return fname
-    
-    def gen_master_calib_header(self, data):
-        data.header = copy.deepcopy(data.group[0].header)
-        data.skycoord = copy.deepcopy(data.group[0].skycoord)
-        data.time_obs_start = copy.deepcopy(data.group[0].time_obs_start)
-    
+    def gen_master_calib_filename(self, master_cal):
+        raise NotImplementedError(f"Must implement method gen_master_calib_filename for class {self.__class__.__name__}")
+
+    def gen_master_calib_header(self, master_cal):
+        return copy.deepcopy(master_cal.group[0].header)
+
     def pair_master_dark(self, data, master_darks):
         n_masker_darks = len(master_darks)
         itimes = np.array([master_darks[i].itime for i in range(n_masker_darks)], dtype=float)

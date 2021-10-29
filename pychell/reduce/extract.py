@@ -56,7 +56,7 @@ class SpectralExtractor:
 
             # Which orders
             if self.extract_orders is None:
-                self.extract_orders = np.arange(1, len(order_map.orders_list)).astype(int)
+                self.extract_orders = np.arange(1, len(order_map.orders_list) + 1).astype(int)
             
             # Alias orders list
             orders_list = order_map.orders_list
@@ -90,10 +90,6 @@ class SpectralExtractor:
 
                     except:
                         print(f"Warning! Could not extract trace [{trace_dict['label']}] for observation [{data}]")
-                        
-                    
-
-                    
 
         # Plot reduced data
         fig = self.plot_extracted_spectra(data, reduced_data)
@@ -108,7 +104,7 @@ class SpectralExtractor:
         # Save reduced data
         fname = f"{reducer.output_path}spectra{os.sep}{data.base_input_file_noext}_{data.object}_reduced.fits"
         hdu = fits.PrimaryHDU(reduced_data, header=data.header)
-        hdu.writeto(fname, overwrite=True)
+        hdu.writeto(fname, overwrite=True, output_verify='ignore')
 
 
 
@@ -410,7 +406,8 @@ class SpectralExtractor:
             data_x = trace_image_no_background_smooth[:, x] / np.nanmax(trace_image_no_background_smooth[:, x])
             
             # CCF lags
-            lags = np.arange(trace_positions_estimate[x] - int(np.ceil(height / 3)), trace_positions_estimate[x] + int(np.ceil(height / 3))).astype(int)
+            #lags = np.arange(trace_positions_estimate[x] - int(np.ceil(height / 3)), trace_positions_estimate[x] + int(np.ceil(height / 3))).astype(int)
+            lags = np.arange(trace_positions_estimate[x] - int(np.ceil(height)), trace_positions_estimate[x] + int(np.ceil(height))).astype(int)
             
             # Perform CCF
             ccf = pcmath.cross_correlate(yarr, data_x, trace_profile_cspline.x, trace_profile, lags, kind="xc")
@@ -427,13 +424,13 @@ class SpectralExtractor:
                 pfit = np.polyfit(lags[iymax-2:iymax+3], ccf[iymax-2:iymax+3], 2)
             except:
                 continue
-                
+
             # Store the nominal location
             y_positions_xc[x] = -1 * pfit[1] / (2 * pfit[0])
         
         # Smooth the deviations
         y_positions_xc_smooth = pcmath.median_filter1d(y_positions_xc, width=3)
-        bad = np.where((np.abs(y_positions_xc - y_positions_xc_smooth) > 0.5) | (np.abs(trace_positions_estimate - y_positions_xc) > 3))[0]
+        bad = np.where(np.abs(y_positions_xc - y_positions_xc_smooth) > 0.5)[0]
         if bad.size > 0:
             y_positions_xc[bad] = np.nan
         good = np.where(np.isfinite(y_positions_xc))[0]

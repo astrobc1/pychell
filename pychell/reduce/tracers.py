@@ -186,5 +186,5 @@ class DensityClusterTracer(OrderTracer):
                 label = int(good_labels[l])
             pfit = np.polyfit(downsample * inds[1], inds[0], 2)
             orders_list.append({'label': label, 'height': heights[l], 'pcoeffs': pfit})
-        
+
         return orders_list

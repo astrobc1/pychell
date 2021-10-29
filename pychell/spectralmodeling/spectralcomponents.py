@@ -837,7 +837,7 @@ class PolyWls(WavelengthSolution):
             pars[self.par_names[i]] = BoundedParameter(value=self.set_point[1],
                                                        vary=True,
                                                        lower_bound=self.set_point[0],
-                                                       upper_bound=self.set_point[1])
+                                                       upper_bound=self.set_point[2])
         return pars
 
 

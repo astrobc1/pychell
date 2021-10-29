@@ -122,7 +122,7 @@ class MasterCal(Echellogram):
         return self.group[0].parser
 
     def save(self, image):
-        fits.writeto(self.input_file, image, self.header, overwrite=True)
+        fits.writeto(self.input_file, image, self.header, overwrite=True, output_verify='ignore')
 
 
 

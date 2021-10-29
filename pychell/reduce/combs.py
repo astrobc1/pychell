@@ -26,24 +26,8 @@ class LFCAnalyzer:
         self.n_lsf_knots = n_lsf_knots
         self.lsf_wave_spacing = lsf_wave_spacing
 
-    def flag_bad_pixels(self, lfc_flux, width=3, thresh=9):
-
-        # First remove negatives
-        bad = np.where(lfc_flux < 0)[0]
-        if bad.size > 0:
-            lfc_flux[bad] = np.nan
-
-        # Identify bad pixels in lfc flux
-        lfc_flux_out = np.copy(lfc_flux)
-        lfc_flux_smooth = pcmath.median_filter1d(lfc_flux, width=width)
-        rel_errors = (lfc_flux - lfc_flux_smooth) / lfc_flux_smooth
-        bad = np.where(np.abs(rel_errors) > thresh * np.nanstd(rel_errors))[0]
-        if bad.size > 0:
-            lfc_flux_out[bad] = np.nan
-        return lfc_flux_out
-
-    def gen_theoretical_peaks(self, lfc_wave):
-        lfc_centers_freq_theoretical = np.arange(self.f0 - 10000 * self.df, self.f0 + 10001 * self.df, self.df)
+    def gen_theoretical_peaks(self, lfc_wave, n_left=10_000, n_right=10_000):
+        lfc_centers_freq_theoretical = np.arange(self.f0 - n_left * self.df, self.f0 + (n_right + 1) * self.df, self.df)
         lfc_centers_wave_theoretical = cs.c / lfc_centers_freq_theoretical
         lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[::-1] * 1E10
         good = np.where((lfc_centers_wave_theoretical > np.nanmin(lfc_wave) - 2) & (lfc_centers_wave_theoretical < np.nanmax(lfc_wave) + 2))
@@ -51,20 +35,25 @@ class LFCAnalyzer:
         return lfc_centers_wave_theoretical
 
     def estimate_background(self, lfc_wave, lfc_flux):
-        background = pcmath.cspline_fit_fancy(lfc_wave, lfc_flux, window=1.25, n_knots=100, percentile=0)
+        background = pcmath.generalized_median_filter1d(lfc_flux, width=int(2 * self.peak_separation), percentile=0.01)
         return background
 
     def estimate_continuum(self, lfc_wave, lfc_flux):
-        continuum = pcmath.cspline_fit_fancy(lfc_wave, lfc_flux, window=1.0, n_knots=200, percentile=0.99)
+        continuum = pcmath.generalized_median_filter1d(lfc_flux, width=int(2 * self.peak_separation), percentile=0.99)
         return continuum
 
-    def compute_lsf_all(self, do_orders, times_sci, times_cal, wls_cal_scifiber, lfc_cal_scifiber):
+
+    def compute_lsf_all(self, times_sci, times_cal, wls_cal_scifiber, lfc_cal_scifiber, do_orders=None):
 
         # Numbers
         nx, n_orders, n_cal_spec = wls_cal_scifiber.shape
+        n_sci_spec = len(times_sci)
         xarr = np.arange(nx).astype(float)
+        if do_orders is None:
+            do_orders = np.arange(1, n_orders + 1).astype(int).tolist()
 
-        lsf_cal_scifiber = np.full((n_orders, n_cal_spec), np.nan)
+        lsfwidths_cal_scifiber = np.full((n_orders, n_cal_spec), np.nan)
+        lsfwidths_sci_scifiber = np.full((n_orders, n_sci_spec), np.nan)
 
         # Loop over orders
         for order_index in range(n_orders):
@@ -74,14 +63,20 @@ class LFCAnalyzer:
 
             # Loop over calibration fiber spectra for sci fiber
             for i in range(n_cal_spec):
-                lsf_cal_scifiber[order_index, i] = self.compute_lsf(wls_cal_scifiber[:, order_index, i], lfc_cal_scifiber[:, order_index, i])
+                try:
+                    lsfwidths_cal_scifiber[order_index, i] = self.compute_lsf(wls_cal_scifiber[:, order_index, i], lfc_cal_scifiber[:, order_index, i])
+                except:
+                    print(f"Warning! Could not compute LSF for order {order_index+1} cal spectrum {i+1}")
 
-        lsf_sci_scifiber = np.empty_like(lsf_cal_scifiber)
-        for i in range(len(times_sci)):
-            k = np.argmin(np.abs(times_sci[i] - times_cal))
-            lsf_sci_scifiber[:, i] = lsf_cal_scifiber[:, k]
+
+        for order_index in range(n_orders):
+
+            if order_index + 1 not in do_orders:
+                continue
+            
+            lsfwidths_sci_scifiber[order_index, :] = np.interp(times_sci, times_cal, lsfwidths_cal_scifiber[order_index, :], left=lsfwidths_cal_scifiber[order_index, 0], right=lsfwidths_cal_scifiber[order_index, -1])
         
-        return lsf_cal_scifiber
+        return lsfwidths_sci_scifiber
 
     def compute_lsf(self, lfc_wave, lfc_flux):
 
@@ -126,20 +121,6 @@ class LFCAnalyzer:
         waves_all = waves_all[good]
         flux_all = flux_all[good]
 
-        # Spline fit
-        knots = np.linspace(np.nanmin(waves_all) + 0.0001, np.nanmax(waves_all) - 0.0001, num=self.n_lsf_knots)
-        cspline_fit = LSQUnivariateSpline(waves_all, flux_all, t=knots[1:-1], k=3, ext=3)
-
-        # Fiducial Grid
-        nx = int(np.ceil((knots[-1] - knots[0]) / self.lsf_wave_spacing))
-        if nx % 2 == 0:
-            nx += 1
-        fiducial_grid = np.arange(int(-nx / 2), int(nx / 2) + 1) * self.lsf_wave_spacing
-        lsf = cspline_fit(fiducial_grid)
-        bad = np.where(lsf < 0)[0]
-        if bad.size > 0:
-            lsf[bad] = 0
-
         p0 = [pcmath.weighted_median(flux_all, percentile=0.95), 0.1]
         bounds = [(0.5 * p0[0], 1.5 * p0[0]), (0.01, 1)]
         opt_result = scipy.optimize.minimize(self.fit_lsf, p0, args=(waves_all, flux_all), method='Nelder-Mead', bounds=bounds)
@@ -148,16 +129,23 @@ class LFCAnalyzer:
 
         return sigma
 
-    def compute_wls_all(self, do_orders, times_sci, times_cal, wave_estimate_sci, wave_estimate_cal, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber):
+    def compute_wls_all(self, times_sci, times_cal, wave_estimate_sci, wave_estimate_cal, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, method="interp"):
 
         # Numbers
         nx, n_orders = wave_estimate_sci.shape
         xarr = np.arange(nx).astype(float)
+        if do_orders is None:
+            do_orders = np.arange(1, n_orders + 1).astype(int).tolist()
 
         # Sci
-        n_sci_spec = len(times_sci)
-        wls_sci_scifiber = np.full((nx, n_orders, n_sci_spec), np.nan) # Returned at the end
-        wls_sci_calfiber = np.full((nx, n_orders, n_sci_spec), np.nan)
+        if times_sci is not None:
+            n_sci_spec = len(times_sci)
+            wls_sci_scifiber = np.full((nx, n_orders, n_sci_spec), np.nan)
+            wls_sci_calfiber = np.full((nx, n_orders, n_sci_spec), np.nan)
+        else:
+            n_sci_spec = 0
+            wls_sci_calfiber = None
+            wls_sci_scifiber = None
         
         # Cal
         n_cal_spec = len(times_cal)
@@ -170,26 +158,48 @@ class LFCAnalyzer:
             if order_index + 1 not in do_orders:
                 continue
 
-            # Loop over calibration fiber spectra and compute wls for all orders, both fibers
+            # Loop over calibration fiber spectra and compute wls for both fibers
             for i in range(n_cal_spec):
-                wls_cal_scifiber[:, order_index, i] = self.compute_wls(wave_estimate_sci[:, order_index], lfc_cal_scifiber[:, order_index, i])
+                print(f"Computing cal fiber wls for order {order_index+1} cal spectrum {i+1}")
+                try:
+                    wls_cal_scifiber[:, order_index, i] = self.compute_wls(wave_estimate_sci[:, order_index], lfc_cal_scifiber[:, order_index, i])
+                except:
+                    print(f"Warning! Could not compute wls for order {order_index+1} cal spectrum {i+1}")
+                
                 try:
                     wls_cal_calfiber[:, order_index, i] = self.compute_wls(wave_estimate_cal[:, order_index], lfc_cal_calfiber[:, order_index, i])
                 except:
-                    print(f"Warning! Could not compute wls for observation {i+1}")
+                    print(f"Warning! Could not compute wls for order {order_index+1} cal spectrum {i+1}")
 
-            # Loop over science fiber spectra and compute wls for all orders
-            for i in range(n_sci_spec):
-                wls_sci_calfiber[:, order_index, i] = self.compute_wls(wave_estimate_cal[:, order_index], lfc_sci_calfiber[:, order_index, i])
+            # Loop over science spectra and compute wls for cal fiber
+            if times_sci is not None:
+                for i in range(n_sci_spec):
+                    print(f"Computing cal fiber wls for order {order_index+1} science spectrum {i+1}")
+                    try:
+                        wls_sci_calfiber[:, order_index, i] = self.compute_wls(wave_estimate_cal[:, order_index], lfc_sci_calfiber[:, order_index, i])
+                    except:
+                        print(f"Warning! Could not compute wls for order {order_index+1} science spectrum {i+1}")
 
-            # Loop over science observations, computer science fiber wls
-            for i in range(n_sci_spec):
-                #k_cal_start = np.where(times_cal < times_sci[i])[-1]
-                #k_cal_end = np.where(times_cal > times_sci[i])[0]
-                for x in range(nx):
-                    #linear_coeffs_scifiber = np.polyfit([times_cal[k_cal_start], times_cal[k_cal_end]], [wls_cal_scifiber[x, k_cal_start], wls_cal_scifiber[x, k_cal_end]])
-                    wls_sci_scifiber[x, order_index, i] = np.interp(times_sci[i], times_cal, wls_cal_scifiber[x, order_index, :], left=wls_cal_scifiber[x, order_index, 0], right=wls_cal_scifiber[x, order_index, -1])
-        
+            # Loop over science observations, computer wls for science fiber
+            if times_sci is not None:
+                for i in range(n_sci_spec):
+                    print(f"Computing sci fiber wls for order {order_index+1} science spectrum {i+1}")
+                    if method == "interp":
+                        for x in range(nx):
+                            wls_sci_scifiber[x, order_index, i] = np.interp(times_sci[i], times_cal, wls_cal_scifiber[x, order_index, :], left=wls_cal_scifiber[x, order_index, 0], right=wls_cal_scifiber[x, order_index, -1])
+                    elif method == "relinterp":
+                        k_cal_start = np.where(times_cal < times_sci[i])[-1]
+                        k_cal_end = np.where(times_cal > times_sci[i])[0]
+                        for x in range(nx):
+                            linear_coeffs_cal_scifiber = np.polyfit([times_cal[k_cal_start], times_cal[k_cal_end]], [wls_cal_scifiber[x, k_cal_start], wls_cal_scifiber[x, k_cal_end]])
+                            linear_coeffs_cal_calfiber = np.polyfit([times_cal[k_cal_start], times_cal[k_cal_end]], [wls_cal_calfiber[x, k_cal_start], wls_cal_calfiber[x, k_cal_end]])
+                            mean_slope = (linear_coeffs_cal_scifiber[0] + linear_coeffs_cal_calfiber[0]) / 2
+                            wls_sci_scifiber[x, order_index, i] = np.interp(times_sci[i], times_cal, wls_cal_scifiber[x, order_index, :], left=wls_cal_scifiber[x, order_index, 0], right=wls_cal_scifiber[x, order_index, -1])
+                    elif method == "nearest":
+                        pass
+                    else:
+                        raise ValueError("method must be nearest or interp")
+
         return wls_sci_scifiber, wls_sci_calfiber, wls_cal_scifiber, wls_cal_calfiber
 
     def compute_wls(self, wave_estimate, lfc_flux):
@@ -267,8 +277,26 @@ class LFCAnalyzer:
         else:
             pfit = np.polyfit(lfc_centers_pix, lfc_centers_wave, self.wls_poly_order)
             wavelength_solution = np.polyval(pfit, xarr)
-        
+
         return wavelength_solution
+
+
+    @staticmethod
+    def flag_bad_pixels(lfc_flux, smooth_width=3, sigma_thresh=9):
+
+        # First remove negatives
+        bad = np.where(lfc_flux < 0)[0]
+        if bad.size > 0:
+            lfc_flux[bad] = np.nan
+
+        # Identify bad pixels in lfc flux
+        lfc_flux_out = np.copy(lfc_flux)
+        lfc_flux_smooth = pcmath.median_filter1d(lfc_flux, width=smooth_width)
+        rel_errors = (lfc_flux - lfc_flux_smooth) / lfc_flux_smooth
+        bad = np.where(np.abs(rel_errors) > sigma_thresh * np.nanstd(rel_errors))[0]
+        if bad.size > 0:
+            lfc_flux_out[bad] = np.nan
+        return lfc_flux_out
 
     @staticmethod
     def fit_peak(pars, x, data):

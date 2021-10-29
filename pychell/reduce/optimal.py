@@ -132,7 +132,7 @@ class OptimalExtractor(SpectralExtractor):
         # Iteratively extract spectrum
         for i in range(n_extract_iterations):
             
-            print(f" [{data}] Iteratively Extracting Trace [{i + 1} / {n_extract_iterations}] ...", flush=True)
+            print(f" [{data}, {trace_dict['label']}] Iteratively Extracting Trace [{i + 1} / {n_extract_iterations}] ...", flush=True)
             
             # Optimal extraction
             spec1d, spec1d_unc = OptimalExtractor.optimal_extraction(trace_image, badpix_mask,

@@ -341,6 +341,16 @@ def median_filter1d(x, width, preserve_nans=True):
         
     return out
 
+def generalized_median_filter1d(x, width, percentile=0.5):
+    nx = len(x)
+    y = np.full(nx, np.nan)
+    for i in range(nx):
+        ilow = int(np.max([0, i - np.ceil(width / 2)]))
+        ihigh = int(np.min([i + np.floor(width / 2), nx - 1]))
+        if np.where(np.isfinite(x[ilow:ihigh+1]))[0].size > 0:
+            y[i] = weighted_median(x[ilow:ihigh+1], percentile=percentile)
+    return y
+
 @njit
 def gauss(x, amp, mu, sigma):
     """Constructs a standard Gaussian
@@ -624,6 +634,7 @@ def mad(x):
     """
     return np.nanmedian(np.abs(x - np.nanmedian(x)))
 
+@jit
 def weighted_median(data, weights=None, percentile=0.5):
     """Computes the weighted percentile of a data set
 
@@ -661,7 +672,7 @@ def weighted_median(data, weights=None, percentile=0.5):
 
     return w_median
 
-@njit
+#@njit
 def weighted_stddev(x, w):
     """Computes the weighted standard deviation of a dataset with bias correction.
 
@@ -679,7 +690,6 @@ def weighted_stddev(x, w):
     var = np.nansum(dev ** 2 * weights) / bias_estimator
     return np.sqrt(var)
 
-@jit
 def weighted_mean(x, w):
     """Computes the weighted mean of a dataset.
 
@@ -692,7 +702,6 @@ def weighted_mean(x, w):
     """
     return np.nansum(x * w) / np.nansum(w)
 
-@njit
 def weighted_combine(y, w, yerr=None, err_type="empirical"):
     """Performs a weighted coadd.
 
@@ -989,6 +998,8 @@ def normalize_image(image, window=5, n_knots=60, percentile=0.99, downsample=8):
     if bad[0].size > 0:
         out[bad] = np.nan
     return out
+
+
 
 def cspline_fit_fancy(x, y, window=None, n_knots=50, percentile=0.99):
     """Robust at fitting certain signals present in a dataset.
