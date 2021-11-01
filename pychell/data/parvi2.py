@@ -235,7 +235,6 @@ class PARVI2Parser(DataParser):
     
     @staticmethod
     def estimate_wavelength_solution(data, order_num=None, fiber_num=None):
-        breakpoint()
         if order_num is None:
             order_num = data.order_num
         if fiber_num == 1:
