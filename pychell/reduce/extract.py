@@ -201,15 +201,16 @@ class SpectralExtractor:
             if good.size < 2:
                 continue
             
-            # Generate trace profile
+            # Generate trace profile for this column
             P = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x], trace_profile_cspline(trace_profile_cspline.x), yarr)
             
-            # Get useful area
+            # Get useful window
             good = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]))[0]
             if good.size <= 1:
                 continue
-            P_use = P[good]
-            P_use /= np.nansum(P_use)
+
+            # Normalize trace profile
+            P_use = P[good] / np.nansum(P[good])
             
             # Remap into 2d space
             if remove_background:
@@ -220,7 +221,9 @@ class SpectralExtractor:
                 weights[good, x] = np.copy(trace_image[good, x])
         
         # Flag
-        bad = np.where(np.abs(residuals) > badpix_threshold*pcmath.weighted_stddev(residuals, weights))
+        weights /= np.nansum(weights)
+        wres = residuals * weights
+        bad = np.where(np.abs(wres) > badpix_threshold * np.nanstd(wres))
         if bad[0].size > 0:
             badpix_mask[bad] = 0
             trace_image[bad] = np.nan
