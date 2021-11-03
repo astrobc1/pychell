@@ -1,23 +1,17 @@
 # Default Python modules
 import os
-import glob
-import importlib
-import sys
-import pdb
 import pickle
-import copy
-import time
-import json
 import warnings
+import importlib
 
-# Science/math
+# Maths
 import numpy as np
 np.seterr(invalid='ignore', divide='ignore')
 warnings.filterwarnings('ignore')
-from astropy.io import fits
-from astropy.time import Time
 
 # Graphics
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pychell
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
@@ -129,7 +123,7 @@ class Reducer:
             print(f"Extracting Spectra In Parallel Using {self.n_cores} Cores ...", flush=True)
             
             # Call in parallel
-            Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.extract_image_wrapper)(self, data, i + 1, len(self.data["extract"])) for i, data in enumerate(self.data["extract"]))
+            Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1, prefer="threads")(delayed(self.extract_image_wrapper)(self, data, i + 1, len(self.data["extract"])) for i, data in enumerate(self.data["extract"]))
             
         else:
             

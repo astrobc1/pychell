@@ -11,6 +11,8 @@ import scipy.signal
 from astropy.io import fits
 
 # Graphics
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # Pychell modules
@@ -448,10 +450,10 @@ class SpectralExtractor:
 
 
 # Optimal
-from .optimal import OptimalExtractor
+from pychell.reduce.optimal import OptimalExtractor
 
 # Slit decomp
-from .decomp import DecompExtractor
+#from pychell.reduce.decomp import DecompExtractor
 
 # Gauss 2d
-from .gauss2d import Gauss2dExtractor
+#from pychell.reduce.gauss2d import Gauss2dExtractor
