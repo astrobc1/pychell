@@ -26,7 +26,7 @@ class OptimalExtractor(SpectralExtractor):
     def __init__(self, mask_left=100, mask_right=100, mask_top=100, mask_bottom=100,
                  remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05,
                  trace_pos_poly_order=4, oversample=4,
-                 n_trace_refine_iterations=3, n_extract_iterations=3,
+                 n_trace_refine_iterations=3, trace_pos_refine_window=None, n_extract_iterations=3,
                  badpix_threshold=5,
                  extract_aperture=None, extract_orders=None):
 
@@ -39,6 +39,7 @@ class OptimalExtractor(SpectralExtractor):
         self.background_smooth_width = background_smooth_width
         self.flux_cutoff = flux_cutoff
         self.n_trace_refine_iterations = n_trace_refine_iterations
+        self.trace_pos_refine_window = trace_pos_refine_window
         self.n_extract_iterations = n_extract_iterations
         self.trace_pos_poly_order = trace_pos_poly_order
         self.oversample = oversample
@@ -50,13 +51,13 @@ class OptimalExtractor(SpectralExtractor):
     #######################################################################
 
     def extract_trace(self, data, trace_image, trace_map_image, trace_dict, badpix_mask=None, read_noise=None):
-        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.n_extract_iterations, self.badpix_threshold, self.extract_orders, self._extract_aperture)
+        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.trace_pos_refine_window, self.n_extract_iterations, self.badpix_threshold, self.extract_orders, self._extract_aperture)
 
     @staticmethod
-    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, n_extract_iterations=3, badpix_threshold=5, extract_orders=None, _extract_aperture=None):
+    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, trace_pos_refine_window=None, n_extract_iterations=3, badpix_threshold=5, extract_orders=None, _extract_aperture=None):
         
         if read_noise is None:
-            read_noise = data.parser.parse_itime(data) * data.parser.spec_module.read_noise
+            read_noise = data.specmod.parse_itime(data) * data.specmod.read_noise
         else:
             read_noise = 0
 
@@ -77,6 +78,10 @@ class OptimalExtractor(SpectralExtractor):
         bad = np.where((trace_map_image != trace_dict['label']) | ~np.isfinite(trace_image) | (badpix_mask == 0))
         badpix_mask[bad] = 0
         trace_image[bad] = np.nan
+
+        # Initiate trace_pos_refine_window
+        if trace_pos_refine_window is None:
+            trace_pos_refine_window = trace_dict['height'] / 2
 
         # Initial trace positions
         trace_positions = np.polyval(trace_dict['pcoeffs'], xarr)
@@ -117,7 +122,7 @@ class OptimalExtractor(SpectralExtractor):
             
             # Trace Position
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            trace_positions = OptimalExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, background, remove_background, trace_pos_poly_order)
+            trace_positions = OptimalExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
 
             # Extract Aperture
             if _extract_aperture is None:

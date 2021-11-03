@@ -86,7 +86,7 @@ class IterativeSpectralForwardModel:
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, wavelength_solution=None, continuum=None, lsf=None,
+    def __init__(self, wls=None, continuum=None, lsf=None,
                  star=None,
                  tellurics=None,
                  gas_cell=None,
@@ -98,7 +98,7 @@ class IterativeSpectralForwardModel:
         """Initiate an iterative spectral forward model object.
 
         Args:
-            wavelength_solution (WavelengthSolution, optional): The wavelength solution model. Defaults to None.
+            wls (WavelengthSolution, optional): The wavelength solution model. Defaults to None.
             continuum (Continuum, optional): The continuum model. Defaults to None.
             lsf (LSF, optional): The LSF model. Defaults to None.
             star (AugmentedStar, optional): The Stellar model. Defaults to None.
@@ -124,7 +124,7 @@ class IterativeSpectralForwardModel:
         self.crop_pix = crop_pix
         
         # Model components
-        self.wavelength_solution = wavelength_solution
+        self.wls = wls
         self.continuum = continuum
         self.lsf = lsf
         self.star = star
@@ -133,7 +133,7 @@ class IterativeSpectralForwardModel:
         self.fringing = fringing
         
     def init_templates(self, data):
-        data_wave_grid = data[0].parser.estimate_wavelength_solution(data[0])
+        data_wave_grid = data[0].specmod.estimate_wls(data[0])
         good = np.where(data[0].mask == 1)[0]
         if good.size == 0:
             raise ValueError(f"{data[0]} contains no good data")
@@ -150,8 +150,8 @@ class IterativeSpectralForwardModel:
         
     def init_parameters(self, data):
         self.p0 = BoundedParameters()
-        if self.wavelength_solution is not None:
-            self.p0.update(self.wavelength_solution.init_parameters(data))
+        if self.wls is not None:
+            self.p0.update(self.wls.init_parameters(data))
         if self.lsf is not None:
             self.p0.update(self.lsf.init_parameters(data))
         if self.continuum is not None:
@@ -178,8 +178,8 @@ class IterativeSpectralForwardModel:
         self.p0 = p0
         
         # Init the models which may modify the templates
-        if self.wavelength_solution is not None:
-            self.wavelength_solution.initialize(self, iter_index)
+        if self.wls is not None:
+            self.wls.initialize(self, iter_index)
         if self.continuum is not None:
             self.continuum.initialize(self, iter_index)
         if self.lsf is not None:
@@ -238,8 +238,8 @@ class IterativeSpectralForwardModel:
             model_flux *= self.continuum.build(pars, model_wave)
 
         # Generate the wavelength solution of the data
-        if self.wavelength_solution is not None:
-            data_wave = self.wavelength_solution.build(pars)
+        if self.wls is not None:
+            data_wave = self.wls.build(pars)
 
         # Interpolate high res model onto data grid
         if wave_final is None:
@@ -256,9 +256,9 @@ class IterativeSpectralForwardModel:
     
     def summary(self, pars):
         s = ""
-        if self.wavelength_solution is not None:
+        if self.wls is not None:
             s += "--Wavelength Solution--:\n"
-            for pname in self.wavelength_solution.par_names:
+            for pname in self.wls.par_names:
                 s += f"  {pars[pname]}\n"
         if self.continuum is not None:
             s += "--Continuum--:\n"

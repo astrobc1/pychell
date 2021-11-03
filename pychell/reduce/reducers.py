@@ -36,7 +36,7 @@ class Reducer:
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, spectrograph, data_input_path, output_path, pre_calib=None, tracer=None, extractor=None, wave_cal=None, lsf_cal=None, n_cores=1):
+    def __init__(self, spectrograph, data_input_path, output_path, pre_calib=None, tracer=None, extractor=None, n_cores=1):
         
         # The spectrograph
         self.spectrograph = spectrograph
@@ -55,7 +55,6 @@ class Reducer:
         self.pre_calib = pre_calib
         self.tracer = tracer
         self.extractor = extractor
-        self.lsf_cal = lsf_cal
 
         # Create the output directories
         self.create_output_dirs()
@@ -82,13 +81,9 @@ class Reducer:
         # Load the spectrograph module
         spec_module = self.spec_module
         
-        # Construct the data parser
-        parser_class = getattr(spec_module, f"{self.spectrograph}Parser")
-        self.parser = parser_class()
-        
         # Identify what's what.
         print("Categorizing Data ...", flush=True)
-        self.data = self.parser.categorize_raw_data(self)
+        self.data = spec_module.categorize_raw_data(self.data_input_path, self.output_path)
     
     ##########################
     #### PRIMARY ROUTINES ####
@@ -171,9 +166,6 @@ class Reducer:
 
         # Print end
         print(f"Extracted Image {image_num} of {n_extract_tot} [{data}] in {round(stopwatch.time_since(), 2) / 60} min")
-
-    def compile_reduced_outputs(self):
-        self.parser.compile_reduced_outputs(self)
 
 
     ###############

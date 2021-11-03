@@ -1,16 +1,19 @@
 # Base Python
 import os
-
-import pychell.data.parser as pcdataparser
 import glob
-from astropy.io import fits
-import pychell.data as pcdata
 
 # Maths
 import numpy as np
+
+# Astropy
+from astropy.io import fits
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as units
+
+# Barycorrpy
+from barycorrpy import get_BC_vel
+from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
 
 # Pychell deps
 import pychell.maths as pcmath
@@ -31,120 +34,56 @@ observatory = {
 #### DATA PARSING ####
 ######################
 
-class CHIRONParser(pcdataparser.DataParser):
-    
-    def categorize_raw_data(self, config):
+def parse_exposure_start_time(data):
+    data.time_obs_start = Time(data.header['DATE-OBS'])
+    return data.time_obs_start
 
-        # Stores the data as above objects
-        data_dict = {}
-        
-        # iSHELL science files are files that contain spc or data
-        sci_files1 = glob.glob(self.input_path + '*data*.fits')
-        sci_files2 = glob.glob(self.input_path + '*spc*.fits')
-        sci_files = sci_files1 + sci_files2
-        sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
-        n_sci_files = len(sci_files)
-        
-        data_dict['science'] = [pcdata.RawImage(input_file=sci_files[f], parser=self) for f in range(n_sci_files)]
-            
-        # Darks assumed to contain dark in filename
-        if config['dark_subtraction']:
-            dark_files = glob.glob(self.input_path + '*dark*.fits')
-            n_dark_files = len(dark_files)
-            data_dict['darks'] = [pcdata.RawImage(input_file=dark_files[f], parser=self) for f in range(n_dark_files)]
-            dark_groups = self.group_darks(data_dict['darks'])
-            data_dict['master_darks'] = []
-            for dark_group in dark_groups:
-                master_dark_fname = self.gen_master_dark_filename(dark_group)
-                data_dict['master_darks'].append(pcdata.MasterCalibImage(dark_group, input_file=master_dark_fname, parser=self))
-            
-            for sci in data_dict['science']:
-                self.pair_master_dark(sci, data_dict['master_darks'])
-                
-            for flat in data_dict['flats']:
-                self.pair_master_dark(flat, data_dict['master_darks'])
-        
-        # iSHELL flats must contain flat in the filename
-        if config['flat_division']:
-            flat_files = glob.glob(self.input_path + '*flat*.fits')
-            n_flat_files = len(flat_files)
-            data_dict['flats'] = [pcdata.RawImage(input_file=flat_files[f], parser=self) for f in range(n_flat_files)]
-            flat_groups = self.group_flats(data_dict['flats'])
-            data_dict['master_flats'] = []
-            for flat_group in flat_groups:
-                master_flat_fname = self.gen_master_flat_filename(flat_group)
-                data_dict['master_flats'].append(pcdata.MasterCalibImage(flat_group, input_file=master_flat_fname, parser=self))
-            
-            for sci in data_dict['science']:
-                self.pair_master_flat(sci, data_dict['master_flats'])
-            
-        # iSHELL ThAr images must contain arc (not implemented yet)
-        if config['wavelength_calibration']:
-            thar_files = glob.glob(self.input_path + '*arc*.fits')
-            data_dict['wavecals'] = [pcdata.RawImage(input_file=thar_files[f], parser=self) for f in range(len(thar_files))]
-            data_dict['master_wavecals'] = self.group_wavecals(data_dict['wavecals'])
-            for sci in data_dict['science']:
-                self.pair_master_wavecal(sci, data_dict['master_wavecals'])
-                
-                
-        # Order map
-        data_dict['order_maps'] = []
-        for master_flat in data_dict['master_flats']:
-            order_map_fname = self.gen_order_map_filename(source=master_flat)
-            data_dict['order_maps'].append(pcdata.ImageMap(input_file=order_map_fname, source=master_flat,  parser=self, order_map_fun='trace_orders_from_flat_field'))
-        for sci_data in data_dict['science']:
-            self.pair_order_map(sci_data, data_dict['order_maps'])
-        
-        self.print_summary(data_dict)
-
-        return data_dict
+def parse_itime(data):
+    data.itime = data.header["EXPTIME"]
+    return data.itime
     
-    def pair_order_map(self, data, order_maps):
-        for order_map in order_maps:
-            if order_map.source == data.master_flat:
-                data.order_map = order_map
-                return
-
-    def parse_image_num(self, data):
-        string_list = data.base_input_file.split('.')
-        data.image_num = string_list[4]
-        return data.image_num
-        
-    def parse_target(self, data):
-        data.target = data.header["OBJECT"]
-        return data.target
-        
-    def parse_utdate(self, data):
-        utdate = "".join(data.header["DATE-OBS"].split('-')[0:3])
-        data.utdate = utdate
-        return data.utdate
-        
-    def parse_sky_coord(self, data):
-        data.skycoord = SkyCoord(ra=data.header['RA'], dec=data.header['DEC'], unit=(units.hourangle, units.deg))
-        return data.skycoord
-        
-    def parse_exposure_start_time(self, data):
-        data.time_obs_start = Time(data.header['DATE-OBS'])
-        return data.time_obs_start
+def parse_spec1d(data):
+    fits_data = fits.open(data.input_file)[0]
+    fits_data.verify('fix')
+    data.header = fits_data.header
+    oi = data.order_num - 1
+    data.wave, data.flux = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 1].astype(np.float64)
+    data.flux_unc = np.full(data.flux.shape, 1E-3)
+    data.mask = np.ones_like(data.flux)
     
-    def parse_itime(self, data):
-        data.itime = data.header["EXPTIME"]
-        return data.itime
+def estimate_wls(data):
+    oi = data.order_num - 1
+    shift = gas_cell_shifts[oi]
+    wls = data.wave - shift
+    return wls
+
+
+################################
+#### BARYCENTER CORRECTIONS ####
+################################
+
+def compute_barycenter_corrections(data, star_name):
         
-    def parse_spec1d(self, data):
-        fits_data = fits.open(data.input_file)[0]
-        fits_data.verify('fix')
-        data.header = fits_data.header
-        oi = data.order_num - 1
-        data.apriori_wave_grid, data.flux = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 1].astype(np.float64)
-        data.flux_unc = np.zeros_like(data.flux) + 1E-3
-        data.mask = np.ones_like(data.flux)
-        
-    def estimate_wavelength_solution(self, data):
-        oi = data.order_num - 1
-        shift = gas_cell_shifts[oi]
-        wls = data.apriori_wave_grid - shift
-        return wls
+    # Star name
+    star_name = star_name.replace('_', ' ')
+    
+    # Compute the JD UTC mid point (possibly weighted)
+    jdmid = compute_exposure_midpoint(data)
+    
+    # BJD
+    bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    
+    # bc vel
+    bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    
+    # Add to data
+    data.bjd = bjd
+    data.bc_vel = bc_vel
+    
+    return bjd, bc_vel
+
+def compute_exposure_midpoint(data):
+    return parse_exposure_start_time(data).jd + parse_itime(data) / (2 * 86400)
 
 
 #######################################

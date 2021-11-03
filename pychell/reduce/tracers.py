@@ -28,7 +28,6 @@ from astropy.io import fits
 import pychell.maths as pcmath
 import pychell.data.spectraldata as pcspecdata
 
-
 class OrderTracer:
 
     def __init__(self, mask_left=200, mask_right=200, mask_top=20, mask_bottom=20):
@@ -84,7 +83,7 @@ class DensityClusterTracer(OrderTracer):
         
         # Fiber number
         try:
-            fiber = int(data.parser.parse_fiber_nums(data))
+            fiber = int(data.specmod.parse_fiber_nums(data))
         except:
             fiber = None
 

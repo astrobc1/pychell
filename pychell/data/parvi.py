@@ -2,19 +2,19 @@
 import os
 import copy
 import glob
+import sys
 
 # Maths
 import numpy as np
+import scipy.constants as cs
 
 # Astropy
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as units
 from astropy.io import fits
-import scipy.constants as cs
 
 # Pychell deps
-from pychell.data.parser import DataParser
 import pychell.maths as pcmath
 import pychell.data.spectraldata as pcspecdata
 
@@ -35,174 +35,193 @@ observatory = {
 #### DATA PARSING ####
 ######################
 
-class PARVIParser(DataParser):
+def categorize_raw_data(data_input_path, output_path):
+
+    # Stores the data as above objects
+    data = {}
+
+    # Classify files
+    all_files = glob.glob(data_input_path + '*.fits')
+    lfc_files = glob.glob(data_input_path + '*LFC_*.fits') + glob.glob(data_input_path + '*LFCSTABILITY_*.fits')
+    dark_files = glob.glob(data_input_path + '*DARK*.fits')
+    full_flat_files = glob.glob(data_input_path + '*FULLFLAT*.fits')
+    badpix_files = glob.glob(data_input_path + "*BadPixels*.fits")
+    fiber_flat_files = glob.glob(data_input_path + '*FIBERFLAT*.fits') + glob.glob(data_input_path + '*FIBREFLAT*.fits')
+    sci_files = list(set(all_files) - set(lfc_files) - set(dark_files) - set(full_flat_files) - set(badpix_files) - set(fiber_flat_files))
+
+    # Create Echellograms from raw data
+    data['science'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in sci_files]
+    data['fiber_flats'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in fiber_flat_files]
+    data['darks'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in dark_files]
+    data['flats'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in full_flat_files]
+    data['lfc'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in lfc_files]
     
-    def categorize_raw_data(self, reducer):
+    # Master Darks
+    data['master_darks'] = [pcspecdata.MasterCal(group, output_path + "calib" + os.sep) for group in group_darks(data['darks'])]
 
-        # Stores the data as above objects
-        data = {}
+    # Master Flats
+    data['master_flats'] = [pcspecdata.MasterCal(group, output_path + "calib" + os.sep) for group in group_flats(data['flats'])]
 
-        # Classify files
-        all_files = glob.glob(reducer.data_input_path + '*.fits')
-        lfc_files = glob.glob(reducer.data_input_path + '*LFC_*.fits') + glob.glob(reducer.data_input_path + '*LFCSTABILITY_*.fits')
-        dark_files = glob.glob(reducer.data_input_path + '*DARK*.fits')
-        full_flat_files = glob.glob(reducer.data_input_path + '*FULLFLAT*.fits')
-        badpix_files = glob.glob(reducer.data_input_path + "*BadPixels*.fits")
-        fiber_flat_files = glob.glob(reducer.data_input_path + '*FIBERFLAT*.fits') + glob.glob(reducer.data_input_path + '*FIBREFLAT*.fits')
-        sci_files = list(set(all_files) - set(lfc_files) - set(dark_files) - set(full_flat_files) - set(badpix_files) - set(fiber_flat_files))
+    # Order maps
+    data['order_maps'] = data['fiber_flats']
 
-        # Create Echellograms from raw data
-        data['science'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in sci_files]
-        data['fiber_flats'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in fiber_flat_files]
-        data['darks'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in dark_files]
-        data['flats'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in full_flat_files]
-        data['lfc'] = [pcspecdata.RawEchellogram(input_file=f, parser=self) for f in lfc_files]
+    # Which to extract
+    data['extract'] = data['science'] + data['fiber_flats'] + data['lfc']
+
+    # Pair order maps for the spectra to extract
+    for d in data['extract']:
+        pair_order_maps(d, data['extract'])
+
+    # Pair darks with full frame flats
+    for flat in data['flats']:
+        pair_master_dark(flat, data['master_darks'])
+
+    # Pair darks and flats with all extract (sci, LFC, fiber flats)
+    for sci in data['extract']:
+        pair_master_dark(sci, data['master_darks'])
+        pair_master_flat(sci, data['master_flats'])
+
+    # Bad pixel mask (only one, load into memory)
+    data['badpix_mask'] = 1 - fits.open(badpix_files[0])[0].data.astype(float)
         
-        # Master Darks
-        data['master_darks'] = [pcspecdata.MasterCal(group, reducer.output_path + "calib" + os.sep) for group in self.group_darks(data['darks'])]
 
-        # Master Flats
-        data['master_flats'] = [pcspecdata.MasterCal(group, reducer.output_path + "calib" + os.sep) for group in self.group_flats(data['flats'])]
+    #self.print_summary(data)
 
-        # Master fiber flats (only one)
-        #data['master_fiber_flats'] = [pcspecdata.MasterCalibrationFrame(data['fiber_flats'], output_path + "calib" + os.sep)]
+    return data
 
-        # Order maps
-        data['order_maps'] = data['fiber_flats']
+def group_darks(darks):
+    return [darks]
 
-        # Which to extract
-        data['extract'] = data['science'] + data['fiber_flats'] + data['lfc']
+def group_flats(flats):
+    return [flats]
 
-        # Pair order maps for the spectra to extract
-        for d in data['extract']:
-            self.pair_order_maps(d, data['extract'])
+def gen_master_calib_filename(master_cal):
+    fname0 = master_cal.group[0].base_input_file.lower()
+    if "dark" in fname0:
+        return f"master_dark_{master_cal.group[0].utdate}{master_cal.group[0].itime}s.fits"
+    elif "fiberflat" in fname0 or "fibreflat" in fname0:
+        return f"master_fiberflat_{master_cal.group[0].utdate}.fits"
+    elif "fullflat" in fname0:
+        return f"master_fullflat_{master_cal.group[0].utdate}.fits"
+    elif "lfc" in fname0:
+        return f"master_lfc_{master_cal.group[0].utdate}.fits"
+    else:
+        return f"master_calib_{master_cal.group[0].utdate}.fits"
 
-        # Pair darks with full frame flats
-        for flat in data['flats']:
-            self.pair_master_dark(flat, data['master_darks'])
+def gen_master_calib_header(master_cal):
+    return copy.deepcopy(master_cal.group[0].header)
 
-        # Pair darks and flats with all extract (sci, LFC, fiber flats)
-        for sci in data['extract']:
-            self.pair_master_dark(sci, data['master_darks'])
-            self.pair_master_flat(sci, data['master_flats'])
+def parse_image_header(data):
+        
+    # Parse the fits HDU
+    fits_hdu = fits.open(data.input_file)[0]
+    
+    # Just in case
+    try:
+        fits_hdu.verify('fix')
+    except:
+        pass
+    
+    # Store the header
+    data.header = fits_hdu.header
+    
+    # Parse the sky coord and time of obs
+    parse_utdate(data)
+    parse_sky_coord(data)
+    parse_exposure_start_time(data)
+    parse_object(data)
+    parse_itime(data)
+    
+    return data.header
 
-        # Bad pixel mask (only one, load into memory)
-        data['badpix_mask'] = 1 - fits.open(badpix_files[0])[0].data.astype(float)
-            
+def parse_image(data):
+    image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float).T
+    return image
 
-        #self.print_summary(data)
+def pair_master_dark(data, master_darks):
+    data.master_dark = master_darks[0]
 
-        return data
+def pair_master_flat(data, master_flats):
+    data.master_flat = master_flats[0]
 
-    def group_darks(self, darks):
-        return [darks]
-
-    def group_flats(self, flats):
-        return [flats]
-
-    def gen_master_calib_filename(self, master_cal):
-        fname0 = master_cal.group[0].base_input_file.lower()
-        if "dark" in fname0:
-            return f"master_dark_{master_cal.group[0].utdate}{master_cal.group[0].itime}s.fits"
-        elif "fiberflat" in fname0 or "fibreflat" in fname0:
-            return f"master_fiberflat_{master_cal.group[0].utdate}.fits"
-        elif "fullflat" in fname0:
-            return f"master_fullflat_{master_cal.group[0].utdate}.fits"
-        elif "lfc" in fname0:
-            return f"master_lfc_{master_cal.group[0].utdate}.fits"
+def pair_order_maps(data, order_maps):
+    fibers_sci = [int(f) for f in str(parse_fiber_nums(data))]
+    fibers_order_maps = [int(parse_fiber_nums(order_map)) for order_map in order_maps]
+    n_fibers_sci = len(fibers_sci)
+    order_maps_out = []
+    for fiber in fibers_sci:
+        k = fibers_order_maps.index(fiber)
+        if k == -1:
+            raise ValueError(f"No fiber flat corresponding to {data}")
         else:
-            return f"master_calib_{master_cal.group[0].utdate}.fits"
+            order_maps_out.append(order_maps[k])
+    data.order_maps = order_maps_out
 
-    def gen_master_calib_header(self, master_cal):
-        return copy.deepcopy(master_cal.group[0].header)
+def parse_image_num(data):
+    return 1
     
-    def parse_image(self, data):
-        image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float).T
-        return image
+def parse_object(data):
+    data.object = data.header["OBJECT"]
+    return data.object
+    
+def parse_utdate(data):
+    utdate = "".join(data.header["P200_UTC"].split('T')[0].split("-"))
+    data.utdate = utdate
+    return data.utdate
+    
+def parse_sky_coord(data):
+    if data.header['P200RA'] is not None and data.header['P200DEC'] is not None:
+        data.skycoord = SkyCoord(ra=data.header['P200RA'], dec=data.header['P200DEC'], unit=(units.hourangle, units.deg))
+    else:
+        data.skycoord = SkyCoord(ra=np.nan, dec=np.nan, unit=(units.hourangle, units.deg))
+    return data.skycoord
 
-    def pair_master_dark(self, data, master_darks):
-        data.master_dark = master_darks[0]
+def parse_itime(data):
+    data.itime = data.header["EXPTIME"]
+    return data.itime
     
-    def pair_master_flat(self, data, master_flats):
-        data.master_flat = master_flats[0]
-    
-    def pair_order_maps(self, data, order_maps):
-        fibers_sci = [int(f) for f in str(self.parse_fiber_nums(data))]
-        fibers_order_maps = [int(self.parse_fiber_nums(order_map)) for order_map in order_maps]
-        n_fibers_sci = len(fibers_sci)
-        order_maps_out = []
-        for fiber in fibers_sci:
-            k = fibers_order_maps.index(fiber)
-            if k == -1:
-                raise ValueError(f"No fiber flat corresponding to {data}")
-            else:
-                order_maps_out.append(order_maps[k])
-        data.order_maps = order_maps_out
+def parse_exposure_start_time(data):
+    data.time_obs_start = Time(float(data.header["TIMEI00"]) / 1E9, format="unix")
+    return data.time_obs_start
 
-    def parse_image_num(self, data):
-        return 1
-        
-    def parse_object(self, data):
-        data.object = data.header["OBJECT"]
-        return data.object
-        
-    def parse_utdate(self, data):
-        utdate = "".join(data.header["P200_UTC"].split('T')[0].split("-"))
-        data.utdate = utdate
-        return data.utdate
-        
-    def parse_sky_coord(self, data):
-        if data.header['P200RA'] is not None and data.header['P200DEC'] is not None:
-            data.skycoord = SkyCoord(ra=data.header['P200RA'], dec=data.header['P200DEC'], unit=(units.hourangle, units.deg))
-        else:
-            data.skycoord = SkyCoord(ra=np.nan, dec=np.nan, unit=(units.hourangle, units.deg))
-        return data.skycoord
+def parse_fiber_nums(data):
+    return int(data.header["FIBER"])
     
-    def parse_itime(self, data):
-        data.itime = data.header["EXPTIME"]
-        return data.itime
-        
-    def parse_exposure_start_time(self, data):
-        data.time_obs_start = Time(float(data.header["TIMEI00"]) / 1E9, format="unix")
-        return data.time_obs_start
+def parse_spec1d(data):
+    fits_data = fits.open(data.input_file)
+    fits_data.verify('fix')
+    data.header = fits_data[0].header
+    data.wave = fits_data[0].data[data.order_num - 1, :, 0]
+    data.flux = fits_data[0].data[data.order_num - 1, :, 1]
+    data.flux_unc = fits_data[0].data[data.order_num - 1, :, 2]
+    data.mask = fits_data[0].data[data.order_num - 1, :, 3]
+    data.lsf_width = fits_data[1].data[data.order_num - 1]
 
-    def parse_fiber_nums(self, data):
-        return int(data.header["FIBER"])
-        
-    def parse_spec1d(self, data):
-        fits_data = fits.open(data.input_file)
-        fits_data.verify('fix')
-        data.header = fits_data[0].header
-        data.wave = 10 * fits_data[4].data[0, data.order_num - 1, :]
-        data.flux = fits_data[4].data[3, data.order_num - 1, :]
-        data.flux_unc = fits_data[4].data[4, data.order_num - 1, :]
-        data.mask = np.ones_like(data.flux)
-        
-    def compute_exposure_midpoint(self, data):
-        jdsi, jdsf = [], []
-        # Eventually we will fill fluxes with an arbitrary read value.
-        for key in data.header:
-            if key.startswith("TIMEI"):
-                jdsi.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
-            if key.startswith("TIMEF"):
-                jdsf.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
-        mean_jd = (np.nanmax(jdsf) - np.nanmin(jdsi)) / 2 + np.nanmin(jdsi)
-        return mean_jd
+def compute_exposure_midpoint(data):
+    jdsi, jdsf = [], []
+    # Eventually we will fill fluxes with an arbitrary read value.
+    for key in data.header:
+        if key.startswith("TIMEI"):
+            jdsi.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
+        if key.startswith("TIMEF"):
+            jdsf.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
+    mean_jd = (np.nanmax(jdsf) - np.nanmin(jdsi)) / 2 + np.nanmin(jdsi)
+    return mean_jd
 
-    ###################
-    #### WAVE INFO ####
-    ###################
-    
-    @staticmethod
-    def estimate_wavelength_solution(data=None, order_num=None, fiber_num=None):
-        if order_num is None:
-            order_num = data.order_num
-        if fiber_num == 1:
-            pcoeffs = wls_coeffs_fiber1[order_num - 1 + 24]
-        else:
-            pcoeffs = wls_coeffs_fiber3[order_num - 1 + 24]
-        wls = np.polyval(pcoeffs, np.arange(2048))
-        return wls
+###################
+#### WAVE INFO ####
+###################
+
+@staticmethod
+def estimate_wls(data=None, order_num=None, fiber_num=None):
+    if order_num is None:
+        order_num = data.order_num
+    if fiber_num == 1:
+        pcoeffs = wls_coeffs_fiber1[order_num - 1 + 24]
+    else:
+        pcoeffs = wls_coeffs_fiber3[order_num - 1 + 24]
+    wls = np.polyval(pcoeffs, np.arange(2048))
+    return wls
 
 
 ################################

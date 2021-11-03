@@ -346,12 +346,11 @@ class SpectralExtractor:
         trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x,
                                                               trace_profile, extrapolate=False)
 
-
         # Return
         return trace_profile_cspline
 
     @staticmethod
-    def compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions_estimate, background=None, remove_background=True, trace_pos_poly_order=4):
+    def compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions_estimate, trace_pos_refine_window=10, background=None, remove_background=True, trace_pos_poly_order=4):
 
         # The image dimensions
         ny, nx = trace_image.shape
@@ -368,7 +367,6 @@ class SpectralExtractor:
         else:
             trace_image_no_background = trace_image
 
-            
         trace_image_no_background_smooth = pcmath.median_filter2d(trace_image_no_background, width=3, preserve_nans=False)
         
         # Trace profile
@@ -406,8 +404,7 @@ class SpectralExtractor:
             data_x = trace_image_no_background_smooth[:, x] / np.nanmax(trace_image_no_background_smooth[:, x])
             
             # CCF lags
-            #lags = np.arange(trace_positions_estimate[x] - int(np.ceil(height / 3)), trace_positions_estimate[x] + int(np.ceil(height / 3))).astype(int)
-            lags = np.arange(trace_positions_estimate[x] - int(np.ceil(height)), trace_positions_estimate[x] + int(np.ceil(height))).astype(int)
+            lags = np.arange(trace_positions_estimate[x] - trace_pos_refine_window, trace_positions_estimate[x] + trace_pos_refine_window)
             
             # Perform CCF
             ccf = pcmath.cross_correlate(yarr, data_x, trace_profile_cspline.x, trace_profile, lags, kind="xc")
@@ -452,3 +449,6 @@ from .optimal import OptimalExtractor
 
 # Slit decomp
 from .decomp import DecompExtractor
+
+# Gauss 2d
+from .gauss2d import Gauss2dExtractor

@@ -17,10 +17,6 @@ class SpecData:
     
     def __init__(self, input_file=None):
         self.input_file = input_file
-        
-    def parse_header(self):
-        self.header = fits.open(self.input_file)[0].header
-        return self.header
     
     def __eq__(self, other):
         return self.input_file == other.input_file
@@ -40,7 +36,6 @@ class SpecData:
     @property
     def input_path(self):
         return os.path.split(self.input_file)[0] + os.sep
-
 
 class Echellogram(SpecData):
     
@@ -64,42 +59,27 @@ class Echellogram(SpecData):
         return data_cube
         
     def parse_image(self):
-        return self.parser.parse_image(self)
+        return self.specmod.parse_image(self)
     
     def parse_header(self):
-        return self.parser.parse_image_header(self)
+        return self.specmod.parse_image_header(self)
     
     def __repr__(self):
         return self.base_input_file
 
 class RawEchellogram(Echellogram):
 
-    def __init__(self, input_file, parser):
+    def __init__(self, input_file, specmod=None):
         
         # Call super init
         super().__init__(input_file)
 
-        # Store the parser
-        self.parser = parser
+        # Store the specmod
+        self.specmod = specmod
 
         # Parse the header
-        if self.parser is not None:
-            try:
-                self.parse_header()
-            except:
-                print(f"Warning! Could not parse header for {self}")
-
-        # Parse the image number
-        try:
-            self.parser.parse_image_num(self)
-        except:
-            print(f"Warning! Could not parse image number for {self}")
-
-        # Parse the date of the observation
-        try:
-            self.parser.parse_utdate(self)
-        except:
-            print(f"Warning! Could not parse UT date for {self}")
+        if self.specmod is not None:
+            self.specmod.parse_image_header(self)
 
 class MasterCal(Echellogram):
 
@@ -108,22 +88,20 @@ class MasterCal(Echellogram):
         # The individual frames
         self.group = group
 
+        # The specmod
+        self.specmod = self.group[0].specmod
+
         # The input filename
-        input_file = output_path + self.parser.gen_master_calib_filename(self)
+        input_file = output_path + self.specmod.gen_master_calib_filename(self)
         
         # Call super init
         super().__init__(input_file)
 
         # Create a header
-        self.header = self.parser.gen_master_calib_header(self)
-
-    @property
-    def parser(self):
-        return self.group[0].parser
+        self.header = self.specmod.gen_master_calib_header(self)
 
     def save(self, image):
         fits.writeto(self.input_file, image, self.header, overwrite=True, output_verify='ignore')
-
 
 
 #####################
@@ -133,20 +111,20 @@ class MasterCal(Echellogram):
 class SpecData1d(SpecData):
     
     # Store the input file, spec, and order num
-    def __init__(self, input_file, order_num, spec_num, parser, crop_pix):
+    def __init__(self, input_file, order_num, spec_num, specmod, crop_pix):
 
         super().__init__(input_file)
         
-        # The parser to load and write data
-        self.parser = parser
+        # The specmod to parse data
+        self.specmod = specmod
         
         # Order number and observation number
         self.order_num = order_num
         self.spec_num = spec_num
             
         # Default wavelength and LSF grid, may be overwritten in custom parse method.
-        self.apriori_wave_grid = None
-        self.apriori_lsf = None
+        self.wave = None
+        self.lsf_width = None
         
         # Extra cropping
         self.crop_pix = crop_pix
@@ -157,7 +135,7 @@ class SpecData1d(SpecData):
     def parse(self):
         
         # Parse the data
-        self.parser.parse_spec1d(self)
+        self.specmod.parse_spec1d(self)
         
         # Normalize to 98th percentile
         medflux = pcmath.weighted_median(self.flux, percentile=0.98)
@@ -183,10 +161,10 @@ class SpecData1d(SpecData):
             self.mask[bad] = 0
             
         # More sanity
-        if self.apriori_wave_grid is not None:
-            bad = np.where(~np.isfinite(self.apriori_wave_grid))[0]
+        if self.wave is not None:
+            bad = np.where(~np.isfinite(self.wave))[0]
             if bad.size > 0:
-                self.apriori_wave_grid[bad] = np.nan
+                self.wave[bad] = np.nan
                 self.flux[bad] = np.nan
                 self.flux_unc[bad] = np.nan
                 self.mask[bad] = 0
@@ -205,6 +183,9 @@ class SpecData1d(SpecData):
         else:
             self.is_good = True
             
-  
+    def parse_header(self):
+        self.header = fits.open(self.input_file)[0].header
+        return self.header
+
     def __repr__(self):
         return f"1d spectrum: {self.base_input_file}"

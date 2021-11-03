@@ -119,25 +119,21 @@ class IterativeSpectralRVProb:
         # Alias the spectrograph module
         spec_module = self.spec_module
         
-        # Construct the data parser
-        parser_class = getattr(spec_module, f"{self.spectrograph}Parser")
-        self.parser = parser_class()
-        
         # List of input files
         input_files = [self.data_input_path + f for f in np.atleast_1d(np.genfromtxt(self.data_input_path + self.filelist, dtype='<U100', comments='#').tolist())]
         
         # Load in each observation for this order
-        data = [SpecData1d(fname, self.order_num, ispec + 1, self.parser, self.crop_pix) for ispec, fname in enumerate(input_files)]
+        data = [SpecData1d(fname, self.order_num, ispec + 1, spec_module, self.crop_pix) for ispec, fname in enumerate(input_files)]
         
         # Sort the data
-        jds = np.array([d.parser.compute_exposure_midpoint(d) for d in data], dtype=float)
+        jds = np.array([spec_module.compute_exposure_midpoint(d) for d in data], dtype=float)
         ss = np.argsort(jds)
         self.data = [data[ss[i]] for i in range(len(jds))]
         for i in range(len(self.data)):
             self.data[i].spec_num = i + 1
             
         # Estimate the wavelength bounds for this order
-        wave_grid = self.parser.estimate_wavelength_solution(self.data[0])
+        wave_grid = spec_module.estimate_wls(self.data[0])
         good = np.where(self.data[0].mask == 1)[0]
         pixmin, pixmax = np.max([good[0] - 5, 0]), np.min([good[-1] + 5, len(self.data[0].mask) - 1])
         wavemin, wavemax = wave_grid[pixmin], wave_grid[pixmax]
@@ -161,7 +157,7 @@ class IterativeSpectralRVProb:
             self.rvs_dict["bjds"] = np.full(self.n_spec, np.nan)
             self.rvs_dict["bc_vels"] = np.full(self.n_spec, np.nan)
             for i in range(self.n_spec):
-                self.rvs_dict["bjds"][i], self.rvs_dict["bc_vels"][i] = self.parser.compute_barycenter_corrections(self.data[i], observatory, self.spectral_model.star.star_name)
+                self.rvs_dict["bjds"][i], self.rvs_dict["bc_vels"][i] = self.spec_module.compute_barycenter_corrections(self.data[i], self.spectral_model.star.star_name)
         else:
             bc_corrs = np.atleast_2d(bc_corrs)
             for i in range(self.n_spec):

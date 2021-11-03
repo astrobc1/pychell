@@ -83,10 +83,10 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
     weights_init = spectral_model.data.mask
 
     # Wavelength grid for the data
-    wave_data = spectral_model.wavelength_solution.build(pars)
+    wave_data = spectral_model.wls.build(pars)
 
     # Compute RV info content
-    rvc_per_pix, _ = compute_rv_content(p0, spectral_model, inject_blaze=True, snr=100) # S/N here doesn't matter
+    rvc_per_pix, _ = compute_rv_content(p0, spectral_model, snr=100) # S/N here doesn't matter
 
     # Weights are 1 / rv info^2
     star_weights = 1 / rvc_per_pix**2
@@ -270,10 +270,10 @@ def detrend_rvs(rvs, vec, thresh=None, poly_order=1):
 #### RV INFO CONTENT ####
 #########################
 
-def compute_rv_content(pars, spectral_model, inject_blaze=True, snr=100):
+def compute_rv_content(pars, spectral_model, snr=100):
 
     # Data wave grid
-    data_wave = spectral_model.wavelength_solution.build(pars)
+    data_wave = spectral_model.wls.build(pars)
 
     # Model wave grid
     model_wave = spectral_model.model_wave
@@ -312,13 +312,6 @@ def compute_rv_content(pars, spectral_model, inject_blaze=True, snr=100):
     
     else:
         tell_flux = None
-
-    # Inject a blaze function
-    if inject_blaze:
-        pfit = np.polyfit([np.nanmin(data_wave), np.nanmean(data_wave), np.nanmax(data_wave)], [0.3, 1.0, 0.3], 2)
-        blaze = np.polyval(pfit, data_wave)
-    else:
-        blaze = np.ones_like(data_wave)
 
     # Find good pixels
     good = np.where(np.isfinite(data_wave) & np.isfinite(star_flux))[0]

@@ -471,7 +471,7 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
 
-def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False, time_offset=2450000):
+def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False, time_offset=2450000, figsize=(8, 4), dpi=200):
         
     # Unpack rvs
     bjds, bjds_nightly = rvs_dict['bjds'], rvs_dict['bjds_nightly']
@@ -481,7 +481,7 @@ def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False, time_of
         rvs_single, unc_single, rvs_nightly, unc_nightly = rvs_dict['rvsxc_out'], rvs_dict['uncxc_out'], rvs_dict['rvsxc_nightly_out'], rvs_dict['uncxc_nightly_out']
         
     # Figure
-    fig = plt.figure(figsize=(8, 4), dpi=300)
+    fig = plt.figure(figsize=figsize, dpi=dpi)
     
     # Single rvs
     plt.errorbar(bjds - time_offset, rvs_single,
