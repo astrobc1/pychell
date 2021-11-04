@@ -15,7 +15,12 @@ import pychell.maths as pcmath
 
 class SpecData:
     
-    def __init__(self, input_file=None):
+    def __init__(self, input_file):
+        """Base constructor for a SpecData object.
+
+        Args:
+            input_file (str): The path + filename.
+        """
         self.input_file = input_file
     
     def __eq__(self, other):
@@ -23,18 +28,38 @@ class SpecData:
 
     @property
     def base_input_file(self):
+        """The input file without the path.
+
+        Returns:
+            str: The input file without the path.
+        """
         return os.path.basename(self.input_file)
 
     @property
     def input_file_noext(self):
+        """The input file without the extension.
+
+        Returns:
+            str: The input file without the extension.
+        """
         return os.path.splitext(self.base_input_file)[0]
 
     @property
     def base_input_file_noext(self):
+        """The input file (filename only) with no extension.
+
+        Returns:
+            str: The input file (filename only) with no extension.
+        """
         return os.path.basename(self.input_file_noext)
 
     @property
     def input_path(self):
+        """The input path without the filename.
+
+        Returns:
+            str: The input path without the filename.
+        """
         return os.path.split(self.input_file)[0] + os.sep
 
 class Echellogram(SpecData):
@@ -59,9 +84,19 @@ class Echellogram(SpecData):
         return data_cube
         
     def parse_image(self):
+        """Parses the image.
+
+        Returns:
+            np.ndarray: The image.
+        """
         return self.specmod.parse_image(self)
     
     def parse_header(self):
+        """Parses and stores the header.
+
+        Returns:
+            fits.Header: The fits file header.
+        """
         return self.specmod.parse_image_header(self)
     
     def __repr__(self):
@@ -69,7 +104,13 @@ class Echellogram(SpecData):
 
 class RawEchellogram(Echellogram):
 
-    def __init__(self, input_file, specmod=None):
+    def __init__(self, input_file, specmod):
+        """Construct a RawEchellogram object.
+
+        Args:
+            input_file (str): The path + filename.
+            specmod (Module): The spectrograph module.
+        """
         
         # Call super init
         super().__init__(input_file)
@@ -84,6 +125,12 @@ class RawEchellogram(Echellogram):
 class MasterCal(Echellogram):
 
     def __init__(self, group, output_path):
+        """Construct a MasterCal object for a master calibration frame.
+
+        Args:
+            group (list): A list of the individual exposures (RawEchellogram objects) used to create this master cal.
+            output_path (str): The output path to store this master cal frame once created.
+        """
 
         # The individual frames
         self.group = group
@@ -112,6 +159,15 @@ class SpecData1d(SpecData):
     
     # Store the input file, spec, and order num
     def __init__(self, input_file, order_num, spec_num, specmod, crop_pix):
+        """Constructs a SpecData1d object.
+
+        Args:
+            input_file (str): The path + filename.
+            order_num (int): The image order number [1, 2, 3, ...].
+            spec_num (int): The spectrum number in order of time.
+            specmod (Module): The spectrograph module
+            crop_pix (list): How many pixels to crop on the left (crop_pix[0]) and right (crop_pix[1]).
+        """
 
         super().__init__(input_file)
         
@@ -133,6 +189,8 @@ class SpecData1d(SpecData):
         self.parse()
 
     def parse(self):
+        """Parse the 1d spectrum (including wavelength, flux, flux uncertainty, and mask).
+        """
         
         # Parse the data
         self.specmod.parse_spec1d(self)
@@ -184,6 +242,11 @@ class SpecData1d(SpecData):
             self.is_good = True
             
     def parse_header(self):
+        """Parse the 1d spectrum fits header.
+
+        Returns:
+            fits.Header: The fits header for the 1d spectrum.
+        """
         self.header = fits.open(self.input_file)[0].header
         return self.header
 

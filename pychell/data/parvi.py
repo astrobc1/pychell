@@ -212,7 +212,7 @@ def compute_exposure_midpoint(data):
 #### WAVE INFO ####
 ###################
 
-@staticmethod
+
 def estimate_wls(data=None, order_num=None, fiber_num=None):
     if order_num is None:
         order_num = data.order_num
