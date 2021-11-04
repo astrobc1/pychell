@@ -14,7 +14,7 @@ import pychell.maths as pcmath
 #### PRIMARY METHODS ####
 #########################
 
-def compute_lsf_width_all(times_sci, times_lfc_cal, wls_cal_scifiber, lfc_cal_scifiber, df, f0, do_orders=None):
+def compute_lsf_width_all(times_sci, times_lfc_cal, wls_cal_scifiber, lfc_cal_scifiber, f0, df, do_orders=None):
     """Wrapper to compute the LSF for all spectra.
 
     Args:
@@ -245,10 +245,12 @@ def estimate_peak_spacing(xi, xf, wi, wf, f0, df):
     """Estimates the peak spacing in detector pixels.
 
     Args:
-        wi ([type]): The lower wavelength.
-        wf ([type]): The upper wavelength.
-        f0 ([type]): The frequency of the LFC pump line in GHz.
-        df ([type]): The LFC line spacing in GHz.
+        xi (float): The lower pixel.
+        xf (float): The upper pixel.
+        wi (float): The lower wavelength.
+        wf (float): The upper wavelength.
+        f0 (float): The frequency of the LFC pump line in GHz.
+        df (float): The LFC line spacing in GHz.
     """
     lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
     n_peaks = len(lfc_centers_wave_theoretical)
@@ -339,17 +341,24 @@ def gen_theoretical_peaks(wi, wf, f0, df):
     Args:
         wi (float): The lower wavelength.
         wf (float): The upper wavelength.
-        f0 (float): The frequency of the pump line in GHz.
-        df (float): The line spacing in GHz.
+        f0 (float): The frequency of the pump line in Hz.
+        df (float): The line spacing in Hz.
 
     Returns:
         np.ndarray: The LFC line centers in wavelength.
     """
+
+    # Generate the frequency grid
     lfc_centers_freq_theoretical = np.arange(f0 - 10_000 * df, f0 + (10_000 + 1) * df, df)
+
+    # Convert to wavelength
     lfc_centers_wave_theoretical = cs.c / lfc_centers_freq_theoretical
     lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[::-1] * 1E10
+
+    # Only peaks within the bounds
     good = np.where((lfc_centers_wave_theoretical > wi) & (lfc_centers_wave_theoretical < wf))[0]
     lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[good]
+
     return lfc_centers_wave_theoretical
 
 def estimate_background(lfc_wave, lfc_flux, f0, df):
@@ -362,7 +371,7 @@ def estimate_background(lfc_wave, lfc_flux, f0, df):
     Returns:
         np.ndarray: The background
     """
-    good = np.where(np.isfinite(lfc_wave) & np.isfinite(lfc_wave))[0]
+    good = np.where(np.isfinite(lfc_wave) & np.isfinite(lfc_flux))[0]
     xi, xf = good[0], good[-1]
     wi, wf = lfc_wave[xi], lfc_wave[xf]
     peak_spacing = estimate_peak_spacing(xi, xf, wi, wf, f0, df)
