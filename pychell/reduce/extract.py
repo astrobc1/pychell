@@ -453,7 +453,7 @@ class SpectralExtractor:
 from pychell.reduce.optimal import OptimalExtractor
 
 # Slit decomp
-#from pychell.reduce.decomp import DecompExtractor
+from pychell.reduce.decomp import DecompExtractor
 
 # Gauss 2d
 #from pychell.reduce.gauss2d import Gauss2dExtractor
