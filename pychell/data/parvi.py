@@ -14,6 +14,10 @@ from astropy.time import Time
 import astropy.units as units
 from astropy.io import fits
 
+# Barycorrpy
+from barycorrpy import get_BC_vel
+from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
+
 # Pychell deps
 import pychell.maths as pcmath
 import pychell.data.spectraldata as pcspecdata
@@ -50,11 +54,11 @@ def categorize_raw_data(data_input_path, output_path):
     sci_files = list(set(all_files) - set(lfc_files) - set(dark_files) - set(full_flat_files) - set(badpix_files) - set(fiber_flat_files))
 
     # Create Echellograms from raw data
-    data['science'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in sci_files]
-    data['fiber_flats'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in fiber_flat_files]
-    data['darks'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in dark_files]
-    data['flats'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in full_flat_files]
-    data['lfc'] = [pcspecdata.RawEchellogram(input_file=f, specmod=sys.modules[__name__]) for f in lfc_files]
+    data['science'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in sci_files]
+    data['fiber_flats'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in fiber_flat_files]
+    data['darks'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in dark_files]
+    data['flats'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in full_flat_files]
+    data['lfc'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in lfc_files]
     
     # Master Darks
     data['master_darks'] = [pcspecdata.MasterCal(group, output_path + "calib" + os.sep) for group in group_darks(data['darks'])]
@@ -191,11 +195,37 @@ def parse_spec1d(data):
     fits_data = fits.open(data.input_file)
     fits_data.verify('fix')
     data.header = fits_data[0].header
-    data.wave = fits_data[0].data[data.order_num - 1, :, 0]
-    data.flux = fits_data[0].data[data.order_num - 1, :, 1]
-    data.flux_unc = fits_data[0].data[data.order_num - 1, :, 2]
-    data.mask = fits_data[0].data[data.order_num - 1, :, 3]
-    data.lsf_width = fits_data[1].data[data.order_num - 1]
+    oi = data.order_num - 1
+    #data.wave = fits_data[0].data[oi, :, 0]
+    data.flux = fits_data[0].data[oi, :, 1] / fits_data[0].data[oi, :, 4]
+    data.flux_unc = fits_data[0].data[oi, :, 2]
+    data.mask = fits_data[0].data[oi, :, 3]
+    data.lsf_width = fits_data[1].data[oi]
+    data.wave = estimate_wls(order_num=oi+1, fiber_num=1)
+
+################################
+#### BARYCENTER CORRECTIONS ####
+################################
+
+def compute_barycenter_corrections(data, star_name):
+        
+    # Star name
+    star_name = star_name.replace('_', ' ')
+    
+    # Compute the JD UTC mid point (possibly weighted)
+    jdmid = compute_exposure_midpoint(data)
+    
+    # BJD
+    bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    
+    # bc vel
+    bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    
+    # Add to data
+    data.bjd = bjd
+    data.bc_vel = bc_vel
+    
+    return bjd, bc_vel
 
 def compute_exposure_midpoint(data):
     jdsi, jdsf = [], []

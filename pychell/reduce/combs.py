@@ -329,7 +329,7 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
     lfc_centers_wave = []
     for i in range(len(lfc_centers_pix)):
         diffs = np.abs(wave_estimate[int(np.round(lfc_centers_pix[i]))] - lfc_centers_wave_theoretical)
-        k = np.argmin(diffs)
+        k = np.argmin(diffs) - 1
         lfc_centers_wave.append(lfc_centers_wave_theoretical[k])
     lfc_centers_wave = np.array(lfc_centers_wave)
 
@@ -356,7 +356,7 @@ def gen_theoretical_peaks(wi, wf, f0, df):
     lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[::-1] * 1E10
 
     # Only peaks within the bounds
-    good = np.where((lfc_centers_wave_theoretical > wi) & (lfc_centers_wave_theoretical < wf))[0]
+    good = np.where((lfc_centers_wave_theoretical > wi - 5) & (lfc_centers_wave_theoretical < wf + 5))[0]
     lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[good]
 
     return lfc_centers_wave_theoretical

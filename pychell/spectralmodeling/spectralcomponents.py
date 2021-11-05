@@ -29,7 +29,6 @@ class SpectralComponent:
     def __init__(self):
 
         # No parameter names, probably overwritten with each instance
-        self.base_par_names = []
         self.par_names = []
         
     def init_parameters(self, data):
@@ -55,10 +54,9 @@ class SpectralComponent:
     ###############
 
     def __repr__(self):
-        s = f"Spectral model: {self.name}\n"
-        s += "Parameters:"
+        s = f"Spectral model: {self.__class__.__name__}\n"
         for pname in self.par_names:
-            s += f"{pname}\n"
+            s += f" {pname}\n"
         return s
 
 
@@ -144,8 +142,6 @@ class PolyContinuum(Continuum):
     """Blaze transmission model through a polynomial.
     """
     
-    name = "polynomial_continuum"
-    
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
@@ -166,9 +162,7 @@ class PolyContinuum(Continuum):
             
         # Parameter names
         for i in range(self.poly_order + 1):
-            self.base_par_names.append(f"_poly_{i}")
-                
-        self.par_names = [self.name + s for s in self.base_par_names]
+            self.par_names.append(f"cont_poly_{i}")
 
     def init_parameters(self, data):
         
@@ -207,8 +201,6 @@ class SplineContinuum(Continuum):
     """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
     """
     
-    name = "spline_continuum"
-    
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
@@ -232,9 +224,7 @@ class SplineContinuum(Continuum):
 
         # Set the spline parameter names and knots
         for i in range(self.n_splines+1):
-            self.base_par_names.append(f"_spline_{i+1}")
-
-        self.par_names = [self.name + s for s in self.base_par_names]
+            self.par_names.append(f"cont_spline_{i+1}")
 
     def init_parameters(self, data):
         pars = BoundedParameters()
@@ -272,8 +262,6 @@ class PChipContinuum(Continuum):
     """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
     """
     
-    name = "pchip_continuum"
-    
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
@@ -297,9 +285,7 @@ class PChipContinuum(Continuum):
 
         # Set the spline parameter names and knots
         for i in range(self.n_splines+1):
-            self.base_par_names.append(f"_spline_{i+1}")
-
-        self.par_names = [self.name + s for s in self.base_par_names]
+            self.names.append(f"cont_spline_{i+1}")
 
     def init_parameters(self, data):
         pars = BoundedParameters()
@@ -368,8 +354,6 @@ class DynamicGasCell(GasCell):
     """A dynamic gas cell model allowing for a depth and shift.
     """
     
-    name = "dynamic_gas_cell"
-    
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
@@ -389,8 +373,7 @@ class DynamicGasCell(GasCell):
         self.shift = shift
         self.depth = depth
 
-        self.base_par_names += ['_shift', '_depth']
-        self.par_names = [self.name + s for s in self.base_par_names]
+        self.par_names = ['gas_cell_shift', 'gas_cell_depth']
 
     def init_parameters(self, data):
         pars = BoundedParameters()
@@ -415,8 +398,6 @@ class DynamicGasCell(GasCell):
 class StaticGasCell(GasCell):
     """A static gas cell model (no modifications).
     """
-    
-    name = "static_gascell"
 
     ##################
     #### BUILDERS ####
@@ -440,8 +421,6 @@ class AugmentedStar(Star):
     """ A star model which may be augmented after each iteration according to the augmenter attribute in the SpectralRVProb object.
     """
     
-    name = "augmented_star"
-    
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
@@ -464,10 +443,7 @@ class AugmentedStar(Star):
         self.vel_bounds = vel_bounds
 
         # Pars
-        self.base_par_names += ['_vel']
-        
-        # Update parameter names
-        self.par_names = [self.name + s for s in self.base_par_names]
+        self.par_names = ['vel_star']
 
     def init_parameters(self, data):
         pars = BoundedParameters()
@@ -550,8 +526,7 @@ class Tellurics(SpectralComponent):
 class TelluricsTAPAS(Tellurics):
     """A telluric model based on templates obtained from TAPAS which are specific to a certain observatory (or generate site such as Maunakea). These templates should be pre-fetched from TAPAS and specific to the site. CH4, N20, CO2, O2, and O3 utilize a common depth parameter. H2O utilizes a unique depth. All species utilize a common Doppler shift.
     """
-    
-    name = "tapas_tellurics"
+
     species = ['water', 'methane', 'carbon_dioxide', 'nitrous_oxide', 'oxygen', 'ozone']
     
     ###############################
@@ -575,10 +550,9 @@ class TelluricsTAPAS(Tellurics):
         self.vel = vel
         self.water_depth = water_depth
         self.airmass_depth = airmass_depth
-        self.base_par_names += ['_vel', '_water_depth', '_airmass_depth']
+        self.par_names = ['velt', 'water_depth', 'airmass_depth']
         self.has_water_features, self.has_airmass_features = True, True
         self.feature_depth = feature_depth
-        self.par_names = [self.name + s for s in self.base_par_names]
         
         # Input files
         self.species_input_files = {species: f"{self.input_path}telluric_{species}_tapas_{self.location_tag}.npz" for species in self.species}
@@ -694,8 +668,6 @@ class HermiteLSF(LSF):
     """A Hermite Gaussian LSF model. The model is a sum of Gaussians of constant width with Hermite Polynomial coefficients to enforce orthogonality. See Arfken et al. for more details.
     """
     
-    name = "hermite_lsf"
-    
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
@@ -718,11 +690,10 @@ class HermiteLSF(LSF):
         self.hermcoeff = hermcoeff
 
         # Width
-        self.base_par_names = ['_width']
+        self.par_names = ['lsf_width']
 
         for k in range(self.hermdeg):
-            self.base_par_names.append('_a' + str(k+1))
-        self.par_names = [self.name + s for s in self.base_par_names]
+            self.par_names.append('a' + str(k+1))
 
     def init_parameters(self, data):
         pars = BoundedParameters()
@@ -771,8 +742,6 @@ class HermiteLSF(LSF):
 class StaticLSF(LSF):
     """A model for a perect LSF (known a priori).
     """
-    
-    name = "static_lsf"
 
     def build(self, pars=None):
         return self.data.lsf
@@ -802,8 +771,6 @@ class PolyWls(WavelengthSolution):
     """A polynomial wavelength solution model. Instead of optimizing coefficients, the model utilizes set points which are evenly spaced across the spectral range in pixel space.
     """
     
-    name = "poly_wls"
-    
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
@@ -825,10 +792,7 @@ class PolyWls(WavelengthSolution):
         
         # Base parameter names
         for i in range(self.poly_order + 1):
-            self.base_par_names.append('_poly_lagrange_' + str(i + 1))
-                
-        # Parameter names
-        self.par_names = [self.name + s for s in self.base_par_names]
+            self.par_names.append('wls_poly_lagrange_' + str(i + 1))
 
     def init_parameters(self, data):
         pars = BoundedParameters()
@@ -885,8 +849,6 @@ class SplineWls(WavelengthSolution):
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
-    
-    name = "spline_wls"
 
     def __init__(self, n_splines=6, spline=[-0.5, 0.01, 0.5]):
         """Initiate a spline wavelength solution model.
@@ -905,9 +867,7 @@ class SplineWls(WavelengthSolution):
 
         # Set the spline parameter names and knots
         for i in range(self.n_splines + 1):
-            self.base_par_names.append(f"_spline_{i + 1}")
-                
-        self.par_names = [self.name + s for s in self.base_par_names]
+            self.par_names.append(f"wls_spline_{i + 1}")
 
     def init_parameters(self, data):
         pars = BoundedParameters()
@@ -955,8 +915,6 @@ class PChipWls(WavelengthSolution):
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
-    
-    name = "pchip_wls"
 
     def __init__(self, n_splines=6, spline=[-0.5, 0.01, 0.5]):
         """Initiate a spline wavelength solution model.
@@ -975,9 +933,7 @@ class PChipWls(WavelengthSolution):
 
         # Set the spline parameter names and knots
         for i in range(self.n_splines + 1):
-            self.base_par_names.append(f"_spline_{i + 1}")
-                
-        self.par_names = [self.name + s for s in self.base_par_names]
+            self.par_names.append(f"wls_spline_{i + 1}")
 
     def init_parameters(self, data):
         pars = BoundedParameters()
@@ -1019,8 +975,6 @@ class LegPolyWls(WavelengthSolution):
     """A Legendre polynomial wavelength solution model.
     """
     
-    name = "legpoly_wls"
-    
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
@@ -1042,10 +996,7 @@ class LegPolyWls(WavelengthSolution):
         
         # Base parameter names
         for i in range(self.poly_order + 1):
-            self.base_par_names.append('_poly_lagrange_' + str(i + 1))
-                
-        # Parameter names
-        self.par_names = [self.name + s for s in self.base_par_names]
+            self.par_names.append('wls_poly_lagrange_' + str(i + 1))
 
     def init_parameters(self, data):
         pars = BoundedParameters()
@@ -1097,8 +1048,6 @@ class StaticWls(WavelengthSolution):
     """A model for a static wavelenth solution model (known a priori).
     """
     
-    name = "static_wls"
-    
     ##################
     #### BUILDERS ####
     ##################
@@ -1123,8 +1072,6 @@ class FPCavityFringing(SpectralComponent):
     """A basic Fabry-Perot cavity model for fringing in spectrographs like iSHELL and NIRSPEC.
     """
     
-    name = "fp_fringing"
-    
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
@@ -1134,9 +1081,7 @@ class FPCavityFringing(SpectralComponent):
         # Super
         super().__init__()
 
-        self.base_par_names += ['_logd', '_fin']
-
-        self.par_names = [self.name + s for s in self.base_par_names]
+        self.par_names = ['fringing_logd', 'fringing_fin']
 
     def init_parameters(self, data):
         

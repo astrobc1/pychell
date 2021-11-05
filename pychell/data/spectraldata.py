@@ -1,6 +1,7 @@
 # Base Python
 import os
 import pickle
+import importlib
 
 # Maths
 import numpy as np
@@ -15,13 +16,14 @@ import pychell.maths as pcmath
 
 class SpecData:
     
-    def __init__(self, input_file):
+    def __init__(self, input_file, spectrograph):
         """Base constructor for a SpecData object.
 
         Args:
             input_file (str): The path + filename.
         """
         self.input_file = input_file
+        self.spectrograph = spectrograph
     
     def __eq__(self, other):
         return self.input_file == other.input_file
@@ -62,6 +64,10 @@ class SpecData:
         """
         return os.path.split(self.input_file)[0] + os.sep
 
+    @property
+    def spec_module(self):
+        return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
+
 class Echellogram(SpecData):
     
     @staticmethod
@@ -89,7 +95,7 @@ class Echellogram(SpecData):
         Returns:
             np.ndarray: The image.
         """
-        return self.specmod.parse_image(self)
+        return self.spec_module.parse_image(self)
     
     def parse_header(self):
         """Parses and stores the header.
@@ -97,30 +103,26 @@ class Echellogram(SpecData):
         Returns:
             fits.Header: The fits file header.
         """
-        return self.specmod.parse_image_header(self)
+        return self.spec_module.parse_image_header(self)
     
     def __repr__(self):
         return self.base_input_file
 
 class RawEchellogram(Echellogram):
 
-    def __init__(self, input_file, specmod):
+    def __init__(self, input_file, spectrograph):
         """Construct a RawEchellogram object.
 
         Args:
             input_file (str): The path + filename.
-            specmod (Module): The spectrograph module.
         """
         
         # Call super init
-        super().__init__(input_file)
-
-        # Store the specmod
-        self.specmod = specmod
+        super().__init__(input_file, spectrograph)
 
         # Parse the header
-        if self.specmod is not None:
-            self.specmod.parse_image_header(self)
+        if self.spectrograph is not None:
+            self.spec_module.parse_image_header(self)
 
 class MasterCal(Echellogram):
 
@@ -135,17 +137,14 @@ class MasterCal(Echellogram):
         # The individual frames
         self.group = group
 
-        # The specmod
-        self.specmod = self.group[0].specmod
-
         # The input filename
-        input_file = output_path + self.specmod.gen_master_calib_filename(self)
+        input_file = output_path + self.group[0].spec_module.gen_master_calib_filename(self)
         
         # Call super init
-        super().__init__(input_file)
+        super().__init__(input_file, self.group[0].spectrograph)
 
         # Create a header
-        self.header = self.specmod.gen_master_calib_header(self)
+        self.header = self.spec_module.gen_master_calib_header(self)
 
     def save(self, image):
         fits.writeto(self.input_file, image, self.header, overwrite=True, output_verify='ignore')
@@ -158,21 +157,18 @@ class MasterCal(Echellogram):
 class SpecData1d(SpecData):
     
     # Store the input file, spec, and order num
-    def __init__(self, input_file, order_num, spec_num, specmod, crop_pix):
+    def __init__(self, input_file, order_num, spec_num, spectrograph, crop_pix):
         """Constructs a SpecData1d object.
 
         Args:
             input_file (str): The path + filename.
             order_num (int): The image order number [1, 2, 3, ...].
             spec_num (int): The spectrum number in order of time.
-            specmod (Module): The spectrograph module
+            spectrograph (str): The spectrograph.
             crop_pix (list): How many pixels to crop on the left (crop_pix[0]) and right (crop_pix[1]).
         """
 
-        super().__init__(input_file)
-        
-        # The specmod to parse data
-        self.specmod = specmod
+        super().__init__(input_file, spectrograph)
         
         # Order number and observation number
         self.order_num = order_num
@@ -193,7 +189,7 @@ class SpecData1d(SpecData):
         """
         
         # Parse the data
-        self.specmod.parse_spec1d(self)
+        self.spec_module.parse_spec1d(self)
         
         # Normalize to 98th percentile
         medflux = pcmath.weighted_median(self.flux, percentile=0.98)

@@ -13,10 +13,12 @@ import astropy.units as units
 from astropy.io import fits
 import scipy.constants as cs
 
+# Barycorrpy
+from barycorrpy import get_BC_vel
+from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
+
 # Pychell deps
-from pychell.data.parser import DataParser
 import pychell.maths as pcmath
-import pychell.data.spectraldata as pcspecdata
 
 
 #######################
@@ -71,6 +73,30 @@ def parse_spec1d(data):
     data.flux_unc = fits_data[4].data[4, data.order_num - 1, :]
     data.mask = np.ones_like(data.flux)
     
+################################
+#### BARYCENTER CORRECTIONS ####
+################################
+
+def compute_barycenter_corrections(data, star_name):
+        
+    # Star name
+    star_name = star_name.replace('_', ' ')
+    
+    # Compute the JD UTC mid point (possibly weighted)
+    jdmid = compute_exposure_midpoint(data)
+    
+    # BJD
+    bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    
+    # bc vel
+    bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    
+    # Add to data
+    data.bjd = bjd
+    data.bc_vel = bc_vel
+    
+    return bjd, bc_vel
+
 def compute_exposure_midpoint(data):
     jdsi, jdsf = [], []
     # Eventually we will fill fluxes with an arbitrary read value.

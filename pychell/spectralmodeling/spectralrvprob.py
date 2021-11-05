@@ -115,25 +115,22 @@ class IterativeSpectralRVProb:
         self.print_init_summary()
             
     def init_data(self):
-
-        # Alias the spectrograph module
-        spec_module = self.spec_module
         
         # List of input files
         input_files = [self.data_input_path + f for f in np.atleast_1d(np.genfromtxt(self.data_input_path + self.filelist, dtype='<U100', comments='#').tolist())]
         
         # Load in each observation for this order
-        data = [SpecData1d(fname, self.order_num, ispec + 1, spec_module, self.crop_pix) for ispec, fname in enumerate(input_files)]
+        data = [SpecData1d(fname, self.order_num, ispec + 1, self.spectrograph, self.crop_pix) for ispec, fname in enumerate(input_files)]
         
         # Sort the data
-        jds = np.array([spec_module.compute_exposure_midpoint(d) for d in data], dtype=float)
+        jds = np.array([self.spec_module.compute_exposure_midpoint(d) for d in data], dtype=float)
         ss = np.argsort(jds)
         self.data = [data[ss[i]] for i in range(len(jds))]
         for i in range(len(self.data)):
             self.data[i].spec_num = i + 1
             
         # Estimate the wavelength bounds for this order
-        wave_grid = spec_module.estimate_wls(self.data[0])
+        wave_grid = self.spec_module.estimate_wls(self.data[0])
         good = np.where(self.data[0].mask == 1)[0]
         pixmin, pixmax = np.max([good[0] - 5, 0]), np.min([good[-1] + 5, len(self.data[0].mask) - 1])
         wavemin, wavemax = wave_grid[pixmin], wave_grid[pixmax]
@@ -144,10 +141,6 @@ class IterativeSpectralRVProb:
         self.spectral_model.init_parameters(self.data)
 
     def init_rvs(self, bc_corrs=None):
-        
-        # Get the spectrograph observatory
-        spec_module = self.spec_module
-        observatory = spec_module.observatory
         
         # Store all rv info in a dict
         self.rvs_dict = {}

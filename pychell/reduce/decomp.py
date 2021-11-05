@@ -68,7 +68,7 @@ class DecompExtractor(SpectralExtractor):
     def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, tilt=None, shear=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, trace_pos_refine_window=None, n_extract_iterations=3, badpix_threshold=5, extract_orders=None, _extract_aperture=None, lambda_sf=0.5, lambda_sp=0):
 
         if read_noise is None:
-            read_noise = data.specmod.parse_itime(data) * data.specmod.read_noise
+            read_noise = data.spec_module.parse_itime(data) * data.spec_module.read_noise
         else:
             read_noise = 0
 

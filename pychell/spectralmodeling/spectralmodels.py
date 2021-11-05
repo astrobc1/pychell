@@ -133,7 +133,7 @@ class IterativeSpectralForwardModel:
         self.fringing = fringing
         
     def init_templates(self, data):
-        data_wave_grid = data[0].specmod.estimate_wls(data[0])
+        data_wave_grid = data[0].spec_module.estimate_wls(data[0])
         good = np.where(data[0].mask == 1)[0]
         if good.size == 0:
             raise ValueError(f"{data[0]} contains no good data")

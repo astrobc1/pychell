@@ -24,7 +24,7 @@ import pychell.utils as pcutils
 import pychell.maths as pcmath
 import pychell.data as pcdata
 
-class Reducer:
+class ReduceRecipe:
     
     ###############################
     #### CONSTRUCTOR + HELPERS ####
@@ -85,7 +85,7 @@ class Reducer:
 
     def reduce(self):
         """Primary method to reduce a full directory. Steps performed are:
-            1. Generate and save all master calibration images (self.gen_master_calib_images).
+            1. Generate and save all master calibration images (self.gen_master_cal_images).
             2. Trace orders for all images (self.trace).
             3. Extract all desired spectra (includes precalibrating (bias, dark, flat), trace positions, profile, and background scatter calculation) (self.extract).
         """
@@ -94,7 +94,7 @@ class Reducer:
         stopwatch = pcutils.StopWatch()
         
         # 1. Generate master bias, dark, flats
-        self.gen_master_calib_images()
+        self.gen_master_cal_images()
         
         # Trace orders for appropriate frames
         self.trace()
@@ -105,7 +105,7 @@ class Reducer:
         # Run Time
         print(f"REDUCTION COMPLETE! TOTAL TIME: {round(stopwatch.time_since() / 3600, 2)} hours")
         
-    def gen_master_calib_images(self):
+    def gen_master_cal_images(self):
         if self.pre_calib is not None:
             self.pre_calib.gen_master_calib_images(self.data)
     

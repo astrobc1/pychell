@@ -341,7 +341,7 @@ def compute_rv_content(pars, spectral_model, snr=100):
             continue
 
         # Compute stellar flux at this wavelength
-        Ai = star_flux[i] * blaze[i]
+        Ai = star_flux[i]
 
         # Include gas and tell flux
         if gas_flux is not None:
@@ -353,7 +353,7 @@ def compute_rv_content(pars, spectral_model, snr=100):
         Ai = Ai * snr**2
 
         # Compute derivative of stellar flux and gas flux
-        dAi_dw_star = cspline_star(data_wave[i], 1) * blaze[i]
+        dAi_dw_star = cspline_star(data_wave[i], 1)
         if gas_flux is not None:
             dAi_dw_star *= gas_flux[i]
         if tell_flux is not None:
@@ -371,7 +371,7 @@ def compute_rv_content(pars, spectral_model, snr=100):
 
         # Compute derivative of gas cell flux
         if gas_flux is not None:
-            dAi_dw_gas = cspline_gas(data_wave[i], 1) * blaze[i]
+            dAi_dw_gas = cspline_gas(data_wave[i], 1)
 
             dAi_dw_gas *= star_flux[i]
             

@@ -274,7 +274,6 @@ def cspline_fit(x, y, knots, weights=None):
     _cspline_fit = scipy.interpolate.LSQUnivariateSpline(xx, yy, t=knots, w=ww, k=3, ext=1)
     return _cspline_fit
 
-@njit
 def _dop_shift_SR(wave, vel):
     """Doppler-shift according to the SR equation.
 
@@ -288,7 +287,6 @@ def _dop_shift_SR(wave, vel):
     beta = vel / cs.c
     return wave * np.sqrt((1 + beta) / (1 - beta))
 
-@njit
 def _dop_shift_exponential(wave, vel):
     """Doppler-shift according to a differential non-SR equation, lambda_f = lambda_0 * exp(v / c).
 
@@ -1037,12 +1035,12 @@ def cspline_fit_fancy(x, y, window=None, n_knots=50, percentile=0.99):
 # dl / l0 + 1 = e^(dv/c)
 # ln(dl / l0 + 1) = dv/c
 # c * ln(dl / l0 - 1) = dv
-@njit
+@jit
 def dl_to_dv(dl, l):
     return cs.c * np.log(dl / l + 1)
 
 # dl = l0 * (e^(dv/c) - 1)
-@njit
+@jit
 def dv_to_dl(dv, l):
     return l * (np.exp(dv / cs.c) - 1)
 
