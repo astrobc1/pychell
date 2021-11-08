@@ -81,7 +81,7 @@ def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
     # Generate theoretical LFC peaks
     good = np.where(np.isfinite(lfc_wave) & np.isfinite(lfc_flux))[0]
     wi, wf = lfc_wave[good[0]], lfc_wave[good[-1]]
-    lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
+    integers, lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
 
     # Remove background flux
     background = estimate_background(lfc_wave, lfc_flux, f0, df)
@@ -229,7 +229,7 @@ def compute_wls(wave_estimate, lfc_flux, df, f0, poly_order=None):
     lfc_flux = flag_bad_pixels(lfc_flux)
 
     # Compute centers (wave, pix)
-    lfc_centers_pix, lfc_centers_wave = compute_peaks(wave_estimate, lfc_flux, f0, df)
+    lfc_centers_pix, lfc_centers_wave, _ = compute_peaks(wave_estimate, lfc_flux, f0, df)
 
     # Polynomial fit to peaks
     wls = fit_peaks(xarr, lfc_centers_pix, lfc_centers_wave, poly_order=poly_order)
@@ -252,7 +252,7 @@ def estimate_peak_spacing(xi, xf, wi, wf, f0, df):
         f0 (float): The frequency of the LFC pump line in GHz.
         df (float): The LFC line spacing in GHz.
     """
-    lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
+    integers, lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
     n_peaks = len(lfc_centers_wave_theoretical)
     peak_spacing = (xf - xi) / n_peaks
     return peak_spacing
@@ -275,12 +275,13 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
     good = np.where(np.isfinite(wave_estimate) & np.isfinite(lfc_flux))[0]
     xi, xf = good[0], good[-1]
     wi, wf = wave_estimate[xi], wave_estimate[xf]
-    lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
+    lfc_peak_integers, lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
     peak_spacing = estimate_peak_spacing(xi, xf, wi, wf, f0, df)
     
     # Number of pixels
     nx = len(wave_estimate)
     xarr = np.arange(nx)
+    pfit_estimate = np.polyfit(xarr[good], wave_estimate[good], 4)
 
     # Remove background flux
     background = estimate_background(wave_estimate, lfc_flux, f0, df)
@@ -327,13 +328,16 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
 
     # Determine which LFC spot matches each peak
     lfc_centers_wave = []
+    peak_integers = []
     for i in range(len(lfc_centers_pix)):
-        diffs = np.abs(wave_estimate[int(np.round(lfc_centers_pix[i]))] - lfc_centers_wave_theoretical)
-        k = np.argmin(diffs) - 1
+        diffs = np.abs(np.polyval(pfit_estimate, lfc_centers_pix[i]) - lfc_centers_wave_theoretical)
+        k = np.argmin(diffs)
         lfc_centers_wave.append(lfc_centers_wave_theoretical[k])
+        peak_integers.append(lfc_peak_integers[k])
     lfc_centers_wave = np.array(lfc_centers_wave)
+    peak_integers = np.array(peak_integers)
 
-    return lfc_centers_pix, lfc_centers_wave
+    return lfc_centers_pix, lfc_centers_wave, peak_integers
 
 def gen_theoretical_peaks(wi, wf, f0, df):
     """Generates the theoretical wavelengths given a range of wavelengths.
@@ -349,17 +353,20 @@ def gen_theoretical_peaks(wi, wf, f0, df):
     """
 
     # Generate the frequency grid
-    lfc_centers_freq_theoretical = np.arange(f0 - 10_000 * df, f0 + (10_000 + 1) * df, df)
+    n_left, n_right = 10_000, 10_000
+    lfc_centers_freq_theoretical = np.arange(f0 - n_left * df, f0 + (n_right + 1) * df, df)
+    integers = np.arange(-n_left, n_right + 1).astype(int)
 
     # Convert to wavelength
     lfc_centers_wave_theoretical = cs.c / lfc_centers_freq_theoretical
     lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[::-1] * 1E10
 
     # Only peaks within the bounds
-    good = np.where((lfc_centers_wave_theoretical > wi - 5) & (lfc_centers_wave_theoretical < wf + 5))[0]
+    good = np.where((lfc_centers_wave_theoretical > wi - 0.1) & (lfc_centers_wave_theoretical < wf + 0.1))[0]
     lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[good]
+    integers = integers[good]
 
-    return lfc_centers_wave_theoretical
+    return integers, lfc_centers_wave_theoretical
 
 def estimate_background(lfc_wave, lfc_flux, f0, df):
     """Estimates the background of the LFC spectrum through a median filter.

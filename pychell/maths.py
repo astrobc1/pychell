@@ -339,6 +339,7 @@ def median_filter1d(x, width, preserve_nans=True):
         
     return out
 
+@jit
 def generalized_median_filter1d(x, width, percentile=0.5):
     nx = len(x)
     y = np.full(nx, np.nan)
@@ -966,13 +967,13 @@ def poly_filter(y, width, poly_order=3):
     y_out[ihigh + 1:] = np.nan
     return y_out
         
-def normalize_image(image, window=5, n_knots=60, percentile=0.99, downsample=8):
+#@jit
+def normalize_image(image, height, order_spacing, percentile=0.99, downsample=4):
     """Normalizes the traces of an echellogram which are roughly aligned with detector rows.
 
     Args:
         image (np.ndarray): The echellogram.
         window (int, optional): The size of the rolling window. Defaults to 5.
-        n_knots (int, optional): The number cubic spline knots. Defaults to 60.
         percentile (float, optional): The percentile of the continuum in the rolling window. Defaults to 0.99.
         downsample (int, optional): How many columns to group together (higher is faster but less precise). Defaults to 8.
 
@@ -984,12 +985,12 @@ def normalize_image(image, window=5, n_knots=60, percentile=0.99, downsample=8):
     xx = np.arange(nx)
     for i in range(0, nx, downsample):
         good = np.where(np.isfinite(image[:, i]))[0]
-        if good.size < 0.1 * ny:
+        if good.size == 0:
             continue
         x_low = np.max([0, i - downsample / 2])
         x_high = np.min([i + downsample / 2, nx - 1])
         inds = np.arange(x_low, x_high + 1).astype(int)
-        continuum_col = cspline_fit_fancy(xx, image[:, i], window=window, n_knots=n_knots, percentile=percentile)
+        continuum_col = generalized_median_filter1d(image[:, i], width=2.5 * order_spacing + height, percentile=percentile)
         for j in inds:
             out[:, j] = image[:, j] / continuum_col
     bad = np.where(out < 0)

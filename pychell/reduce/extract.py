@@ -25,11 +25,7 @@ class SpectralExtractor:
     #### CONSTRUCTOR ####
     #####################
     
-    def __init__(self, mask_left=100, mask_right=100, mask_top=100, mask_bottom=100, extract_orders=None):
-        self.mask_left = mask_left
-        self.mask_right = mask_right
-        self.mask_top = mask_top
-        self.mask_bottom = mask_bottom
+    def __init__(self, extract_orders=None):
         self.extract_orders = extract_orders
 
 
@@ -37,7 +33,7 @@ class SpectralExtractor:
     #### PRIMARY METHOD TO EXTRACT ENTIRE IMAGE ####
     ################################################
 
-    def extract_image(self, reducer, data, data_image, badpix_mask=None):
+    def extract_image(self, recipe, data, data_image, badpix_mask=None):
 
         # Stopwatch
         stopwatch = pcutils.StopWatch()
@@ -64,10 +60,10 @@ class SpectralExtractor:
             orders_list = order_map.orders_list
         
             # A trace mask
-            trace_map_image = reducer.tracer.gen_image(orders_list, ny, nx, mask_left=self.mask_left, mask_right=self.mask_right, mask_top=self.mask_top, mask_bottom=self.mask_bottom)
+            trace_map_image = recipe.tracer.gen_image(orders_list, ny, nx, mask_left=recipe.mask_left, mask_right=recipe.mask_right, mask_top=recipe.mask_top, mask_bottom=recipe.mask_bottom)
         
             # Mask edge pixels as nan
-            self.mask_image(data_image, self.mask_left, self.mask_right, self.mask_top, self.mask_bottom)
+            self.mask_image(data_image, recipe.mask_left, recipe.mask_right, recipe.mask_top, recipe.mask_bottom)
         
             # Loop over orders, possibly multi-trace
             for order_index, trace_dict in enumerate(orders_list):
@@ -97,14 +93,14 @@ class SpectralExtractor:
         fig = self.plot_extracted_spectra(data, reduced_data)
         
         # Create a filename
-        fname = f"{reducer.output_path}spectra{os.sep}{data.base_input_file_noext}_{data.object.replace(' ', '_')}_preview.png"
+        fname = f"{recipe.output_path}spectra{os.sep}{data.base_input_file_noext}_{data.object.replace(' ', '_')}_preview.png"
         
         # Save
         plt.savefig(fname)
         plt.close()
 
         # Save reduced data
-        fname = f"{reducer.output_path}spectra{os.sep}{data.base_input_file_noext}_{data.object}_reduced.fits"
+        fname = f"{recipe.output_path}spectra{os.sep}{data.base_input_file_noext}_{data.object}_reduced.fits"
         hdu = fits.PrimaryHDU(reduced_data, header=data.header)
         hdu.writeto(fname, overwrite=True, output_verify='ignore')
 

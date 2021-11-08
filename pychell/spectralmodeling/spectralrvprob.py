@@ -160,7 +160,7 @@ class IterativeSpectralRVProb:
             self.rvs_dict["bc_vels"] = bc_corrs[:, 1]
         
         # Get the nightly jds
-        self.rvs_dict["bjds_nightly"], self.rvs_dict["n_obs_nights"] = pcrvcalc.gen_nightly_jds(self.rvs_dict["bjds"])
+        self.rvs_dict["bjds_nightly"], self.rvs_dict["n_obs_nights"] = pcrvcalc.gen_nightly_jds(self.rvs_dict["bjds"], utc_offset=self.spec_module.utc_offset)
         
         # Individual and per-night Forward Modeled RVs
         self.rvs_dict["rvsfwm"] = np.full((self.n_spec, self.n_iterations), np.nan)

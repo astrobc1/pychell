@@ -183,3 +183,8 @@ def get_stellar_rv(star_name):
     rv = result[0]["rv"]
     return rv
 
+def get_spec_module(spectrograph):
+    return importlib.import_module(f"pychell.data.{spectrograph.lower()}")
+
+def get_utc_offset(spectrograph):
+    return get_spec_module(spectrograph).utc_offset

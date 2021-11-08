@@ -29,12 +29,6 @@ import pychell.maths as pcmath
 import pychell.data.spectraldata as pcspecdata
 
 class OrderTracer:
-
-    def __init__(self, mask_left=200, mask_right=200, mask_top=20, mask_bottom=20):
-        self.mask_left = mask_left
-        self.mask_right = mask_right
-        self.mask_top = mask_top
-        self.mask_bottom = mask_bottom
     
     @staticmethod
     def gen_image(orders_list, ny, nx, mask_left=200, mask_right=200, mask_top=20, mask_bottom=20):
@@ -58,11 +52,10 @@ class DensityClusterTracer(OrderTracer):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, n_orders, poly_order=2, order_spacing=10, heights=10, mask_left=200, mask_right=200, mask_top=20, mask_bottom=20, downsample=4, n_cores=1):
-        super().__init__(mask_left=mask_left, mask_right=mask_right, mask_top=mask_top, mask_bottom=mask_bottom)
+    def __init__(self, n_orders, poly_order=2, order_spacing=10, heights=10, downsample=4, n_cores=1):
+        self.n_orders = n_orders
         self.poly_order = poly_order
         self.order_spacing = order_spacing
-        self.n_orders = n_orders
         try:
             iter(heights)
             self.heights = heights
@@ -76,19 +69,19 @@ class DensityClusterTracer(OrderTracer):
     #### TRACE ORDERS ####
     ######################
         
-    def trace(self, data):
+    def trace(self, recipe, data):
 
         # Image
         image = data.parse_image()
         
         # Fiber number
         try:
-            fiber = int(data.specmod.parse_fiber_nums(data))
+            fiber = int(data.spec_module.parse_fiber_nums(data))
         except:
             fiber = None
 
         # Call function
-        orders_list = self._trace(image, self.n_orders, self.poly_order, self.order_spacing, self.heights, self.mask_left, self.mask_right, self.mask_top, self.mask_bottom, self.downsample, fiber, self.n_cores)
+        orders_list = self._trace(image, self.n_orders, self.poly_order, self.order_spacing, self.heights, recipe.mask_left, recipe.mask_right, recipe.mask_top, recipe.mask_bottom, self.downsample, fiber, self.n_cores)
 
         # Store result
         data.orders_list = orders_list
@@ -115,9 +108,9 @@ class DensityClusterTracer(OrderTracer):
         image_smooth = pcmath.median_filter2d(image, width=5, preserve_nans=False)
         
         # Normalize the flat.
-        image_smooth_norm = pcmath.normalize_image(image_smooth, window=order_spacing, n_knots=n_orders, percentile=0.99, downsample=8)
+        image_smooth_norm = pcmath.normalize_image(image_smooth, np.nanmean(heights), order_spacing, percentile=0.99, downsample=4)
         
-        # Downsample in the horizontal direction to save on memory
+        # Downsample in the horizontal direction for performance
         nx_lr = int(nx / downsample)
 
         # Only consider regions where the flux is greater than 50%
@@ -185,5 +178,5 @@ class DensityClusterTracer(OrderTracer):
                 label = int(good_labels[l])
             pfit = np.polyfit(downsample * inds[1], inds[0], 2)
             orders_list.append({'label': label, 'height': heights[l], 'pcoeffs': pfit})
-
+            
         return orders_list

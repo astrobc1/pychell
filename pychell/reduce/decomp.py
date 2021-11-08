@@ -28,8 +28,7 @@ class DecompExtractor(SpectralExtractor):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, mask_left=100, mask_right=100, mask_top=100, mask_bottom=100,
-                 remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05,
+    def __init__(self, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05,
                  trace_pos_poly_order=4, oversample=4,
                  n_trace_refine_iterations=3, n_extract_iterations=3, trace_pos_refine_window=None,
                  badpix_threshold=5,
@@ -37,7 +36,7 @@ class DecompExtractor(SpectralExtractor):
                  extract_aperture=None, lambda_sf=0.5, lambda_sp=0.0, tilt=None, shear=None):
 
         # Super init
-        super().__init__(mask_left=mask_left, mask_right=mask_right, mask_top=mask_top, mask_bottom=mask_bottom, extract_orders=extract_orders)
+        super().__init__(extract_orders=extract_orders)
 
         # Set params
         self.remove_background = remove_background

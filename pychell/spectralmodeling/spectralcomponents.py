@@ -146,7 +146,7 @@ class PolyContinuum(Continuum):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, poly_order=4, coeffs={0: [0.95, 1.0, 1.1], 1: [-1E-3, 1E4, 1E-3]}):
+    def __init__(self, poly_order=4, coeffs={0: [0.95, 1.0, 1.1], 1: [-1E-3, 1E-4, 1E-3]}):
         """Initiate a polynomial continuum model.
 
         Args:
@@ -449,7 +449,7 @@ class AugmentedStar(Star):
         pars = BoundedParameters()
         if not self.from_flat:
             rv_absolute = pcutils.get_stellar_rv(self.star_name)
-            spec_module = data[0].specmod
+            spec_module = data[0].spec_module
             rv_zero_point = spec_module.rv_zero_point
             v = rv_absolute + rv_zero_point
         else:
@@ -506,7 +506,7 @@ class AugmentedStar(Star):
             spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
         else:
             rv_absolute = pcutils.get_stellar_rv(self.star_name)
-            spec_module = spectral_model.data.specmod
+            spec_module = spectral_model.data.spec_module
             rv_zero_point = spec_module.rv_zero_point
             v = rv_absolute + rv_zero_point - spectral_model.data.bc_vel
             spectral_model.p0[self.par_names[0]].value = v
@@ -838,7 +838,7 @@ class PolyWls(WavelengthSolution):
         self.poly_pixel_lagrange_points = np.linspace(spectral_model.sregion.pixmin,
                                                       spectral_model.sregion.pixmax,
                                                       num=self.poly_order + 1).astype(int)
-        wls_estimate = spectral_model.data.specmod.estimate_wls(spectral_model.data)
+        wls_estimate = spectral_model.data.spec_module.estimate_wls(spectral_model.data)
         self.nx = len(wls_estimate)
         self.poly_wave_lagrange_zero_points = wls_estimate[self.poly_pixel_lagrange_points]
 
@@ -904,7 +904,7 @@ class SplineWls(WavelengthSolution):
         self.spline_pixel_lagrange_points = np.linspace(spectral_model.sregion.pixmin,
                                                         spectral_model.sregion.pixmax,
                                                         num=self.n_splines + 1).astype(int)
-        wls_estimate = spectral_model.data.specmod.estimate_wls(spectral_model.data)
+        wls_estimate = spectral_model.data.spec_module.estimate_wls(spectral_model.data)
         self.nx = len(wls_estimate)
         self.spline_wave_lagrange_zero_points = wls_estimate[self.spline_pixel_lagrange_points]
 
@@ -967,7 +967,7 @@ class PChipWls(WavelengthSolution):
         self.spline_pixel_lagrange_points = np.linspace(spectral_model.sregion.pixmin,
                                                         spectral_model.sregion.pixmax,
                                                         num=self.n_splines + 1).astype(int)
-        wls_estimate = spectral_model.data.specmod.estimate_wls(spectral_model.data)
+        wls_estimate = spectral_model.data.spec_module.estimate_wls(spectral_model.data)
         self.nx = len(wls_estimate)
         self.spline_wave_lagrange_zero_points = wls_estimate[self.spline_pixel_lagrange_points]
 

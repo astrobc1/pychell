@@ -35,6 +35,8 @@ observatory = {
     "alt": 1713.0
 }
 
+utc_offset = -8
+
 ######################
 #### DATA PARSING ####
 ######################
@@ -234,7 +236,6 @@ def compute_barycenter_corrections(data, star_name):
 
 def compute_exposure_midpoint(data):
     jdsi, jdsf = [], []
-    # Eventually we will fill fluxes with an arbitrary read value.
     for key in data.header:
         if key.startswith("TIMEI"):
             jdsi.append(Time(float(data.header[key]) / 1E9, format="unix").jd)

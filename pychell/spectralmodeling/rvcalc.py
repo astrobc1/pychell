@@ -22,12 +22,13 @@ import pychell.utils as pcutils
 #### COMPUTE PER-NIGHT JDS (OR BJDS) ####
 #########################################
 
-def gen_nightly_jds(jds, sep=0.5):
+
+def gen_nightly_jds(jds, utc_offset=0):
     """Computes nightly (average) JDs (or BJDs) for a time-series observation over many nights. Average times are computed from the mean of the considered times.
 
     Args:
         jds (np.ndarray): An array of sorted JDs (or BJDs).
-        sep (float): The minimum separation in days between two different nights of data, defaults to 0.5 (half a day).
+        utc_offset (int): The number of hours offset from UTC.
     Returns:
         np.ndarray: The average nightly jds.
         np.ndarray: The number of observations each night with data, of length n_nights.
@@ -36,10 +37,11 @@ def gen_nightly_jds(jds, sep=0.5):
     # Number of spectra
     n_obs_tot = len(jds)
 
+    # Keep track of previous night's last index
     prev_i = 0
+
     # Calculate mean JD date and number of observations per night for nightly
-    # coadded RV points; assume that observations on separate nights are
-    # separated by at least "sep" days.
+    # Assume that observations on separate nights if noon passes.
     jds_nightly = []
     n_obs_nights = []
     if n_obs_tot == 1:
@@ -47,7 +49,8 @@ def gen_nightly_jds(jds, sep=0.5):
         n_obs_nights.append(1)
     else:
         for i in range(n_obs_tot - 1):
-            if jds[i+1] - jds[i] > sep:
+            t_noon = np.ceil(jds[i] + utc_offset / 24) - utc_offset / 24
+            if jds[i+1] > t_noon:
                 jd_avg = np.average(jds[prev_i:i+1])
                 n_obs_night = i - prev_i + 1
                 jds_nightly.append(jd_avg)
