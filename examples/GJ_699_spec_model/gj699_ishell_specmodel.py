@@ -8,8 +8,8 @@ import numpy as np
 # Pychell deps
 from pychell.spectralmodeling.spectralrvprob import IterativeSpectralRVProb
 import pychell.spectralmodeling.spectralmodels as pcsm
-from pychell.spectralmodeling.spectral_objectives import WeightedSpectralUncRMS
-from pychell.spectralmodeling.template_augmenters import WeightedMedian
+from pychell.spectralmodeling.spectralobjectives import WeightedSpectralUncRMS
+from pychell.spectralmodeling.templateaugmenters import WeightedMedian
 import pychell.data.ishell as ishell
 
 # Optimize deps
@@ -22,14 +22,14 @@ filelist = "filelist_example.txt"
 output_path = os.getcwd() + os.sep
 star_name = "GJ_699"
 tag = "gj699_example"
-do_orders = [6, 8, 12, 15] # Do some arbitrary but appropriate orders
+do_orders = [6, 8, 12, 15] # Do some arbitrary orders (relative to the image)
 templates_path = "/Users/cale/Research/pychell_templates/" # Must download templates
 
 # Loop over orders
 for order_num in do_orders:
     
-    # Wls
-    wavelength_solution = pcsm.SplineWavelengthSolution(n_splines=6)
+    # Wavelength Solution
+    wls = pcsm.SplineWls(n_splines=6)
     
     # Continuum
     continuum = pcsm.SplineContinuum(n_splines=10)
@@ -47,7 +47,7 @@ for order_num in do_orders:
     tellurics = pcsm.TelluricsTAPAS(input_path=templates_path, location_tag="maunakea")
     
     # Final spectral model
-    spectral_model = pcsm.IterativeSpectralForwardModel(wavelength_solution=wavelength_solution, continuum=continuum, lsf=lsf,
+    spectral_model = pcsm.IterativeSpectralForwardModel(wls=wls, continuum=continuum, lsf=lsf,
                                                         star=star,
                                                         gas_cell=gas_cell,
                                                         tellurics=tellurics,

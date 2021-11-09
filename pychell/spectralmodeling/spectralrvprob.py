@@ -15,7 +15,7 @@ import pychell
 import pychell.maths as pcmath
 import pychell.spectralmodeling.rvcalc as pcrvcalc
 import pychell.utils as pcutils
-from pychell.data.spectraldata import SpecData1d
+from pychell.data.spectraldata import Spec1d
 from pychell.spectralmodeling.spectralmodels import IterativeSpectralForwardModel
 
 # Plots
@@ -120,7 +120,7 @@ class IterativeSpectralRVProb:
         input_files = [self.data_input_path + f for f in np.atleast_1d(np.genfromtxt(self.data_input_path + self.filelist, dtype='<U100', comments='#').tolist())]
         
         # Load in each observation for this order
-        data = [SpecData1d(fname, self.order_num, ispec + 1, self.spectrograph, self.crop_pix) for ispec, fname in enumerate(input_files)]
+        data = [Spec1d(fname, self.order_num, ispec + 1, self.spectrograph, self.crop_pix) for ispec, fname in enumerate(input_files)]
         
         # Sort the data
         jds = np.array([self.spec_module.compute_exposure_midpoint(d) for d in data], dtype=float)

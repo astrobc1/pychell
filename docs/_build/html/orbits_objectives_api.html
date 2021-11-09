@@ -15,6 +15,8 @@
     <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="data_api.html" />
+    <link rel="prev" title="pychell API reference" href="orbits_models_api.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
   
@@ -37,13 +39,13 @@
 <span id="likelihoods"></span><h2>Likelihoods<a class="headerlink" href="#module-pychell.orbits.rvobjectives" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
 <dt id="pychell.orbits.rvobjectives.RVLikelihood">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvobjectives.</code><code class="sig-name descname">RVLikelihood</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">label</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">model</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvobjectives.RVLikelihood" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvobjectives.</span></code><code class="sig-name descname"><span class="pre">RVLikelihood</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvobjectives.RVLikelihood" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.bayesobj.GaussianLikelihood</span></code></p>
 </dd></dl>
 
 <dl class="py class">
 <dt id="pychell.orbits.rvobjectives.RVPosterior">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvobjectives.</code><code class="sig-name descname">RVPosterior</code><a class="headerlink" href="#pychell.orbits.rvobjectives.RVPosterior" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvobjectives.</span></code><code class="sig-name descname"><span class="pre">RVPosterior</span></code><a class="headerlink" href="#pychell.orbits.rvobjectives.RVPosterior" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.bayesobj.Posterior</span></code></p>
 <p>A class for RV Posteriors.</p>
 </dd></dl>
@@ -71,17 +73,29 @@
 
 
 <h3>Navigation</h3>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spectralmodeling_api.html">Radial Velocity Generation</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="orbits_api.html">Radial Velocity Fitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data_api.html">Data Containers</a></li>
+</ul>
+</li>
 </ul>
 
 <div class="relations">
 <h3>Related Topics</h3>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="orbits_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="orbits_models_api.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="data_api.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
   </ul></li>
 </ul>
 </div>
@@ -111,7 +125,7 @@
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.5.4</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

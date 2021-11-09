@@ -49,12 +49,12 @@ def categorize_raw_data(data_input_path, output_path):
     # iSHELL science files are files that contain spc or data
     sci_files = glob.glob(data_input_path + "*data*.fits") + glob.glob(data_input_path + "*spc*.fits")
     sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
-    data['science'] = [pcspecdata.RawEchellogram(input_file=sci_file, specmod=sys.modules[__name__]) for sci_file in sci_files]
+    data['science'] = [pcspecdata.RawEchellogram(input_file=sci_file, spectrograph="iSHELL") for sci_file in sci_files]
 
     # Darks assumed to contain dark in filename
     dark_files = glob.glob(data_input_path + '*dark*.fits')
     if len(dark_files) > 0:
-        data['darks'] = [pcspecdata.RawEchellogram(input_file=dark_files[f], specmod=sys.modules[__name__]) for f in range(len(dark_files))]
+        data['darks'] = [pcspecdata.RawEchellogram(input_file=dark_files[f], spectrograph="iSHELL") for f in range(len(dark_files))]
         dark_groups = group_darks(data['darks'])
         data['master_darks'] = [pcspecdata.MasterCal(dark_group, output_path + "calib" + os.sep) for dark_groups in dark_group]
     
@@ -67,7 +67,7 @@ def categorize_raw_data(data_input_path, output_path):
     # iSHELL flats must contain flat in the filename
     flat_files = glob.glob(data_input_path + '*flat*.fits')
     if len(flat_files) > 0:
-        data['flats'] = [pcspecdata.RawEchellogram(input_file=flat_files[f], specmod=sys.modules[__name__]) for f in range(len(flat_files))]
+        data['flats'] = [pcspecdata.RawEchellogram(input_file=flat_files[f], spectrograph="iSHELL") for f in range(len(flat_files))]
         flat_groups = group_flats(data['flats'])
         data['master_flats'] = [pcspecdata.MasterCal(flat_group, output_path + "calib" + os.sep) for flat_group in flat_groups]
     
@@ -81,13 +81,10 @@ def categorize_raw_data(data_input_path, output_path):
 
     # Which to extract
     data['extract'] = data['science']
-    
-    # Print reduction summary
-    print_reduction_summary(data)
 
     # Return the data dict
     return data
-    
+
 def pair_order_maps(data, order_maps):
     for order_map in order_maps:
         if order_map == data.master_flat:
@@ -97,7 +94,7 @@ def parse_image_num(data):
     string_list = data.base_input_file.split('.')
     data.image_num = string_list[4]
     return data.image_num
-    
+
 def parse_itime(data):
     data.itime = data.header["ITIME"]
     return data.itime
@@ -105,7 +102,7 @@ def parse_itime(data):
 def parse_object(data):
     data.object = data.header["OBJECT"]
     return data.object
-    
+
 def parse_utdate(data):
     utdate = "".join(data.header["DATE_OBS"].split('-'))
     data.utdate = utdate
@@ -118,6 +115,45 @@ def parse_sky_coord(data):
 def parse_exposure_start_time(data):
     data.time_obs_start = Time(float(data.header['TCS_UTC']) + 2400000.5, scale='utc', format='jd')
     return data.time_obs_start
+
+def parse_image(data):
+    image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float)
+    correct_readmath(data, image)
+    return image
+
+def parse_image_header(data):
+        
+    # Parse the fits HDU
+    fits_hdu = fits.open(data.input_file)[0]
+    
+    # Just in case
+    try:
+        fits_hdu.verify('fix')
+    except:
+        pass
+    
+    # Store the header
+    data.header = fits_hdu.header
+    
+    # Parse the sky coord and time of obs
+    parse_utdate(data)
+    parse_sky_coord(data)
+    parse_exposure_start_time(data)
+    parse_object(data)
+    parse_itime(data)
+    
+    return data.header
+
+def correct_readmath(data, data_image):
+    # Corrects NDRs - Number of dynamic reads, or Non-destructive reads, take your pick.
+    # This reduces the read noise by sqrt(NDR)
+    if hasattr(data, "header"):
+        if 'NDR' in data.header:
+            data_image /= float(data.header['NDR'])
+        if 'BZERO' in data.header:
+            data_image -= float(data.header['BZERO'])
+        if 'BSCALE' in data.header:
+            data_image /= float(data.header['BSCALE'])
 
 def gen_master_calib_filename(master_cal):
     fname0 = master_cal.group[0].base_input_file.lower()
@@ -137,6 +173,9 @@ def gen_master_calib_header(master_cal):
     master_cal.itime = master_cal.group[0].itime
     return copy.deepcopy(master_cal.group[0].header)
 
+def pair_master_bias(data, master_bias):
+    data.master_bias = master_bias
+
 def pair_master_dark(data, master_darks):
     itimes = np.array([master_darks[i].itime for i in range(len(master_darks))], dtype=float)
     good = np.where(data.itime == itimes)[0]
@@ -144,7 +183,7 @@ def pair_master_dark(data, master_darks):
         raise ValueError(str(good.size) + " master dark(s) found for\n" + str(data))
     else:
         data.master_dark = master_darks[good[0]]
-    
+
 def pair_master_flat(data, master_flats):
     ang_seps = np.array([np.abs(data.skycoord.separation(master_flat.skycoord)).value for master_flat in master_flats], dtype=float)
     ang_seps /= np.nanmax(ang_seps)
@@ -153,7 +192,7 @@ def pair_master_flat(data, master_flats):
     ds = np.sqrt(ang_seps**2 + time_seps**2)
     minds_loc = np.argmin(ds)
     data.master_flat = master_flats[minds_loc]
-  
+
 def group_darks(darks):
     groups = []
     itimes = np.array([dark.itime for dark in darks])
@@ -163,7 +202,7 @@ def group_darks(darks):
         indiv_darks = [darks[i] for i in good]
         groups.append(indiv_darks)
     return groups
-    
+
 def group_flats(flats):
     
     # Groups
@@ -205,9 +244,6 @@ def group_flats(flats):
         groups.append(indiv_flats)
         
     return groups
-    
-def pair_master_bias(data, master_bias):
-    data.master_bias = master_bias
 
 def parse_spec1d(data):
     
@@ -223,74 +259,8 @@ def parse_spec1d(data):
     data.mask = data.mask[::-1]
     data.flux_unc = data.flux_unc[::-1]
 
-def parse_image(data):
-    image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float)
-    correct_readmath(data, image)
-    return image
-
-def parse_image_header(data):
-        
-    # Parse the fits HDU
-    fits_hdu = fits.open(data.input_file)[0]
-    
-    # Just in case
-    try:
-        fits_hdu.verify('fix')
-    except:
-        pass
-    
-    # Store the header
-    data.header = fits_hdu.header
-    
-    # Parse the sky coord and time of obs
-    parse_utdate(data)
-    parse_sky_coord(data)
-    parse_exposure_start_time(data)
-    parse_object(data)
-    parse_itime(data)
-    
-    return data.header
-
-def correct_readmath(data, data_image):
-    # Corrects NDRs - Number of dynamic reads, or Non-destructive reads, take your pick.
-    # This reduces the read noise by sqrt(NDR)
-    if hasattr(data, "header"):
-        if 'NDR' in data.header:
-            data_image /= float(data.header['NDR'])
-        if 'BZERO' in data.header:
-            data_image -= float(data.header['BZERO'])
-        if 'BSCALE' in data.header:
-            data_image /= float(data.header['BSCALE'])
-
 def parse_fiber_nums(data):
     return None
-
-def print_reduction_summary(data):
-    
-    n_sci_tot = len(data['science'])
-    targets_all = np.array([data['science'][i].object for i in range(n_sci_tot)], dtype='<U50')
-    targets_unique = np.unique(targets_all)
-    for i in range(len(targets_unique)):
-        
-        target = targets_unique[i]
-        
-        locs_this_target = np.where(targets_all == target)[0]
-        
-        sci_this_target = [data['science'][j] for j in locs_this_target]
-        
-        print('Target: ' + target)
-        print('    N Exposures: ' + str(locs_this_target.size))
-        if hasattr(sci_this_target[0], 'master_bias'):
-            print('  Master Bias: ')
-            print('    ' + str(sci_this_target[0].master_bias))
-            
-        if hasattr(sci_this_target[0], 'master_dark'):
-            print('  Master Dark: ')
-            print('    ' + str(sci_this_target[0].master_dark))
-            
-        if hasattr(sci_this_target[0], 'master_flat'):
-            print('  Master Flat: ')
-            print('    ' + str(sci_this_target[0].master_flat))
 
 
 ################################

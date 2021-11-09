@@ -15,6 +15,8 @@
     <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="orbits_models_api.html" />
+    <link rel="prev" title="pychell API reference" href="orbits_data_api.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
   
@@ -37,11 +39,11 @@
 <span id="noise-modeling"></span><h2>Noise Modeling<a class="headerlink" href="#module-pychell.orbits.rvnoise" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
 <dt id="pychell.orbits.rvnoise.ChromaticProcessJ1">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvnoise.</code><code class="sig-name descname">ChromaticProcessJ1</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">par_names</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvnoise.</span></code><code class="sig-name descname"><span class="pre">ChromaticProcessJ1</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.noise.GaussianProcess</span></code></p>
 <dl class="py method">
 <dt id="pychell.orbits.rvnoise.ChromaticProcessJ1.compute_data_errors">
-<code class="sig-name descname">compute_data_errors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">include_corr_error</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">linpred</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1.compute_data_errors" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">compute_data_errors</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_corr_error</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1.compute_data_errors" title="Permalink to this definition">¶</a></dt>
 <dd><p>Computes the errors added in quadrature for all datasets corresponding to this kernel.
 :param pars: The parameters to use.
 :type pars: Parameters</p>
@@ -57,7 +59,7 @@
 
 <dl class="py method">
 <dt id="pychell.orbits.rvnoise.ChromaticProcessJ1.compute_residuals">
-<code class="sig-name descname">compute_residuals</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">linpred</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1.compute_residuals" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">compute_residuals</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1.compute_residuals" title="Permalink to this definition">¶</a></dt>
 <dd><p>Computes the final residuals (linpred - noise process)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -77,7 +79,7 @@
 
 <dl class="py method">
 <dt id="pychell.orbits.rvnoise.ChromaticProcessJ1.initialize">
-<code class="sig-name descname">initialize</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">p0</span></em>, <em class="sig-param"><span class="n">x1</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">xpred</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">instname1</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">instname2</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1.initialize" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">initialize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">p0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1.initialize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Default initializer for correlated noise kernels. By default, only the distance matrix is constructed.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -91,7 +93,163 @@
 
 <dl class="py method">
 <dt id="pychell.orbits.rvnoise.ChromaticProcessJ1.realize">
-<code class="sig-name descname">realize</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">linpred</span></em>, <em class="sig-param"><span class="n">instname</span></em>, <em class="sig-param"><span class="n">xpred</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1.realize" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">realize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ1.realize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Realize the GP (predict/ssample at arbitrary points).
+:param pars: The parameters to use.
+:type pars: Parameters
+:param residuals: The residuals before the GP is subtracted.
+:type residuals: np.ndarray
+:param xpred: The vector to realize the GP on.
+:type xpred: np.ndarray
+:param errors: The errorbars, already added in quadrature.
+:type errors: np.ndarray</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>If stddev is False, only the mean GP is returned. If stddev is True, the uncertainty in the GP is computed and returned as well. The mean GP is computed through a linear optimization.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>np.ndarray OR tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ2">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvnoise.</span></code><code class="sig-name descname"><span class="pre">ChromaticProcessJ2</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wavelength0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">550</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ2" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.noise.GaussianProcess</span></code></p>
+<dl class="py method">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ2.compute_data_errors">
+<code class="sig-name descname"><span class="pre">compute_data_errors</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_corr_error</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ2.compute_data_errors" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the errors added in quadrature for all datasets corresponding to this kernel.
+:param pars: The parameters to use.
+:type pars: Parameters</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The data errors.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ2.compute_residuals">
+<code class="sig-name descname"><span class="pre">compute_residuals</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ2.compute_residuals" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the final residuals (linpred - noise process)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use.</p></li>
+<li><p><strong>linpred</strong> (<em>np.ndarray</em>) – The linear predictor.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The final residuals.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ2.initialize">
+<code class="sig-name descname"><span class="pre">initialize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">p0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wave1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wave2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ2.initialize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default initializer for correlated noise kernels. By default, only the distance matrix is constructed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x1</strong> (<em>np.ndarray</em><em>, </em><em>optional</em>) – The x1 vector. Defaults to the Data grid (self.x).</p></li>
+<li><p><strong>xpred</strong> (<em>np.ndarray</em><em>, </em><em>optional</em>) – The vector to make predictions on. Defaults to x1.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ2.realize">
+<code class="sig-name descname"><span class="pre">realize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wavelength</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ2.realize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Realize the GP (predict/ssample at arbitrary points).
+:param pars: The parameters to use.
+:type pars: Parameters
+:param residuals: The residuals before the GP is subtracted.
+:type residuals: np.ndarray
+:param xpred: The vector to realize the GP on.
+:type xpred: np.ndarray
+:param errors: The errorbars, already added in quadrature.
+:type errors: np.ndarray</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>If stddev is False, only the mean GP is returned. If stddev is True, the uncertainty in the GP is computed and returned as well. The mean GP is computed through a linear optimization.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>np.ndarray OR tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ3">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvnoise.</span></code><code class="sig-name descname"><span class="pre">ChromaticProcessJ3</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_names</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ3" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.noise.GaussianProcess</span></code></p>
+<dl class="py method">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ3.compute_data_errors">
+<code class="sig-name descname"><span class="pre">compute_data_errors</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_corr_error</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ3.compute_data_errors" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the errors added in quadrature for all datasets corresponding to this kernel.
+:param pars: The parameters to use.
+:type pars: Parameters</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns</dt>
+<dd class="field-odd"><p>The data errors.</p>
+</dd>
+<dt class="field-even">Return type</dt>
+<dd class="field-even"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ3.compute_residuals">
+<code class="sig-name descname"><span class="pre">compute_residuals</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ3.compute_residuals" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes the final residuals (linpred - noise process)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pars</strong> (<em>Parameters</em>) – The parameters to use.</p></li>
+<li><p><strong>linpred</strong> (<em>np.ndarray</em>) – The linear predictor.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The final residuals.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>np.ndarray</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ3.initialize">
+<code class="sig-name descname"><span class="pre">initialize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">p0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ3.initialize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default initializer for correlated noise kernels. By default, only the distance matrix is constructed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>x1</strong> (<em>np.ndarray</em><em>, </em><em>optional</em>) – The x1 vector. Defaults to the Data grid (self.x).</p></li>
+<li><p><strong>xpred</strong> (<em>np.ndarray</em><em>, </em><em>optional</em>) – The vector to make predictions on. Defaults to x1.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt id="pychell.orbits.rvnoise.ChromaticProcessJ3.realize">
+<code class="sig-name descname"><span class="pre">realize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.ChromaticProcessJ3.realize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Realize the GP (predict/ssample at arbitrary points).
 :param pars: The parameters to use.
 :type pars: Parameters
@@ -115,11 +273,11 @@
 
 <dl class="py class">
 <dt id="pychell.orbits.rvnoise.RVGP">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvnoise.</code><code class="sig-name descname">RVGP</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">kernel</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.RVGP" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvnoise.</span></code><code class="sig-name descname"><span class="pre">RVGP</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">kernel</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.RVGP" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.noise.GaussianProcess</span></code></p>
 <dl class="py method">
 <dt id="pychell.orbits.rvnoise.RVGP.compute_data_errors">
-<code class="sig-name descname">compute_data_errors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">include_corr_error</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">linpred</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.RVGP.compute_data_errors" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">compute_data_errors</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_corr_error</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">linpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.RVGP.compute_data_errors" title="Permalink to this definition">¶</a></dt>
 <dd><p>Computes the errors added in quadrature for all datasets corresponding to this kernel.
 :param pars: The parameters to use.
 :type pars: Parameters</p>
@@ -137,11 +295,11 @@
 
 <dl class="py class">
 <dt id="pychell.orbits.rvnoise.RVJitter">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvnoise.</code><code class="sig-name descname">RVJitter</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.RVJitter" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvnoise.</span></code><code class="sig-name descname"><span class="pre">RVJitter</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.RVJitter" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.noise.WhiteNoiseProcess</span></code></p>
 <dl class="py method">
 <dt id="pychell.orbits.rvnoise.RVJitter.compute_data_errors">
-<code class="sig-name descname">compute_data_errors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.RVJitter.compute_data_errors" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">compute_data_errors</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvnoise.RVJitter.compute_data_errors" title="Permalink to this definition">¶</a></dt>
 <dd><p>Computes the errors added in quadrature for all datasets corresponding to this kernel.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -160,11 +318,35 @@
 
 <span class="target" id="module-pychell.orbits.rvkernels"></span><dl class="py class">
 <dt id="pychell.orbits.rvkernels.ChromaticKernelJ1">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvkernels.</code><code class="sig-name descname">ChromaticKernelJ1</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em>, <em class="sig-param"><span class="n">par_names</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ1" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvkernels.</span></code><code class="sig-name descname"><span class="pre">ChromaticKernelJ1</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_names</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ1" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.kernels.CorrelatedNoiseKernel</span></code></p>
 <dl class="py method">
 <dt id="pychell.orbits.rvkernels.ChromaticKernelJ1.initialize">
-<code class="sig-name descname">initialize</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">p0</span></em>, <em class="sig-param"><span class="n">x1</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">xpred</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">instname1</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">instname2</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ1.initialize" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">initialize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">p0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ1.initialize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default wrapper to initialize the kernel, storing the parameters.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.orbits.rvkernels.ChromaticKernelJ2">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvkernels.</span></code><code class="sig-name descname"><span class="pre">ChromaticKernelJ2</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_names</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wavelength0</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">550</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ2" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.kernels.CorrelatedNoiseKernel</span></code></p>
+<dl class="py method">
+<dt id="pychell.orbits.rvkernels.ChromaticKernelJ2.initialize">
+<code class="sig-name descname"><span class="pre">initialize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">p0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wave1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">wave2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ2.initialize" title="Permalink to this definition">¶</a></dt>
+<dd><p>Default wrapper to initialize the kernel, storing the parameters.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="pychell.orbits.rvkernels.ChromaticKernelJ3">
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvkernels.</span></code><code class="sig-name descname"><span class="pre">ChromaticKernelJ3</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">par_names</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ3" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.kernels.CorrelatedNoiseKernel</span></code></p>
+<dl class="py method">
+<dt id="pychell.orbits.rvkernels.ChromaticKernelJ3.initialize">
+<code class="sig-name descname"><span class="pre">initialize</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">p0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">xpred</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname1</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">instname2</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvkernels.ChromaticKernelJ3.initialize" title="Permalink to this definition">¶</a></dt>
 <dd><p>Default wrapper to initialize the kernel, storing the parameters.</p>
 </dd></dl>
 
@@ -193,17 +375,29 @@
 
 
 <h3>Navigation</h3>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spectralmodeling_api.html">Radial Velocity Generation</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="orbits_api.html">Radial Velocity Fitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data_api.html">Data Containers</a></li>
+</ul>
+</li>
 </ul>
 
 <div class="relations">
 <h3>Related Topics</h3>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="orbits_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="orbits_data_api.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="orbits_models_api.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
   </ul></li>
 </ul>
 </div>
@@ -233,7 +427,7 @@
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.5.4</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

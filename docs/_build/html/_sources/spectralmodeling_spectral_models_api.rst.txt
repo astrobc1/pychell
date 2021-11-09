@@ -2,8 +2,8 @@ pychell API reference
 =====================
 
 
-Composite Spectral Models and Model Components
-++++++++++++++++++++++++++++++++++++++++++++++
+Spectral Models
++++++++++++++++
 
 .. automodule:: pychell.spectralmodeling.spectralmodels
     :members:

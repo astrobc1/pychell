@@ -35,13 +35,47 @@
             
   <div class="section" id="extending">
 <h1>Extending<a class="headerlink" href="#extending" title="Permalink to this headline">¶</a></h1>
-<div class="section" id="overview-of-pychell">
-<h2>Overview of Pychell<a class="headerlink" href="#overview-of-pychell" title="Permalink to this headline">¶</a></h2>
-<p>pychell is a fully objected oriented package, so most new functionality is done through defining new Python classes. A very powerful way of modifying the current state of pychell for supported spectrographs is to “patch” classes through the fastcore package.</p>
-</div>
 <div class="section" id="define-a-new-spectrograph">
 <h2>Define A New Spectrograph<a class="headerlink" href="#define-a-new-spectrograph" title="Permalink to this headline">¶</a></h2>
-<p>Each implemented spectrograph must live in a file named spectrograph_name.py (must be lowercase) in the data module. This file must define a new class called {INSTNAME}Parser which extends the base Parser class.</p>
+<p>Each implemented spectrograph must have a file named spectrograph.py (must be lowercase) in the data module. This file can contain a variety of items, but it must contain the following methods and variables in order to support:</p>
+<div class="section" id="reduction">
+<h3>Reduction<a class="headerlink" href="#reduction" title="Permalink to this headline">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">categorize_raw_data</span><span class="p">(</span><span class="n">data_input_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span>
+
+<span class="n">correct_readmath</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Echellogram</span><span class="p">,</span> <span class="n">data_image</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+
+<span class="n">gen_master_calib_filename</span><span class="p">(</span><span class="n">master_cal</span><span class="p">:</span> <span class="n">MasterCal</span><span class="p">)</span>
+<span class="n">gen_master_calib_header</span><span class="p">(</span><span class="n">master_cal</span><span class="p">:</span> <span class="n">MasterCal</span><span class="p">)</span>
+
+<span class="n">group_darks</span><span class="p">(</span><span class="n">darks</span><span class="p">:</span><span class="nb">list</span><span class="o">&lt;</span><span class="n">MasterCal</span><span class="o">&gt;</span><span class="p">)</span>
+<span class="n">group_flats</span><span class="p">(</span><span class="n">flats</span><span class="p">:</span><span class="nb">list</span><span class="o">&lt;</span><span class="n">MasterCal</span><span class="o">&gt;</span><span class="p">)</span>
+
+<span class="n">pair_master_bias</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">RawEchellogram</span><span class="p">,</span> <span class="n">master_bias</span><span class="p">:</span> <span class="nb">list</span><span class="o">&lt;</span><span class="n">MasterCal</span><span class="o">&gt;</span><span class="p">)</span>
+<span class="n">pair_master_dark</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">RawEchellogram</span><span class="p">,</span> <span class="n">master_darks</span><span class="p">:</span> <span class="nb">list</span><span class="o">&lt;</span><span class="n">MasterCal</span><span class="o">&gt;</span><span class="p">)</span>
+<span class="n">pair_master_flat</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">RawEchellogram</span><span class="p">,</span> <span class="n">master_flats</span><span class="p">:</span> <span class="nb">list</span><span class="o">&lt;</span><span class="n">MasterCal</span><span class="o">&gt;</span><span class="p">)</span>
+<span class="n">pair_order_maps</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">RawEchellogram</span><span class="p">,</span> <span class="n">order_maps</span><span class="p">:</span> <span class="nb">list</span><span class="o">&lt;</span><span class="n">RawEchellogram</span><span class="o">&gt;</span><span class="p">)</span>
+
+<span class="n">parse_exposure_start_time</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Echellogram</span><span class="p">)</span>
+<span class="n">parse_fiber_nums</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">RawEchellogram</span><span class="p">)</span>
+<span class="n">parse_image</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Echellogram</span><span class="p">)</span>
+<span class="n">parse_image_header</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Echellogram</span><span class="p">)</span>
+<span class="n">parse_image_num</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">RawEchellogram</span><span class="p">)</span>
+<span class="n">parse_itime</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Echellogram</span><span class="p">)</span>
+<span class="n">parse_object</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">RawEchellogram</span><span class="p">)</span>
+<span class="n">parse_sky_coord</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Echellogram</span><span class="p">)</span>
+<span class="n">parse_utdate</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Echellogram</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
+<div class="section" id="spectral-forward-modeling">
+<h3>Spectral Forward Modeling<a class="headerlink" href="#spectral-forward-modeling" title="Permalink to this headline">¶</a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">compute_barycenter_corrections</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Spec1d</span><span class="p">,</span> <span class="n">RawEchellogram</span><span class="p">],</span> <span class="n">star_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span>
+<span class="n">compute_exposure_midpoint</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Spec1d</span><span class="p">,</span> <span class="n">RawEchellogram</span><span class="p">])</span>
+<span class="n">estimate_wls</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Spec1d</span><span class="p">,</span> <span class="n">RawEchellogram</span><span class="p">],</span> <span class="n">order_num</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">fiber_num</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+<span class="n">parse_spec1d</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Spec1d</span><span class="p">)</span>
+</pre></div>
+</div>
+</div>
 </div>
 </div>
 
@@ -69,7 +103,6 @@
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Extending pychell</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#overview-of-pychell">Overview of Pychell</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#define-a-new-spectrograph">Define A New Spectrograph</a></li>
 </ul>
 </li>
@@ -111,7 +144,7 @@
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.5.4</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

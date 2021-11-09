@@ -37,28 +37,138 @@
 <span id="quickstart"></span><h1>Tutorials<a class="headerlink" href="#tutorials" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="reduction">
 <h2>Reduction<a class="headerlink" href="#reduction" title="Permalink to this headline">¶</a></h2>
-<p>Below is an example which reduces a single spectrum of Vega using raw spectra from the iSHELL spectrograph in Kgas mode (~2.3 microns). Flat division is performed, but not dark or bias subtraction. Copy the example folder Vega_reduction to a new location of your choice. Open a terminal window in this new location. Run:</p>
-<p><code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">vega_ishell_reduction_example.py</span></code></p>
-<p>An output directory will be created in an output folder <code class="docutils literal notranslate"><span class="pre">Vega</span></code>. Each sub folder contains the following:</p>
-<p>1. <strong>calib</strong> - Any master calibration images.
-3. <strong>spectra</strong> - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_traces, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons, but may still contain blaze modulation.
-4. <strong>trace</strong> - Trace profiles (seeing profiles) and order map information for all relevant full frame science images.</p>
+<p>Below is an example which reduces and extracts an echellogram of Vega observed with the iSHELL spectrograph in Kgas mode (~2.3 microns). Flat division is performed, but not dark or bias subtraction.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Base python</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="c1"># pychell deps</span>
+<span class="kn">from</span> <span class="nn">pychell.reduce.recipes</span> <span class="kn">import</span> <span class="n">ReduceRecipe</span>
+<span class="kn">from</span> <span class="nn">pychell.reduce.extract</span> <span class="kn">import</span> <span class="n">OptimalExtractor</span>
+<span class="kn">from</span> <span class="nn">pychell.reduce.tracers</span> <span class="kn">import</span> <span class="n">DensityClusterTracer</span>
+
+<span class="c1"># Basic info</span>
+<span class="n">spectrograph</span> <span class="o">=</span> <span class="s2">&quot;iSHELL&quot;</span>
+<span class="n">data_input_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span> <span class="o">+</span> <span class="s2">&quot;Vega&quot;</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span>
+<span class="n">output_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span> <span class="o">+</span> <span class="s2">&quot;ReduceOutputs&quot;</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span>
+
+<span class="c1"># Order tracing</span>
+<span class="n">tracer</span> <span class="o">=</span> <span class="n">DensityClusterTracer</span><span class="p">(</span><span class="n">n_orders</span><span class="o">=</span><span class="mi">29</span><span class="p">,</span> <span class="n">poly_order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">heights</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">order_spacing</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+
+<span class="c1"># Extraction</span>
+<span class="n">extractor</span> <span class="o">=</span> <span class="n">OptimalExtractor</span><span class="p">(</span><span class="n">trace_pos_poly_order</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">oversample</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+                            <span class="n">n_trace_refine_iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">n_extract_iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                            <span class="n">badpix_threshold</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">trace_pos_refine_window</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+
+<span class="c1"># Create the primary Recipe class</span>
+<span class="n">recipe</span> <span class="o">=</span> <span class="n">ReduceRecipe</span><span class="p">(</span><span class="n">spectrograph</span><span class="o">=</span><span class="n">spectrograph</span><span class="p">,</span>
+                       <span class="n">data_input_path</span><span class="o">=</span><span class="n">data_input_path</span><span class="p">,</span> <span class="n">output_path</span><span class="o">=</span><span class="n">output_path</span><span class="p">,</span>
+                       <span class="n">do_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">do_flat</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">do_dark</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">flat_percentile</span><span class="o">=</span><span class="mf">0.75</span><span class="p">,</span>
+                       <span class="n">mask_left</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">mask_right</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">mask_top</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">mask_bottom</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                       <span class="n">tracer</span><span class="o">=</span><span class="n">tracer</span><span class="p">,</span>
+                       <span class="n">extractor</span><span class="o">=</span><span class="n">extractor</span><span class="p">,</span>
+                       <span class="n">n_cores</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Reduce the night</span>
+<span class="n">recipe</span><span class="o">.</span><span class="n">reduce</span><span class="p">()</span>
+</pre></div>
 </div>
-<div class="section" id="radial-velocitiy-generation">
-<h2>Radial Velocitiy Generation<a class="headerlink" href="#radial-velocitiy-generation" title="Permalink to this headline">¶</a></h2>
-<p>Below is an example which fits 4 nights (8 spectra) of Barnard’s Star spectra using reduced spectra from iSHELL. Only orders 6, 8, 12, and 15 are fit. The wavelength solution and LSF are constrained from the isotopic methane gas cell.</p>
-<p>Copy the example folder GJ_699_rvs to a new location of your choice. Open a terminal window in this new location. Run:</p>
-<p><code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">gj699_ishell_rvs_example.py</span></code></p>
-<p>Summaries of fits are printed after each fit. An output directory will also be created in an output folder <code class="docutils literal notranslate"><span class="pre">ishell_gj699_example</span></code>, with each order contained in its own folder. Each order contains the following sub folders:</p>
+<p>To run the example, open a terminal window and run <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">vega_ishell_reduction_example.py</span></code>.</p>
+<p>An output directory will be created in an output folder <code class="docutils literal notranslate"><span class="pre">Vega</span></code>. Each sub folder contains the following:</p>
 <ol class="arabic simple">
-<li><p><strong>ForwardModels</strong> - The spectral model fit for each observation and iteration as PNG plots.</p></li>
-<li><p><strong>RVs</strong> - Plots of the individual and per-night (co-added) RVs for each iteration, plots of BIS vs. RVs for each iteration, and the RVs stored in a <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file.</p></li>
-<li><p><strong>Templates</strong> - Not currently used.</p></li>
+<li><p><strong>calib</strong> - Any master dark, bias, and flat calibration images.</p></li>
+<li><p><strong>spectra</strong> - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_traces, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons. Plots for each echellogram are also included.</p></li>
+<li><p><strong>trace</strong> - Order map information.</p></li>
 </ol>
-<p>A <code class="docutils literal notranslate"><span class="pre">.pkl</span></code> file of the SpectralRVProb instance is also saved which may be loaded in order to generate wavelength solutions, look at best fit parameters, etc.</p>
+</div>
+<div class="section" id="computing-radial-velocities">
+<h2>Computing Radial Velocities<a class="headerlink" href="#computing-radial-velocities" title="Permalink to this headline">¶</a></h2>
+<p>Below is an example which fits 8 spectra (4 nights) of Barnard’s Star spectra observed with iSHELL. Only orders 6, 8, 12, and 15 are fit. The wavelength solution and LSF are constrained from the isotopic methane gas cell.</p>
+<p>First, download and extract the templates from here: <a class="reference external" href="https://drive.google.com/file/d/1ubwYyH6DidtDfxRdg707-8M9iORS-jql/view?usp=sharing">https://drive.google.com/file/d/1ubwYyH6DidtDfxRdg707-8M9iORS-jql/view?usp=sharing</a>.
+Then in the example gj699_ishell_rvs_example.py, change the templates_path variable to the appropriate folder.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Base Python</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">copy</span>
+
+<span class="c1"># Numpy</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="c1"># Pychell deps</span>
+<span class="kn">from</span> <span class="nn">pychell.spectralmodeling.spectralrvprob</span> <span class="kn">import</span> <span class="n">IterativeSpectralRVProb</span>
+<span class="kn">import</span> <span class="nn">pychell.spectralmodeling.spectralmodels</span> <span class="k">as</span> <span class="nn">pcsm</span>
+<span class="kn">from</span> <span class="nn">pychell.spectralmodeling.spectralobjectives</span> <span class="kn">import</span> <span class="n">WeightedSpectralUncRMS</span>
+<span class="kn">from</span> <span class="nn">pychell.spectralmodeling.templateaugmenters</span> <span class="kn">import</span> <span class="n">WeightedMedian</span>
+<span class="kn">import</span> <span class="nn">pychell.data.ishell</span> <span class="k">as</span> <span class="nn">ishell</span>
+
+<span class="c1"># Optimize deps</span>
+<span class="kn">from</span> <span class="nn">optimize.optimizers</span> <span class="kn">import</span> <span class="n">IterativeNelderMead</span>
+
+<span class="c1"># Define basic info</span>
+<span class="n">spectrograph</span> <span class="o">=</span> <span class="s2">&quot;iSHELL&quot;</span>
+<span class="n">data_input_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span> <span class="o">+</span> <span class="s2">&quot;data&quot;</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span>
+<span class="n">filelist</span> <span class="o">=</span> <span class="s2">&quot;filelist_example.txt&quot;</span>
+<span class="n">output_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span>
+<span class="n">star_name</span> <span class="o">=</span> <span class="s2">&quot;GJ_699&quot;</span>
+<span class="n">tag</span> <span class="o">=</span> <span class="s2">&quot;gj699_example&quot;</span>
+<span class="n">do_orders</span> <span class="o">=</span> <span class="p">[</span><span class="mi">6</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">15</span><span class="p">]</span> <span class="c1"># Do some arbitrary orders (relative to the image)</span>
+<span class="n">templates_path</span> <span class="o">=</span> <span class="s2">&quot;/Users/cale/Research/pychell_templates/&quot;</span> <span class="c1"># Must download templates</span>
+
+<span class="c1"># Loop over orders</span>
+<span class="k">for</span> <span class="n">order_num</span> <span class="ow">in</span> <span class="n">do_orders</span><span class="p">:</span>
+    
+    <span class="c1"># Wavelength Solution</span>
+    <span class="n">wls</span> <span class="o">=</span> <span class="n">pcsm</span><span class="o">.</span><span class="n">SplineWls</span><span class="p">(</span><span class="n">n_splines</span><span class="o">=</span><span class="mi">6</span><span class="p">)</span>
+    
+    <span class="c1"># Continuum</span>
+    <span class="n">continuum</span> <span class="o">=</span> <span class="n">pcsm</span><span class="o">.</span><span class="n">SplineContinuum</span><span class="p">(</span><span class="n">n_splines</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    
+    <span class="c1"># LSF</span>
+    <span class="n">lsf</span> <span class="o">=</span> <span class="n">pcsm</span><span class="o">.</span><span class="n">HermiteLSF</span><span class="p">(</span><span class="n">hermdeg</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="n">ishell</span><span class="o">.</span><span class="n">lsf_width</span><span class="p">)</span>
+    
+    <span class="c1"># Star</span>
+    <span class="n">star</span> <span class="o">=</span> <span class="n">pcsm</span><span class="o">.</span><span class="n">AugmentedStar</span><span class="p">(</span><span class="n">input_file</span><span class="o">=</span><span class="n">templates_path</span> <span class="o">+</span> <span class="s2">&quot;gj699_btsettl_kband.txt&quot;</span><span class="p">,</span> <span class="n">star_name</span><span class="o">=</span><span class="n">star_name</span><span class="p">)</span>
+
+    <span class="c1"># Gas cell</span>
+    <span class="n">gas_cell</span> <span class="o">=</span> <span class="n">pcsm</span><span class="o">.</span><span class="n">DynamicGasCell</span><span class="p">(</span><span class="n">input_file</span><span class="o">=</span><span class="n">templates_path</span> <span class="o">+</span> <span class="n">ishell</span><span class="o">.</span><span class="n">gas_cell_file</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">ishell</span><span class="o">.</span><span class="n">gas_cell_depth</span><span class="p">)</span>
+    
+    <span class="c1"># Tellurics</span>
+    <span class="n">tellurics</span> <span class="o">=</span> <span class="n">pcsm</span><span class="o">.</span><span class="n">TelluricsTAPAS</span><span class="p">(</span><span class="n">input_path</span><span class="o">=</span><span class="n">templates_path</span><span class="p">,</span> <span class="n">location_tag</span><span class="o">=</span><span class="s2">&quot;maunakea&quot;</span><span class="p">)</span>
+    
+    <span class="c1"># Final spectral model</span>
+    <span class="n">spectral_model</span> <span class="o">=</span> <span class="n">pcsm</span><span class="o">.</span><span class="n">IterativeSpectralForwardModel</span><span class="p">(</span><span class="n">wls</span><span class="o">=</span><span class="n">wls</span><span class="p">,</span> <span class="n">continuum</span><span class="o">=</span><span class="n">continuum</span><span class="p">,</span> <span class="n">lsf</span><span class="o">=</span><span class="n">lsf</span><span class="p">,</span>
+                                                        <span class="n">star</span><span class="o">=</span><span class="n">star</span><span class="p">,</span>
+                                                        <span class="n">gas_cell</span><span class="o">=</span><span class="n">gas_cell</span><span class="p">,</span>
+                                                        <span class="n">tellurics</span><span class="o">=</span><span class="n">tellurics</span><span class="p">,</span>
+                                                        <span class="n">order_num</span><span class="o">=</span><span class="n">order_num</span><span class="p">,</span>
+                                                        <span class="n">n_iterations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+                                                        <span class="n">model_resolution</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+    
+    <span class="c1"># Create the &quot;Problem&quot; object.</span>
+    <span class="n">specrvprob</span> <span class="o">=</span> <span class="n">IterativeSpectralRVProb</span><span class="p">(</span><span class="n">spectrograph</span><span class="o">=</span><span class="n">spectrograph</span><span class="p">,</span>
+                                         <span class="n">spectral_model</span><span class="o">=</span><span class="n">spectral_model</span><span class="p">,</span>
+                                         <span class="n">data_input_path</span><span class="o">=</span><span class="n">data_input_path</span><span class="p">,</span> <span class="n">filelist</span><span class="o">=</span><span class="n">filelist</span><span class="p">,</span> <span class="n">output_path</span><span class="o">=</span><span class="n">output_path</span><span class="p">,</span>
+                                         <span class="n">tag</span><span class="o">=</span><span class="n">tag</span><span class="p">,</span>
+                                         <span class="n">augmenter</span><span class="o">=</span><span class="n">WeightedMedian</span><span class="p">(</span><span class="n">max_thresh</span><span class="o">=</span><span class="mf">1.005</span><span class="p">,</span> <span class="n">downweight_tellurics</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                                         <span class="n">obj</span><span class="o">=</span><span class="n">WeightedSpectralUncRMS</span><span class="p">(),</span>
+                                         <span class="n">optimizer</span><span class="o">=</span><span class="n">IterativeNelderMead</span><span class="p">(),</span>
+                                         <span class="n">n_cores</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                                         <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    
+    <span class="c1"># Run RVs for this order</span>
+    <span class="n">specrvprob</span><span class="o">.</span><span class="n">compute_rvs_for_target</span><span class="p">()</span>
+</pre></div>
+</div>
+<p>To then run the example, open a terminal window and run <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">gj699_ishell_rvs_example.py</span></code>.</p>
+<p>Summaries of fits are printed after each fit if verbose=True. An output directory will also be created in an output folder <code class="docutils literal notranslate"><span class="pre">ishell_gj699_example</span></code>, with each order contained in its own subfolder. Each order then contains the following subfolders:</p>
+<ol class="arabic simple">
+<li><p><strong>ForwardModels</strong> - The spectral model fit for each observation and iteration as png plots.</p></li>
+<li><p><strong>RVs</strong> - Plots of the individual and per-night (co-added) RVs for each iteration, plots of CCF skew vs. RVs for each iteration, and the RVs stored in a <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file.</p></li>
+<li><p><strong>Templates</strong> - Stores stellar templates in .npz files.</p></li>
+</ol>
+<p>A <code class="docutils literal notranslate"><span class="pre">.pkl</span></code> file of the SpectralRVProb instance is also saved which may be used to generate wavelength solutions, look at best fit parameters, etc.</p>
 </div>
 <div class="section" id="radial-velocity-fitting">
 <h2>Radial Velocity Fitting<a class="headerlink" href="#radial-velocity-fitting" title="Permalink to this headline">¶</a></h2>
+<p>Coming soon…</p>
 </div>
 </div>
 
@@ -86,7 +196,7 @@
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Tutorials</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#reduction">Reduction</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#radial-velocitiy-generation">Radial Velocitiy Generation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#computing-radial-velocities">Computing Radial Velocities</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#radial-velocity-fitting">Radial Velocity Fitting</a></li>
 </ul>
 </li>
@@ -129,7 +239,7 @@
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.5.4</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

@@ -15,6 +15,8 @@
     <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="orbits_objectives_api.html" />
+    <link rel="prev" title="pychell API reference" href="orbits_noise_api.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
   
@@ -37,8 +39,8 @@
 <span id="rv-models"></span><h2>RV Models<a class="headerlink" href="#module-pychell.orbits.rvmodels" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
 <dt id="pychell.orbits.rvmodels.CompositeGPRVModel">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">CompositeGPRVModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">planets_dict</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">noise_process</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">poly_order</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">time_zero</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">'rvs'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeGPRVModel" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference internal" href="#pychell.orbits.rvmodels.CompositeRVModel" title="pychell.orbits.rvmodels.CompositeRVModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.orbits.rvmodels.CompositeRVModel</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.GPBasedModel</span></code></p>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvmodels.</span></code><code class="sig-name descname"><span class="pre">CompositeGPRVModel</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">planets_dict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_process</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">poly_order</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_zero</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'rvs'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeGPRVModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="#pychell.orbits.rvmodels.CompositeRVModel" title="pychell.orbits.rvmodels.CompositeRVModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">pychell.orbits.rvmodels.CompositeRVModel</span></code></a>, <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.NoiseModel</span></code></p>
 <p>Base constructor for a noise based model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -46,13 +48,13 @@
 <li><p><strong>det_model</strong> (<em>DeterministicModel</em>) – The deterministic model.</p></li>
 <li><p><strong>noise_process</strong> (<em>NoiseProcess</em>) – The noise process.</p></li>
 <li><p><strong>data</strong> (<em>Dataset</em>) – The dataset for this model.</p></li>
-<li><p><strong>name</strong> (<em>str</em>) – The name of this model.</p></li>
+<li><p><strong>label</strong> (<em>str</em>) – The label of this model.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
 <dt id="pychell.orbits.rvmodels.CompositeGPRVModel.compute_data_errors">
-<code class="sig-name descname">compute_data_errors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">include_corr_error</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeGPRVModel.compute_data_errors" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">compute_data_errors</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">include_corr_error</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeGPRVModel.compute_data_errors" title="Permalink to this definition">¶</a></dt>
 <dd><p>Default method to generate the data errors, which may be parametrized. Here the data a priori error bars are returned.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -69,7 +71,7 @@
 
 <dl class="py method">
 <dt id="pychell.orbits.rvmodels.CompositeGPRVModel.compute_residuals">
-<code class="sig-name descname">compute_residuals</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeGPRVModel.compute_residuals" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">compute_residuals</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeGPRVModel.compute_residuals" title="Permalink to this definition">¶</a></dt>
 <dd><p>Default method to generate the residuals (data - model).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -88,8 +90,8 @@
 
 <dl class="py class">
 <dt id="pychell.orbits.rvmodels.CompositeRVModel">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">CompositeRVModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">planets_dict</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">noise_process</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">poly_order</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">time_zero</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">name</span><span class="o">=</span><span class="default_value">'Composite RV Model'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeRVModel" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.NoiseBasedModel</span></code></p>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvmodels.</span></code><code class="sig-name descname"><span class="pre">CompositeRVModel</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">planets_dict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">noise_process</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">poly_order</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_zero</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'Composite</span> <span class="pre">RV</span> <span class="pre">Model'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeRVModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.NoiseModel</span></code></p>
 <p>Base constructor for a noise based model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -97,13 +99,13 @@
 <li><p><strong>det_model</strong> (<em>DeterministicModel</em>) – The deterministic model.</p></li>
 <li><p><strong>noise_process</strong> (<em>NoiseProcess</em>) – The noise process.</p></li>
 <li><p><strong>data</strong> (<em>Dataset</em>) – The dataset for this model.</p></li>
-<li><p><strong>name</strong> (<em>str</em>) – The name of this model.</p></li>
+<li><p><strong>label</strong> (<em>str</em>) – The label of this model.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
 <dt id="pychell.orbits.rvmodels.CompositeRVModel.compute_data_errors">
-<code class="sig-name descname">compute_data_errors</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeRVModel.compute_data_errors" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">compute_data_errors</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeRVModel.compute_data_errors" title="Permalink to this definition">¶</a></dt>
 <dd><p>Default method to generate the data errors, which may be parametrized. Here the data a priori error bars are returned.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -120,7 +122,7 @@
 
 <dl class="py method">
 <dt id="pychell.orbits.rvmodels.CompositeRVModel.compute_residuals">
-<code class="sig-name descname">compute_residuals</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeRVModel.compute_residuals" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">compute_residuals</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.CompositeRVModel.compute_residuals" title="Permalink to this definition">¶</a></dt>
 <dd><p>Default method to generate the residuals (data - model).</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -139,20 +141,20 @@
 
 <dl class="py class">
 <dt id="pychell.orbits.rvmodels.KeplerianRVModel">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">KeplerianRVModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">planets_dict</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvmodels.</span></code><code class="sig-name descname"><span class="pre">KeplerianRVModel</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">planets_dict</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.DeterministicModel</span></code></p>
 <p>Base constructor for a model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<em>Dataset</em><em>, </em><em>optional</em>) – The dataset for this model.</p></li>
-<li><p><strong>name</strong> (<em>str</em><em>, </em><em>optional</em>) – The name of this model.</p></li>
+<li><p><strong>data</strong> (<em>Dataset</em>) – The dataset for this model.</p></li>
+<li><p><strong>label</strong> (<em>str</em><em>, </em><em>optional</em>) – The label of this model.</p></li>
 </ul>
 </dd>
 </dl>
 <dl class="py method">
 <dt id="pychell.orbits.rvmodels.KeplerianRVModel.build_planet">
-<code class="sig-name descname">build_planet</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">planet_index</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel.build_planet" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">build_planet</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">planet_index</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel.build_planet" title="Permalink to this definition">¶</a></dt>
 <dd><p>Builds a keplerian model for a single planet.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -173,7 +175,7 @@
 
 <dl class="py method">
 <dt id="pychell.orbits.rvmodels.KeplerianRVModel.build_planets">
-<code class="sig-name descname">build_planets</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">pars</span></em>, <em class="sig-param"><span class="n">t</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel.build_planets" title="Permalink to this definition">¶</a></dt>
+<code class="sig-name descname"><span class="pre">build_planets</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pars</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">t</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel.build_planets" title="Permalink to this definition">¶</a></dt>
 <dd><p>Builds a model including all planets.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -193,7 +195,7 @@
 
 <dl class="py method">
 <dt id="pychell.orbits.rvmodels.KeplerianRVModel.planet_signal">
-<em class="property">static </em><code class="sig-name descname">planet_signal</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">t</span></em>, <em class="sig-param"><span class="n">per</span></em>, <em class="sig-param"><span class="n">tp</span></em>, <em class="sig-param"><span class="n">ecc</span></em>, <em class="sig-param"><span class="n">w</span></em>, <em class="sig-param"><span class="n">k</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel.planet_signal" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">static</span> </em><code class="sig-name descname"><span class="pre">planet_signal</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">t</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">per</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ecc</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">w</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.KeplerianRVModel.planet_signal" title="Permalink to this definition">¶</a></dt>
 <dd><p>Computes the RV signal of one planet for a given time vector.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
@@ -220,14 +222,14 @@
 
 <dl class="py class">
 <dt id="pychell.orbits.rvmodels.RVTrend">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.orbits.rvmodels.</code><code class="sig-name descname">RVTrend</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">poly_order</span></em>, <em class="sig-param"><span class="n">data</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">time_zero</span><span class="o">=</span><span class="default_value">None</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.RVTrend" title="Permalink to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.orbits.rvmodels.</span></code><code class="sig-name descname"><span class="pre">RVTrend</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">poly_order</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_zero</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.orbits.rvmodels.RVTrend" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.DeterministicModel</span></code></p>
 <p>Base constructor for a model.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>data</strong> (<em>Dataset</em><em>, </em><em>optional</em>) – The dataset for this model.</p></li>
-<li><p><strong>name</strong> (<em>str</em><em>, </em><em>optional</em>) – The name of this model.</p></li>
+<li><p><strong>data</strong> (<em>Dataset</em>) – The dataset for this model.</p></li>
+<li><p><strong>label</strong> (<em>str</em><em>, </em><em>optional</em>) – The label of this model.</p></li>
 </ul>
 </dd>
 </dl>
@@ -256,17 +258,29 @@
 
 
 <h3>Navigation</h3>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spectralmodeling_api.html">Radial Velocity Generation</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="orbits_api.html">Radial Velocity Fitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data_api.html">Data Containers</a></li>
+</ul>
+</li>
 </ul>
 
 <div class="relations">
 <h3>Related Topics</h3>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="orbits_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="orbits_noise_api.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="orbits_objectives_api.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
   </ul></li>
 </ul>
 </div>
@@ -296,7 +310,7 @@
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.5.4</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

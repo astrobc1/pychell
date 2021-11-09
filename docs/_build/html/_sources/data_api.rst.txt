@@ -1,19 +1,35 @@
 pychell API reference
 =====================
 
-Data Parsers
-++++++++++++
+Spectrograph Modules
+++++++++++++++++++++
 
-Each spectrogrpah must subclass the Parser class within its own file.
-
-.. automodule:: pychell.data.parser
+.. automodule:: pychell.data.ishell
     :members:
-    :show-inheritance:
+
+.. automodule:: pychell.data.parvi
+    :members:
+
+.. automodule:: pychell.data.chiron
+    :members:
+
+.. automodule:: pychell.data.minerva
+    :members:
+
+.. automodule:: pychell.data.nirspec
+    :members:
+
+.. automodule:: pychell.data.parvi
+    :members:
 
 
 Data Containers
 +++++++++++++++
 
-.. automodule:: pychell.data.data
+.. automodule:: pychell.data.spectraldata
+    :members:
+    :show-inheritance:
+
+.. automodule:: pychell.data.rvdata
     :members:
     :show-inheritance:

@@ -2,8 +2,8 @@ pychell API reference
 =====================
 
 
-Calibration
-+++++++++++
+Pre Calibration
++++++++++++++++
 
-.. automodule:: pychell.reduce.calib
+.. automodule:: pychell.reduce.precalib
     :members:

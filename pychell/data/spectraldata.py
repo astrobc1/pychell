@@ -154,7 +154,7 @@ class MasterCal(Echellogram):
 #### 1D SPECTRUM ####
 #####################
 
-class SpecData1d(SpecData):
+class Spec1d(SpecData):
     
     # Store the input file, spec, and order num
     def __init__(self, input_file, order_num, spec_num, spectrograph, crop_pix):

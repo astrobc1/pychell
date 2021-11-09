@@ -15,6 +15,8 @@
     <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="pychell API reference" href="reduce_order_map_api.html" />
+    <link rel="prev" title="pychell API reference" href="reduce_api.html" />
    
   <link rel="stylesheet" href="_static/custom.css" type="text/css" />
   
@@ -33,8 +35,45 @@
             
   <div class="section" id="pychell-api-reference">
 <h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
-<div class="section" id="module-pychell.reduce.calib">
-<span id="calibration"></span><h2>Calibration<a class="headerlink" href="#module-pychell.reduce.calib" title="Permalink to this headline">¶</a></h2>
+<div class="section" id="module-pychell.reduce.precalib">
+<span id="pre-calibration"></span><h2>Pre Calibration<a class="headerlink" href="#module-pychell.reduce.precalib" title="Permalink to this headline">¶</a></h2>
+<dl class="py function">
+<dt id="pychell.reduce.precalib.gen_master_bias">
+<code class="sig-prename descclassname"><span class="pre">pychell.reduce.precalib.</span></code><code class="sig-name descname"><span class="pre">gen_master_bias</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.precalib.gen_master_bias" title="Permalink to this definition">¶</a></dt>
+<dd><p>Generates a median master bias image.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><p><strong>group</strong> (<em>list</em>) – The list of BiasImages.</p>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The master bias image.</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>master_bias (np.ndarray)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt id="pychell.reduce.precalib.gen_master_dark">
+<code class="sig-prename descclassname"><span class="pre">pychell.reduce.precalib.</span></code><code class="sig-name descname"><span class="pre">gen_master_dark</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">group</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">do_bias</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.reduce.precalib.gen_master_dark" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes a median master flat field image from a subset of flat field images. Dark and bias subtraction is also performed if set.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>group</strong> (<em>list</em>) – The list of DarkImages.</p></li>
+<li><p><strong>bias_subtraction</strong> (<em>bool</em>) – Whether or not to perform bias subtraction. If so, each dark must have a master_bias attribute.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns</dt>
+<dd class="field-even"><p>The median combined master dark image</p>
+</dd>
+<dt class="field-odd">Return type</dt>
+<dd class="field-odd"><p>master_dark (np.ndarray)</p>
+</dd>
+</dl>
+</dd></dl>
+
 </div>
 </div>
 
@@ -58,17 +97,29 @@
 
 
 <h3>Navigation</h3>
-<ul>
+<ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="installation.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API</a></li>
+<li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="spectralmodeling_api.html">Radial Velocity Generation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="orbits_api.html">Radial Velocity Fitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data_api.html">Data Containers</a></li>
+</ul>
+</li>
 </ul>
 
 <div class="relations">
 <h3>Related Topics</h3>
 <ul>
   <li><a href="index.html">Documentation overview</a><ul>
+  <li><a href="api.html">pychell API reference</a><ul>
+  <li><a href="reduce_api.html">pychell API reference</a><ul>
+      <li>Previous: <a href="reduce_api.html" title="previous chapter">pychell API reference</a></li>
+      <li>Next: <a href="reduce_order_map_api.html" title="next chapter">pychell API reference</a></li>
+  </ul></li>
+  </ul></li>
   </ul></li>
 </ul>
 </div>
@@ -98,7 +149,7 @@
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.5.4</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

@@ -36,17 +36,17 @@
   <div class="section" id="pychell-api-reference">
 <h1>pychell API reference<a class="headerlink" href="#pychell-api-reference" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="module-pychell.spectralmodeling.spectralmodels">
-<span id="composite-spectral-models-and-model-components"></span><h2>Composite Spectral Models and Model Components<a class="headerlink" href="#module-pychell.spectralmodeling.spectralmodels" title="Permalink to this headline">¶</a></h2>
+<span id="spectral-models"></span><h2>Spectral Models<a class="headerlink" href="#module-pychell.spectralmodeling.spectralmodels" title="Permalink to this headline">¶</a></h2>
 <dl class="py class">
 <dt id="pychell.spectralmodeling.spectralmodels.IterativeSpectralForwardModel">
-<em class="property">class </em><code class="sig-prename descclassname">pychell.spectralmodeling.spectralmodels.</code><code class="sig-name descname">IterativeSpectralForwardModel</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">wavelength_solution</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">continuum</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">lsf</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">star</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">tellurics</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">gas_cell</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">fringing</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">order_num</span><span class="o">=</span><span class="default_value">None</span></em>, <em class="sig-param"><span class="n">n_iterations</span><span class="o">=</span><span class="default_value">10</span></em>, <em class="sig-param"><span class="n">model_resolution</span><span class="o">=</span><span class="default_value">8</span></em>, <em class="sig-param"><span class="n">crop_pix</span><span class="o">=</span><span class="default_value">[200, 200]</span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.spectralmodeling.spectralmodels.IterativeSpectralForwardModel" title="Permalink to this definition">¶</a></dt>
-<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">optimize.models.Model</span></code></p>
+<em class="property"><span class="pre">class</span> </em><code class="sig-prename descclassname"><span class="pre">pychell.spectralmodeling.spectralmodels.</span></code><code class="sig-name descname"><span class="pre">IterativeSpectralForwardModel</span></code><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">wls</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">continuum</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lsf</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">star</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tellurics</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">gas_cell</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fringing</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">order_num</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_iterations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">model_resolution</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">crop_pix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[200,</span> <span class="pre">200]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#pychell.spectralmodeling.spectralmodels.IterativeSpectralForwardModel" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>The primary container for an iterative spectral forward model problem.</p>
 <p>Initiate an iterative spectral forward model object.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>wavelength_solution</strong> (<em>WavelengthSolution</em><em>, </em><em>optional</em>) – The wavelength solution model. Defaults to None.</p></li>
+<li><p><strong>wls</strong> (<em>WavelengthSolution</em><em>, </em><em>optional</em>) – The wavelength solution model. Defaults to None.</p></li>
 <li><p><strong>continuum</strong> (<em>Continuum</em><em>, </em><em>optional</em>) – The continuum model. Defaults to None.</p></li>
 <li><p><strong>lsf</strong> (<em>LSF</em><em>, </em><em>optional</em>) – The LSF model. Defaults to None.</p></li>
 <li><p><strong>star</strong> (<em>AugmentedStar</em><em>, </em><em>optional</em>) – The Stellar model. Defaults to None.</p></li>
@@ -90,9 +90,10 @@
 <li class="toctree-l1"><a class="reference internal" href="tutorials.html">Tutorials</a></li>
 <li class="toctree-l1"><a class="reference internal" href="extending.html">Extending pychell</a></li>
 <li class="toctree-l1 current"><a class="reference internal" href="api.html">API</a><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction and Extraction</a></li>
-<li class="toctree-l2 current"><a class="reference internal" href="spectralmodeling_api.html">Radial Velocity Generation Through Spectral Forward Modeling</a></li>
+<li class="toctree-l2"><a class="reference internal" href="reduce_api.html">Reduction</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="spectralmodeling_api.html">Radial Velocity Generation</a></li>
 <li class="toctree-l2"><a class="reference internal" href="orbits_api.html">Radial Velocity Fitting</a></li>
+<li class="toctree-l2"><a class="reference internal" href="data_api.html">Data Containers</a></li>
 </ul>
 </li>
 </ul>
@@ -136,7 +137,7 @@
       &copy;2020, Bryson Cale.
       
       |
-      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.4.3</a>
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 3.5.4</a>
       &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
       
       |

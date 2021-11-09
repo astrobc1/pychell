@@ -30,7 +30,7 @@ tc1 =  2457147.0529
 tc1_unc = 0.002
 ecc1 = 0.077
 ecc1_unc = 0.024 * 2
-w1 = 55 * np.pi / 180
+w1 = 55 * np.pi / 180 - np.pi
 w1_unc = 15 * np.pi / 180
 pars["per1"] = pco.BayesianParameter(value=per1, vary=False)
 #pars["per1"].add_prior(pco.priors.Gaussian(per1, per1_unc))

@@ -2,8 +2,8 @@ pychell API reference
 =====================
 
 
-Template Generation
-+++++++++++++++++++
+Stellar Template Augmentation
++++++++++++++++++++++++++++++
 
-.. automodule:: pychell.spectralmodeling.template_augmenters
+.. automodule:: pychell.spectralmodeling.templateaugmenters
     :members:

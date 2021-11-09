@@ -1,7 +1,8 @@
 pychell API reference
 =====================
 
-Order Map
-+++++++++
+Order Tracing
++++++++++++++
 
-*under dev*
+.. automodule:: pychell.reduce.tracers
+    :members:

@@ -2,32 +2,31 @@
 import os
 
 # pychell deps
-from pychell.reduce.reducers import StandardReducer
-from pychell.reduce.extract import OptimalSlitExtractor
+from pychell.reduce.recipes import ReduceRecipe
+from pychell.reduce.extract import OptimalExtractor
 from pychell.reduce.tracers import DensityClusterTracer
-from pychell.reduce.calib import PreCalibrator, FringingPreCalibrator
 
 # Basic info
 spectrograph = "iSHELL"
-data_input_path = "/Users/cale/Desktop/examples/Vega_reduction/Vega/"
-output_path = os.getcwd() + os.sep
-
-# Pre calibration
-pre_calib = FringingPreCalibrator(do_bias=False, do_dark=False, do_flat=True, flat_percentile=0.9, remove_blaze_from_flat=False, remove_fringing_from_flat=False)
+data_input_path = os.getcwd() + os.sep + "Vega" + os.sep
+output_path = os.getcwd() + os.sep + "ReduceOutputs" + os.sep
 
 # Order tracing
-tracer = DensityClusterTracer(n_orders=29, trace_pos_poly_order=2, order_spacing=30, mask_left=200, mask_right=200, mask_top=50, mask_bottom=20)
+tracer = DensityClusterTracer(n_orders=29, poly_order=2, heights=30, order_spacing=20)
 
-# Extractor
-extractor = OptimalSlitExtractor(trace_pos_poly_order=4, mask_left=200, mask_right=200, mask_top=50, mask_bottom=20, oversample=4)
+# Extraction
+extractor = OptimalExtractor(trace_pos_poly_order=4, oversample=4,
+                            n_trace_refine_iterations=3, n_extract_iterations=3,
+                            badpix_threshold=5, trace_pos_refine_window=15)
 
-# Create the class
-reducer = StandardReducer(spectrograph=spectrograph,
-                          data_input_path=data_input_path, output_path=output_path,
-                          pre_calib=pre_calib,
-                          tracer=tracer,
-                          extractor=extractor,
-                          n_cores=1)
+# Create the primary Recipe class
+recipe = ReduceRecipe(spectrograph=spectrograph,
+                       data_input_path=data_input_path, output_path=output_path,
+                       do_bias=False, do_flat=True, do_dark=False, flat_percentile=0.75,
+                       mask_left=200, mask_right=200, mask_top=20, mask_bottom=20,
+                       tracer=tracer,
+                       extractor=extractor,
+                       n_cores=1)
 
 # Reduce the night
-reducer.reduce()
+recipe.reduce()
