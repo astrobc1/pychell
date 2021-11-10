@@ -739,12 +739,14 @@ class HermiteLSF(LSF):
         lsf /= np.nansum(lsf)
         return lsf
 
-class StaticLSF(LSF):
+class StaticLSFWidth(LSF):
     """A model for a perect LSF (known a priori).
     """
 
     def build(self, pars=None):
-        return self.data.lsf
+        lsf = pcmath.gauss(self.x, 1.0, 0.0, self.data.lsf_width)
+        lsf /= np.nansum(lsf)
+        return lsf
     
     def convolve_flux(self, raw_flux, pars=None, lsf=None):
         lsf = self.build(pars=pars)
@@ -756,6 +758,17 @@ class StaticLSF(LSF):
     
     def initialize(self, spectral_model, iter_index=None):
         self.data = spectral_model.data
+        nx = spectral_model.data.flux.size
+        self.x = np.arange(int(-nx / 2), int(nx / 2) + 1)
+        lsf_init = self.build(spectral_model.p0)
+        lsf_init /= np.nanmax(lsf_init) # norm to max
+        good = np.where(lsf_init > 1E-10)[0]
+        x_min, x_max = good.min(), good.max()
+        nx = int(2 * np.max([np.abs(x_min), x_max])) # or +/- 1
+        if nx % 2 == 0:
+            nx += 1
+        self.x = np.arange(int(-nx / 2), int(nx / 2) + 1) * spectral_model.model_dl
+        self.n_pad_model = int(np.floor(self.x.size / 2))
 
 
 ####################

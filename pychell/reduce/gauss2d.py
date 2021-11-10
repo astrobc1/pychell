@@ -27,17 +27,16 @@ class Gauss2dExtractor(SpectralExtractor):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, mask_left=100, mask_right=100, mask_top=100, mask_bottom=100,
-                 remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05,
+    def __init__(self, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05,
                  trace_pos_poly_order=4, oversample=4,
-                 n_trace_refine_iterations=3, n_extract_iterations=3,
+                 n_trace_refine_iterations=3, n_extract_iterations=3, trace_pos_refine_window=3,
                  badpix_threshold=5,
                  extract_orders=None,
                  extract_aperture=None,
-                 eta=None, theta=None, q=None):
+                 eta=None, theta=None, q=None, sigma=None):
 
         # Super init
-        super().__init__(mask_left=mask_left, mask_right=mask_right, mask_top=mask_top, mask_bottom=mask_bottom, extract_orders=extract_orders)
+        super().__init__(extract_orders=extract_orders)
 
         # Set params
         self.remove_background = remove_background
@@ -45,6 +44,7 @@ class Gauss2dExtractor(SpectralExtractor):
         self.background_smooth_width = background_smooth_width
         self.flux_cutoff = flux_cutoff
         self.n_trace_refine_iterations = n_trace_refine_iterations
+        self.trace_pos_refine_window = trace_pos_refine_window
         self.n_extract_iterations = n_extract_iterations
         self.trace_pos_poly_order = trace_pos_poly_order
         self.oversample = oversample
@@ -52,6 +52,7 @@ class Gauss2dExtractor(SpectralExtractor):
         self._extract_aperture = extract_aperture
         self.eta = eta
         self.q = q
+        self.sigma = sigma
         self.theta = theta
         
         
@@ -60,13 +61,13 @@ class Gauss2dExtractor(SpectralExtractor):
     #######################################################################
 
     def extract_trace(self, data, trace_image, trace_map_image, trace_dict, badpix_mask=None, read_noise=None):
-        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.n_extract_iterations, self.badpix_threshold, self.extract_orders, self._extract_aperture, self.eta, self.theta, self.q)
+        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.n_extract_iterations, self.trace_pos_refine_window, self.badpix_threshold, self.extract_orders, self._extract_aperture, self.eta, self.theta, self.q)
 
     @staticmethod
-    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, n_extract_iterations=3, badpix_threshold=5, extract_orders=None, _extract_aperture=None, eta=None, theta=None, q=None):
+    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, n_extract_iterations=3, trace_pos_refine_window=5, badpix_threshold=5, extract_orders=None, _extract_aperture=None, eta=None, theta=None, q=None):
 
         if read_noise is None:
-            read_noise = data.parser.parse_itime(data) * data.parser.spec_module.read_noise
+            read_noise = data.spec_module.parse_itime(data) * data.spec_module.read_noise
         else:
             read_noise = 0
 
@@ -128,7 +129,7 @@ class Gauss2dExtractor(SpectralExtractor):
             
             # Trace Position
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            trace_positions = Gauss2dExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, background, remove_background, trace_pos_poly_order)
+            trace_positions = Gauss2dExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
 
             # Extract Aperture
             if _extract_aperture is None:
@@ -178,6 +179,10 @@ class Gauss2dExtractor(SpectralExtractor):
         trace_positions_cp = np.copy(trace_positions)
         badpix_mask_cp = np.copy(badpix_mask)
 
+        # Good
+        goody, goodx = np.where(badpix_mask)
+        xi, xf = goodx[0], goodx[-1]
+
         # Dims
         ny, nx = trace_image.shape
 
@@ -192,10 +197,16 @@ class Gauss2dExtractor(SpectralExtractor):
         # Profile
         if theta is None:
             theta = np.zeros(nx)
+        if np.isscalar(theta):
+            theta = np.full(nx, theta)
         if sigma is None:
             sigma = 3.0
+        if np.isscalar(sigma):
+            sigma = np.full(nx, sigma)
         if q is None:
             q = 1.0
+        if np.isscalar(q):
+            q = np.full(nx, q)
         
         # Reglurization
         if eta is None:
@@ -207,32 +218,69 @@ class Gauss2dExtractor(SpectralExtractor):
             trace_image_cp[bad] = np.nan
             badpix_mask[bad] = np.nan
 
-        # Construct H
-        H = Gauss2dExtractor.compute_H(np.zeros((3, 3)), np.array([1, 2, 3]), theta, sigma, q) # warmup
-        H = Gauss2dExtractor.compute_H(trace_image_cp, trace_positions_cp, theta, sigma, q)
+        # Now set all bad pixels to zero
+        bad = np.where(~np.isfinite(trace_image_cp) | (badpix_mask == 0))
+        if bad[0].size > 0:
+            trace_image_cp[bad] = 0
 
-        # Chunks
-        breakpoint()
+        # Now loop over columns and mask regions low in flux
+        for x in range(nx):
+            bad = np.where((yarr < trace_positions[x] - extract_aperture[0]) | (yarr > trace_positions[x] + extract_aperture[1]))[0]
+            if bad.size > 0:
+                trace_image_cp[bad, x] = 0
+
+        # Construct H
+        H = Gauss2dExtractor.generate_H(np.ones((3, 3)), np.array([1, 2, 3]), np.array([1, 1, 1]), np.array([1, 1, 1]), np.array([0, 0, 0])) # warmup
+        H = Gauss2dExtractor.generate_H(trace_image_cp, trace_positions_cp, sigma, q, np.arctan(theta))
+
+        # Initial guess
+        f0 = np.nansum(trace_image_cp, axis=0)
 
         # Perform lsqr
-        result = slinalg.lsqr(A, b, damp=eta)
+        result = slinalg.lsqr(H.reshape((ny*nx, nx)), trace_image_cp.flatten(), damp=eta, x0=f0)
+
+        # Parse results
+        spec1d = result[0]
+        bad = np.where(~np.isfinite(spec1d) | (spec1d <= 0))[0]
+        spec1d[bad] = np.nan
+        spec1d_unc = np.sqrt(spec1d)
+        spec1d[0:xi] = np.nan
+        spec1d[xf+1:] = np.nan
 
         # Return
         return spec1d, spec1d_unc
 
     @staticmethod
-    @jit
-    def compute_H(trace_image, trace_positions, theta, sigma, q):
-        ny, nx = trace_image.shape
-        xarr = np.arange(nx).astype(float)
-        yarr = np.arange(ny).astype(float)
-        H = np.full(shape=(ny, nx, nx), fill_value=np.nan)
-        norm = (1 / (2 * np.pi * q * sigma**2))
+    @jit(nogil=True)
+    def generate_H(image, trace_positions, sigma, q, theta):
+
+        # Image dims
+        ny, nx = image.shape
+
+        # Apertures
+        nm = nx
+
+        # Initialize H tensor (not yet flattened)
+        H = np.full(shape=(ny, nx, nm), fill_value=np.nan)
+
+        # Helpful arrays
+        xarr_detector = np.arange(nx)
+        yarr_detector = np.arange(ny)
+
+        # Loops!
         for i in range(nx):
             for j in range(ny):
-                xp = xarr[i] * np.sin(theta[i]) - (yarr[j] - trace_positions[i]) * np.cos(theta[i])
-                yp = xarr[i] * np.cos(theta[i]) + (yarr[j] - trace_positions[i]) * np.sin(theta[i])
-                for k in range(nx):
-                    H[j, i, k] = norm * np.exp(-0.5 * ((xp / sigma)**2 + (yp / (q * sigma))**2))
+                for m in range(nm):
+                    xl = xarr_detector[i]
+                    xkc = xarr_detector[m]
+                    yl = yarr_detector[j]
+                    ykc = trace_positions[m]
+                    _theta = theta[m]
+                    _sigma = sigma[m]
+                    _q = q[m]
+                    norm = 1 / (2 * np.pi * _q * _sigma**2)
+                    xp = (xl - xkc) * np.sin(_theta) - (yl - ykc) * np.cos(_theta)
+                    yp = (xl - xkc) * np.cos(_theta) + (yl - ykc) * np.sin(_theta)
+                    H[j, i, m] = norm * np.exp(-0.5 * ((xp / _sigma)**2 + (yp / (_q * _sigma))**2))
         return H
 

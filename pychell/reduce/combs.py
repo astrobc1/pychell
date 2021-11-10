@@ -14,6 +14,18 @@ import pychell.maths as pcmath
 #### PRIMARY METHODS ####
 #########################
 
+def compute_psf(image, badpix_mask, trace_dict, wave_estimate, f0, df):
+    """Fits 2d tilted Gaussian to each peak in the 2d image.
+
+    Args:
+        image (np.ndarray): The image.
+        trace_dict (dict): The trace dictionary.
+        wave_estimate (np.ndarray): An estimate of the wavelength grid for this order.
+        f0 (float): The frequency of the pump line.
+        df (float): The comb line spacing.
+    """
+    pass
+
 def compute_lsf_width_all(times_sci, times_lfc_cal, wls_cal_scifiber, lfc_cal_scifiber, f0, df, do_orders=None):
     """Wrapper to compute the LSF for all spectra.
 
@@ -201,7 +213,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
                         wls_sci_scifiber[x, order_index, i] = np.interp(times_sci[i], times_lfc_cal, wls_cal_scifiber[x, order_index, :], left=wls_cal_scifiber[x, order_index, 0], right=wls_cal_scifiber[x, order_index, -1])
                 elif method == "nearest":
                     k_cal_nearest = np.nanargmin(np.abs(times_sci[i] - times_lfc_cal))
-                    wls_sci_scifiber[:, order_index, i] = wls_cal_scifiber[:, order_index, k_cal_nearest]
+                    wls_sci_scifiber[:, order_index, i] = np.copy(wls_cal_scifiber[:, order_index, k_cal_nearest])
                 else:
                     raise ValueError("method must be nearest or interp")
 

@@ -452,4 +452,4 @@ from pychell.reduce.optimal import OptimalExtractor
 from pychell.reduce.decomp import DecompExtractor
 
 # Gauss 2d
-#from pychell.reduce.gauss2d import Gauss2dExtractor
+from pychell.reduce.gauss2d import Gauss2dExtractor

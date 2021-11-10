@@ -203,12 +203,11 @@ def parse_spec1d(data):
     fits_data.verify('fix')
     data.header = fits_data[0].header
     oi = data.order_num - 1
-    #data.wave = fits_data[0].data[oi, :, 0]
+    data.wave = fits_data[0].data[oi, :, 0]
     data.flux = fits_data[0].data[oi, :, 1] / fits_data[0].data[oi, :, 4]
     data.flux_unc = fits_data[0].data[oi, :, 2]
     data.mask = fits_data[0].data[oi, :, 3]
     data.lsf_width = fits_data[1].data[oi]
-    data.wave = estimate_wls(order_num=oi+1, fiber_num=1)
 
 ################################
 #### BARYCENTER CORRECTIONS ####
