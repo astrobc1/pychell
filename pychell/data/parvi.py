@@ -248,7 +248,7 @@ def compute_exposure_midpoint(data):
 ###################
 
 
-def estimate_wls(data=None, order_num=None, fiber_num=None):
+def estimate_wls(data=None, order_num=None, fiber_num=1):
     if order_num is None:
         order_num = data.order_num
     if fiber_num == 1:
@@ -289,4 +289,4 @@ wls_coeffs_fiber3 = np.array([np.array([7.20697948e-06, 3.67460556e-02, 1.122862
 # LSF widths (temporary)
 lsf_linear_coeffs = np.array([0.00167515, 0.08559148])
 lsf_widths = np.polyval(lsf_linear_coeffs, np.arange(46))
-lsf_widths = [[lw*0.7, lw, lw*1.3] for lw in lsf_widths]
+lsf_widths = [[lw*0.5, lw, lw*1.5] for lw in lsf_widths]
