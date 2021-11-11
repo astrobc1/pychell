@@ -225,13 +225,13 @@ class Gauss2dExtractor(SpectralExtractor):
 
         # Now loop over columns and mask regions low in flux
         for x in range(nx):
-            bad = np.where((yarr < trace_positions[x] - extract_aperture[0]) | (yarr > trace_positions[x] + extract_aperture[1]))[0]
+            bad = np.where((yarr < trace_positions_cp[x] - extract_aperture[0]) | (yarr > trace_positions_cp[x] + extract_aperture[1]))[0]
             if bad.size > 0:
                 trace_image_cp[bad, x] = 0
 
         # Construct H
-        H = Gauss2dExtractor.generate_H(np.ones((3, 3)), np.array([1, 2, 3]), np.array([1, 1, 1]), np.array([1, 1, 1]), np.array([0, 0, 0])) # warmup
-        H = Gauss2dExtractor.generate_H(trace_image_cp, trace_positions_cp, sigma, q, np.arctan(theta))
+        H = Gauss2dExtractor.generate_H(np.ones((3, 3)), np.ones((3, 3)), np.array([1, 2, 3]), np.array([1, 1, 1]), np.array([1, 1, 1]), np.array([0, 0, 0])) # warmup
+        H = Gauss2dExtractor.generate_H(trace_image_cp, badpix_mask_cp, trace_positions_cp, sigma, q, np.arctan(theta))
 
         # Initial guess
         f0 = np.nansum(trace_image_cp, axis=0)
@@ -240,6 +240,7 @@ class Gauss2dExtractor(SpectralExtractor):
         result = slinalg.lsqr(H.reshape((ny*nx, nx)), trace_image_cp.flatten(), damp=eta, x0=f0)
 
         # Parse results
+        breakpoint()
         spec1d = result[0]
         bad = np.where(~np.isfinite(spec1d) | (spec1d <= 0))[0]
         spec1d[bad] = np.nan
@@ -251,8 +252,8 @@ class Gauss2dExtractor(SpectralExtractor):
         return spec1d, spec1d_unc
 
     @staticmethod
-    @jit(nogil=True)
-    def generate_H(image, trace_positions, sigma, q, theta):
+    @jit
+    def generate_H(image, badpix_mask, trace_positions, sigma, q, theta):
 
         # Image dims
         ny, nx = image.shape
@@ -266,6 +267,8 @@ class Gauss2dExtractor(SpectralExtractor):
         # Helpful arrays
         xarr_detector = np.arange(nx)
         yarr_detector = np.arange(ny)
+        xarr_aperture = np.arange(nx)
+        yarr_aperture = np.arange(ny)
 
         # Loops!
         for i in range(nx):
@@ -281,6 +284,11 @@ class Gauss2dExtractor(SpectralExtractor):
                     norm = 1 / (2 * np.pi * _q * _sigma**2)
                     xp = (xl - xkc) * np.sin(_theta) - (yl - ykc) * np.cos(_theta)
                     yp = (xl - xkc) * np.cos(_theta) + (yl - ykc) * np.sin(_theta)
-                    H[j, i, m] = norm * np.exp(-0.5 * ((xp / _sigma)**2 + (yp / (_q * _sigma))**2))
+                    H[j, i, m] = np.exp(-0.5 * ((xp / _sigma)**2 + (yp / (_q * _sigma))**2)) * badpix_mask[j, i]
+
+        # Normalize each aperture
+        for m in range(nm):
+            H[:, :, m] /= np.nansum(H[:, :, m])
+
         return H
 

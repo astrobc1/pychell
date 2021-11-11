@@ -447,6 +447,7 @@ class SpectralExtractor:
 
 # Optimal
 from pychell.reduce.optimal import OptimalExtractor
+from pychell.reduce.optimaltilted import TiltOptimalExtractor
 
 # Slit decomp
 from pychell.reduce.decomp import DecompExtractor

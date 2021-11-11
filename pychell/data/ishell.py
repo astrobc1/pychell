@@ -85,10 +85,12 @@ def categorize_raw_data(data_input_path, output_path):
     # Return the data dict
     return data
 
+
 def pair_order_maps(data, order_maps):
     for order_map in order_maps:
         if order_map == data.master_flat:
             data.order_maps = [order_map]
+
 
 def parse_image_num(data):
     string_list = data.base_input_file.split('.')
@@ -193,6 +195,7 @@ def pair_master_flat(data, master_flats):
     minds_loc = np.argmin(ds)
     data.master_flat = master_flats[minds_loc]
 
+
 def group_darks(darks):
     groups = []
     itimes = np.array([dark.itime for dark in darks])
@@ -245,6 +248,7 @@ def group_flats(flats):
         
     return groups
 
+
 def parse_spec1d(data):
     
     # Load the flux, flux unc, and bad pix arrays
@@ -258,6 +262,7 @@ def parse_spec1d(data):
     data.flux = data.flux[::-1]
     data.mask = data.mask[::-1]
     data.flux_unc = data.flux_unc[::-1]
+
 
 def parse_fiber_nums(data):
     return None
