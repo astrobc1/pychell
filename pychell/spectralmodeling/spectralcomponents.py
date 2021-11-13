@@ -425,7 +425,7 @@ class AugmentedStar(Star):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, input_file=None, star_name=None, vel_bounds=[-10_000, 10_000]):
+    def __init__(self, input_file=None, star_name=None, vel_bounds=[-10_000, 10_000], rv_abs=None):
 
         # Call super method
         super().__init__()
@@ -441,6 +441,9 @@ class AugmentedStar(Star):
 
         # Vel bounds
         self.vel_bounds = vel_bounds
+
+        # Absolute RV
+        self.rv_abs = rv_abs
 
         # Pars
         self.par_names = ['vel_star']
@@ -505,7 +508,10 @@ class AugmentedStar(Star):
             spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
             spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
         else:
-            rv_absolute = pcutils.get_stellar_rv(self.star_name)
+            if self.rv_abs is None:
+                rv_absolute = pcutils.get_stellar_rv(self.star_name)
+            else:
+                rv_absolute = self.rv_abs
             spec_module = spectral_model.data.spec_module
             rv_zero_point = spec_module.rv_zero_point
             v = rv_absolute + rv_zero_point - spectral_model.data.bc_vel
