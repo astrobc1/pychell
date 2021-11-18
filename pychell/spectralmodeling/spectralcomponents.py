@@ -451,7 +451,10 @@ class AugmentedStar(Star):
     def init_parameters(self, data):
         pars = BoundedParameters()
         if not self.from_flat:
-            rv_absolute = pcutils.get_stellar_rv(self.star_name)
+            if self.rv_abs is None:
+                rv_absolute = pcutils.get_stellar_rv(self.star_name)
+            else:
+                rv_absolute = self.rv_abs
             spec_module = data[0].spec_module
             rv_zero_point = spec_module.rv_zero_point
             v = rv_absolute + rv_zero_point
