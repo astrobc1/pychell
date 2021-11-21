@@ -79,6 +79,8 @@ class ReduceRecipe:
         # Reduction steps
         self.tracer = tracer
         self.extractor = extractor
+
+        self.init_data()
         
     def create_output_dirs(self):
         """Creates the output folder and subfolders trace, spectra, calib.
@@ -120,9 +122,6 @@ class ReduceRecipe:
 
         # Create the output directories
         self.create_output_dirs()
-        
-        # Init the spectrograph and data
-        self.init_data()
 
         # Generate pre calibration images
         pccalib.gen_master_calib_images(self.data, self.do_bias, self.do_dark, self.do_flat, self.flat_percentile)

@@ -219,7 +219,7 @@ class DecompExtractor(SpectralExtractor):
         trace_image_cp = np.ma.masked_array(trace_image_cp, mask=np.logical_not(badpix_mask_cp))
 
         # Call pyreduce
-        result = extract.extract_spectrum(trace_image_cp, trace_positions_cp, yrange=yrange, xrange=xrange, lambda_sf=lambda_sf, lambda_sp=lambda_sp, osample=oversample, readnoise=read_noise, tilt=tilt, shear=shear)
+        result = extract.extract_spectrum(trace_image_cp, trace_positions_cp, yrange=yrange, xrange=xrange, lambda_sf=lambda_sf, lambda_sp=lambda_sp, osample=oversample, readnoise=read_noise, tilt=tilt, shear=shear, swath_width=nx)
 
         # Get relevant outputs
         spec1d = result[0]

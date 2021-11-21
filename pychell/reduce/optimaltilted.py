@@ -17,7 +17,7 @@ import pychell.utils as pcutils
 import pychell.maths as pcmath
 from pychell.reduce.extract import SpectralExtractor
 
-class TiltOptimalExtractor(SpectralExtractor):
+class TiltedOptimalExtractor(SpectralExtractor):
     
     ###############################
     #### CONSTRUCTOR + HELPERS ####
@@ -117,21 +117,21 @@ class TiltOptimalExtractor(SpectralExtractor):
             
             # Trace Profile
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace profile [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            trace_profile_cspline = OptimalExtractor.compute_trace_profile(trace_image, badpix_mask, trace_positions, background, remove_background, oversample)
+            trace_profile_cspline = TiltedOptimalExtractor.compute_trace_profile(trace_image, badpix_mask, trace_positions, background, remove_background, oversample)
             
             # Trace Position
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            trace_positions = OptimalExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
+            trace_positions = TiltedOptimalExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
 
             # Extract Aperture
             if _extract_aperture is None:
-                extract_aperture = OptimalExtractor.compute_extract_aperture(trace_profile_cspline)
+                extract_aperture = TiltedOptimalExtractor.compute_extract_aperture(trace_profile_cspline)
             else:
                 extract_aperture = _extract_aperture
 
             # Background signal
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Background [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            background, background_err = OptimalExtractor.compute_background(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, background_smooth_width, background_smooth_poly_order)
+            background, background_err = TiltedOptimalExtractor.compute_background(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, background_smooth_width, background_smooth_poly_order)
         
         # Iteratively extract spectrum
         for i in range(n_extract_iterations):
@@ -139,14 +139,14 @@ class TiltOptimalExtractor(SpectralExtractor):
             print(f" [{data}, {trace_dict['label']}] Iteratively Extracting Trace [{i + 1} / {n_extract_iterations}] ...", flush=True)
             
             # Optimal extraction
-            spec1d, spec1d_unc = OptimalExtractor.optimal_extraction(trace_image, badpix_mask,
+            spec1d, spec1d_unc = TiltedOptimalExtractor.optimal_extraction(trace_image, badpix_mask,
                                                          trace_profile_cspline, trace_positions, extract_aperture=extract_aperture,
                                                          remove_background=remove_background, background=background,
                                                          background_err=background_err, read_noise=read_noise)
 
             # Re-map pixels and flag in the 2d image.
             if i < n_extract_iterations - 1:
-                OptimalExtractor.flag_pixels_post_extraction(trace_image, badpix_mask, trace_positions, trace_profile_cspline, extract_aperture, spec1d, spec1d_unc, background, background_err, remove_background, badpix_threshold)
+                TiltedOptimalExtractor.flag_pixels_post_extraction(trace_image, badpix_mask, trace_positions, trace_profile_cspline, extract_aperture, spec1d, spec1d_unc, background, background_err, remove_background, badpix_threshold)
 
         # badpix mask
         badpix1d = np.ones(nx)
@@ -196,16 +196,23 @@ class TiltOptimalExtractor(SpectralExtractor):
 
         # Loop over columns
         for x in range(nx):
+
+            if np.nansum(badpix_mask[:, x]) == 0:
+                continue
             
-            # Create new matrices
-            n = extract_aperture[1] - extract_aperture[0] + 1
+            # Create new matrices for this column
+            n = extract_aperture[1] + extract_aperture[0] + 1
             trace_image_extract = np.full(n, np.nan)
             badpix_mask_extract = np.full(n, np.nan)
             yc_int = int(np.round(trace_positions[x]))
-            for i in range(ny):
-                for j in range(nx):
+            xarr_aperture = np.arange(x - int(np.round(n / 2)), x + int(np.round(n / 2))).astype(int)
+            yarr_aperture = np.arange(yc_int - int(np.round(n / 2)), yc_int + int(np.round(n / 2))).astype(int)
+            for i in range(n): # y
+                for j in range(n): # x
                     breakpoint()
-                    #trace_image_extract[i, j] = trace_image_nobg[i, ]
+                    dx = xarr_aperture[j] - x
+                    dy = yarr_aperture[i] - yc_int
+                    trace_image_extract[i, j] = trace_image_nobg[i, j]
             
             # Shift Trace Profile
             P = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x],
@@ -215,7 +222,7 @@ class TiltOptimalExtractor(SpectralExtractor):
             # Determine which pixels to use from the aperture
             good = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]))[0]
             P_use = P[good]
-            data_use = data_x[good]
+            data_use = trace_image_extract[good, x]
             badpix_use = badpix_x[good]
             P_use /= np.nansum(P_use)
             

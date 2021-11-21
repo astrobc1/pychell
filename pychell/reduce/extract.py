@@ -328,9 +328,6 @@ class SpectralExtractor:
         good = np.where(np.isfinite(trace_profile))[0]
         trace_profile_cspline = scipy.interpolate.CubicSpline(yarr_hr[good], trace_profile[good], extrapolate=False)
         
-        # Trim 3 pixels on each side
-        trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x[3*oversample:-3*oversample], trace_profile_cspline(trace_profile_cspline.x[3*oversample:-3*oversample]), extrapolate=False)
-        
         # Ensure trace profile is centered at zero
         prec = 1000
         yhr = np.arange(trace_profile_cspline.x[0], trace_profile_cspline.x[-1], 1 / prec)
@@ -447,10 +444,10 @@ class SpectralExtractor:
 
 # Optimal
 from pychell.reduce.optimal import OptimalExtractor
-from pychell.reduce.optimaltilted import TiltOptimalExtractor
+from pychell.reduce.optimaltilted import TiltedOptimalExtractor
 
 # Slit decomp
-from pychell.reduce.decomp import DecompExtractor
+# from pychell.reduce.decomp import DecompExtractor
 
 # Gauss 2d
 from pychell.reduce.gauss2d import Gauss2dExtractor

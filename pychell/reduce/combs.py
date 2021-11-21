@@ -1,4 +1,3 @@
-
 # Maths
 import numpy as np
 import matplotlib.pyplot as plt
@@ -14,7 +13,7 @@ import pychell.maths as pcmath
 #### PRIMARY METHODS ####
 #########################
 
-def compute_psf(image, badpix_mask, trace_dict, wave_estimate, f0, df):
+def compute_psf2d(image, badpix_mask, trace_positions, wave_estimate, f0, df, peak_thresh):
     """Fits 2d tilted Gaussian to each peak in the 2d image.
 
     Args:
@@ -24,7 +23,103 @@ def compute_psf(image, badpix_mask, trace_dict, wave_estimate, f0, df):
         f0 (float): The frequency of the pump line.
         df (float): The comb line spacing.
     """
-    pass
+
+
+    ny, nx = image.shape
+    yarr = np.arange(ny)
+    xarr = np.arange(nx)
+
+    # Generate theoretical LFC peaks
+    good = np.where(np.isfinite(wave_estimate))[0]
+    xi, xf = good[0], good[-1]
+    wi, wf = wave_estimate[xi], wave_estimate[xf]
+    lfc_peak_integers, lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
+    n_spots = len(lfc_centers_wave_theoretical)
+    peak_spacing = estimate_peak_spacing(xi, xf, wi, wf, f0, df)
+    
+    # Number of pixels
+    nx = len(wave_estimate)
+    xarr = np.arange(nx)
+    pfit_estimate = np.polyfit(xarr[good], wave_estimate[good], 4)
+
+    # Estimate spec1d
+    lfc_flux = simple_extract(image, badpix_mask, trace_positions)
+
+    # Remove background flux
+    background = estimate_background(wave_estimate, lfc_flux, f0, df)
+    lfc_flux_no_bg = lfc_flux - background
+    lfc_peak_max = pcmath.weighted_median(lfc_flux_no_bg, percentile=0.99)
+    
+    # Estimate continuum
+    continuum = estimate_continuum(wave_estimate, lfc_flux_no_bg, f0, df)
+    lfc_flux_norm = lfc_flux_no_bg / continuum
+
+    # Estimate peaks in pixel space (just indices)
+    peaks = scipy.signal.find_peaks(lfc_flux_norm, height=np.full(nx, 0.75), distance=0.8*peak_spacing)[0]
+    peaks = np.sort(peaks)
+
+    # Estimate spacing between peaks, assume linear trend across order
+    peak_spacing = np.polyval(np.polyfit(peaks[1:], np.diff(peaks), 1), xarr)
+
+    # Only consider peaks with enough flux
+    good_peaks = []
+    for peak in peaks:
+        if np.nanmax(image[:, peak-1:peak+2]) >= peak_thresh:
+            good_peaks.append(peak)
+    good_peaks = np.array(good_peaks)
+
+    # Storage arrays for best fit params
+    amps = np.full(good_peaks.size, np.nan) # 0
+    lfc_centers_pix_x = np.full(good_peaks.size, np.nan) # 1
+    sigmas = np.full(good_peaks.size, np.nan) # 3
+    qs = np.full(good_peaks.size, np.nan) # 4
+    thetas = np.full(good_peaks.size, np.nan) # 5
+    rms_norm = np.full(good_peaks.size, np.nan)
+
+    # Fit each peak with a Gaussian
+    for i in range(len(good_peaks)):
+        print(i, len(good_peaks))
+
+        # Window
+        usex = np.where((xarr >= good_peaks[i] - peak_spacing[good_peaks[i]] / 2) & (xarr < good_peaks[i] + peak_spacing[good_peaks[i]] / 2))[0]
+        xx = np.copy(xarr[usex])
+        yy = np.arange(trace_positions[good_peaks[i]] - int(len(usex) / 2), trace_positions[good_peaks[i]] + int(len(usex) / 2) + 1).astype(int)
+
+        # Data
+        zz = image[yy.min():yy.max()+1, usex.min():usex.max()+1]
+
+        # Initial pars
+        p0 = [np.nanmax(zz), # amp
+              xarr[good_peaks[i]], # mux
+              trace_positions[good_peaks[i]], # muy
+              1.4, # sigma
+              0.8, # q
+              np.pi/4, # theta
+              3] # offset
+        
+        # Bounds
+        bounds = [(0.5 * p0[0], 1.5 * p0[0]), # amp
+                  (p0[1] - 1, p0[1] + 1), # mux
+                  (p0[2] - 1, p0[2] + 1), # muy
+                  (0.5, 4), # sigma
+                  (0.4, 0.9), # q
+                  (0, np.pi/2), # theta
+                  (0, 10)] # offset
+
+        # Fit
+        opt_result = scipy.optimize.minimize(fit_peak2d, p0, args=(xx, yy, zz), method='Nelder-Mead', bounds=bounds)
+
+        # Get best fit params
+        pbest = opt_result.x
+        lfc_centers_pix_x[i] = pbest[1]
+        sigmas[i] = pbest[3]
+        qs[i] = pbest[4]
+        thetas[i] = pbest[5]
+
+        # Store rms of fit
+        rms_norm[i] = opt_result.fun / pbest[0]
+
+    return rms_norm, lfc_centers_pix_x, sigmas, thetas, qs
 
 def compute_lsf_width_all(times_sci, times_lfc_cal, wls_cal_scifiber, lfc_cal_scifiber, f0, df, do_orders=None):
     """Wrapper to compute the LSF for all spectra.
@@ -249,6 +344,37 @@ def compute_wls(wave_estimate, lfc_flux, df, f0, poly_order=None):
     return wls
 
 
+def simple_extract(image, badpix_mask, trace_positions):
+
+    ny, nx = image.shape
+
+    yarr = np.arange(ny)
+
+
+    yarr_zero_center = np.arange(int(np.floor(-ny / 2)), int(np.ceil(ny / 2)) + 1)
+    image_rect = np.full((len(yarr_zero_center), nx), np.nan)
+
+    # Rectify
+    for x in range(nx):
+        image_rect[:, x] = pcmath.lin_interp(yarr - trace_positions[x], image[:, x], yarr_zero_center)
+        image_rect[:, x] /= np.nansum(image_rect[:, x])
+
+    # Trace profile crude estimate
+    trace_profile = np.nanmedian(image_rect, axis=1)
+
+    # Simple boxcar extract
+    spec1d = np.full(nx, np.nan)
+    for x in range(nx):
+        weights = badpix_mask[:, x]
+        tp = pcmath.lin_interp(yarr_zero_center + trace_positions[x], trace_profile, yarr)
+        spec1d[x] = np.nansum(image[:, x]) / np.nansum(weights) / np.nansum(tp * weights, axis=0)
+
+    bad = np.where(~np.isfinite(spec1d) | (spec1d == 0))[0]
+    spec1d[bad] = np.nan
+
+    return spec1d
+
+
 ######################
 #### PEAK FITTING ####
 ######################
@@ -281,6 +407,7 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
     Returns:
         np.ndarray: The pixel centers of each peak
         np.ndarray: The wavelength centers of each peak
+        np.ndarray: The integers relative to f0.
     """
 
     # Generate theoretical LFC peaks
@@ -427,14 +554,14 @@ def flag_bad_pixels(lfc_flux, smooth_width=3, sigma_thresh=9):
     """
 
     # First remove negatives
-    bad = np.where(lfc_flux < 0)[0]
+    lfc_flux_out = np.copy(lfc_flux)
+    bad = np.where(lfc_flux_out < 0)[0]
     if bad.size > 0:
-        lfc_flux[bad] = np.nan
+        lfc_flux_out[bad] = np.nan
 
     # Identify bad pixels in lfc flux
-    lfc_flux_out = np.copy(lfc_flux)
-    lfc_flux_smooth = pcmath.median_filter1d(lfc_flux, width=smooth_width)
-    rel_errors = (lfc_flux - lfc_flux_smooth) / lfc_flux_smooth
+    lfc_flux_smooth = pcmath.median_filter1d(lfc_flux_out, width=smooth_width)
+    rel_errors = (lfc_flux_out - lfc_flux_smooth) / lfc_flux_smooth
     bad = np.where(np.abs(rel_errors) > sigma_thresh * np.nanstd(rel_errors))[0]
     if bad.size > 0:
         lfc_flux_out[bad] = np.nan
@@ -466,4 +593,29 @@ def fit_lsf(pars, x, data):
     rms = pcmath.rmsloss(data, model)
     return rms
 
+def fit_peak2d(pars, xarr, yarr, image):
+    model = peak_model2d(pars, xarr, yarr)
+    rms = pcmath.rmsloss(image.flatten(), model.flatten())
+    return rms
 
+def peak_model2d(pars, xarr, yarr):
+
+    model = np.full((len(yarr), len(xarr)), np.nan)
+    
+    amp = pars[0]
+    xmu = pars[1]
+    ymu = pars[2]
+    sigma = pars[3]
+    q = pars[4]
+    theta = pars[5]
+    offset = pars[6]
+
+    # Compute PSF
+    for i in range(len(yarr)):
+        for j in range(len(xarr)):
+            xp = (xarr[j] - xmu) * np.sin(theta) - (yarr[i] - ymu) * np.cos(theta)
+            yp = (xarr[j] - xmu) * np.cos(theta) + (yarr[i] - ymu) * np.sin(theta)
+            model[i, j] = amp * np.exp(-0.5 * ((xp / sigma)**2 + (yp / (sigma * q))**2)) + offset
+
+    # Return model
+    return model

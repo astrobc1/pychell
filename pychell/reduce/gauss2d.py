@@ -7,6 +7,7 @@ import pickle
 import numpy as np
 import scipy.interpolate
 import scipy.signal
+import scipy.sparse as sparse
 from astropy.io import fits
 import scipy.sparse.linalg as slinalg
 
@@ -65,7 +66,7 @@ class Gauss2dExtractor(SpectralExtractor):
 
     @staticmethod
     def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, n_extract_iterations=3, trace_pos_refine_window=5, badpix_threshold=5, extract_orders=None, _extract_aperture=None, eta=None, theta=None, q=None):
-
+        
         if read_noise is None:
             read_noise = data.spec_module.parse_itime(data) * data.spec_module.read_noise
         else:
@@ -142,6 +143,7 @@ class Gauss2dExtractor(SpectralExtractor):
             background, background_err = Gauss2dExtractor.compute_background(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, background_smooth_width, background_smooth_poly_order)
         
         # Iteratively extract spectrum
+        breakpoint()
         for i in range(n_extract_iterations):
             
             print(f" [{data}] Iteratively Extracting Trace [{i + 1} / {n_extract_iterations}] ...", flush=True)
@@ -173,7 +175,7 @@ class Gauss2dExtractor(SpectralExtractor):
 
     @staticmethod
     def gauss2dextraction(trace_image, badpix_mask, trace_positions, extract_aperture, background=None, remove_background=True, read_noise=0, oversample=1, eta=None, theta=None, sigma=None, q=None):
-
+        
         # Copy input
         trace_image_cp = np.copy(trace_image)
         trace_positions_cp = np.copy(trace_positions)
@@ -231,13 +233,15 @@ class Gauss2dExtractor(SpectralExtractor):
 
         # Construct H
         H = Gauss2dExtractor.generate_H(np.ones((3, 3)), np.ones((3, 3)), np.array([1, 2, 3]), np.array([1, 1, 1]), np.array([1, 1, 1]), np.array([0, 0, 0])) # warmup
-        H = Gauss2dExtractor.generate_H(trace_image_cp, badpix_mask_cp, trace_positions_cp, sigma, q, np.arctan(theta))
+        H = Gauss2dExtractor.generate_H(trace_image_cp, badpix_mask_cp, trace_positions_cp, sigma, q, theta)
+        Hflat = sparse.csr_matrix(H.reshape((ny*nx, nx)))
 
         # Initial guess
         f0 = np.nansum(trace_image_cp, axis=0)
 
         # Perform lsqr
-        result = slinalg.lsqr(H.reshape((ny*nx, nx)), trace_image_cp.flatten(), damp=eta, x0=f0)
+        breakpoint()
+        result = slinalg.lsqr(Hflat, trace_image_cp.flatten(), damp=eta, x0=f0)
 
         # Parse results
         breakpoint()
@@ -252,17 +256,15 @@ class Gauss2dExtractor(SpectralExtractor):
         return spec1d, spec1d_unc
 
     @staticmethod
-    @jit
+    @njit(nogil=True)
     def generate_H(image, badpix_mask, trace_positions, sigma, q, theta):
 
         # Image dims
         ny, nx = image.shape
 
-        # Apertures
-        nm = nx
-
         # Initialize H tensor (not yet flattened)
-        H = np.full(shape=(ny, nx, nm), fill_value=np.nan)
+        n_apertures = nx
+        H = np.zeros(shape=(ny, nx, n_apertures), dtype=np.float64)
 
         # Helpful arrays
         xarr_detector = np.arange(nx)
@@ -273,22 +275,38 @@ class Gauss2dExtractor(SpectralExtractor):
         # Loops!
         for i in range(nx):
             for j in range(ny):
-                for m in range(nm):
-                    xl = xarr_detector[i]
+                for m in range(n_apertures):
+
+                    # Coordinates
+                    xl = xarr_aperture[i]
                     xkc = xarr_detector[m]
-                    yl = yarr_detector[j]
+                    yl = yarr_aperture[j]
                     ykc = trace_positions[m]
+
+                    # PSF params
                     _theta = theta[m]
                     _sigma = sigma[m]
                     _q = q[m]
-                    norm = 1 / (2 * np.pi * _q * _sigma**2)
+
+                    # Tilted Coordinates relative to center of aperture
                     xp = (xl - xkc) * np.sin(_theta) - (yl - ykc) * np.cos(_theta)
                     yp = (xl - xkc) * np.cos(_theta) + (yl - ykc) * np.sin(_theta)
+
+                    # Compute PSF
                     H[j, i, m] = np.exp(-0.5 * ((xp / _sigma)**2 + (yp / (_q * _sigma))**2)) * badpix_mask[j, i]
 
         # Normalize each aperture
-        for m in range(nm):
-            H[:, :, m] /= np.nansum(H[:, :, m])
+        for m in range(n_apertures):
+
+            # Set small pixels to zero
+            peak = np.max(H[:, :, m])
+            bad = np.where(H[:, :, m] < 1E-10 * peak)
+            for i, j in zip(bad[0], bad[1]):
+                H[i, j, m] = 0
+
+            s = np.sum(H[:, :, m])
+            if s != 0:
+                H[:, :, m] /= s
 
         return H
 

@@ -942,11 +942,10 @@ def poly_filter(y, width, poly_order=3):
         poly_order (int, optional): The polynomial order. Defaults to 3.
 
     Returns:
-        [type]: [description]
+        np.ndarray: The filtered array.
     """
     width = int(width)
     assert width > poly_order
-    assert width % 2 == 1
     nx = len(y)
     x = np.arange(nx).astype(int)
     window_arr = np.arange(width)
