@@ -207,7 +207,7 @@ def parse_spec1d(data):
     data.flux = fits_data[0].data[oi, :, 1] / fits_data[0].data[oi, :, 4]
     data.flux_unc = fits_data[0].data[oi, :, 2]
     data.mask = fits_data[0].data[oi, :, 3]
-    data.lsf_width = fits_data[1].data[oi]
+    #data.lsf_width = fits_data[1].data[oi]
 
 ################################
 #### BARYCENTER CORRECTIONS ####
