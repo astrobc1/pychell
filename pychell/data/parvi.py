@@ -137,8 +137,8 @@ def parse_image_header(data):
     data.header = fits_hdu.header
     
     # Parse the sky coord and time of obs
-    parse_utdate(data)
-    parse_sky_coord(data)
+    #parse_utdate(data)
+    #parse_sky_coord(data)
     parse_exposure_start_time(data)
     parse_object(data)
     parse_itime(data)
