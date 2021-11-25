@@ -193,41 +193,38 @@ class DecompExtractor(SpectralExtractor):
         # Helpful array
         yarr = np.arange(ny)
 
+        # Aperture
+        yrange = [int(np.ceil(extract_aperture[0])), int(np.ceil(extract_aperture[1]))]
+
         # Remove background
         if remove_background:
             for x in range(nx):
                 trace_image_cp[:, x] -= background[x]
 
         # Flat negative pixels
-        bad = np.where(trace_image_cp < 0)
+        bad = np.where(trace_image_cp <= 0)
         if bad[0].size > 0:
-            trace_image_cp[bad] = np.nan
-            badpix_mask[bad] = np.nan
-        
-        # Sanity check y positions
-        goody, goodx = np.where(badpix_mask_cp)
-        xi, xf = goodx.min(), goodx.max()
-        for x in range(xi, xf+1):
-            if trace_positions_cp[x] - extract_aperture[0] < 0 or trace_positions_cp[x] + extract_aperture[1] > ny - 1:
-                return np.full(nx, np.nan), np.full(nx, np.nan)
-            good = np.where((yarr >= trace_positions_cp[x] - extract_aperture[0]) & (yarr <= trace_positions_cp[x] + extract_aperture[1]) & (badpix_mask_cp[:, x] == 1))[0]
+            trace_image_cp[bad] = 0
 
-        # Define additional inputs
-        yrange = [int(np.ceil(extract_aperture[0])), int(np.ceil(extract_aperture[1]))]
+        # Now change all bad pixels to zeros
+        bad = np.where(badpix_mask == 0)
+        if bad[0].size > 0:
+            trace_image_cp[bad] = 0
+        
+        # Loop and identify bad columns (pyreduce doesn't like bad cols)
+        # Note that with a tilted PSF we can't remove bad cols
         goody, goodx = np.where(badpix_mask_cp)
         xrange = [goodx.min(), goodx.max()]
-        trace_image_cp = np.ma.masked_array(trace_image_cp, mask=np.logical_not(badpix_mask_cp))
+        yrange = [extract_aperture[0], extract_aperture[-1]]
+        _trace_image_cp = np.ma.masked_array(trace_image_cp, mask=np.logical_not(badpix_mask_cp))
+        result = extract.extract_spectrum(_trace_image_cp, trace_positions_cp, yrange=yrange, xrange=xrange, lambda_sf=lambda_sf, lambda_sp=lambda_sp, osample=oversample, readnoise=read_noise, tilt=tilt, shear=shear, swath_width=int((xrange[1] - xrange[0] + 1) / 4))
 
-        # Call pyreduce
-        result = extract.extract_spectrum(trace_image_cp, trace_positions_cp, yrange=yrange, xrange=xrange, lambda_sf=lambda_sf, lambda_sp=lambda_sp, osample=oversample, readnoise=read_noise, tilt=tilt, shear=shear, swath_width=nx)
-
-        # Get relevant outputs
+        # Flag zeros
         spec1d = result[0]
         spec1d_unc = result[3]
         bad = np.where((spec1d == 0) | (spec1d_unc == 0))[0]
         spec1d[bad] = np.nan
         spec1d_unc[bad] = np.nan
-        trace_profile = result[1]
 
         # Return
         return spec1d, spec1d_unc

@@ -35,7 +35,7 @@ observatory = {
     'alt': 4168.066848
 }
 
-utc_offset = -8
+utc_offset = -10
 
 ######################
 #### DATA PARSING ####

@@ -339,7 +339,7 @@ def median_filter1d(x, width, preserve_nans=True):
         
     return out
 
-@jit
+#@jit
 def generalized_median_filter1d(x, width, percentile=0.5):
     nx = len(x)
     y = np.full(nx, np.nan)
@@ -633,7 +633,7 @@ def mad(x):
     """
     return np.nanmedian(np.abs(x - np.nanmedian(x)))
 
-@jit
+#@jit
 def weighted_median(data, weights=None, percentile=0.5):
     """Computes the weighted percentile of a data set
 
