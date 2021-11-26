@@ -100,28 +100,6 @@ def categorize_raw_data(data_input_path, output_path):
 
     return data
 
-def group_darks(darks):
-    return [darks]
-
-def group_flats(flats):
-    return [flats]
-
-def gen_master_calib_filename(master_cal):
-    fname0 = master_cal.group[0].base_input_file.lower()
-    if "dark" in fname0:
-        return f"master_dark_{master_cal.group[0].utdate}{master_cal.group[0].itime}s.fits"
-    elif "fiberflat" in fname0 or "fibreflat" in fname0:
-        return f"master_fiberflat_{master_cal.group[0].utdate}.fits"
-    elif "fullflat" in fname0:
-        return f"master_fullflat_{master_cal.group[0].utdate}.fits"
-    elif "lfc" in fname0:
-        return f"master_lfc_{master_cal.group[0].utdate}.fits"
-    else:
-        return f"master_calib_{master_cal.group[0].utdate}.fits"
-
-def gen_master_calib_header(master_cal):
-    return copy.deepcopy(master_cal.group[0].header)
-
 def parse_image_header(data):
         
     # Parse the fits HDU
@@ -170,7 +148,7 @@ def pair_order_maps(data, order_maps):
 
 def parse_image_num(data):
     return 1
-    
+
 def parse_object(data):
     data.object = data.header["OBJECT"]
     return data.object
@@ -208,6 +186,34 @@ def parse_spec1d(data):
     data.flux_unc = fits_data[0].data[oi, :, 2]
     data.mask = fits_data[0].data[oi, :, 3]
     #data.lsf_width = fits_data[1].data[oi]
+
+
+#######################
+#### GROUPING CALS ####
+#######################
+
+def group_darks(darks):
+    return [darks]
+
+def group_flats(flats):
+    return [flats]
+
+def gen_master_calib_filename(master_cal):
+    fname0 = master_cal.group[0].base_input_file.lower()
+    if "dark" in fname0:
+        return f"master_dark_{master_cal.group[0].utdate}{master_cal.group[0].itime}s.fits"
+    elif "fiberflat" in fname0 or "fibreflat" in fname0:
+        return f"master_fiberflat_{master_cal.group[0].utdate}.fits"
+    elif "fullflat" in fname0:
+        return f"master_fullflat_{master_cal.group[0].utdate}.fits"
+    elif "lfc" in fname0:
+        return f"master_lfc_{master_cal.group[0].utdate}.fits"
+    else:
+        return f"master_calib_{master_cal.group[0].utdate}.fits"
+
+def gen_master_calib_header(master_cal):
+    return copy.deepcopy(master_cal.group[0].header)
+
 
 ################################
 #### BARYCENTER CORRECTIONS ####
@@ -306,7 +312,6 @@ q_coeffs_fiber1 = np.array([np.array([ 8.48812353e-08, -3.38395100e-04,  8.23741
        np.array([ 9.48852415e-09, -6.39038033e-05,  6.60310925e-01]),
        np.array([ 4.03668978e-08, -1.66071008e-04,  7.17295916e-01]),
        np.array([ 4.92654631e-08, -1.46751000e-04,  7.09774554e-01])], dtype=np.ndarray)
-
 theta_coeffs_fiber1 = np.array([np.array([ 6.68095023e-08, -2.40890710e-04,  1.48491629e+00]),
        np.array([-8.83818569e-09, -6.47917604e-05,  1.33173122e+00]),
        np.array([ 6.58999075e-08, -1.97732828e-04,  1.24777025e+00]),
@@ -335,7 +340,7 @@ theta_coeffs_fiber1 = np.array([np.array([ 6.68095023e-08, -2.40890710e-04,  1.4
 # thetas_coeffs_fiber3 = np.array(, dtype=np.ndarray)
 # qs_coeffs_fiber3 = np.array(, dtype=np.ndarray)
 
-read_noise = 0.0
+read_noise = 0.0 # Needs updated
 
 #######################################
 ##### GENERATING RADIAL VELOCITIES ####
@@ -349,8 +354,8 @@ rv_zero_point = -5604.0
 # dlf + ldf=0, df=-dlf/l=-dl/l*c/l=-dl/c^2
 # f = c / l
 # l = c / f
-f0 = cs.c / (1559.91370 * 1E-9) # freq of pump line in Hz.
-df = 10.0000000 * 1E9 # spacing of peaks [Hz]
+lfc_f0 = cs.c / (1559.91370 * 1E-9) # freq of pump line in Hz.
+lfc_df = 10.0000000 * 1E9 # spacing of peaks [Hz]
 
 # When orientated with orders along detector rows and concave down (vertex at top)
 # Top fiber is 1 (sci)

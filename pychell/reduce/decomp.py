@@ -21,7 +21,6 @@ import pychell.maths as pcmath
 from pychell.reduce.extract import SpectralExtractor
 
 # From optimal
-
 class DecompExtractor(SpectralExtractor):
     
     ###############################
@@ -180,7 +179,7 @@ class DecompExtractor(SpectralExtractor):
     ###########################
 
     @staticmethod
-    def decomp_extraction(trace_image, badpix_mask, trace_positions, extract_aperture, background=None, remove_background=True, read_noise=0, oversample=1, lambda_sp=0, lambda_sf=0.5, tilt=None, shear=None):
+    def decomp_extraction(trace_image, badpix_mask, trace_positions, extract_aperture, background=None, remove_background=True, read_noise=0, oversample=1, lambda_sp=0, lambda_sf=0.5, tilt=None, shear=None, return_trace_profile=False):
 
         # Copy input
         trace_image_cp = np.copy(trace_image)
@@ -201,7 +200,7 @@ class DecompExtractor(SpectralExtractor):
             for x in range(nx):
                 trace_image_cp[:, x] -= background[x]
 
-        # Flat negative pixels
+        # Flag negative pixels after background subtraction
         bad = np.where(trace_image_cp <= 0)
         if bad[0].size > 0:
             trace_image_cp[bad] = 0
@@ -212,19 +211,31 @@ class DecompExtractor(SpectralExtractor):
             trace_image_cp[bad] = 0
         
         # Loop and identify bad columns (pyreduce doesn't like bad cols)
-        # Note that with a tilted PSF we can't remove bad cols
+        # Note that with a tilted PSF we can't just remove bad cols and join non-neighboring columns that weren't already neighbors
         goody, goodx = np.where(badpix_mask_cp)
         xrange = [goodx.min(), goodx.max()]
-        yrange = [extract_aperture[0], extract_aperture[-1]]
-        _trace_image_cp = np.ma.masked_array(trace_image_cp, mask=np.logical_not(badpix_mask_cp))
-        result = extract.extract_spectrum(_trace_image_cp, trace_positions_cp, yrange=yrange, xrange=xrange, lambda_sf=lambda_sf, lambda_sp=lambda_sp, osample=oversample, readnoise=read_noise, tilt=tilt, shear=shear, swath_width=int((xrange[1] - xrange[0] + 1) / 4))
-
-        # Flag zeros
+        nnx = xrange[1] - xrange[0]
+        xxi, xxf = goodx.min(), goodx.max()
+        yyi, yyf = goody.min(), goody.max()
+        S = trace_image_cp[yyi:yyf+1, xxi:xxf+1]
+        M = np.logical_not(badpix_mask_cp[yyi:yyf+1, xxi:xxf+1])
+        S = np.ma.masked_array(S, mask=M)
+        ycen = trace_positions_cp[xxi:xxf+1] - yyi
+        tilt = tilt[xxi:xxf+1]
+        shear = shear[xxi:xxf+1]
+        swath_width = np.min([int(nnx / 4), 400])
+        result = extract.extract_spectrum(S, ycen, yrange=yrange, xrange=xrange, lambda_sf=lambda_sf, lambda_sp=lambda_sp, osample=oversample, readnoise=read_noise, tilt=tilt, shear=shear, swath_width=swath_width)
         spec1d = result[0]
         spec1d_unc = result[3]
+        trace_profile = result[1]
+
+        # Flag zeros
         bad = np.where((spec1d == 0) | (spec1d_unc == 0))[0]
         spec1d[bad] = np.nan
         spec1d_unc[bad] = np.nan
 
         # Return
-        return spec1d, spec1d_unc
+        if return_trace_profile:
+            return spec1d, spec1d_unc, trace_profile
+        else:
+            return spec1d, spec1d_unc
