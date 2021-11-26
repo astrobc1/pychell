@@ -301,7 +301,7 @@
 <p>Each implemented spectrograph must have a file named spectrograph.py (must be lowercase) in the data module. This file can contain a variety of items, but it must contain the following methods and variables in order to support:</p>
 <div class="section" id="reduction">
 <h3>Reduction<a class="headerlink" href="#reduction" title="Permalink to this headline">¶</a></h3>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">categorize_raw_data</span><span class="p">(</span><span class="n">data_input_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">categorize_raw_data</span><span class="p">(</span><span class="n">data_input_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">output_path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span>
 
 <span class="n">correct_readmath</span><span class="p">(</span><span class="n">data</span><span class="p">:</span> <span class="n">Echellogram</span><span class="p">,</span> <span class="n">data_image</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
 

@@ -12,7 +12,7 @@ Reduction
 .. code-block:: python
 
 
-    categorize_raw_data(data_input_path: str, output_path: str)
+    categorize_raw_data(data_input_path: str, output_path: str) -> dict
 
     correct_readmath(data: Echellogram, data_image: np.ndarray)
 
