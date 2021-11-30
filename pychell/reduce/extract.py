@@ -93,14 +93,15 @@ class SpectralExtractor:
         fig = self.plot_extracted_spectra(data, reduced_data)
         
         # Create a filename
-        fname = f"{recipe.output_path}spectra{os.sep}{data.base_input_file_noext}_{data.object.replace(' ', '_')}_preview.png"
+        obj = data.spec_module.parse_object(data).replace(' ', '_')
+        fname = f"{recipe.output_path}spectra{os.sep}{data.base_input_file_noext}_{obj}_preview.png"
         
         # Save
         plt.savefig(fname)
         plt.close()
 
         # Save reduced data
-        fname = f"{recipe.output_path}spectra{os.sep}{data.base_input_file_noext}_{data.object}_reduced.fits"
+        fname = f"{recipe.output_path}spectra{os.sep}{data.base_input_file_noext}_{obj}_reduced.fits"
         hdu = fits.PrimaryHDU(reduced_data, header=data.header)
         hdu.writeto(fname, overwrite=True, output_verify='ignore')
 
@@ -109,6 +110,16 @@ class SpectralExtractor:
     ###############
     #### MISC. ####
     ###############
+
+    @staticmethod
+    def estimate_snr(trace_image):
+        spec1d = np.nansum(trace_image, axis=0)
+        spec1d /= pcmath.weighted_median(spec1d, percentile=0.99)
+        spec1d_smooth = np.nansum(pcmath.median_filter2d(trace_image, width=3), axis=0)
+        spec1d_smooth /= pcmath.weighted_median(spec1d_smooth, percentile=0.99)
+        res_norm = spec1d - spec1d_smooth
+        snr = 1 / np.nanstd(res_norm)
+        return snr
 
     @staticmethod
     def plot_extracted_spectra(data, reduced_data):
@@ -187,9 +198,12 @@ class SpectralExtractor:
         
         # Helper array
         yarr = np.arange(ny)
+
+        # Smooth the 2d image
+        trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
         
         # Smooth 1d spectrum
-        spec1d_smooth = pcmath.median_filter1d(spec1d, width=5)
+        spec1d_smooth = pcmath.median_filter1d(spec1d, width=3)
         
         # Remap 1d sepctrum into 2d space
         for x in range(nx):
@@ -213,14 +227,11 @@ class SpectralExtractor:
             # Remap into 2d space
             if remove_background:
                 residuals[good, x] = (P_use * spec1d_smooth[x] + background[x]) - trace_image[good, x]
-                weights[good, x] = trace_image[good, x] + background[x] + background_err[x]**2
             else:
                 residuals[good, x] = (P_use * spec1d_smooth[x]) - trace_image[good, x]
-                weights[good, x] = np.copy(trace_image[good, x])
         
         # Flag
-        weights /= np.nansum(weights)
-        wres = residuals * weights
+        wres = residuals / trace_image_smooth
         bad = np.where(np.abs(wres) > badpix_threshold * np.nanstd(wres))
         if bad[0].size > 0:
             badpix_mask[bad] = 0

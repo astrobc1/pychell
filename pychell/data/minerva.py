@@ -30,6 +30,8 @@ observatory = {
     'alt': np.nan,
 }
 
+utc_offset = -7
+
 
 ######################
 #### DATA PARSING ####

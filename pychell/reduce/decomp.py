@@ -9,11 +9,16 @@ import scipy.interpolate
 import scipy.signal
 from astropy.io import fits
 
-# Graphics
-import matplotlib.pyplot as plt
-
 # Pyreduce
 import pyreduce.extract as extract
+
+# Graphics
+import matplotlib
+try:
+    matplotlib.use("MacOSX")
+except:
+    pass
+import matplotlib.pyplot as plt
 
 # Pychell modules
 import pychell.utils as pcutils
@@ -60,7 +65,9 @@ class DecompExtractor(SpectralExtractor):
     #######################################################################
 
     def extract_trace(self, data, trace_image, trace_map_image, trace_dict, badpix_mask=None, read_noise=None):
-        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, self.tilt, self.shear, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.trace_pos_refine_window, self.n_extract_iterations, self.badpix_threshold, self.extract_orders, self._extract_aperture, self.lambda_sf, self.lambda_sp)
+        tilt = self.tilt[:, int(trace_dict['label'])-1] if self.tilt is not None else None
+        shear = self.shear[:, int(trace_dict['label'])-1] if self.shear is not None else None
+        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, tilt, shear, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.trace_pos_refine_window, self.n_extract_iterations, self.badpix_threshold, self.extract_orders, self._extract_aperture, self.lambda_sf, self.lambda_sp)
 
     @staticmethod
     def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, tilt=None, shear=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, trace_pos_refine_window=None, n_extract_iterations=3, badpix_threshold=5, extract_orders=None, _extract_aperture=None, lambda_sf=0.5, lambda_sp=0):
@@ -213,10 +220,12 @@ class DecompExtractor(SpectralExtractor):
         # Loop and identify bad columns (pyreduce doesn't like bad cols)
         # Note that with a tilted PSF we can't just remove bad cols and join non-neighboring columns that weren't already neighbors
         goody, goodx = np.where(badpix_mask_cp)
-        xrange = [goodx.min(), goodx.max()]
-        nnx = xrange[1] - xrange[0]
         xxi, xxf = goodx.min(), goodx.max()
         yyi, yyf = goody.min(), goody.max()
+        nnx = xxf - xxi + 1
+        spec1d = np.full(nx, np.nan)
+        spec1d_unc = np.full(nx, np.nan)
+        xrange = [0, nnx-1]
         S = trace_image_cp[yyi:yyf+1, xxi:xxf+1]
         M = np.logical_not(badpix_mask_cp[yyi:yyf+1, xxi:xxf+1])
         S = np.ma.masked_array(S, mask=M)
@@ -224,15 +233,20 @@ class DecompExtractor(SpectralExtractor):
         tilt = tilt[xxi:xxf+1]
         shear = shear[xxi:xxf+1]
         swath_width = np.min([int(nnx / 4), 400])
+        snr = DecompExtractor.estimate_snr(trace_image)
+        # With oversample=32, (snr, lambda_sp): (22, 0.01), (60, 0.0001)
+        if lambda_sp == "auto":
+            lambda_sp = (8.06666667 / snr)**4.59001346
         result = extract.extract_spectrum(S, ycen, yrange=yrange, xrange=xrange, lambda_sf=lambda_sf, lambda_sp=lambda_sp, osample=oversample, readnoise=read_noise, tilt=tilt, shear=shear, swath_width=swath_width)
-        spec1d = result[0]
-        spec1d_unc = result[3]
+        spec1d[xxi:xxf+1] = result[0]
+        spec1d_unc[xxi:xxf+1] = result[3]
         trace_profile = result[1]
 
         # Flag zeros
-        bad = np.where((spec1d == 0) | (spec1d_unc == 0))[0]
-        spec1d[bad] = np.nan
-        spec1d_unc[bad] = np.nan
+        bad = np.where((spec1d <= 0) | (spec1d_unc <= 0))[0]
+        if bad.size > 0:
+            spec1d[bad] = np.nan
+            spec1d_unc[bad] = np.nan
 
         # Return
         if return_trace_profile:

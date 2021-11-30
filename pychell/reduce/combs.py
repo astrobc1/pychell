@@ -450,15 +450,17 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
     rms_norm = np.full(good_peaks.size, np.nan)
     for i in range(len(good_peaks)):
         use = np.where((xarr >= good_peaks[i] - peak_spacing[good_peaks[i]] / 2) & (xarr < good_peaks[i] + peak_spacing[good_peaks[i]] / 2))[0]
-        xx, yy = np.copy(xarr[use]), np.copy(lfc_flux_no_bg[use])
-        yy -= np.nanmin(yy)
+        xx, yy = np.copy(xarr[use]), np.copy(lfc_flux[use])
         yy /= np.nanmax(yy)
-        p0 = np.array([1.0, good_peaks[i], len(use) / 4])
-        bounds = [(0.8, 1.5), (p0[1] - np.nanmean(peak_spacing[use]) / 2, p0[1] + np.nanmean(peak_spacing[use]) / 2), (0.25 * p0[2], 4*p0[2])]
-        opt_result = scipy.optimize.minimize(fit_peak, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds)
+        p0 = np.array([1.0, # amp
+                       good_peaks[i], # mu
+                       len(use) / 4, # sigma
+                       np.nanmin(yy)]) # offset
+        bounds = [(0.8, 1.5), (p0[1] - np.nanmean(peak_spacing[use]) / 2, p0[1] + np.nanmean(peak_spacing[use]) / 2), (0.25 * p0[2], 4*p0[2]), (0, p0[3] * 2)]
+        opt_result = scipy.optimize.minimize(fit_peak1d, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds)
         pbest = opt_result.x
         lfc_centers_pix[i] = pbest[1]
-        rms_norm[i] = opt_result.fun
+        rms_norm[i] = opt_result.fun / pbest[0]
 
     # Flag bad fits
     good_rms = pcmath.weighted_median(rms_norm, percentile=0.75)
@@ -583,8 +585,8 @@ def fit_peaks(pixel_arr, lfc_centers_pix, lfc_centers_wave, poly_order=6):
     wls = np.polyval(pfit, pixel_arr)
     return wls
 
-def fit_peak(pars, x, data):
-    model = pcmath.gauss(x, *pars)
+def fit_peak1d(pars, x, data):
+    model = pcmath.gauss(x, *pars[0:3]) + pars[3]
     rms = pcmath.rmsloss(data, model)
     return rms
 

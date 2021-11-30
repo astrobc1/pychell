@@ -79,8 +79,6 @@ class ReduceRecipe:
         # Reduction steps
         self.tracer = tracer
         self.extractor = extractor
-
-        self.init_data()
         
     def create_output_dirs(self):
         """Creates the output folder and subfolders trace, spectra, calib.
@@ -193,7 +191,7 @@ class ReduceRecipe:
         recipe.extractor.extract_image(recipe, data, data_image, badpix_mask=badpix_mask)
         
         # Print end
-        print(f"Extracted {data} in {round(stopwatch.time_since(), 2) / 60} min")
+        print(f"Extracted {data} in {round(stopwatch.time_since() / 60, 2)} min")
 
 
     ###############
