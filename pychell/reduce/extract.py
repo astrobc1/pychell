@@ -78,10 +78,10 @@ class SpectralExtractor:
                     
                     # Extract trace
                     try:
-                        data_out = self.extract_trace(data, data_image, trace_map_image, trace_dict, badpix_mask=badpix_mask)
+                        spec1d, spec1d_unc, badpix1d = self.extract_trace(data, data_image, trace_map_image, trace_dict, badpix_mask=badpix_mask)
                         
                         # Store result
-                        reduced_data[order_index, fiber_index, :, :] = data_out
+                        reduced_data[order_index, fiber_index, :, :] = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
 
                         # Print end of trace
                         print(f" [{data}] Extracted Trace {trace_dict['label']} in {round(stopwatch.time_since(trace_dict['label']) / 60, 3)} min", flush=True)
@@ -187,52 +187,19 @@ class SpectralExtractor:
     #########################
 
     @staticmethod
-    def flag_pixels_post_extraction(trace_image, badpix_mask, trace_positions, trace_profile_cspline, extract_aperture, spec1d, spec1d_unc, background=None, background_err=None, remove_background=True, badpix_threshold=5):
-        
-        # Image dims
-        ny, nx = trace_image.shape
-        
-        # Residuals array
-        residuals = np.full_like(trace_image, np.nan)
-        weights = np.zeros_like(trace_image)
-        
-        # Helper array
-        yarr = np.arange(ny)
+    def flag_pixels2d(trace_image, badpix_mask, model2d, badpix_threshold=5):
 
         # Smooth the 2d image
-        trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
-        
-        # Smooth 1d spectrum
-        spec1d_smooth = pcmath.median_filter1d(spec1d, width=3)
-        
-        # Remap 1d sepctrum into 2d space
-        for x in range(nx):
-            
-            # See if column is useful
-            good = np.where(np.isfinite(trace_image[:, x]) & (badpix_mask[:, x] == 1))[0]
-            if good.size < 2:
-                continue
-            
-            # Generate trace profile for this column
-            P = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x], trace_profile_cspline(trace_profile_cspline.x), yarr)
-            
-            # Get useful window
-            good = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]))[0]
-            if good.size <= 1:
-                continue
+        trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
 
-            # Normalize trace profile
-            P_use = P[good] / np.nansum(P[good])
-            
-            # Remap into 2d space
-            if remove_background:
-                residuals[good, x] = (P_use * spec1d_smooth[x] + background[x]) - trace_image[good, x]
-            else:
-                residuals[good, x] = (P_use * spec1d_smooth[x]) - trace_image[good, x]
-        
+        # Smooth the 2d model
+        model2d_smooth = pcmath.median_filter2d(trace_image, width=3)
+
+        # Normalized residuals
+        norm_res = (trace_image - model2d_smooth) / trace_image_smooth
+
         # Flag
-        wres = residuals / trace_image_smooth
-        bad = np.where(np.abs(wres) > badpix_threshold * np.nanstd(wres))
+        bad = np.where(np.abs(norm_res) > badpix_threshold * np.nanstd(norm_res))
         if bad[0].size > 0:
             badpix_mask[bad] = 0
             trace_image[bad] = np.nan
@@ -253,6 +220,7 @@ class SpectralExtractor:
         height = trace_profile_x[np.max(good)] - trace_profile_x[np.min(good)]
         extract_aperture = [int(np.ceil(height / 2)), int(np.ceil(height / 2))]
         return extract_aperture
+
 
     @staticmethod
     def compute_background(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, background_smooth_width=51, background_smooth_poly_order=3):
@@ -455,10 +423,13 @@ class SpectralExtractor:
 
 # Optimal
 from pychell.reduce.optimal import OptimalExtractor
-from pychell.reduce.optimaltilted import TiltedOptimalExtractor
+#from pychell.reduce.optimaltilted import TiltedOptimalExtractor
 
 # Slit decomp
-from pychell.reduce.decomp import DecompExtractor
+try:
+    from pychell.reduce.decomp import DecompExtractor
+except:
+    print("Warning! Could not import pyreduce")
 
-# Gauss 2d
-from pychell.reduce.gauss2d import Gauss2dExtractor
+# Deconv 2d
+from pychell.reduce.deconv2d import Deconv2dExtractor

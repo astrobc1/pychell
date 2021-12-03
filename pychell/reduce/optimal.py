@@ -146,7 +146,12 @@ class OptimalExtractor(SpectralExtractor):
 
             # Re-map pixels and flag in the 2d image.
             if i < n_extract_iterations - 1:
-                OptimalExtractor.flag_pixels_post_extraction(trace_image, badpix_mask, trace_positions, trace_profile_cspline, extract_aperture, spec1d, spec1d_unc, background, background_err, remove_background, badpix_threshold)
+
+                # 2d model
+                model2d = OptimalExtractor.compute_model2d(trace_image, badpix_mask, spec1d, trace_profile_cspline, trace_positions, extract_aperture, remove_background=remove_background, background=background, background_err=background_err)
+
+                # Flag
+                OptimalExtractor.flag_pixels2d(trace_image, badpix_mask, model2d, badpix_threshold)
 
         # badpix mask
         badpix1d = np.ones(nx)
@@ -155,11 +160,8 @@ class OptimalExtractor(SpectralExtractor):
             spec1d[bad] = np.nan
             spec1d_unc[bad] = np.nan
             badpix1d[bad] = 0
-            
-        # Data out
-        data_out = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
         
-        return data_out
+        return spec1d, spec1d_unc, badpix1d
 
 
     ############################
@@ -205,7 +207,7 @@ class OptimalExtractor(SpectralExtractor):
                                       yarr)
             
             # Determine which pixels to use from the aperture
-            good = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]))[0]
+            good = np.where((yarr >= trace_positions[x] - extract_aperture[0] - 0.5) & (yarr <= trace_positions[x] + extract_aperture[1] + 0.5))[0]
             P_use = P[good]
             data_use = data_x[good]
             badpix_use = badpix_x[good]
@@ -237,3 +239,39 @@ class OptimalExtractor(SpectralExtractor):
         return spec, spec_unc
     
 
+    #########################
+    #### CREATE 2d MODEL ####
+    #########################
+
+    @staticmethod
+    def compute_model2d(trace_image, badpix_mask, spec1d, trace_profile_cspline, trace_positions, extract_aperture, remove_background=True, background=None, background_err=None):
+        
+        # Dims
+        ny, nx = trace_image.shape
+
+        # Helpful arr
+        yarr = np.arange(ny)
+
+        # Initialize model
+        model2d = np.full((ny, nx), np.nan)
+
+        # Loop over cols
+        for i in range(nx):
+
+            # Compute trace profile for this column
+            tp = scipy.interpolate.CubicSpline(trace_profile_cspline.x + trace_positions[i], trace_profile_cspline(trace_profile_cspline.x))(yarr)
+
+            # Which pixels to use
+            usey = np.where((yarr >= trace_positions[i] - extract_aperture[0] - 0.5) & (yarr <= trace_positions[i] + extract_aperture[1] + 0.5))[0]
+
+            # Normalize
+            tp = tp[usey] / np.nansum(tp[usey])
+
+            # Model
+            if remove_background:
+                model2d[usey, i] = tp * spec1d[i] + background[i]
+            else:
+                model2d[usey, i] = tp * spec1d[i]
+        
+        # Return
+        return model2d

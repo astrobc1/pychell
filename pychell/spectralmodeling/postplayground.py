@@ -511,6 +511,8 @@ def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False, time_of
     plt.savefig(f"{path}rvs_{specrvprobs[0].spectrograph.lower().replace(' ', '_')}_{specrvprobs[0].spectral_model.star.star_name.lower().replace(' ', '_')}.png")
     if show:
         plt.show()
+    else:
+        return fig
 
 def parameter_corrs(path, specrvprobs, rvs_dict, n_cols=4):
     

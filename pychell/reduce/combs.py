@@ -281,12 +281,12 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
         for i in range(n_cal_spec):
             print(f"Computing cal fiber wls for order {order_index+1} cal spectrum {i+1}")
             try:
-                wls_cal_scifiber[:, order_index, i] = compute_wls(wave_estimate_scifiber[:, order_index], lfc_cal_scifiber[:, order_index, i], df, f0, poly_order)
+                wls_cal_scifiber[:, order_index, i] = compute_wls(wave_estimate_scifiber[:, order_index], lfc_cal_scifiber[:, order_index, i], f0, df, poly_order)
             except:
                 print(f"Warning! Could not compute wls for order {order_index+1} cal spectrum {i+1}")
             
             try:
-                wls_cal_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_cal_calfiber[:, order_index, i], df, f0, poly_order)
+                wls_cal_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_cal_calfiber[:, order_index, i], f0, df, poly_order)
             except:
                 print(f"Warning! Could not compute wls for order {order_index+1} cal spectrum {i+1}")
 
@@ -295,7 +295,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
             for i in range(n_sci_spec):
                 print(f"Computing cal fiber wls for order {order_index+1} science spectrum {i+1}")
                 try:
-                    wls_sci_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_sci_calfiber[:, order_index, i], df, f0, poly_order)
+                    wls_sci_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_sci_calfiber[:, order_index, i], f0, df, poly_order)
                 except:
                     print(f"Warning! Could not compute wls for order {order_index+1} science spectrum {i+1}")
 
@@ -314,7 +314,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
 
     return wls_sci_scifiber, wls_sci_calfiber, wls_cal_scifiber, wls_cal_calfiber
 
-def compute_wls(wave_estimate, lfc_flux, df, f0, poly_order=None):
+def compute_wls(wave_estimate, lfc_flux, f0, df, poly_order=None):
     """Computes the wavelength solution from the LFC spectrum.
 
     Args:
@@ -501,6 +501,7 @@ def gen_theoretical_peaks(wi, wf, f0, df):
     # Convert to wavelength
     lfc_centers_wave_theoretical = cs.c / lfc_centers_freq_theoretical
     lfc_centers_wave_theoretical = lfc_centers_wave_theoretical[::-1] * 1E10
+    integers = integers[::-1]
 
     # Only peaks within the bounds
     good = np.where((lfc_centers_wave_theoretical > wi - 0.1) & (lfc_centers_wave_theoretical < wf + 0.1))[0]
