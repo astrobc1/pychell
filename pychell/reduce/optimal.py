@@ -10,7 +10,11 @@ import scipy.signal
 from astropy.io import fits
 
 # Graphics
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import pychell
+plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # Pychell modules
 import pychell.utils as pcutils
@@ -118,16 +122,16 @@ class OptimalExtractor(SpectralExtractor):
             # Trace Profile
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace profile [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
             trace_profile_cspline = OptimalExtractor.compute_trace_profile(trace_image, badpix_mask, trace_positions, background, remove_background, oversample)
-            
-            # Trace Position
-            print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            trace_positions = OptimalExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
 
             # Extract Aperture
             if _extract_aperture is None:
                 extract_aperture = OptimalExtractor.compute_extract_aperture(trace_profile_cspline)
             else:
                 extract_aperture = _extract_aperture
+            
+            # Trace Position
+            print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
+            trace_positions = OptimalExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
 
             # Background signal
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Background [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)

@@ -14,11 +14,10 @@ import pyreduce.extract
 
 # Graphics
 import matplotlib
-try:
-    matplotlib.use("MacOSX")
-except:
-    pass
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import pychell
+plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # Pychell modules
 import pychell.utils as pcutils

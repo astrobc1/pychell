@@ -17,9 +17,12 @@ import scipy.interpolate
 import astropy.stats as stats
 import sklearn.cluster
 
-# Plotting
+# Graphics
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import pychell
+plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # Astropy
 from astropy.io import fits

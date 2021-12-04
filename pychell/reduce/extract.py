@@ -14,6 +14,8 @@ from astropy.io import fits
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import pychell
+plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # Pychell modules
 import pychell.utils as pcutils
@@ -327,7 +329,7 @@ class SpectralExtractor:
         return trace_profile_cspline
 
     @staticmethod
-    def compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions_estimate, trace_pos_refine_window=10, background=None, remove_background=True, trace_pos_poly_order=4):
+    def compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions_estimate, extract_aperture, trace_pos_refine_window=10, background=None, remove_background=True, trace_pos_poly_order=4):
 
         # The image dimensions
         ny, nx = trace_image.shape
@@ -358,12 +360,7 @@ class SpectralExtractor:
         y_positions_xc = np.full(nx, np.nan)
         
         # Compute the boxcar spectrum
-        spec1d_boxcar = np.nansum(trace_image_no_background_smooth, axis=0)
-        spec1d_boxcar = pcmath.median_filter1d(spec1d_boxcar, width=3)
-        spec1d_boxcar /= pcmath.weighted_median(spec1d_boxcar, percentile=0.95)
-
-        # Define CCF shifts for this column
-        height = np.nanmax(np.nansum(badpix_mask, axis=0))
+        spec1d_boxcar, _ = SpectralExtractor.boxcar_extraction(trace_image_no_background_smooth, badpix_mask, trace_profile_cspline, trace_positions_estimate, extract_aperture, remove_background=False)
 
         # Normalize trace profile to 1
         trace_profile = trace_profile_cspline(trace_profile_cspline.x)
@@ -420,16 +417,72 @@ class SpectralExtractor:
         # Return
         return trace_positions
 
+    @staticmethod
+    def boxcar_extraction(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, remove_background=True, background=None, background_err=None, read_noise=0):
 
-# Optimal
-from pychell.reduce.optimal import OptimalExtractor
-#from pychell.reduce.optimaltilted import TiltedOptimalExtractor
+        # Image dims
+        ny, nx = trace_image.shape
 
-# Slit decomp
-try:
-    from pychell.reduce.decomp import DecompExtractor
-except:
-    print("Warning! Could not import pyreduce")
+        # Storage arrays
+        spec = np.full(nx, fill_value=np.nan, dtype=float)
+        spec_unc = np.full(nx, fill_value=np.nan, dtype=float)
+        
+        # Helper array
+        yarr = np.arange(ny)
 
-# Deconv 2d
-from pychell.reduce.deconv2d import Deconv2dExtractor
+        # Loop over columns
+        for x in range(nx):
+            
+            # Views
+            badpix_x = np.copy(badpix_mask[:, x])
+            if remove_background:
+                data_x = trace_image[:, x] - background[x]
+            else:
+                data_x = np.copy(trace_image[:, x])
+            
+            # Flag negative values after sky subtraction
+            bad = np.where(data_x < 0)[0]
+            if bad.size > 0:
+                badpix_x[bad] = 0
+                data_x[bad] = np.nan
+                
+            # Check if column is worth extracting
+            if np.nansum(badpix_x) <= 1:
+                continue
+            
+            # Shift Trace Profile
+            P = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x],
+                                      trace_profile_cspline(trace_profile_cspline.x),
+                                      yarr)
+            
+            # Determine which pixels to use from the aperture
+            good = np.where((yarr >= trace_positions[x] - extract_aperture[0] - 0.5) & (yarr <= trace_positions[x] + extract_aperture[1] + 0.5))[0]
+            P_use = P[good]
+            data_use = data_x[good]
+            badpix_use = badpix_x[good]
+            P_use /= np.nansum(P_use)
+            
+            # Variance
+            if remove_background:
+                var_use = read_noise**2 + data_use + background[x] + background_err[x]**2
+            else:
+                var_use = read_noise**2 + data_use
+            
+            # Weights = bad pixels only
+            weights_use = np.copy(badpix_use)
+            
+            # Normalize the weights such that sum=1
+            weights_use /= np.nansum(weights_use)
+            
+            # Final sanity check
+            good = np.where(weights_use > 0)[0]
+            if good.size <= 1:
+                continue
+            
+            # 1d final flux at column x
+            correction = np.nansum(P_use * weights_use)
+            spec[x] = np.nansum(data_use * weights_use) / correction
+            spec_unc[x] = np.sqrt(np.nansum(var_use)) / correction
+
+        # Return
+        return spec, spec_unc

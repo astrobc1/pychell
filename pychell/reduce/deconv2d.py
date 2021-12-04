@@ -16,11 +16,10 @@ from numba import jit, njit
 
 # Graphics
 import matplotlib
-try:
-    matplotlib.use("MacOSX")
-except:
-    pass
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import pychell
+plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # Pychell modules
 import pychell.utils as pcutils
@@ -137,16 +136,16 @@ class Deconv2dExtractor(SpectralExtractor):
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace profile [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
 
             trace_profile_cspline = Deconv2dExtractor.compute_trace_profile(trace_image, badpix_mask, trace_positions, background, remove_background, oversample)
-            
-            # Trace Position
-            print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            trace_positions = Deconv2dExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
 
             # Extract Aperture
             if _extract_aperture is None:
                 extract_aperture = Deconv2dExtractor.compute_extract_aperture(trace_profile_cspline)
             else:
                 extract_aperture = _extract_aperture
+            
+            # Trace Position
+            print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
+            trace_positions = Deconv2dExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
 
             # Background signal
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Background [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)

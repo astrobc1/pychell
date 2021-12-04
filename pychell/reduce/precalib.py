@@ -2,7 +2,11 @@
 import os
 
 # Graphics
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import pychell
+plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # Science/Math
 import numpy as np

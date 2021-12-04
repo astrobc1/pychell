@@ -1,10 +1,19 @@
+# Base python
+import os
+
 # Maths
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.interpolate
 import scipy.constants as cs
 import scipy.signal
 from scipy.interpolate import LSQUnivariateSpline
+
+# Graphics
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import pychell
+plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # pychell deps
 import pychell.maths as pcmath

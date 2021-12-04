@@ -151,7 +151,7 @@ class ReduceRecipe:
             print(f"Extracting Spectra In Parallel Using {self.n_cores} Cores ...", flush=True)
             
             # Call in parallel
-            Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1, prefer="threads")(delayed(self.extract_image_wrapper)(self, data) for data in self.data["extract"])
+            Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.extract_image_wrapper)(self, data) for data in self.data["extract"])
             
         else:
             
