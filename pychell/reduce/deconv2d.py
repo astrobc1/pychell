@@ -26,7 +26,7 @@ import pychell.utils as pcutils
 import pychell.maths as pcmath
 from pychell.reduce.extract import SpectralExtractor
 
-class Deconv2dExtractor(SpectralExtractor):
+class GaussianDeconv2dExtractor(SpectralExtractor):
     
     ###############################
     #### CONSTRUCTOR + HELPERS ####
@@ -71,17 +71,17 @@ class Deconv2dExtractor(SpectralExtractor):
         sigma = self.sigma[:, int(trace_dict['label'])-1] if self.sigma is not None else None
         theta = self.theta[:, int(trace_dict['label'])-1] if self.theta is not None else None
         q = self.q[:, int(trace_dict['label'])-1] if self.q is not None else None
-        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.n_extract_iterations, self.trace_pos_refine_window, self.badpix_threshold, self.extract_orders, self._extract_aperture, sigma, q, theta, self.chunk_width, self.distrust_width)
+        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.n_extract_iterations, self.trace_pos_refine_window, self.badpix_threshold, self._extract_aperture, sigma, q, theta, self.chunk_width, self.distrust_width)
 
     @staticmethod
-    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, n_extract_iterations=3, trace_pos_refine_window=5, badpix_threshold=5, extract_orders=None, _extract_aperture=None, sigma=None, q=None, theta=None, chunk_width=200, distrust_width=20):
+    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, n_extract_iterations=3, trace_pos_refine_window=5, badpix_threshold=5, _extract_aperture=None, sigma=None, q=None, theta=None, chunk_width=200, distrust_width=20):
         
         if read_noise is None:
             read_noise = data.spec_module.parse_itime(data) * data.spec_module.read_noise
         else:
             read_noise = 0
 
-        # Numbers
+        # dims
         nx = image.shape[1]
 
         # Don't overwrite image
@@ -99,16 +99,20 @@ class Deconv2dExtractor(SpectralExtractor):
         badpix_mask[bad] = 0
         trace_image[bad] = np.nan
 
+        # Initiate trace_pos_refine_window
+        if trace_pos_refine_window is None:
+            trace_pos_refine_window = trace_dict['height'] / 2
+
         # Initial trace positions
         trace_positions = np.polyval(trace_dict['pcoeffs'], xarr)
 
-        # Crop the image and mask to limit memory usage going forward
+        # Crop the image
         goody, goodx = np.where(badpix_mask)
-        y_start, y_end = np.min(goody), np.max(goody)
-        trace_image = trace_image[y_start:y_end + 1, :]
-        badpix_mask = badpix_mask[y_start:y_end + 1, :]
-        trace_positions -= y_start
-            
+        yi, yf = np.min(goody), np.max(goody)
+        trace_image = trace_image[yi:yf + 1, :]
+        badpix_mask = badpix_mask[yi:yf + 1, :]
+        trace_positions -= yi
+
         # Flag obvious bad pixels
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
         peak = pcmath.weighted_median(trace_image_smooth, percentile=0.99)
@@ -117,39 +121,32 @@ class Deconv2dExtractor(SpectralExtractor):
             trace_image[bad] = np.nan
             badpix_mask[bad] = 0
 
-        # Estimate background
-        trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
-        background = np.full(nx, np.nan)
-        for x in range(nx):
-            background[x] = pcmath.weighted_median(trace_image_smooth[:, x], percentile=0.1)
-        background = pcmath.median_filter1d(background, width=7)
-        bad = np.where(background < 0)[0]
-        if bad.size > 0:
-            trace_image[:, bad] = np.nan
-            badpix_mask[:, bad] = 0
-            background[bad] = np.nan
+        # Starting background
+        if remove_background:
+            background = np.nanmin(trace_image_chunk, axis=0)
+            background = pcmath.poly_filter(background, width=background_smooth_width, poly_order=background_smooth_poly_order)
+            background_err = np.sqrt(background)
+        else:
+            background = None
+            background_err = None
         
-        # Iteratively refine trace positions and profile.
+        # Iteratively refine trace positions.
         for i in range(n_trace_refine_iterations):
             
             # Trace Profile
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace profile [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
 
-            trace_profile_cspline = Deconv2dExtractor.compute_trace_profile(trace_image, badpix_mask, trace_positions, background, remove_background, oversample)
+            trace_profile_cspline = GaussianDeconv2dExtractor.compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, oversample=4, spec1d=None, background=background)
 
             # Extract Aperture
             if _extract_aperture is None:
-                extract_aperture = Deconv2dExtractor.compute_extract_aperture(trace_profile_cspline)
+                extract_aperture = GaussianDeconv2dExtractor.compute_extract_aperture(trace_profile_cspline)
             else:
                 extract_aperture = _extract_aperture
             
             # Trace Position
             print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            trace_positions = Deconv2dExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
-
-            # Background signal
-            print(f" [{data}, {trace_dict['label']}] Iteratively Refining Background [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            background, background_err = Deconv2dExtractor.compute_background(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, background_smooth_width, background_smooth_poly_order)
+            trace_positions = GaussianDeconv2dExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, spec1d=None, window=trace_pos_refine_window, background=background, remove_background=remove_background, trace_pos_poly_order=trace_pos_poly_order)
         
         # Iteratively extract spectrum
         for i in range(n_extract_iterations):
@@ -157,16 +154,16 @@ class Deconv2dExtractor(SpectralExtractor):
             print(f" [{data}] Iteratively Extracting Trace [{i + 1} / {n_extract_iterations}] ...", flush=True)
             
             # Optimal extraction
-            spec1d, spec1d_unc, spec1dt, spec1dt_unc = Deconv2dExtractor.deconv2dextraction(trace_image, badpix_mask, trace_positions, sigma, q, theta, extract_aperture, background, remove_background, read_noise, chunk_width, distrust_width)
+            spec1d, spec1d_unc, spec1dt, spec1dt_unc, _ = GaussianDeconv2dExtractor.deconv2dextraction(trace_image, badpix_mask, trace_positions, sigma, q, theta, extract_aperture, background, remove_background, read_noise, chunk_width, distrust_width)
 
             # Re-map pixels and flag in the 2d image.
             if i < n_extract_iterations - 1:
 
                 # Create the 2d model
-                model2d = Deconv2dExtractor.compute_model2d(trace_image, badpix_mask, spec1dt, trace_positions, sigma, q, theta, extract_aperture, background, remove_background)
+                model2d = GaussianDeconv2dExtractor.compute_model2d(trace_image, badpix_mask, spec1dt, trace_positions, sigma, q, theta, extract_aperture, background, remove_background)
 
                 # Flag bad pixels
-                Deconv2dExtractor.flag_pixels2d(trace_image, badpix_mask, model2d, badpix_threshold)
+                GaussianDeconv2dExtractor.flag_pixels2d(trace_image, badpix_mask, model2d, badpix_threshold)
 
         # badpix mask
         badpix1d = np.ones(nx)
@@ -179,9 +176,9 @@ class Deconv2dExtractor(SpectralExtractor):
         return spec1dt, spec1dt_unc, badpix1d
 
 
-    ###########################
-    #### DECOMP EXTRACTION ####
-    ###########################
+    ##############################
+    #### 2d DECONV EXTRACTION ####
+    ##############################
 
     @staticmethod
     def deconv2dextraction(trace_image, badpix_mask, trace_positions, sigma, q, theta, extract_aperture, background=None, remove_background=True, read_noise=0, chunk_width=200, distrust_width=20, oversample=1):
@@ -213,7 +210,7 @@ class Deconv2dExtractor(SpectralExtractor):
             trace_image_cp[bad] = 0
 
         # Chunks
-        chunks = generate_chunks(trace_image, badpix_mask_cp, chunk_width=chunk_width)
+        chunks = GaussianDeconv2dExtractor.generate_chunks(trace_image, badpix_mask_cp, chunk_width=chunk_width)
         n_chunks = len(chunks)
 
         # Outputs
@@ -251,19 +248,21 @@ class Deconv2dExtractor(SpectralExtractor):
             theta_hr = scipy.interpolate.interp1d(xarr, _theta, fill_value="extrapolate")(xarr_aperture)
 
             # Generate Aperture tensor for this chunk
-            A = Deconv2dExtractor.generate_A(S, xarr_aperture, tp_hr, sigma_hr, q_hr, theta_hr, extract_aperture)
+            A = GaussianDeconv2dExtractor.generate_A(S, xarr_aperture, tp_hr, sigma_hr, q_hr, theta_hr, extract_aperture)
 
             # Prep inputs for sparse extraction
             Aflat = A.reshape((nny*nnx, len(xarr_aperture)))
             Sflat = S.flatten()
-            Nflat = np.diag(Sflat)
+            Ninv = np.diag(1 / Sflat)
+            bad = np.where(~np.isfinite(Ninv))
+            Ninv[bad] = 0
 
             # Call sparse extraction
-            syhr, sythr, R = Deconv2dExtractor.extract_2D_sparse(Aflat, Sflat, Nflat)
+            syhr, sythr, R = GaussianDeconv2dExtractor.extract_2D_sparse(Aflat, Sflat, Ninv)
 
             # Bin back to detector grid
-            sy = Deconv2dExtractor.bin_spec1d(syhr, oversample)
-            syt = Deconv2dExtractor.bin_spec1d(sythr, oversample)
+            sy = GaussianDeconv2dExtractor.bin_spec1d(syhr, oversample)
+            syt = GaussianDeconv2dExtractor.bin_spec1d(sythr, oversample)
 
             # Mask ends
             sy[0:distrust_width] = np.nan
@@ -283,7 +282,11 @@ class Deconv2dExtractor(SpectralExtractor):
         spec1dt[0:xi+distrust_width, 0] = np.nan
         spec1dt[xf-distrust_width:, -1] = np.nan
 
-        # Average
+        # Correct negatives in reconvolved spectrum
+        bad = np.where(spec1dt < 0)[0]
+        spec1dt[bad] = np.nan
+
+        # Average each chunk
         spec1d = np.nanmean(spec1d, axis=1)
         spec1d_unc = np.sqrt(spec1d)
         
@@ -293,7 +296,6 @@ class Deconv2dExtractor(SpectralExtractor):
         # Return
         return spec1d, spec1d_unc, spec1dt, spec1dt_unc, R
         
-
     @staticmethod
     def compute_model2d(trace_image, badpix_mask, spec1d, trace_positions, sigma, q, theta, extract_aperture, background, remove_background):
 
@@ -326,7 +328,8 @@ class Deconv2dExtractor(SpectralExtractor):
             nnny = yyf - yyi + 1
             S = trace_image[yyi:yyf+1, xxi:xxf+1]
             tp = trace_positions[xxi:xxf+1] - yyi
-            A = Deconv2dExtractor.generate_A(S, tp, sigma[xxi:xxf+1], q[xxi:xxf+1], theta[xxi:xxf+1], extract_aperture)
+            xarr_aperture = np.arange(xxi, xxf+1)
+            A = GaussianDeconv2dExtractor.generate_A(S, xarr_aperture, tp, sigma[xxi:xxf+1], q[xxi:xxf+1], theta[xxi:xxf+1], extract_aperture)
             Aflat = A.reshape((nnny*nnnx, nnnx))
             Sflat = S.flatten()
             model2d[yyi:yyf+1, xxi:xxf+1] = np.matmul(Aflat, f[xxi:xxf+1]).reshape((nnny, nnnx)) + np.sqrt(S)
@@ -334,26 +337,6 @@ class Deconv2dExtractor(SpectralExtractor):
                 model2d[yyi:yyf+1, xxi:xxf+1] += np.outer(np.ones(nnny), background[xxi:xxf+1])
 
         return model2d
-
-    @staticmethod
-    def generate_chunks(trace_image, badpix_mask, chunk_width=150):
-
-        # Preliminary info
-        goody, goodx = np.where(badpix_mask)
-        xi, xf = goodx.min(), goodx.max()
-        nnx = xf - xi + 1
-        yi, yf = goody.min(), goody.max()
-        nny = yf - yi + 1
-        chunk_width = np.min([chunk_width, 200])
-        chunks = []
-        chunks.append((xi, xi + chunk_width))
-        for i in range(1, int(2 * np.ceil(nnx / chunk_width))):
-            vi = chunks[i-1][1] - int(chunk_width / 2)
-            vf = np.min([vi + chunk_width, xf])
-            chunks.append((vi, vf))
-            if vf == xf:
-                break
-        return chunks
 
     @staticmethod
     @njit(nogil=True)
@@ -421,7 +404,7 @@ class Deconv2dExtractor(SpectralExtractor):
             for i, j in zip(bad[0], bad[1]):
                 A[i, j, m] = 0
 
-            # Normalize aperture
+            # Normalize each aperture
             s = np.sum(A[:, :, m])
             if s != 0:
                 A[:, :, m] /= s
@@ -429,19 +412,49 @@ class Deconv2dExtractor(SpectralExtractor):
         return A
 
     @staticmethod
-    def bin_spec1d(spec1d, oversample):
-        nx = int(len(spec1d) / oversample)
-        return np.nansum(spec1d.reshape((nx, oversample)), axis=1)    
+    def generate_chunks(trace_image, badpix_mask, chunk_width=150):
+
+        # Preliminary info
+        goody, goodx = np.where(badpix_mask)
+        xi, xf = goodx.min(), goodx.max()
+        nnx = xf - xi + 1
+        yi, yf = goody.min(), goody.max()
+        nny = yf - yi + 1
+        chunk_width = np.min([chunk_width, 200])
+        chunks = []
+        chunks.append((xi, xi + chunk_width))
+        for i in range(1, int(2 * np.ceil(nnx / chunk_width))):
+            vi = chunks[i-1][1] - int(chunk_width / 2)
+            vf = np.min([vi + chunk_width, xf])
+            chunks.append((vi, vf))
+            if vf == xf:
+                break
+        return chunks
 
     @staticmethod
-    def extract_2D_sparse(A, S, N):
+    def bin_spec1d(spec1dhr, oversample):
+        nx = int(len(spec1dhr) / oversample)
+        return np.nansum(spec1dhr.reshape((nx, oversample)), axis=1)
+
+    @staticmethod
+    def extract_2D_sparse(A, S, Ninv):
+        """Written by Matthew A. Cornachione, tweaked here.
+
+        Args:
+            A (np.ndarray): The aperture tensor (weights).
+            S (np.ndarray): The data vector.
+            Ninv (np.ndarray): The inverse of the pixel noise matrix.
+
+        Returns:
+            np.ndarray: The raw deconvolved flux.
+            np.ndarray: The reconvolved flux.
+            np.ndarray: The reconvolution matrix used.
+        """
 
         # Convert inputs
         A = np.matrix(A)
         S = np.reshape(np.matrix(S), (len(S), 1))
-        Ninv = 1 / np.matrix(N)
-        bad = np.where(~np.isfinite(Ninv))
-        Ninv[bad] = 0
+        Ninv = np.matrix(Ninv)
         
         # Convert to sparse
         A = sparse.csr_matrix(A)
@@ -480,4 +493,4 @@ class Deconv2dExtractor(SpectralExtractor):
         flux = np.asarray(flux).reshape((len(flux),))
         fluxtilde = np.asarray(fluxtilde).reshape((len(fluxtilde),))
 
-        return flux, fluxtilde
+        return flux, fluxtilde, R

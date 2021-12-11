@@ -337,7 +337,7 @@ class SpectralExtractor:
         return trace_profile_cspline
 
     @staticmethod
-    def compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions_estimate, extract_aperture, trace_pos_refine_window=10, background=None, remove_background=True, trace_pos_poly_order=4):
+    def compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, spec1d=None, window=10, background=None, remove_background=True, trace_pos_poly_order=4):
 
         # The image dimensions
         ny, nx = trace_image.shape
@@ -348,12 +348,11 @@ class SpectralExtractor:
         
         # Remove background
         if remove_background:
-            trace_image_no_background = np.full_like(trace_image, np.nan)
-            for x in range(nx):
-                trace_image_no_background[:, x] = trace_image[:, x] - background[x]
+            trace_image_no_background = trace_image - np.outer(np.ones(ny), background)
         else:
-            trace_image_no_background = trace_image
+            trace_image_no_background = np.copy(trace_image)
 
+        # Smooth image
         trace_image_no_background_smooth = pcmath.median_filter2d(trace_image_no_background, width=3, preserve_nans=False)
         
         # Trace profile
@@ -367,8 +366,11 @@ class SpectralExtractor:
         # Cross correlate each data column with the trace profile estimate
         y_positions_xc = np.full(nx, np.nan)
         
-        # Compute the boxcar spectrum
-        spec1d_boxcar, _ = SpectralExtractor.boxcar_extraction(trace_image_no_background_smooth, badpix_mask, trace_profile_cspline, trace_positions_estimate, extract_aperture, remove_background=False)
+        # 1d spec info
+        if spec1d is None:
+            spec1d = np.nansum(trace_image, axis=0)
+            spec1d = pcmath.median_filter1d(spec1d, width=3)
+        spec1d_norm = spec1d / pcmath.weighted_median(spec1d, percentile=0.95)
 
         # Normalize trace profile to 1
         trace_profile = trace_profile_cspline(trace_profile_cspline.x)
@@ -379,14 +381,14 @@ class SpectralExtractor:
             
             # See if column is even worth looking at
             good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_no_background_smooth[:, x]))[0]
-            if good.size <= 3 or spec1d_boxcar[x] < 0.2:
+            if good.size <= 3 or spec1d_norm[x] < 0.2:
                 continue
             
             # Normalize data column to 1
             data_x = trace_image_no_background_smooth[:, x] / np.nanmax(trace_image_no_background_smooth[:, x])
             
             # CCF lags
-            lags = np.arange(trace_positions_estimate[x] - trace_pos_refine_window, trace_positions_estimate[x] + trace_pos_refine_window)
+            lags = np.arange(trace_positions[x] - window/2, trace_positions[x] + window/2)
             
             # Perform CCF
             ccf = pcmath.cross_correlate(yarr, data_x, trace_profile_cspline.x, trace_profile, lags, kind="xc")
@@ -418,79 +420,151 @@ class SpectralExtractor:
         if good.size > nx / 6:
             pfit = np.polyfit(xarr[good], y_positions_xc[good], trace_pos_poly_order)
             trace_positions = np.polyval(pfit, xarr)
-        else:
-            trace_positions = trace_positions_estimate
-
         
         # Return
         return trace_positions
 
     @staticmethod
-    def boxcar_extraction(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, remove_background=True, background=None, background_err=None, read_noise=0):
+    def boxcar_extraction(trace_image, badpix_mask, trace_positions, extract_aperture, trace_profile_cspline=None, remove_background=False, background=None, background_err=None, read_noise=0, background_smooth_poly_order=3, background_smooth_width=51):
+        """A flavor of boxcar extraction. A single column from the data is a function of y pixels ($S_{y}$), and is modeled as:
+
+            F_{y} = A * P_{y} + B
+
+            where P_{y} is the nominal vertical profile and may be arbitrarily scaled. A is the scaling of the input signal, and B is the background signal which is ignored if remove_background is False or the background variable is set. The sum is performed over a given window defined by extract_aperture. A and B are determined by minimizing the function:
+
+            phi = \sum_{y} w_{y} (S_{y} - F_{y})^{2} = \sum_{y} w_{y} (S_{y} - (A * (\sum_{y} P_{y}) + B))^{2}
+
+            where
+            
+            w_{y} = M_{y}, where M_{y} is a binary mask (1=good, 0=bad).
+
+            The final 1d value is then A * \sum_{y} P_{y}.
+
+        Args:
+            trace_image (np.ndarray): The trace image of shape ny, nx.
+            badpix_mask (np.ndarray): The bad pix mask.
+            trace_positions (np.ndarray): The trace positions of length nx.
+            extract_aperture (np.ndarray): A list of the number of pixels above and below trace_positions for each column.
+            trace_profile_cspline (scipy.interpolate.CubicSpline): A CubicSpline object to construct the trace profile, centered at zero.
+            remove_background (bool, optional): Whether or not to remove the background. Defaults to False.
+            background (np.ndarray, optional): The background. Defaults to None.
+            background_err (np.ndarray, optional): The background error. Defaults to None.
+            read_noise (float, optional): The detector read noise. Defaults to 0.
+            background_smooth_poly_order (int, optional): The polynomial order to smooth the background with. Defaults to 51.. Defaults to 3.
+            background_smooth_width (int, optional): The window size of the polynomial filter to smooth the background with. Defaults to 51.
+
+        Returns:
+            np.ndarray: The 1d flux.
+            np.ndarray: The 1d flux uncertainty.
+            np.ndarray: The 1d background.
+            np.ndarray: The 1d background uncertainty.
+        """
 
         # Image dims
         ny, nx = trace_image.shape
 
+        # Copy
+        trace_image_cp = np.copy(trace_image)
+        badpix_mask_cp = np.copy(badpix_mask)
+
         # Storage arrays
-        spec = np.full(nx, fill_value=np.nan, dtype=float)
-        spec_unc = np.full(nx, fill_value=np.nan, dtype=float)
+        spec = np.full(nx, np.nan)
+        spec_err = np.full(nx, np.nan)
         
         # Helper array
         yarr = np.arange(ny)
 
-        # Loop over columns
+        # Background
+        if remove_background and background is not None:
+            trace_image_cp -= np.outer(np.ones(ny), background)
+            bad = np.where(trace_image_cp < 0)
+            trace_image_cp[bad] = np.nan
+            badpix_mask_cp[bad] = 0
+
+        # Loop over columns and compute background and 1d spectrum
+        if remove_background and background is None:
+            background = np.full(nx, np.nan)
+            for x in range(nx):
+
+                # Copy arrs
+                S_x = np.copy(trace_image_cp[:, x])
+                M_x = np.copy(badpix_mask_cp[:, x])
+
+                # Check if column is worth extracting
+                if np.nansum(M_x) <= 1:
+                    continue
+                
+                # Shift Trace Profile
+                P_x = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x], trace_profile_cspline(trace_profile_cspline.x), yarr)
+                
+                # Determine which pixels to use from the aperture
+                #use = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]))[0]
+                use = np.where(M_x)[0]
+
+                # Copy arrays
+                S = np.copy(S_x[use])
+                M = np.copy(M_x[use])
+                P = np.copy(P_x[use])
+
+                # Variance
+                v = read_noise**2 + S
+
+                # Normalize P
+                P /= np.nansum(P) # not necessary but oh well
+
+                # Weights
+                w = np.copy(M)
+
+                # Least squares
+                B = (np.nansum(w * S) - np.nansum(w * P) * np.nansum(w * P * S) / np.nansum(w * P**2)) / (np.nansum(w) - np.nansum(w * P)**2 / np.nansum(w * P**2))
+                background[x] = B
+
+            # Smooth background
+            background, background_err = OptimalExtractor._compute_background1d(background, badpix_mask, extract_aperture, background_smooth_poly_order=background_smooth_poly_order, background_smooth_width=background_smooth_width)
+
+        # Redo the optimal extraction with smoothing the smoothed background
         for x in range(nx):
-            
-            # Views
-            badpix_x = np.copy(badpix_mask[:, x])
-            if remove_background:
-                data_x = trace_image[:, x] - background[x]
-            else:
-                data_x = np.copy(trace_image[:, x])
-            
-            # Flag negative values after sky subtraction
-            bad = np.where(data_x < 0)[0]
-            if bad.size > 0:
-                badpix_x[bad] = 0
-                data_x[bad] = np.nan
+
+            # Copy arrs
+            S_x = np.copy(trace_image_cp[:, x])
+            M_x = np.copy(badpix_mask_cp[:, x])
+
+            # Flag negative vals
+            bad = np.where(S_x < 0)[0]
+            S_x[bad] = np.nan
+            M_x[bad] = 0
                 
             # Check if column is worth extracting
-            if np.nansum(badpix_x) <= 1:
+            if np.nansum(M_x) <= 1:
                 continue
-            
+
             # Shift Trace Profile
-            P_x = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x],
-                                      trace_profile_cspline(trace_profile_cspline.x),
-                                      yarr)
+            P_x = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x], trace_profile_cspline(trace_profile_cspline.x), yarr)
             
             # Determine which pixels to use from the aperture
-            good = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]) & (badpix_x == 1))[0]
-            P_use = P_x[good]
-            data_use = data_x[good]
-            badpix_use = badpix_x[good]
-            P_use /= np.nansum(P_use)
-            
+            use = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]))[0]
+
+            # Copy arrays
+            S = np.copy(S_x[use])
+            M = np.copy(M_x[use])
+            P = np.copy(P_x[use])
+            P /= np.nansum(P) # not necessary but oh well
+
             # Variance
             if remove_background:
-                var_use = read_noise**2 + data_use + background[x] + background_err[x]**2
+                v = read_noise**2 + S + background_err[x]**2
             else:
-                var_use = read_noise**2 + data_use
+                v = read_noise**2 + S
             
-            # Weights = bad pixels only
-            weights_use = np.copy(badpix_use)
-            
-            # Normalize the weights such that sum=1
-            weights_use /= np.nansum(weights_use)
-            
-            # Final sanity check
-            good = np.where(weights_use > 0)[0]
-            if good.size <= 1:
-                continue
-            
-            # 1d final flux at column x
-            correction = np.nansum(P_use * weights_use)
-            spec[x] = np.nansum(data_use * weights_use) / correction
-            spec_unc[x] = np.sqrt(np.nansum(var_use)) / correction
+            # Weights
+            w = np.copy(M)
+            w /= np.nansum(w)
 
-        # Return
-        return spec, spec_unc
+            # Least squares
+            A = np.nansum(w * P * S) / np.nansum(w * P**2)
+
+            # Final 1d spec
+            spec[x] = A * np.nansum(P)
+            spec_err[x] = np.sqrt(np.nansum(v) / (np.nansum(M) - 1))
+        
+        return spec, spec_err, background, background_err

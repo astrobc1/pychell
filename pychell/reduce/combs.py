@@ -237,7 +237,7 @@ def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
 
     p0 = [pcmath.weighted_median(flux_all, percentile=0.95), 0.1]
     bounds = [(0.5 * p0[0], 1.5 * p0[0]), (0.01, 1)]
-    opt_result = scipy.optimize.minimize(fit_lsf, p0, args=(waves_all, flux_all), method='Nelder-Mead', bounds=bounds)
+    opt_result = scipy.optimize.minimize(solve_lsf_model, p0, args=(waves_all, flux_all), method='Nelder-Mead', bounds=bounds)
     pbest = opt_result.x
     sigma = pbest[1]
 

@@ -54,10 +54,10 @@ class OptimalExtractor(SpectralExtractor):
     #######################################################################
 
     def extract_trace(self, data, trace_image, trace_map_image, trace_dict, badpix_mask=None, read_noise=None):
-        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.trace_pos_poly_order, self.oversample, self.trace_pos_refine_window, self.n_iterations, self.badpix_threshold, self.extract_orders, self._extract_aperture, self.chunk_width, self.refine_trace_positions)
+        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.trace_pos_poly_order, self.oversample, self.trace_pos_refine_window, self.n_iterations, self.badpix_threshold, self._extract_aperture, self.chunk_width, self.refine_trace_positions)
 
     @staticmethod
-    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=False, background_smooth_poly_order=3, background_smooth_width=51, trace_pos_poly_order=4, oversample=4, trace_pos_refine_window=None, n_iterations=5, badpix_threshold=5, extract_orders=None, _extract_aperture=None, chunk_width=600, refine_trace_positions=True):
+    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=False, background_smooth_poly_order=3, background_smooth_width=51, trace_pos_poly_order=4, oversample=4, trace_pos_refine_window=None, n_iterations=5, badpix_threshold=5, _extract_aperture=None, chunk_width=600, refine_trace_positions=True):
         
         if read_noise is None:
             read_noise = data.spec_module.parse_itime(data) * data.spec_module.read_noise
@@ -204,13 +204,13 @@ class OptimalExtractor(SpectralExtractor):
 
             F_{y} = A * P_{y} + B
 
-            where P_{y} is the nominal vertical profile and may be arbitrarily scaled. If P_{y} is unknown, the data itself is used. A is the scaling of the input signal, and B is the background signal which is ignored if remove_background is False or the background variable is set. The sum is performed over a given window defined by extract_aperture. A and B are determined by minimizing the function:
+            where P_{y} is the nominal vertical profile and may be arbitrarily scaled. A is the scaling of the input signal, and B is the background signal which is ignored if remove_background is False or the background variable is set. The sum is performed over a given window defined by extract_aperture. A and B are determined by minimizing the function:
 
             phi = \sum_{y} w_{y} (S_{y} - F_{y})^{2} = \sum_{y} w_{y} (S_{y} - (A * (\sum_{y} P_{y}) + B))^{2}
 
             where
             
-            w_{y} = P_{y}^{2} / \sigma_{y}^{2}, \sigma_{2} = R^{2} + S_{y} + B/(N − 1), N = number of good pixels used in finding B.
+            w_{y} = P_{y}^{2} M_{y} / \sigma_{y}^{2}, \sigma_{2} = R^{2} + S_{y} + B/(N − 1), N = number of good pixels used in finding B, and M_{y} is a binary mask (1=good, 0=bad).
 
             The final 1d value is then A * \sum_{y} P_{y}.
 
@@ -243,7 +243,6 @@ class OptimalExtractor(SpectralExtractor):
 
         # Storage arrays
         spec = np.full(nx, np.nan)
-        spec2 = np.full(nx, np.nan)
         spec_err = np.full(nx, np.nan)
         
         # Helper array
@@ -270,10 +269,7 @@ class OptimalExtractor(SpectralExtractor):
                     continue
                 
                 # Shift Trace Profile
-                if trace_profile_cspline is not None:
-                    P_x = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x], trace_profile_cspline(trace_profile_cspline.x), yarr)
-                else:
-                    P_x = np.copy(S_x)
+                P_x = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x], trace_profile_cspline(trace_profile_cspline.x), yarr)
                 
                 # Determine which pixels to use from the aperture
                 #use = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]))[0]
@@ -317,10 +313,7 @@ class OptimalExtractor(SpectralExtractor):
                 continue
 
             # Shift Trace Profile
-            if trace_profile_cspline is not None:
-                P_x = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x], trace_profile_cspline(trace_profile_cspline.x), yarr)
-            else:
-                P_x = np.copy(S_x)
+            P_x = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x], trace_profile_cspline(trace_profile_cspline.x), yarr)
             
             # Determine which pixels to use from the aperture
             use = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]))[0]
@@ -365,94 +358,6 @@ class OptimalExtractor(SpectralExtractor):
 
         # Return
         return background, background_err
-
-    @staticmethod
-    def compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, spec1d=None, window=10, background=None, remove_background=True, trace_pos_poly_order=4):
-
-        # The image dimensions
-        ny, nx = trace_image.shape
-        
-        # Helpful arrays
-        yarr = np.arange(ny)
-        xarr = np.arange(nx)
-        
-        # Remove background
-        if remove_background:
-            trace_image_no_background = trace_image - np.outer(np.ones(ny), background)
-        else:
-            trace_image_no_background = np.copy(trace_image)
-
-        # Smooth image
-        trace_image_no_background_smooth = pcmath.median_filter2d(trace_image_no_background, width=3, preserve_nans=False)
-        
-        # Trace profile
-        trace_profile = trace_profile_cspline(trace_profile_cspline.x)
-        
-        # Smooth the image
-        bad = np.where(trace_image_no_background_smooth <= 0)
-        if bad[0].size > 0:
-            trace_image_no_background[bad] = np.nan
-
-        # Cross correlate each data column with the trace profile estimate
-        y_positions_xc = np.full(nx, np.nan)
-        
-        # 1d spec info
-        if spec1d is None:
-            spec1d = np.nansum(trace_image, axis=0)
-            spec1d = pcmath.median_filter1d(spec1d, width=3)
-        spec1d_norm = spec1d / pcmath.weighted_median(spec1d, percentile=0.95)
-
-        # Normalize trace profile to 1
-        trace_profile = trace_profile_cspline(trace_profile_cspline.x)
-        trace_profile /= np.nanmax(trace_profile)
-
-        # Loop over columns
-        for x in range(nx):
-            
-            # See if column is even worth looking at
-            good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_no_background_smooth[:, x]))[0]
-            if good.size <= 3 or spec1d_norm[x] < 0.2:
-                continue
-            
-            # Normalize data column to 1
-            data_x = trace_image_no_background_smooth[:, x] / np.nanmax(trace_image_no_background_smooth[:, x])
-            
-            # CCF lags
-            lags = np.arange(trace_positions[x] - window/2, trace_positions[x] + window/2)
-            
-            # Perform CCF
-            ccf = pcmath.cross_correlate(yarr, data_x, trace_profile_cspline.x, trace_profile, lags, kind="xc")
-
-            # Normalize to max=1
-            ccf /= np.nanmax(ccf)
-            
-            # Fit ccf
-            iymax = np.nanargmax(ccf)
-            if iymax >= len(lags) - 2 or iymax <= 2:
-                continue
-
-            try:
-                pfit = np.polyfit(lags[iymax-2:iymax+3], ccf[iymax-2:iymax+3], 2)
-            except:
-                continue
-
-            # Store the nominal location
-            y_positions_xc[x] = -1 * pfit[1] / (2 * pfit[0])
-        
-        # Smooth the deviations
-        y_positions_xc_smooth = pcmath.median_filter1d(y_positions_xc, width=3)
-        bad = np.where(np.abs(y_positions_xc - y_positions_xc_smooth) > 0.5)[0]
-        if bad.size > 0:
-            y_positions_xc[bad] = np.nan
-        good = np.where(np.isfinite(y_positions_xc))[0]
-        
-        # Fit with a polynomial and generate
-        if good.size > nx / 6:
-            pfit = np.polyfit(xarr[good], y_positions_xc[good], trace_pos_poly_order)
-            trace_positions = np.polyval(pfit, xarr)
-        
-        # Return
-        return trace_positions
 
     #########################
     #### CREATE 2d MODEL ####
