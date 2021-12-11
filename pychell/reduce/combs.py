@@ -18,9 +18,9 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 # pychell deps
 import pychell.maths as pcmath
 
-#########################
-#### PRIMARY METHODS ####
-#########################
+################
+#### 2d PSF ####
+################
 
 def compute_psf2d(image, badpix_mask, trace_positions, wave_estimate, f0, df, peak_thresh):
     """Fits 2d tilted Gaussian to each peak in the 2d image.
@@ -52,7 +52,7 @@ def compute_psf2d(image, badpix_mask, trace_positions, wave_estimate, f0, df, pe
     pfit_estimate = np.polyfit(xarr[good], wave_estimate[good], 4)
 
     # Estimate spec1d
-    lfc_flux = simple_extract(image, badpix_mask, trace_positions)
+    lfc_flux = np.nansum(image, axis=0)
 
     # Remove background flux
     background = estimate_background(wave_estimate, lfc_flux, f0, df)
@@ -129,6 +129,11 @@ def compute_psf2d(image, badpix_mask, trace_positions, wave_estimate, f0, df, pe
         rms_norm[i] = opt_result.fun / pbest[0]
 
     return rms_norm, lfc_centers_pix_x, sigmas, thetas, qs
+
+
+################
+#### 1d LSF ####
+################
 
 def compute_lsf_width_all(times_sci, times_lfc_cal, wls_cal_scifiber, lfc_cal_scifiber, f0, df, do_orders=None):
     """Wrapper to compute the LSF for all spectra.
@@ -238,7 +243,12 @@ def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
 
     return sigma
 
-def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wave_estimate_calfiber, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, method="nearest", poly_order=6):
+
+#############
+#### WLS ####
+#############
+
+def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wave_estimate_calfiber, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, method="nearest", poly_order=6, n_cores=1):
     """Wrapper to compute the wavelength solution for all spectra.
 
     Args:
@@ -288,25 +298,16 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
 
         # Loop over calibration fiber spectra and compute wls for both fibers
         for i in range(n_cal_spec):
+            print(f"Computing sci fiber wls for order {order_index+1} cal spectrum {i+1}")
+            wls_cal_scifiber[:, order_index, i] = compute_wls(wave_estimate_scifiber[:, order_index], lfc_cal_scifiber[:, order_index, i], f0, df, poly_order)
             print(f"Computing cal fiber wls for order {order_index+1} cal spectrum {i+1}")
-            try:
-                wls_cal_scifiber[:, order_index, i] = compute_wls(wave_estimate_scifiber[:, order_index], lfc_cal_scifiber[:, order_index, i], f0, df, poly_order)
-            except:
-                print(f"Warning! Could not compute wls for order {order_index+1} cal spectrum {i+1}")
-            
-            try:
-                wls_cal_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_cal_calfiber[:, order_index, i], f0, df, poly_order)
-            except:
-                print(f"Warning! Could not compute wls for order {order_index+1} cal spectrum {i+1}")
+            wls_cal_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_cal_calfiber[:, order_index, i], f0, df, poly_order)
 
         # Loop over science spectra and compute wls for cal fiber
         if times_sci is not None:
             for i in range(n_sci_spec):
                 print(f"Computing cal fiber wls for order {order_index+1} science spectrum {i+1}")
-                try:
-                    wls_sci_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_sci_calfiber[:, order_index, i], f0, df, poly_order)
-                except:
-                    print(f"Warning! Could not compute wls for order {order_index+1} science spectrum {i+1}")
+                wls_sci_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_sci_calfiber[:, order_index, i], f0, df, poly_order)
 
         # Loop over science observations, computer wls for science fiber
         if times_sci is not None:
@@ -323,7 +324,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
 
     return wls_sci_scifiber, wls_sci_calfiber, wls_cal_scifiber, wls_cal_calfiber
 
-def compute_wls(wave_estimate, lfc_flux, f0, df, poly_order=None):
+def compute_wls(wave_estimate, lfc_flux, f0, df, poly_order=None, xrange=None):
     """Computes the wavelength solution from the LFC spectrum.
 
     Args:
@@ -332,61 +333,29 @@ def compute_wls(wave_estimate, lfc_flux, f0, df, poly_order=None):
         df (np.ndarray): The frequency of the LFC in GHz.
         f0 (np.ndarray): The frequency of the pump line in GHz.
         poly_order (int, optional): The polynomial order to fit the LFC line centers with.
+        xrange (list, optional): The range to consider in pixels for each order. Defaults to the whole order.
 
     Returns:
         np.ndarray: The wavelength solution.
     """
 
-    # Number of pixels
+    # Number of pixels and range to consider for each order
     nx = len(wave_estimate)
     xarr = np.arange(nx)
+    if xrange is None:
+        xrange = [0, nx-1]
+    wave_range = [wave_estimate[xrange[0]], wave_estimate[xrange[1]]]
 
     # Flag bad pixels
     lfc_flux = flag_bad_pixels(lfc_flux)
 
     # Compute centers (wave, pix)
-    lfc_centers_pix, lfc_centers_wave, _ = compute_peaks(wave_estimate, lfc_flux, f0, df)
+    lfc_centers_pix, lfc_centers_wave, _ = compute_peaks(wave_estimate, lfc_flux, f0, df, xrange)
 
     # Polynomial fit to peaks
     wls = fit_peaks(xarr, lfc_centers_pix, lfc_centers_wave, poly_order=poly_order)
 
     return wls
-
-
-def simple_extract(image, badpix_mask, trace_positions):
-
-    ny, nx = image.shape
-
-    yarr = np.arange(ny)
-
-
-    yarr_zero_center = np.arange(int(np.floor(-ny / 2)), int(np.ceil(ny / 2)) + 1)
-    image_rect = np.full((len(yarr_zero_center), nx), np.nan)
-
-    # Rectify
-    for x in range(nx):
-        image_rect[:, x] = pcmath.lin_interp(yarr - trace_positions[x], image[:, x], yarr_zero_center)
-        image_rect[:, x] /= np.nansum(image_rect[:, x])
-
-    # Trace profile crude estimate
-    trace_profile = np.nanmedian(image_rect, axis=1)
-
-    # Simple boxcar extract
-    spec1d = np.full(nx, np.nan)
-    for x in range(nx):
-        weights = badpix_mask[:, x]
-        tp = pcmath.lin_interp(yarr_zero_center + trace_positions[x], trace_profile, yarr)
-        spec1d[x] = np.nansum(image[:, x]) / np.nansum(weights) / np.nansum(tp * weights, axis=0)
-
-    bad = np.where(~np.isfinite(spec1d) | (spec1d == 0))[0]
-    spec1d[bad] = np.nan
-
-    return spec1d
-
-
-######################
-#### PEAK FITTING ####
-######################
 
 def estimate_peak_spacing(xi, xf, wi, wf, f0, df):
     """Estimates the peak spacing in detector pixels.
@@ -404,7 +373,7 @@ def estimate_peak_spacing(xi, xf, wi, wf, f0, df):
     peak_spacing = (xf - xi) / n_peaks
     return peak_spacing
 
-def compute_peaks(wave_estimate, lfc_flux, f0, df):
+def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange):
     """Computes the pixel and corresponding wavelength values for each LFC spot peak.
 
     Args:
@@ -412,6 +381,7 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
         lfc_flux (np.ndarray): The LFC flux.
         f0 (float): The LFC pump line GHz.
         df (float): The LFC spacing in GHz.
+        xrange (list): The lower and upper pixel bounds to consider.
 
     Returns:
         np.ndarray: The pixel centers of each peak
@@ -422,9 +392,9 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
     # Generate theoretical LFC peaks
     good = np.where(np.isfinite(wave_estimate) & np.isfinite(lfc_flux))[0]
     xi, xf = good[0], good[-1]
-    wi, wf = wave_estimate[xi], wave_estimate[xf]
-    lfc_peak_integers, lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
-    peak_spacing = estimate_peak_spacing(xi, xf, wi, wf, f0, df)
+    wwi, wwf = wave_estimate[xi], wave_estimate[xf]
+    lfc_peak_integers, lfc_centers_wave_theoretical = gen_theoretical_peaks(wwi, wwf, f0, df)
+    peak_spacing = estimate_peak_spacing(xi, xf, wwi, wwf, f0, df)
     
     # Number of pixels
     nx = len(wave_estimate)
@@ -441,8 +411,8 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
     lfc_flux_norm = lfc_flux_no_bg / continuum
 
     # Estimate peaks in pixel space (just indices)
-    peaks = scipy.signal.find_peaks(lfc_flux_norm, height=np.full(nx, 0.75), distance=0.8*peak_spacing)[0]
-    peaks = np.sort(peaks)
+    peaks = scipy.signal.find_peaks(lfc_flux_norm[xrange[0]:xrange[1]+1], height=np.full(xrange[1] - xrange[0] + 1, 0.75), distance=0.8*peak_spacing)[0]
+    peaks = np.sort(peaks + xrange[0])
 
     # Estimate spacing between peaks, assume linear trend across order
     peak_spacing = np.polyval(np.polyfit(peaks[1:], np.diff(peaks), 1), xarr)
@@ -452,24 +422,48 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
     for peak in peaks:
         if lfc_flux_no_bg[peak] >= 0.2 * lfc_peak_max:
             good_peaks.append(peak)
+    del good_peaks[0], good_peaks[-1]
     good_peaks = np.array(good_peaks)
 
     # Fit each peak with a Gaussian
     lfc_centers_pix = np.full(good_peaks.size, np.nan)
     rms_norm = np.full(good_peaks.size, np.nan)
+    sigmas = np.full(len(good_peaks), np.nan)
     for i in range(len(good_peaks)):
+
+        # Region to consider
         use = np.where((xarr >= good_peaks[i] - peak_spacing[good_peaks[i]] / 2) & (xarr < good_peaks[i] + peak_spacing[good_peaks[i]] / 2))[0]
+
+        # Crop data
         xx, yy = np.copy(xarr[use]), np.copy(lfc_flux[use])
+
+        # Normalize lfc flux to max
+        yy -= np.nanmin(yy)
         yy /= np.nanmax(yy)
+
+        # Initial pars
         p0 = np.array([1.0, # amp
                        good_peaks[i], # mu
-                       len(use) / 4, # sigma
+                       1.2, # sigma
                        np.nanmin(yy)]) # offset
-        bounds = [(0.8, 1.5), (p0[1] - np.nanmean(peak_spacing[use]) / 2, p0[1] + np.nanmean(peak_spacing[use]) / 2), (0.25 * p0[2], 4*p0[2]), (0, p0[3] * 2)]
-        opt_result = scipy.optimize.minimize(fit_peak1d, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds)
+
+        # Bounds
+        bounds = [(0.5, 1.5), # amp
+                  (p0[1] - 1, p0[1] + 1), # mu
+                  (0.7, 1.5), # sigma
+                  (0, 0.5)] # offset
+
+        # Fit
+        opt_result = scipy.optimize.minimize(solve_fit_peak1d, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds, tol=1E-8)
+
+        # Results
         pbest = opt_result.x
         lfc_centers_pix[i] = pbest[1]
-        rms_norm[i] = opt_result.fun / pbest[0]
+        sigmas[i] = pbest[2]
+        rms_norm[i] = opt_result.fun
+
+        #matplotlib.use("MacOSX")
+        #plt.plot(xx, yy); plt.plot(xx, pcmath.gauss(xx, *pbest[0:3]) + pbest[3]); plt.show()
 
     # Flag bad fits
     good_rms = pcmath.weighted_median(rms_norm, percentile=0.75)
@@ -486,6 +480,10 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df):
         peak_integers.append(lfc_peak_integers[k])
     lfc_centers_wave = np.array(lfc_centers_wave)
     peak_integers = np.array(peak_integers)
+
+    #yy = lfc_centers_wave - np.polyval(np.polyfit(lfc_centers_pix, lfc_centers_wave, 4), lfc_centers_pix)
+    #yy = pcmath.dl_to_dv(yy*(wave_estimate[-1]-wave_estimate[0])/2048, np.nanmean(wave_estimate))
+    #plt.plot(lfc_centers_pix, yy, marker='X'); plt.show()
 
     return lfc_centers_pix, lfc_centers_wave, peak_integers
 
@@ -579,6 +577,10 @@ def flag_bad_pixels(lfc_flux, smooth_width=3, sigma_thresh=9):
         lfc_flux_out[bad] = np.nan
     return lfc_flux_out
 
+######################
+#### PEAK FITTING ####
+######################
+
 def fit_peaks(pixel_arr, lfc_centers_pix, lfc_centers_wave, poly_order=6):
     """Simple wrapper to fit a polynomial to the lfc centers for a single order.
 
@@ -595,17 +597,17 @@ def fit_peaks(pixel_arr, lfc_centers_pix, lfc_centers_wave, poly_order=6):
     wls = np.polyval(pfit, pixel_arr)
     return wls
 
-def fit_peak1d(pars, x, data):
+def solve_fit_peak1d(pars, x, data):
     model = pcmath.gauss(x, *pars[0:3]) + pars[3]
     rms = pcmath.rmsloss(data, model)
     return rms
 
-def fit_lsf(pars, x, data):
+def solve_lsf_model(pars, x, data):
     model = pcmath.gauss(x, pars[0], 0, pars[1])
     rms = pcmath.rmsloss(data, model)
     return rms
 
-def fit_peak2d(pars, xarr, yarr, image):
+def solve_fit_peak2d(pars, xarr, yarr, image):
     model = peak_model2d(pars, xarr, yarr)
     rms = pcmath.rmsloss(image.flatten(), model.flatten())
     return rms

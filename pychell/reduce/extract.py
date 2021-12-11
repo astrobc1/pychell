@@ -201,7 +201,8 @@ class SpectralExtractor:
         norm_res = (trace_image - model2d_smooth) / trace_image_smooth
 
         # Flag
-        bad = np.where(np.abs(norm_res) > badpix_threshold * np.nanstd(norm_res))
+        use = np.where(norm_res != 0)
+        bad = np.where(np.abs(norm_res) > badpix_threshold * np.nanstd(norm_res[use]))
         if bad[0].size > 0:
             badpix_mask[bad] = 0
             trace_image[bad] = np.nan
@@ -217,6 +218,7 @@ class SpectralExtractor:
     @staticmethod
     def compute_extract_aperture(trace_profile_cspline, flux_cutoff=0.05):
         trace_profile_x, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+        trace_profile -= np.nanmin(trace_profile)
         trace_profile /= np.nanmax(trace_profile)
         good = np.where(trace_profile > flux_cutoff)[0]
         height = trace_profile_x[np.max(good)] - trace_profile_x[np.min(good)]
@@ -277,53 +279,59 @@ class SpectralExtractor:
         return background, background_err
 
     @staticmethod
-    def compute_trace_profile(trace_image, badpix_mask, trace_positions, background, remove_background, oversample):
+    def compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, oversample, spec1d=None, background=None):
         
         # Image dims
         ny, nx = trace_image.shape
         
         # Helpful array
         yarr = np.arange(ny)
+
+        # Background
+        if background is None:
+            background = np.zeros(nx)
         
         # Create a fiducial high resolution grid centered at zero
-        yarr_hr = np.arange(int(np.floor(-ny / 2)), int(np.ceil(ny / 2)) + 1, 1 / oversample)
+        yarr_hr = np.arange(int(np.floor(-ny / 2)), int(np.ceil(ny / 2)) + 1 / oversample, 1 / oversample)
         trace_image_rect = np.full((len(yarr_hr), nx), np.nan)
+
+        # 1d spec info
+        if spec1d is None:
+            spec1d = np.nansum(trace_image, axis=0)
+        spec1d_norm = spec1d / pcmath.weighted_median(spec1d, percentile=0.95)
         
-        # Remove background and rectify
+        # Rectify
         for x in range(nx):
             good = np.where(np.isfinite(trace_image[:, x]))[0]
-            if good.size >= 3:
+            if good.size >= 3 and spec1d_norm[x] > 0.2:
                 col_hr = pcmath.lin_interp(yarr - trace_positions[x], trace_image[:, x], yarr_hr)
                 trace_image_rect[:, x] = col_hr - background[x]
                 bad = np.where(trace_image_rect[:, x] < 0)[0]
                 if bad.size > 0:
-                    trace_image_rect[bad, x] = 0
+                    trace_image_rect[bad, x] = np.nan
                 trace_image_rect[:, x] /= np.nansum(trace_image_rect[:, x])
-            else:
-                trace_image_rect[:, x] = np.nan
         
         # Compute trace profile
-        trace_profile = np.nanmedian(trace_image_rect, axis=1)
+        trace_profile_mean = np.nanmean(trace_image_rect, axis=1)
         
         # Compute cubic spline for profile
-        good = np.where(np.isfinite(trace_profile))[0]
-        trace_profile_cspline = scipy.interpolate.CubicSpline(yarr_hr[good], trace_profile[good], extrapolate=False)
+        good = np.where(np.isfinite(trace_profile_mean))[0]
+        trace_profile_cspline = scipy.interpolate.CubicSpline(yarr_hr[good], trace_profile_mean[good], extrapolate=False)
         
         # Ensure trace profile is centered at zero
         prec = 1000
         yhr = np.arange(trace_profile_cspline.x[0], trace_profile_cspline.x[-1], 1 / prec)
         tphr = trace_profile_cspline(yhr)
         mid = np.nanmean(trace_profile_cspline.x)
-        consider = np.where((yhr > mid - 8*oversample) & (yhr < mid + 8*oversample))[0]
+        consider = np.where((yhr > mid - 3*oversample) & (yhr < mid + 3*oversample))[0]
         trace_max_pos = yhr[consider[np.nanargmax(tphr[consider])]]
         trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x - trace_max_pos,
                                                               trace_profile_cspline(trace_profile_cspline.x), extrapolate=False)
 
-        # Further remove the minimum of the trace profile
-        trace_profile = trace_profile_cspline(trace_profile_cspline.x)
-        trace_profile -= np.nanmin(trace_profile)
-        trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x,
-                                                              trace_profile, extrapolate=False)
+        # Trim 1 pixel on each end
+        tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+        trace_profile_cspline = scipy.interpolate.CubicSpline(tpx[2*oversample:len(tpx)-2*oversample], tpy[2*oversample:len(tpx)-2*oversample], extrapolate=False)
+        
 
         # Return
         return trace_profile_cspline
@@ -451,13 +459,13 @@ class SpectralExtractor:
                 continue
             
             # Shift Trace Profile
-            P = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x],
+            P_x = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x],
                                       trace_profile_cspline(trace_profile_cspline.x),
                                       yarr)
             
             # Determine which pixels to use from the aperture
-            good = np.where((yarr >= trace_positions[x] - extract_aperture[0] - 0.5) & (yarr <= trace_positions[x] + extract_aperture[1] + 0.5))[0]
-            P_use = P[good]
+            good = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]) & (badpix_x == 1))[0]
+            P_use = P_x[good]
             data_use = data_x[good]
             badpix_use = badpix_x[good]
             P_use /= np.nansum(P_use)

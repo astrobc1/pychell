@@ -112,7 +112,7 @@ class Deconv2dExtractor(SpectralExtractor):
         # Flag obvious bad pixels
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
         peak = pcmath.weighted_median(trace_image_smooth, percentile=0.99)
-        bad = np.where((trace_image < 0) | (trace_image > 10 * peak))
+        bad = np.where((trace_image < 0) | (trace_image > 20 * peak))
         if bad[0].size > 0:
             trace_image[bad] = np.nan
             badpix_mask[bad] = 0
@@ -184,15 +184,11 @@ class Deconv2dExtractor(SpectralExtractor):
     ###########################
 
     @staticmethod
-    def deconv2dextraction(trace_image, badpix_mask, trace_positions, sigma, q, theta, extract_aperture, background=None, remove_background=True, read_noise=0, chunk_width=200, distrust_width=20):
-        
+    def deconv2dextraction(trace_image, badpix_mask, trace_positions, sigma, q, theta, extract_aperture, background=None, remove_background=True, read_noise=0, chunk_width=200, distrust_width=20, oversample=1):
+    
         # Copy input
         trace_image_cp = np.copy(trace_image)
         badpix_mask_cp = np.copy(badpix_mask)
-
-        # Good
-        goody, goodx = np.where(badpix_mask_cp)
-        xi, xf = goodx.min(), goodx.max()
 
         # Dims
         ny, nx = trace_image_cp.shape
@@ -211,42 +207,75 @@ class Deconv2dExtractor(SpectralExtractor):
             trace_image_cp[bad] = np.nan
             badpix_mask_cp[bad] = 0
 
-        # Now set all bad pixels to zero
+        # Now set all nans to zero
         bad = np.where(~np.isfinite(trace_image_cp) | (badpix_mask_cp == 0))
         if bad[0].size > 0:
             trace_image_cp[bad] = 0
 
-        # Preliminary info
-        chunks = Deconv2dExtractor.generate_chunks(trace_image, badpix_mask_cp, chunk_width=chunk_width)
+        # Chunks
+        chunks = generate_chunks(trace_image, badpix_mask_cp, chunk_width=chunk_width)
         n_chunks = len(chunks)
-        goody, goodx = np.where(badpix_mask_cp)
-        xi, xf = goodx.min(), goodx.max()
-        nnx = xf - xi + 1
-        yi, yf = goody.min(), goody.max()
-        nny = yf - yi + 1
+
+        # Outputs
         spec1d = np.full((nx, n_chunks), np.nan)
         spec1dt = np.full((nx, n_chunks), np.nan)
+        spec1dhr = np.full((nx*oversample, n_chunks), np.nan)
+        spec1dthr = np.full((nx*oversample, n_chunks), np.nan)
             
         # Loop over and extract chunks
         for i in range(n_chunks):
-            xxi, xxf = chunks[i][0], chunks[i][1]
-            nnnx = xxf - xxi + 1
-            goodyy, _ = np.where(badpix_mask_cp[:, xxi:xxf+1])
-            yyi, yyf = goodyy.min(), goodyy.max()
-            nnny = yyf - yyi + 1
-            S = trace_image_cp[yyi:yyf+1, xxi:xxf+1]
-            tp = trace_positions[xxi:xxf+1] - yyi
-            A = Deconv2dExtractor.generate_A(S, tp, sigma[xxi:xxf+1], q[xxi:xxf+1], theta[xxi:xxf+1], extract_aperture)
-            Aflat = A.reshape((nnny*nnnx, nnnx))
+
+            # X pixel bounds for this chunk
+            xi, xf = chunks[i][0], chunks[i][1]
+            nnx = xf - xi + 1
+
+            # Y pixel bounds  for this chunk
+            goody, _ = np.where(badpix_mask_cp[:, xi:xf+1])
+            yi, yf = goody.min(), goody.max()
+            nny = yf - yi + 1
+
+            # Crop image and mask to this chunk
+            S = trace_image_cp[yi:yf+1, xi:xf+1]
+            M = badpix_mask_cp[yi:yf+1, xi:xf+1]
+
+            # Crop aperture params to this chunk and upsample
+            tp = trace_positions[xi:xf+1] - yi
+            _sigma = sigma[xi:xf+1]
+            _q = q[xi:xf+1]
+            _theta = theta[xi:xf+1]
+            xarr_aperture = np.arange(-0.5 + 0.5 / oversample, nnx - 1 + 0.5 - 0.5 / oversample + 1 / oversample, 1 / oversample)
+            xarr = np.arange(nnx)
+            tp_hr = scipy.interpolate.interp1d(xarr, tp, fill_value="extrapolate")(xarr_aperture)
+            sigma_hr = scipy.interpolate.interp1d(xarr, _sigma, fill_value="extrapolate")(xarr_aperture)
+            q_hr = scipy.interpolate.interp1d(xarr, _q, fill_value="extrapolate")(xarr_aperture)
+            theta_hr = scipy.interpolate.interp1d(xarr, _theta, fill_value="extrapolate")(xarr_aperture)
+
+            # Generate Aperture tensor for this chunk
+            A = Deconv2dExtractor.generate_A(S, xarr_aperture, tp_hr, sigma_hr, q_hr, theta_hr, extract_aperture)
+
+            # Prep inputs for sparse extraction
+            Aflat = A.reshape((nny*nnx, len(xarr_aperture)))
             Sflat = S.flatten()
             Nflat = np.diag(Sflat)
-            sy, syt = Deconv2dExtractor.extract_2D_sparse(Aflat, Sflat, Nflat)
+
+            # Call sparse extraction
+            syhr, sythr, R = Deconv2dExtractor.extract_2D_sparse(Aflat, Sflat, Nflat)
+
+            # Bin back to detector grid
+            sy = Deconv2dExtractor.bin_spec1d(syhr, oversample)
+            syt = Deconv2dExtractor.bin_spec1d(sythr, oversample)
+
+            # Mask ends
             sy[0:distrust_width] = np.nan
             sy[-distrust_width:] = np.nan
             syt[0:distrust_width] = np.nan
             syt[-distrust_width:] = np.nan
-            spec1d[xxi:xxf+1, i] = sy
-            spec1dt[xxi:xxf+1, i] = syt
+
+            # Store results
+            spec1d[xi:xf+1, i] = sy
+            spec1dt[xi:xf+1, i] = syt
+            spec1d[xi:xf+1, i] = sy
+            spec1dt[xi:xf+1, i] = syt
 
         # Final trim of edges
         spec1d[0:xi+distrust_width, 0] = np.nan
@@ -262,7 +291,7 @@ class Deconv2dExtractor(SpectralExtractor):
         spec1dt_unc = np.sqrt(spec1dt)
 
         # Return
-        return spec1d, spec1d_unc, spec1dt, spec1dt_unc
+        return spec1d, spec1d_unc, spec1dt, spec1dt_unc, R
         
 
     @staticmethod
@@ -328,30 +357,28 @@ class Deconv2dExtractor(SpectralExtractor):
 
     @staticmethod
     @njit(nogil=True)
-    def generate_A(image, trace_positions, sigma, q, theta, extract_aperture):
+    def generate_A(image, xarr_aperture, trace_positions, sigma, q, theta, extract_aperture):
 
         # Image dims
         ny, nx = image.shape
 
         # Aperture size
         nl, nu = extract_aperture[0], extract_aperture[1]
-        aperture_size = (nu + nl + 1) * 3
-        if aperture_size%2 != 1:
-            aperture_size += 1
-        aperture_size_x = aperture_size
-        aperture_size_y = aperture_size
+        aperture_size_x = int((nu + nl + 1) * 3 * len(xarr_aperture) / nx)
+        aperture_size_y = int((nu + nl + 1) * 3 * len(xarr_aperture) / nx)
+        if aperture_size_x % 2 != 1:
+            aperture_size_x += 1
+        if aperture_size_y % 2 != 1:
+            aperture_size_y += 1
 
         # Initialize A
-        n_apertures = nx
+        n_apertures = len(xarr_aperture)
         A = np.zeros(shape=(ny, nx, n_apertures), dtype=np.float64)
 
         # Helpful arrays
         xarr_detector = np.arange(nx)
         yarr_detector = np.arange(ny)
-        #xarr_aperture = np.arange(-int(aperture_size_x / 2), int(aperture_size_x / 2 + 1))
-        #yarr_aperture = np.arange(-int(aperture_size_y / 2), int(aperture_size_y / 2 + 1))
-        xarr_aperture = np.arange(nx)
-        yarr_aperture = np.arange(ny)
+        yarr_aperture = trace_positions
 
         # Loops!
         for m in range(n_apertures):
@@ -359,13 +386,13 @@ class Deconv2dExtractor(SpectralExtractor):
                 for j in range(ny):
 
                     # (x, y) of the center of the aperture, relative to dims of image
-                    xkc = xarr_detector[m]
-                    ykc = trace_positions[m]
+                    xkc = xarr_aperture[m]
+                    ykc = yarr_aperture[m]
 
                     # Coordinates
                     # (x, y) of the psf, relative to dims of image
-                    xl = xarr_aperture[i]
-                    yl = yarr_aperture[j]
+                    xl = xarr_detector[i]
+                    yl = yarr_detector[j]
 
                     # Diffs
                     dx = xl - xkc
@@ -388,17 +415,23 @@ class Deconv2dExtractor(SpectralExtractor):
         # Normalize each aperture
         for m in range(n_apertures):
 
-            # Set small pixels to zero
+            # Set small pixels to zero to leverage sparse arrays
             peak = np.max(A[:, :, m])
             bad = np.where(A[:, :, m] < 1E-10 * peak)
             for i, j in zip(bad[0], bad[1]):
                 A[i, j, m] = 0
 
+            # Normalize aperture
             s = np.sum(A[:, :, m])
             if s != 0:
                 A[:, :, m] /= s
 
         return A
+
+    @staticmethod
+    def bin_spec1d(spec1d, oversample):
+        nx = int(len(spec1d) / oversample)
+        return np.nansum(spec1d.reshape((nx, oversample)), axis=1)    
 
     @staticmethod
     def extract_2D_sparse(A, S, N):

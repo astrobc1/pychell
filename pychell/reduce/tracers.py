@@ -14,6 +14,7 @@ from numba import jit, njit
 # Maths
 import numpy as np
 import scipy.interpolate
+import scipy.signal
 import astropy.stats as stats
 import sklearn.cluster
 
@@ -55,16 +56,17 @@ class DensityClusterTracer(OrderTracer):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, n_orders, poly_order=2, order_spacing=10, heights=10, downsample=4, n_cores=1):
+    def __init__(self, n_orders, poly_order=2, poly_mask_bottom=None, poly_mask_top=None, order_spacing=10, heights=10, downsample=4):
         self.n_orders = n_orders
         self.poly_order = poly_order
         self.order_spacing = order_spacing
+        self.poly_mask_bottom = poly_mask_bottom
+        self.poly_mask_top = poly_mask_top
         try:
             iter(heights)
             self.heights = heights
         except:
             self.heights = np.full(self.n_orders, heights)
-        self.n_cores = n_cores
         self.downsample = downsample
 
 
@@ -84,14 +86,14 @@ class DensityClusterTracer(OrderTracer):
             fiber = None
 
         # Call function
-        orders_list = self._trace(image, self.n_orders, self.poly_order, self.order_spacing, self.heights, recipe.mask_left, recipe.mask_right, recipe.mask_top, recipe.mask_bottom, self.downsample, fiber, self.n_cores)
+        orders_list = self._trace(image, self.n_orders, self.poly_order, self.order_spacing, self.heights, recipe.mask_left, recipe.mask_right, self.poly_mask_bottom, self.poly_mask_top, self.downsample, fiber, recipe.n_cores)
 
         # Store result
         data.orders_list = orders_list
 
 
     @staticmethod
-    def _trace(image, n_orders, poly_order=2, order_spacing=10, heights=10, mask_left=200, mask_right=200, mask_top=20, mask_bottom=20, downsample=4, fiber=None, n_cores=1):
+    def _trace(image, n_orders, poly_order=2, order_spacing=10, heights=10, mask_left=200, mask_right=200, poly_mask_bottom=None, poly_mask_top=None, downsample=4, fiber=None, n_cores=1):
 
         try:
             iter(heights)
@@ -102,10 +104,21 @@ class DensityClusterTracer(OrderTracer):
         ny, nx = image.shape
     
         # Mask
-        image[0:mask_bottom, :] = np.nan
-        image[ny-mask_top:, :] = np.nan
+        image = np.copy(image)
         image[:, 0:mask_left] = np.nan
         image[:, nx-mask_right:] = np.nan
+
+        # Helpful arrs
+        xarr = np.arange(nx)
+        yarr = np.arange(ny)
+
+        # Top and bottom bounding polynomials
+        poly_top = np.polyval(poly_mask_top, xarr)
+        poly_bottom = np.polyval(poly_mask_bottom, xarr)
+
+        for x in range(nx):
+            bad = np.where((yarr < poly_bottom[x]) | (yarr > poly_top[x]))[0]
+            image[bad, x] = np.nan
 
         # Smooth the flat.
         image_smooth = pcmath.median_filter2d(image, width=5, preserve_nans=False)
@@ -182,4 +195,162 @@ class DensityClusterTracer(OrderTracer):
             pfit = np.polyfit(downsample * inds[1], inds[0], 2)
             orders_list.append({'label': label, 'height': heights[l], 'pcoeffs': pfit})
             
+        return orders_list
+
+
+class PeakTracer(OrderTracer):
+    
+    ###############################
+    #### CONSTRUCTOR + HELPERS ####
+    ###############################
+
+    def __init__(self, n_orders, poly_order=2, order_spacing=10, heights=10, xleft=None, xright=None, poly_mask_bottom=None, poly_mask_top=None, n_slices=10):
+        self.n_orders = n_orders
+        self.poly_order = poly_order
+        self.order_spacing = order_spacing
+        self.xleft = xleft
+        self.xright = xright
+        self.poly_mask_bottom = poly_mask_bottom
+        self.poly_mask_top = poly_mask_top
+        self.n_slices = n_slices
+        try:
+            iter(heights)
+            self.heights = heights
+        except:
+            self.heights = np.full(self.n_orders, heights)
+
+
+    ######################
+    #### TRACE ORDERS ####
+    ######################
+        
+    def trace(self, recipe, data):
+
+        # Image
+        image = data.parse_image()
+
+        # dims
+        ny, nx = image.shape
+
+        # xleft and xright
+        if self.xleft is None:
+            xleft = int(nx / 4)
+        else:
+            xleft = self.xleft
+        if self.xright is None:
+            xright = int(3 * nx / 4)
+        else:
+            xright = self.xright
+        
+        # Fiber number
+        try:
+            fiber = int(data.spec_module.parse_fiber_nums(data))
+        except:
+            fiber = None
+
+        # Call function
+        orders_list = self._trace(image, self.n_orders, self.poly_order, self.order_spacing, self.heights, recipe.mask_left, recipe.mask_right, self.poly_mask_bottom, self.poly_mask_top, fiber, xleft, xright, self.n_slices)
+
+        # Store result
+        data.orders_list = orders_list
+
+
+    @staticmethod
+    def _trace(image, n_orders, poly_order=2, order_spacing=10, heights=10, mask_left=200, mask_right=200, poly_mask_bottom=None, poly_mask_top=None, fiber=None, xleft=None, xright=None, n_slices=10):
+
+        try:
+            iter(heights)
+        except:
+            heights = np.full(n_orders, heights)
+
+        # Image dimensions
+        ny, nx = image.shape
+
+        # Helpful arrs
+        xarr = np.arange(nx)
+        yarr = np.arange(ny)
+
+        matplotlib.use("MacOSX")
+
+        # Mask
+        image = np.copy(image)
+        image[:, 0:mask_left] = np.nan
+        image[:, nx-mask_right:] = np.nan
+
+        # Top and bottom bounding polynomials
+        poly_top = np.polyval(poly_mask_top, xarr)
+        poly_bottom = np.polyval(poly_mask_bottom, xarr)
+        for x in range(nx):
+            bad = np.where((yarr < poly_bottom[x]) | (yarr > poly_top[x]))[0]
+            image[bad, x] = np.nan
+
+        # Smooth the flat.
+        image_smooth = pcmath.median_filter2d(image, width=3, preserve_nans=False)
+
+        # Slices
+        xslices = np.linspace(xleft + 20, xright - 20, num=n_slices).astype(int)
+        slices = []
+        peaks = []
+        for i in range(n_slices):
+            x = xslices[i]
+            s = np.nanmedian(image_smooth[:, x-5:x+5], axis=1)
+            goody, _ = np.where(np.isfinite(image_smooth[:, x-5:x+5]))
+            yi, yf = goody.min(), goody.max()
+            continuum = pcmath.generalized_median_filter1d(s, width=3 * int(np.nanmean(order_spacing)), percentile=0.99)
+            continuum[yi:yi+20] = np.nanmedian(continuum[yi+20:yi+40])
+            continuum[yf-20:] = np.nanmedian(continuum[yf-40:])
+            s /= continuum
+            good = np.where(s > 0.7)
+            s[good] = 1.0
+
+            # Peak finding
+            # Estimate peaks in pixel space (just indices)
+            _peaks = scipy.signal.find_peaks(s, height=np.full(ny, 0.75), distance=order_spacing)[0]
+            _peaks = np.sort(_peaks)
+            if len(_peaks) == n_orders:
+                peaks.append(_peaks)
+            else:
+                peaks.append(None)
+
+        # Fit
+        poly_coeffs = []
+        for i in range(n_orders):
+            xx = [xslices[i] for i in range(len(xslices)) if peaks[i] is not None]
+            yy = [_peaks[i] for _peaks in peaks if _peaks is not None]
+            pfit = np.polyfit(xx, yy, 2)
+            poly_coeffs.append(pfit)
+
+        # Ensure the labels are properly sorted
+        y_mean = np.array([np.nanmean(np.polyval(poly_coeffs[i], xarr)) for i in range(len(poly_coeffs))], dtype=float)
+        ss = np.argsort(y_mean)
+        poly_coeffs = [poly_coeffs[ss[i]] for i in range(len(ss))]
+        
+        # h2 = np.nanmean(heights) / 2
+
+        # for i in range(len(poly_coeffs)):
+        #     trace_positions_estimate = np.polyval(poly_coeffs[i], xarr)
+        #     trace_positions_centroids = np.full(nx, np.nan)
+        #     for x in range(nx):
+        #         if x < mask_left or x > nx - mask_right - 1 or trace_positions_estimate[x] - h2 < poly_bottom[x] or trace_positions_estimate[x] + h2 > poly_top[x]:
+        #             continue
+        #         yy = np.arange(np.floor(trace_positions_estimate[x] - h2), np.ceil(trace_positions_estimate[x] + h2 + 1)).astype(int)
+        #         w = np.copy(image[yy, x])
+        #         trace_positions_centroids[x] = pcmath.weighted_mean(yy, w)
+
+        #     trace_positions_centroids_smooth = pcmath.median_filter1d(trace_positions_centroids, width=5)
+        #     res = np.abs(trace_positions_centroids - trace_positions_centroids_smooth)
+        #     res_smooth = pcmath.median_filter1d(res, width=3)
+        #     good = np.where((res < 0.5) & np.isfinite(res))
+        #     pfit = np.polyfit(xarr[good], trace_positions_centroids[good], poly_order)
+        #     poly_coeffs[i] = pfit
+
+        # Now build the orders list
+        orders_list = []
+        for i in range(len(poly_coeffs)):
+            if fiber is not None:
+                label = float(str(int(i + 1)) + "." + str(int(fiber)))
+            else:
+                label = i + 1
+            orders_list.append({'label': label, 'height': heights[i], 'pcoeffs': poly_coeffs[i]})
+        
         return orders_list

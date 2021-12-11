@@ -437,12 +437,13 @@ class PARVIReduceRecipe(ReduceRecipe):
         # Print reduction summary
         self.print_reduction_summary()
 
-    def prep_post_reduction_products(self):
+    @staticmethod
+    def prep_post_reduction_products(path):
 
         # Parse folder
-        all_files = glob.glob(f"{self.output_path}spectra{os.sep}*_reduced.fits")
-        lfc_files = glob.glob(f"{self.output_path}spectra{os.sep}*LFC*_reduced.fits")
-        fiber_flat_files = glob.glob(f"{self.output_path}spectra{os.sep}*FIBERFLAT*_reduced.fits") + glob.glob(f"{self.output_path}spectra{os.sep}*FIBREFLAT*_reduced.fits")
+        all_files = glob.glob(f"{path}*_reduced.fits")
+        lfc_files = glob.glob(f"{path}*LFC*_reduced.fits")
+        fiber_flat_files = glob.glob(f"{path}*FIBERFLAT*_reduced.fits") + glob.glob(f"{path}*FIBREFLAT*_reduced.fits")
         sci_files = list(set(all_files) - set(lfc_files) - set(fiber_flat_files))
 
         # Create temporary objects to parse header info
@@ -456,13 +457,15 @@ class PARVIReduceRecipe(ReduceRecipe):
         lfc_files = np.array(lfc_files)
         lfc_files = lfc_files[ss]
         times_lfc_cal = times_lfc_cal[ss]
-
+        lfc_cals = [lfc_cals[ss[i]] for i in range(len(lfc_cals))]
+        
         # Parse times of sci exposures
         times_sci = np.array([compute_exposure_midpoint(d) for d in scis], dtype=float)
         ss = np.argsort(times_sci)
         sci_files = np.array(sci_files)
         sci_files = sci_files[ss]
         times_sci = times_sci[ss]
+        scis = [scis[ss[i]] for i in range(len(scis))]
 
         # Initialize arrays for lfc spectra
         n_orders, nx = 21, 2048
