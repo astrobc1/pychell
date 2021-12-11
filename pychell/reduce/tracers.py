@@ -270,8 +270,6 @@ class PeakTracer(OrderTracer):
         xarr = np.arange(nx)
         yarr = np.arange(ny)
 
-        matplotlib.use("MacOSX")
-
         # Mask
         image = np.copy(image)
         image[:, 0:mask_left] = np.nan
