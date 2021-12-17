@@ -30,7 +30,7 @@ class WeightedSpectralUncRMS(SpectralObjectiveFunction):
     """Objective function which returns the weighted RMS. The weights are prop. to 1 / flux_unc^2. The LSF is further enforced to be positive.
     """
 
-    def __init__(self, flag_n_worst_pixels=10, remove_edges=4, use_flux_unc=True):
+    def __init__(self, flag_n_worst_pixels=10, remove_edges=4, use_flux_unc=False):
         """Constructs the objective function.
 
         Args:

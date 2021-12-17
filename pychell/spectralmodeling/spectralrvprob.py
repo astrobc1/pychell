@@ -401,8 +401,8 @@ class IterativeSpectralRVProb:
             flagged_inds = ss[k-1*spectral_model.obj.flag_n_worst_pixels - 1:k]
     
         # Left and right padding
-        good = np.where(mask == 1)[0]
-        pad = 0.01 * (wave_data_nm[good][-1] - wave_data_nm[good][0])
+        good = np.where(np.isfinite(wave_data_nm) & (mask == 1))[0]
+        pad = 0.01 * (wave_data_nm[good].max() - wave_data_nm[good].min())
         
         # Data
         plt.plot(wave_data_nm, spectral_model.data.flux, color=(0, 114/255, 189/255), lw=0.8, label="Data")
