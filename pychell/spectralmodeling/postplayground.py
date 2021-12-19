@@ -632,7 +632,11 @@ def compute_empirical_rvprec(path, specrvprobs, rvs_dict, templates=None, iter_i
     # Extract the desired iteration
     for o in range(n_orders):
         for i, f, l in pcutils.nightly_iteration(rvs_dict['n_obs_nights']):
-            rvcontents_theo[o, i] = np.nansum(1 / rvcontents_theo_single_exposures[o, f:l, iter_indices[o]]**2)**-0.5
+            v = np.nansum(1 / rvcontents_theo_single_exposures[o, f:l, iter_indices[o]]**2)**-0.5
+            if np.isfinite(v):
+                rvcontents_theo[o, i] = v
+            else:
+                rvcontents_theo[o, i] = np.nan
 
             # Empirical are just the per-order error bars, co-added across exposures
             rvcontents_emp[o, i] = rvs_dict["uncfwm_nightly"][o, i, iter_indices[o]]
@@ -656,7 +660,7 @@ def compute_empirical_rvprec(path, specrvprobs, rvs_dict, templates=None, iter_i
         # Build the best fit model for the kth observation to find the mean wavelength
         pbest = specrvprobs[o].opt_results[k, iter_indices[o]]["pbest"]
         specrvprobs[o].spectral_model.initialize(pbest, specrvprobs[o].data[k], iter_indices[o], specrvprobs[o].stellar_templates)
-        wave_data = specrvprobs[o].spectral_model.wavelength_solution.build(pbest)
+        wave_data = specrvprobs[o].spectral_model.wls.build(pbest)
         mean_waves[o] = np.nanmean(wave_data)
 
     # Sort according to wavelength
@@ -715,16 +719,20 @@ def gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices):
     n_orders = len(specrvprobs)
     n_spec = specrvprobs[0].n_spec
     n_iterations = specrvprobs[0].n_iterations
+
+    # RV Content
+    rvcontents = compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=False)
     
     # RV content weights
-    weights = np.zeros((n_orders, n_spec, n_iterations))
-    rvsxc_unc = rvs_dict['uncxc']
-    for o in range(n_orders):
-        for j in range(n_iterations):
-            weights[o, :, j] = 1 / rvsxc_unc[o, :, j]**2
+    #weights = np.zeros((n_orders, n_spec, n_iterations))
+    weights = rvcontents * mask
+    #rvsxc_unc = rvs_dict['uncxc']
+    #for o in range(n_orders):
+        #for j in range(n_iterations):
+            #weights[o, :, j] = 1 / rvsxc_unc[o, :, j]**2
     
     # Mask weights
-    weights *= mask
+    #weights *= mask
 
     return weights
 
@@ -765,7 +773,7 @@ def compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=False):
         specrvprobs[o].spectral_model.initialize(pars, specrvprobs[o].data[k], -1, specrvprobs[o].stellar_templates)
 
         # Data wave grid
-        data_wave_k = specrvprobs[o].spectral_model.wavelength_solution.build(pars)
+        data_wave_k = specrvprobs[o].spectral_model.wls.build(pars)
 
         # Mean wavelength
         mean_waves[o] = np.nanmean(data_wave_k)
@@ -787,7 +795,7 @@ def compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=False):
             specrvprobs[o].spectral_model.initialize(pars, specrvprobs[o].data[k], j, specrvprobs[o].stellar_templates)
 
             # Data wave grid
-            data_wave = specrvprobs[o].spectral_model.wavelength_solution.build(pars)
+            data_wave = specrvprobs[o].spectral_model.wls.build(pars)
             
             # Set the star in the templates dict
             specrvprobs[o].spectral_model.templates_dict["star"] = np.copy(specrvprobs[o].stellar_templates[j])
@@ -796,7 +804,7 @@ def compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=False):
             model_wave = specrvprobs[o].spectral_model.model_wave
 
             # Formula: derivative comes from gas cell / stellar flux, but overall flux further accounts for tellurics and blaze
-            _, rvcontents[o, :, j] = pcrvcalc.compute_rv_content(pars, specrvprobs[o].spectral_model, inject_blaze=inject_blaze, snr=snr0)
+            _, rvcontents[o, :, j] = pcrvcalc.compute_rv_content(pars, specrvprobs[o].spectral_model, snr=snr0)
 
             # Scale to S/N
             rvcontents[o, :, j] *= (snr0 / snrs_single[o, :, j])

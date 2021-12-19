@@ -188,3 +188,13 @@ def get_spec_module(spectrograph):
 
 def get_utc_offset(spectrograph):
     return get_spec_module(spectrograph).utc_offset
+
+
+def flatten_jagged_list(x):
+    x_out = np.array([], dtype=float)
+    inds = []
+    for i in range(len(x)):
+        j_start = len(x_out)
+        x_out = np.concatenate((x_out, x[i]))
+        inds += [(i, j) for j in range(len(x[i]))]
+    return x_out, inds

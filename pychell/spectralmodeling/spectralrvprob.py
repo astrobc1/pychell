@@ -345,7 +345,7 @@ class IterativeSpectralRVProb:
             opt_result = optimizer.optimize()
             
             # Print diagnostics
-            print(f"Fit spectrum {data.spec_num} in {round((stopwatch.time_since())/60, 2)} min", flush=True)
+            print(f"Fit observation {data} [{data.spec_num}] in {round((stopwatch.time_since())/60, 2)} min", flush=True)
             if verbose:
                 print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
                 print(f" Best Fit Parameters:\n{spectral_model.summary(opt_result['pbest'])}", flush=True)
@@ -475,7 +475,7 @@ class IterativeSpectralRVProb:
         plt.tight_layout()
         
         # Save figure
-        fname = f"{output_path}Order{data.order_num}{os.sep}ForwardModels{os.sep}{tag}_data_model_spec{data.spec_num}_ord{data.order_num}_iter{iter_index + 1}.png"
+        fname = f"{output_path}Order{data.order_num}{os.sep}ForwardModels{os.sep}{tag}_spec{data.spec_num}_ord{data.order_num}_iter{iter_index + 1}_{data.base_input_file_noext}.png"
         fig.savefig(fname)
         plt.close()
             

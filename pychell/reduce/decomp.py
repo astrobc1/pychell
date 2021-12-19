@@ -36,6 +36,7 @@ class DecompExtractor(SpectralExtractor):
                  n_trace_refine_iterations=3, n_extract_iterations=3, trace_pos_refine_window=None,
                  badpix_threshold=5,
                  extract_orders=None,
+                 chunk_width=400,
                  extract_aperture=None, lambda_sf=0.5, lambda_sp=0.0, tilt=None, shear=None):
 
         # Super init
@@ -51,6 +52,7 @@ class DecompExtractor(SpectralExtractor):
         self.n_extract_iterations = n_extract_iterations
         self.trace_pos_poly_order = trace_pos_poly_order
         self.oversample = oversample
+        self.chunk_width = chunk_width
         self.badpix_threshold = badpix_threshold
         self._extract_aperture = extract_aperture
         self.lambda_sf = lambda_sf
@@ -64,8 +66,9 @@ class DecompExtractor(SpectralExtractor):
     #######################################################################
 
     def extract_trace(self, data, trace_image, trace_map_image, trace_dict, badpix_mask=None, read_noise=None):
-        tilt = self.tilt[:, int(trace_dict['label'])-1] if self.tilt is not None else None
-        shear = self.shear[:, int(trace_dict['label'])-1] if self.shear is not None else None
+        ny, nx = trace_image.shape
+        tilt = self.tilt[:, int(trace_dict['label'])-1] if self.tilt is not None else np.zeros(nx)
+        shear = self.shear[:, int(trace_dict['label'])-1] if self.shear is not None else np.zeros(nx)
         return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, tilt, shear, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.trace_pos_refine_window, self.n_extract_iterations, self.badpix_threshold, self.extract_orders, self._extract_aperture, self.lambda_sf, self.lambda_sp)
 
     @staticmethod
@@ -76,20 +79,11 @@ class DecompExtractor(SpectralExtractor):
         else:
             read_noise = 0
 
-        # Numbers
+        # dims
         nx = image.shape[1]
-
-        if tilt is None:
-            tilt = np.zeros(nx)
-        if shear is None:
-            shear = np.zeros(nx)
 
         # Don't overwrite image
         trace_image = np.copy(image)
-
-        # Initiate trace_pos_refine_window
-        if trace_pos_refine_window is None:
-            trace_pos_refine_window = trace_dict['height'] / 2
 
         # Helpful array
         xarr = np.arange(nx)
@@ -103,56 +97,52 @@ class DecompExtractor(SpectralExtractor):
         badpix_mask[bad] = 0
         trace_image[bad] = np.nan
 
+        # Initiate trace_pos_refine_window
+        if trace_pos_refine_window is None:
+            trace_pos_refine_window = trace_dict['height'] / 2
+
         # Initial trace positions
         trace_positions = np.polyval(trace_dict['pcoeffs'], xarr)
 
-        # Crop the image and mask to limit memory usage going forward
+        # Crop the image
         goody, goodx = np.where(badpix_mask)
-        y_start, y_end = np.min(goody), np.max(goody)
-        trace_image = trace_image[y_start:y_end + 1, :]
-        badpix_mask = badpix_mask[y_start:y_end + 1, :]
-        trace_positions -= y_start
-            
+        yi, yf = np.min(goody), np.max(goody)
+        trace_image = trace_image[yi:yf + 1, :]
+        badpix_mask = badpix_mask[yi:yf + 1, :]
+        trace_positions -= yi
+
         # Flag obvious bad pixels
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
         peak = pcmath.weighted_median(trace_image_smooth, percentile=0.99)
-        bad = np.where((trace_image < 0) | (trace_image > 10 * peak))
+        bad = np.where((trace_image < 0) | (trace_image > 20 * peak))
         if bad[0].size > 0:
             trace_image[bad] = np.nan
             badpix_mask[bad] = 0
 
-        # Estimate background
-        trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
-        background = np.full(nx, np.nan)
-        for x in range(nx):
-            background[x] = pcmath.weighted_median(trace_image_smooth[:, x], percentile=0.1)
-        background = pcmath.median_filter1d(background, width=7)
-        bad = np.where(background < 0)[0]
-        if bad.size > 0:
-            trace_image[:, bad] = np.nan
-            badpix_mask[:, bad] = 0
-            background[bad] = np.nan
+        # Starting background
+        if remove_background:
+            background = np.nanmin(trace_image, axis=0)
+            background = pcmath.poly_filter(background, width=background_smooth_width, poly_order=background_smooth_poly_order)
+            background_err = np.sqrt(background)
+        else:
+            background = None
+            background_err = None
+
+        # Extract Aperture
+        if _extract_aperture is None:
+            extract_aperture = DecompExtractor.compute_extract_aperture(trace_profile_cspline)
+        else:
+            extract_aperture = _extract_aperture
         
-        # Iteratively refine trace positions and profile.
-        for i in range(n_trace_refine_iterations):
-            
-            # Trace Profile
-            print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace profile [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            trace_profile_cspline = DecompExtractor.compute_trace_profile(trace_image, badpix_mask, trace_positions, background, remove_background, oversample)
-            
-            # Trace Position
-            print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            trace_positions = DecompExtractor.compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, trace_pos_refine_window, background, remove_background, trace_pos_poly_order)
+        # Iteratively refine trace positions.
+        print(f" [{data}, {trace_dict['label']}] Iteratively Refining Trace positions ...", flush=True)
+        for i in range(10):
 
-            # Extract Aperture
-            if _extract_aperture is None:
-                extract_aperture = DecompExtractor.compute_extract_aperture(trace_profile_cspline)
-            else:
-                extract_aperture = _extract_aperture
+            # Update trace profile
+            trace_profile_cspline = DecompExtractor.compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, 4, None, background=background)
 
-            # Background signal
-            print(f" [{data}, {trace_dict['label']}] Iteratively Refining Background [{i + 1} / {n_trace_refine_iterations}] ...", flush=True)
-            background, background_err = DecompExtractor.compute_background(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, background_smooth_width, background_smooth_poly_order)
+            # Update trace positions
+            trace_positions = DecompExtractor.compute_trace_positions_ccf(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, spec1d=None, window=trace_pos_refine_window, background=background, remove_background=remove_background, trace_pos_poly_order=trace_pos_poly_order)
 
         # Iteratively extract spectrum
         for i in range(n_extract_iterations):
@@ -236,9 +226,9 @@ class DecompExtractor(SpectralExtractor):
         swath_width = np.min([int(nnx / 4), 400])
         snr = DecompExtractor.estimate_snr(trace_image)
         # With oversample=32, (snr, lambda_sp): (22, 0.01), (60, 0.0001)
-        if lambda_sp == "auto":
-            lambda_sp = (8.06666667 / snr)**4.59001346
-        result = pyreduce.extract.extract_spectrum(S, ycen, yrange=yrange, xrange=xrange, lambda_sf=lambda_sf, lambda_sp=lambda_sp, osample=oversample, readnoise=read_noise, tilt=tilt, shear=shear, swath_width=swath_width)
+        #if lambda_sp == "auto":
+        #    lambda_sp = (8.06666667 / snr)**4.59001346
+        result = pyreduce.extract.extract_spectrum(S, ycen, yrange=yrange, xrange=np.copy(xrange), lambda_sf=lambda_sf, lambda_sp=lambda_sp, osample=oversample, readnoise=read_noise, tilt=tilt, shear=shear, swath_width=swath_width)
         spec1d[xxi:xxf+1] = result[0]
         spec1d_unc[xxi:xxf+1] = result[3]
         trace_profile = result[1]

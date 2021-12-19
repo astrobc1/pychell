@@ -236,7 +236,7 @@ def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
     flux_all = flux_all[good]
 
     p0 = [pcmath.weighted_median(flux_all, percentile=0.95), 0.1]
-    bounds = [(0.5 * p0[0], 1.5 * p0[0]), (0.01, 1)]
+    bounds = [(0.5 * p0[0], 1.5 * p0[0]), (0.005, 1)]
     opt_result = scipy.optimize.minimize(solve_lsf_model, p0, args=(waves_all, flux_all), method='Nelder-Mead', bounds=bounds)
     pbest = opt_result.x
     sigma = pbest[1]
@@ -350,7 +350,7 @@ def compute_wls(wave_estimate, lfc_flux, f0, df, poly_order=None, xrange=None):
     lfc_flux = flag_bad_pixels(lfc_flux)
 
     # Compute centers (wave, pix)
-    lfc_centers_pix, lfc_centers_wave, _ = compute_peaks(wave_estimate, lfc_flux, f0, df, xrange)
+    lfc_centers_pix, lfc_centers_wave, _, _ = compute_peaks(wave_estimate, lfc_flux, f0, df, xrange)
 
     # Polynomial fit to peaks
     wls = fit_peaks(xarr, lfc_centers_pix, lfc_centers_wave, poly_order=poly_order)
@@ -373,7 +373,7 @@ def estimate_peak_spacing(xi, xf, wi, wf, f0, df):
     peak_spacing = (xf - xi) / n_peaks
     return peak_spacing
 
-def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange):
+def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="lorentz", sigma_guess=[0.2, 1.4, 3.0], mu_guess=[0.5, 1E-2, 0.5]):
     """Computes the pixel and corresponding wavelength values for each LFC spot peak.
 
     Args:
@@ -441,34 +441,41 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange):
         yy -= np.nanmin(yy)
         yy /= np.nanmax(yy)
 
-        # Initial pars
-        p0 = np.array([1.0, # amp
-                       good_peaks[i], # mu
-                       1.2, # sigma
-                       np.nanmin(yy)]) # offset
+        # Pars and bounds
+        p0 = []
+        bounds = []
 
-        # Bounds
-        bounds = [(0.5, 1.5), # amp
-                  (p0[1] - 1, p0[1] + 1), # mu
-                  (0.7, 1.5), # sigma
-                  (0, 0.5)] # offset
+        # Amp
+        p0.append(1.0)
+        bounds.append((0.5, 1.5))
+
+        # Mu
+        p0.append(good_peaks[i] + mu_guess[1])
+        bounds.append((good_peaks[i] - mu_guess[0], good_peaks[i] + mu_guess[2]))
+
+        # Sigma or fwhm
+        if peak_model.lower() == "gaussian":
+            p0.append(sigma_guess[1])
+            bounds.append((sigma_guess[0], sigma_guess[2]))
+        else:
+            p0.append(sigma_guess[1] * 2.355)
+            bounds.append((sigma_guess[0] * 2.355, sigma_guess[2] * 2.355))
+
+        # Offset
+        p0.append(0.1)
+        bounds.append((-0.2, 0.2))
 
         # Fit
-        opt_result = scipy.optimize.minimize(solve_fit_peak1d, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds, tol=1E-8)
+        if peak_model.lower() == "gaussian":
+            opt_result = scipy.optimize.minimize(solve_fit_peak1d_gaussian, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds, tol=1E-8)
+        else:
+            opt_result = scipy.optimize.minimize(solve_fit_peak1d_lorentz, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds, tol=1E-8)
 
         # Results
         pbest = opt_result.x
         lfc_centers_pix[i] = pbest[1]
         sigmas[i] = pbest[2]
         rms_norm[i] = opt_result.fun
-
-        #matplotlib.use("MacOSX")
-        #plt.plot(xx, yy); plt.plot(xx, pcmath.gauss(xx, *pbest[0:3]) + pbest[3]); plt.show()
-
-    # Flag bad fits
-    good_rms = pcmath.weighted_median(rms_norm, percentile=0.75)
-    good = np.where(rms_norm < 3*good_rms)[0]
-    lfc_centers_pix = lfc_centers_pix[good]
 
     # Determine which LFC spot matches each peak
     lfc_centers_wave = []
@@ -481,11 +488,7 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange):
     lfc_centers_wave = np.array(lfc_centers_wave)
     peak_integers = np.array(peak_integers)
 
-    #yy = lfc_centers_wave - np.polyval(np.polyfit(lfc_centers_pix, lfc_centers_wave, 4), lfc_centers_pix)
-    #yy = pcmath.dl_to_dv(yy*(wave_estimate[-1]-wave_estimate[0])/2048, np.nanmean(wave_estimate))
-    #plt.plot(lfc_centers_pix, yy, marker='X'); plt.show()
-
-    return lfc_centers_pix, lfc_centers_wave, peak_integers
+    return lfc_centers_pix, lfc_centers_wave, rms_norm, peak_integers
 
 def gen_theoretical_peaks(wi, wf, f0, df):
     """Generates the theoretical wavelengths given a range of wavelengths.
@@ -597,8 +600,13 @@ def fit_peaks(pixel_arr, lfc_centers_pix, lfc_centers_wave, poly_order=6):
     wls = np.polyval(pfit, pixel_arr)
     return wls
 
-def solve_fit_peak1d(pars, x, data):
+def solve_fit_peak1d_gaussian(pars, x, data):
     model = pcmath.gauss(x, *pars[0:3]) + pars[3]
+    rms = pcmath.rmsloss(data, model)
+    return rms
+
+def solve_fit_peak1d_lorentz(pars, x, data):
+    model = pcmath.lorentz(x, *pars[0:3]) + pars[3]
     rms = pcmath.rmsloss(data, model)
     return rms
 

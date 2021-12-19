@@ -17,6 +17,9 @@ import matplotlib.pyplot as plt
 import pychell
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
+# LLVM
+from numba import jit, njit
+
 # Pychell modules
 import pychell.utils as pcutils
 import pychell.maths as pcmath
@@ -337,7 +340,7 @@ class SpectralExtractor:
         return trace_profile_cspline
 
     @staticmethod
-    def compute_trace_positions(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, spec1d=None, window=10, background=None, remove_background=True, trace_pos_poly_order=4):
+    def compute_trace_positions_ccf(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, spec1d=None, window=10, background=None, remove_background=True, trace_pos_poly_order=4):
 
         # The image dimensions
         ny, nx = trace_image.shape
@@ -380,7 +383,7 @@ class SpectralExtractor:
         for x in range(nx):
             
             # See if column is even worth looking at
-            good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_no_background_smooth[:, x]))[0]
+            good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_no_background_smooth[:, x]) & (yarr > trace_positions[x] - np.ceil(window / 2)) & (yarr < trace_positions[x] + np.ceil(window / 2)))[0]
             if good.size <= 3 or spec1d_norm[x] < 0.2:
                 continue
             
@@ -421,6 +424,61 @@ class SpectralExtractor:
             pfit = np.polyfit(xarr[good], y_positions_xc[good], trace_pos_poly_order)
             trace_positions = np.polyval(pfit, xarr)
         
+        # Return
+        return trace_positions
+
+    @staticmethod
+    def compute_trace_positions_centroids(trace_image, badpix_mask, trace_positions_estimate=None, extract_aperture=None, trace_pos_poly_order=4, n_iterations=5):
+
+        # The image dimensions
+        ny, nx = trace_image.shape
+        
+        # Helpful arrays
+        yarr = np.arange(ny)
+        xarr = np.arange(nx)
+
+        # Smooth image
+        trace_image_smooth = pcmath.median_filter2d(trace_image, width=3, preserve_nans=False)
+
+        if extract_aperture is None:
+            h2 = int(np.ceil(np.nanmax(np.nansum(badpix_mask, axis=0))))
+            extract_aperture = [h2, h2]
+
+        # Initiate trace positions
+        trace_positions = np.full(nx, np.nan)
+
+        for i in range(n_iterations):
+
+            # Y centroids
+            ycen = np.full(nx, np.nan)
+
+            # Loop over columns
+            for x in range(nx):
+                
+                # See if column is even worth looking at
+                if i == 0 and trace_positions_estimate is None:
+                    good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_smooth[:, x]))[0]
+                elif i == 0 and trace_positions_estimate is not None:
+                    good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_smooth[:, x]) & (yarr > trace_positions_estimate[x] - extract_aperture[0]) & (yarr < trace_positions_estimate[x] + extract_aperture[1]))[0]
+                else:
+                    good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_smooth[:, x]) & (yarr > trace_positions[x] - extract_aperture[0]) & (yarr < trace_positions[x] + extract_aperture[1]))[0]
+                if good.size <= 3:
+                    continue
+
+                # Centroid
+                ycen[x] = pcmath.weighted_mean(good, trace_image_smooth[good, x]**2)
+        
+            # Smooth the deviations
+            ycen_smooth = pcmath.median_filter1d(ycen, width=3)
+            bad = np.where(np.abs(ycen - ycen_smooth) > 0.5)[0]
+            if bad.size > 0:
+                ycen[bad] = np.nan
+            good = np.where(np.isfinite(ycen))[0]
+        
+            # Fit with a polynomial
+            pfit = np.polyfit(xarr[good], ycen[good], trace_pos_poly_order)
+            trace_positions = np.polyval(pfit, xarr)
+    
         # Return
         return trace_positions
 
