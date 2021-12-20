@@ -305,7 +305,7 @@ class WeightedMean(TemplateAugmenter):
             pars = specrvprob.opt_results[ispec, iter_index]["pbest"]
         
             # Init the chunk
-            specrvprob.spectral_model.initialize(pars, specrvprob.data[ispec], iter_index=iter_index)
+            specrvprob.spectral_model.initialize(pars, specrvprob.data[ispec], iter_index, specrvprob.stellar_templates)
         
             # Generate the low res model
             wave_data, model_lr = specrvprob.spectral_model.build(pars)
