@@ -71,7 +71,7 @@ def parse_spec1d(data):
     data.wave, data.flux, data.flux_unc, data.mask = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 1].astype(np.float64), fits_data.data[oi, :, 2].astype(np.float64), fits_data.data[oi, :, 3].astype(np.float64)
 
 def parse_telescope(data):
-    return int(data.base_input_file_noext[-6:-5])
+    return int(data.base_input_file_noext[-1:])
 
 
 
@@ -105,9 +105,14 @@ def compute_exposure_midpoint(data):
 #########################
 #### BASIC WAVE INFO ####
 #########################
-    
+
 def estimate_wls(data):
-    return data.wave
+    wave = data.wave
+    tel = parse_telescope(data)
+    if tel == 4:
+        return wave + 0.133
+    else:
+        return wave
 
 
 #######################################
@@ -116,4 +121,4 @@ def estimate_wls(data):
 
 rv_zero_point = -2410.0
 
-lsf_width = [0.014, 0.0229, 0.028]
+lsf_width = [0.014, 0.021, 0.027]

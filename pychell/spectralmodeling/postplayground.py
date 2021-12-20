@@ -195,8 +195,9 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
     # Get RVs for single iteration
     rvsfwm_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
     weights_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+    order_offsets = np.array([np.nanmedian(rvs_dict["rvsfwm"][o, :, iter_indices[o]]) for o in range(n_orders)])
     for o in range(n_orders):
-        rvsfwm_single_iter[o, :] = rvs_dict["rvsfwm"][o, :, iter_indices[o]] - np.nanmedian(rvs_dict["rvsfwm"][o, :, iter_indices[o]])
+        rvsfwm_single_iter[o, :] = rvs_dict["rvsfwm"][o, :, iter_indices[o]] - order_offsets[o]
         weights_single_iter[o, :] = weights[o, :, iter_indices[o]]
         
     # Iteratively Combine and flag RVs
@@ -206,15 +207,19 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
         rvs, unc, rvsn, uncn = (*result_fwm,)
     
         # Flag bad RVs
+        n_bad = 0
         for inight, f, l in pcutils.nightly_iteration(n_obs_nights):
-            rr, ww = rvsfwm_single_iter[:, f:l].flatten(), weights_single_iter[:, f:l].flatten()
+            rr, ww = rvsfwm_single_iter[:, f:l], weights_single_iter[:, f:l]
             if np.nansum(ww) == 0:
                 continue
-            wstddev = pcmath.weighted_stddev(rr, ww)
-            bad = np.where(np.abs(rvsfwm_single_iter[:, f:l] - rvsn[inight]) > thresh * wstddev)
+            res_norm = (rr - rvsn[inight])
+            bad = np.where(np.abs(res_norm) > thresh * np.nanstd(res_norm))
             if bad[0].size > 0:
-                rvsfwm_single_iter[:, f:l][bad] = np.nan
-                weights_single_iter[:, f:l][bad] = 0
+               rvsfwm_single_iter[:, f:l][bad] = np.nan
+               weights_single_iter[:, f:l][bad] = 0
+               n_bad += len(bad[0])
+        if n_bad == 0:
+            break
 
     # Add to dictionary
     rvs_dict['rvsfwm_out'] = result_fwm[0]
@@ -406,7 +411,7 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
         iter_indices = [n_iterations - 1] * n_orders
 
     # Generate weights
-    weights = gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices, templates=templates)
+    weights = gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices)
     
     # Combine RVs for NM
     rvsfwm_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
@@ -725,7 +730,7 @@ def gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices):
     
     # RV content weights
     #weights = np.zeros((n_orders, n_spec, n_iterations))
-    weights = rvcontents * mask
+    weights = mask / rvcontents**2
     #rvsxc_unc = rvs_dict['uncxc']
     #for o in range(n_orders):
         #for j in range(n_iterations):
