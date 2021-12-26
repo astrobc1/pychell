@@ -19,119 +19,6 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 import pychell.maths as pcmath
 
 ################
-#### 2d PSF ####
-################
-
-def compute_psf2d(image, badpix_mask, trace_positions, wave_estimate, f0, df, peak_thresh):
-    """Fits 2d tilted Gaussian to each peak in the 2d image.
-
-    Args:
-        image (np.ndarray): The image.
-        trace_dict (dict): The trace dictionary.
-        wave_estimate (np.ndarray): An estimate of the wavelength grid for this order.
-        f0 (float): The frequency of the pump line.
-        df (float): The comb line spacing.
-    """
-
-
-    ny, nx = image.shape
-    yarr = np.arange(ny)
-    xarr = np.arange(nx)
-
-    # Generate theoretical LFC peaks
-    good = np.where(np.isfinite(wave_estimate))[0]
-    xi, xf = good[0], good[-1]
-    wi, wf = wave_estimate[xi], wave_estimate[xf]
-    lfc_peak_integers, lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
-    n_spots = len(lfc_centers_wave_theoretical)
-    peak_spacing = estimate_peak_spacing(xi, xf, wi, wf, f0, df)
-    
-    # Number of pixels
-    nx = len(wave_estimate)
-    xarr = np.arange(nx)
-    pfit_estimate = np.polyfit(xarr[good], wave_estimate[good], 4)
-
-    # Estimate spec1d
-    lfc_flux = np.nansum(image, axis=0)
-
-    # Remove background flux
-    background = estimate_background(wave_estimate, lfc_flux, f0, df)
-    lfc_flux_no_bg = lfc_flux - background
-    lfc_peak_max = pcmath.weighted_median(lfc_flux_no_bg, percentile=0.99)
-    
-    # Estimate continuum
-    continuum = estimate_continuum(wave_estimate, lfc_flux_no_bg, f0, df)
-    lfc_flux_norm = lfc_flux_no_bg / continuum
-
-    # Estimate peaks in pixel space (just indices)
-    peaks = scipy.signal.find_peaks(lfc_flux_norm, height=np.full(nx, 0.75), distance=0.8*peak_spacing)[0]
-    peaks = np.sort(peaks)
-
-    # Estimate spacing between peaks, assume linear trend across order
-    peak_spacing = np.polyval(np.polyfit(peaks[1:], np.diff(peaks), 1), xarr)
-
-    # Only consider peaks with enough flux
-    good_peaks = []
-    for peak in peaks:
-        if np.nanmax(image[:, peak-1:peak+2]) >= peak_thresh:
-            good_peaks.append(peak)
-    good_peaks = np.array(good_peaks)
-
-    # Storage arrays for best fit params
-    amps = np.full(good_peaks.size, np.nan) # 0
-    lfc_centers_pix_x = np.full(good_peaks.size, np.nan) # 1
-    sigmas = np.full(good_peaks.size, np.nan) # 3
-    qs = np.full(good_peaks.size, np.nan) # 4
-    thetas = np.full(good_peaks.size, np.nan) # 5
-    rms_norm = np.full(good_peaks.size, np.nan)
-
-    # Fit each peak with a Gaussian
-    for i in range(len(good_peaks)):
-        print(i, len(good_peaks))
-
-        # Window
-        usex = np.where((xarr >= good_peaks[i] - peak_spacing[good_peaks[i]] / 2) & (xarr < good_peaks[i] + peak_spacing[good_peaks[i]] / 2))[0]
-        xx = np.copy(xarr[usex])
-        yy = np.arange(trace_positions[good_peaks[i]] - int(len(usex) / 2), trace_positions[good_peaks[i]] + int(len(usex) / 2) + 1).astype(int)
-
-        # Data
-        zz = image[yy.min():yy.max()+1, usex.min():usex.max()+1]
-
-        # Initial pars
-        p0 = [np.nanmax(zz), # amp
-              xarr[good_peaks[i]], # mux
-              trace_positions[good_peaks[i]], # muy
-              1.4, # sigma
-              0.8, # q
-              np.pi/4, # theta
-              3] # offset
-        
-        # Bounds
-        bounds = [(0.5 * p0[0], 1.5 * p0[0]), # amp
-                  (p0[1] - 1, p0[1] + 1), # mux
-                  (p0[2] - 1, p0[2] + 1), # muy
-                  (0.5, 4), # sigma
-                  (0.4, 0.9), # q
-                  (0, np.pi/2), # theta
-                  (0, 10)] # offset
-
-        # Fit
-        opt_result = scipy.optimize.minimize(fit_peak2d, p0, args=(xx, yy, zz), method='Nelder-Mead', bounds=bounds)
-
-        # Get best fit params
-        pbest = opt_result.x
-        lfc_centers_pix_x[i] = pbest[1]
-        sigmas[i] = pbest[3]
-        qs[i] = pbest[4]
-        thetas[i] = pbest[5]
-
-        # Store rms of fit
-        rms_norm[i] = opt_result.fun / pbest[0]
-
-    return rms_norm, lfc_centers_pix_x, sigmas, thetas, qs
-
-
-################
 #### 1d LSF ####
 ################
 
@@ -248,7 +135,7 @@ def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
 #### WLS ####
 #############
 
-def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wave_estimate_calfiber, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, method="nearest", poly_order=6, n_cores=1):
+def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wave_estimate_calfiber, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, method="nearest", poly_order=6, n_cores=1, static_index=0):
     """Wrapper to compute the wavelength solution for all spectra.
 
     Args:
@@ -319,6 +206,8 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
                 elif method == "nearest":
                     k_cal_nearest = np.nanargmin(np.abs(times_sci[i] - times_lfc_cal))
                     wls_sci_scifiber[:, order_index, i] = np.copy(wls_cal_scifiber[:, order_index, k_cal_nearest])
+                elif method == "static":
+                    wls_sci_scifiber[:, order_index, i] = np.copy(wls_cal_scifiber[:, order_index, static_index])
                 else:
                     raise ValueError("method must be nearest or interp")
 
@@ -373,7 +262,7 @@ def estimate_peak_spacing(xi, xf, wi, wf, f0, df):
     peak_spacing = (xf - xi) / n_peaks
     return peak_spacing
 
-def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="lorentz", sigma_guess=[0.2, 1.4, 3.0], mu_guess=[0.5, 1E-2, 0.5]):
+def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian", sigma_guess=[0.2, 1.4, 3.0], mu_guess=[0.5, 1E-2, 0.5]):
     """Computes the pixel and corresponding wavelength values for each LFC spot peak.
 
     Args:
@@ -487,7 +376,6 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="lorentz",
         peak_integers.append(lfc_peak_integers[k])
     lfc_centers_wave = np.array(lfc_centers_wave)
     peak_integers = np.array(peak_integers)
-
     return lfc_centers_pix, lfc_centers_wave, rms_norm, peak_integers
 
 def gen_theoretical_peaks(wi, wf, f0, df):

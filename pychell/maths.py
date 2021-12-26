@@ -10,6 +10,7 @@ from scipy import constants as cs # cs.c = speed of light in m/s
 import scipy.stats
 import numpy as np
 import scipy.ndimage.filters
+import numpy.polynomial.chebyshev
 
 from astropy.coordinates import SkyCoord
 import astropy.modeling.functional_models
@@ -1044,3 +1045,31 @@ def dl_to_dv(dl, l):
 def dv_to_dl(dv, l):
     return l * (np.exp(dv / cs.c) - 1)
 
+def flatten_jagged_list(x):
+    x_out = np.array([], dtype=float)
+    inds = np.array([], dtype=int)
+    for i in range(len(x)):
+        j_start = len(x_out)
+        x_out = np.concatenate((x_out, x[i]))
+        inds = np.concatenate((inds, np.arange(len(x[i]))))
+    return x_out, inds
+
+def chebyval2d(pcoeffs, echelle_order, norm_pixel, norm_order, poly_order_inter_order, poly_order_intra_order):
+    if len(pcoeffs.shape) == 1:
+        pcoeffs = pcoeffs.reshape((poly_order_inter_order+1, poly_order_intra_order+1))
+    #return 1 / echelle_order * numpy.polynomial.chebyshev.chebval2d(norm_pixel, norm_order, pcoeffs)
+    return 1 / norm_order * numpy.polynomial.chebyshev.chebval2d(norm_pixel, norm_order, pcoeffs)
+
+def chebyval2d_model_builder(pcoeffs, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order):
+    model = chebyval2d(pcoeffs, echelle_orders_flat, pixels_flat / nx, echelle_orders_flat / max_order, poly_order_inter_order, poly_order_intra_order)
+    return model
+
+def solve_poly2d_echelle(pcoeffs, pixels_flat, y_flat, weights_flat, echelle_orders_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order):
+    model_flat = chebyval2d_model_builder(pcoeffs, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order)
+    good = np.where((weights_flat > 0) & np.isfinite(weights_flat))[0]
+    w = weights_flat[good]
+    m = model_flat[good]
+    s = y_flat[good]
+    w = w / np.nansum(w)
+    wres = w * (m - s)
+    return wres
