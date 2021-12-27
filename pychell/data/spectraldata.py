@@ -232,7 +232,7 @@ class Spec1d(SpecData):
             self.mask[bad] = 0
             
         # Check if 1d spectrum is even worth using
-        if np.nansum(self.mask) < self.mask.size / 4:
+        if np.nansum(self.mask) < self.mask.size / 4 or np.where(np.isfinite(self.wave))[0].size < 1500 or np.where(np.isfinite(self.flux))[0].size < 1500:
             self.is_good = False
         else:
             self.is_good = True
