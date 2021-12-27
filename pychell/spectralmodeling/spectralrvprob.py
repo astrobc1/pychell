@@ -130,10 +130,11 @@ class IterativeSpectralRVProb:
             self.data[i].spec_num = i + 1
             
         # Estimate the wavelength bounds for this order
-        wave_grid = self.spec_module.estimate_wls(self.data[0])
-        good = np.where(self.data[0].mask == 1)[0]
-        pixmin, pixmax = np.max([good[0] - 5, 0]), np.min([good[-1] + 5, len(self.data[0].mask) - 1])
-        wavemin, wavemax = wave_grid[pixmin], wave_grid[pixmax]
+        #data0 = [d for d in self.data if d.is_good][0]
+        #wave_grid = self.spec_module.estimate_wls(data0)
+        #good = np.where(data0.mask == 1)[0]
+        #pixmin, pixmax = np.max([good[0] - 5, 0]), np.min([good[-1] + 5, len(data0.mask) - 1])
+        #wavemin, wavemax = wave_grid[pixmin], wave_grid[pixmax]
 
     def init_spectral_model(self):
         self.spectral_model.init_templates(self.data)
