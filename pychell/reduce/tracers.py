@@ -322,25 +322,6 @@ class PeakTracer(OrderTracer):
         y_mean = np.array([np.nanmean(np.polyval(poly_coeffs[i], xarr)) for i in range(len(poly_coeffs))], dtype=float)
         ss = np.argsort(y_mean)
         poly_coeffs = [poly_coeffs[ss[i]] for i in range(len(ss))]
-        
-        # h2 = np.nanmean(heights) / 2
-
-        # for i in range(len(poly_coeffs)):
-        #     trace_positions_estimate = np.polyval(poly_coeffs[i], xarr)
-        #     trace_positions_centroids = np.full(nx, np.nan)
-        #     for x in range(nx):
-        #         if x < mask_left or x > nx - mask_right - 1 or trace_positions_estimate[x] - h2 < poly_bottom[x] or trace_positions_estimate[x] + h2 > poly_top[x]:
-        #             continue
-        #         yy = np.arange(np.floor(trace_positions_estimate[x] - h2), np.ceil(trace_positions_estimate[x] + h2 + 1)).astype(int)
-        #         w = np.copy(image[yy, x])
-        #         trace_positions_centroids[x] = pcmath.weighted_mean(yy, w)
-
-        #     trace_positions_centroids_smooth = pcmath.median_filter1d(trace_positions_centroids, width=5)
-        #     res = np.abs(trace_positions_centroids - trace_positions_centroids_smooth)
-        #     res_smooth = pcmath.median_filter1d(res, width=3)
-        #     good = np.where((res < 0.5) & np.isfinite(res))
-        #     pfit = np.polyfit(xarr[good], trace_positions_centroids[good], poly_order)
-        #     poly_coeffs[i] = pfit
 
         # Now build the orders list
         orders_list = []

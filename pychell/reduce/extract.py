@@ -111,7 +111,6 @@ class SpectralExtractor:
         hdu.writeto(fname, overwrite=True, output_verify='ignore')
 
 
-
     ###############
     #### MISC. ####
     ###############
@@ -228,9 +227,8 @@ class SpectralExtractor:
         extract_aperture = [int(np.ceil(height / 2)), int(np.ceil(height / 2))]
         return extract_aperture
 
-
     @staticmethod
-    def compute_background(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, background_smooth_width=51, background_smooth_poly_order=3):
+    def compute_background_OLD(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, background_smooth_width=51, background_smooth_poly_order=3):
         
         # Image dims
         ny, nx = trace_image.shape
@@ -282,44 +280,48 @@ class SpectralExtractor:
         return background, background_err
 
     @staticmethod
-    def compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, oversample, spec1d=None, background=None):
+    def compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, oversample, spec1d=None, remove_background=False, background=None):
         
         # Image dims
         ny, nx = trace_image.shape
         
         # Helpful array
+        xarr = np.arange(nx)
         yarr = np.arange(ny)
-
-        # Background
-        if background is None:
-            background = np.zeros(nx)
         
         # Create a fiducial high resolution grid centered at zero
-        yarr_hr = np.arange(int(np.floor(-ny / 2)), int(np.ceil(ny / 2)) + 1 / oversample, 1 / oversample)
-        trace_image_rect = np.full((len(yarr_hr), nx), np.nan)
+        yarr_hr0 = np.arange(int(np.floor(-ny / 2)), int(np.ceil(ny / 2)) + 1 / oversample, 1 / oversample)
+        trace_image_rect_norm = np.full((len(yarr_hr0), nx), np.nan)
 
-        # 1d spec info
+        # 1d spec info (smooth)
         if spec1d is None:
             spec1d = np.nansum(trace_image, axis=0)
-        spec1d_norm = spec1d / pcmath.weighted_median(spec1d, percentile=0.95)
+        spec1d_smooth = pcmath.median_filter1d(spec1d, width=3)
+        spec1d_smooth /= pcmath.weighted_median(spec1d_smooth, percentile=0.98)
         
         # Rectify
         for x in range(nx):
-            good = np.where(np.isfinite(trace_image[:, x]))[0]
-            if good.size >= 3 and spec1d_norm[x] > 0.2:
-                col_hr = pcmath.lin_interp(yarr - trace_positions[x], trace_image[:, x], yarr_hr)
-                trace_image_rect[:, x] = col_hr - background[x]
-                bad = np.where(trace_image_rect[:, x] < 0)[0]
+            good = np.where(np.isfinite(trace_image[:, x]) & (badpix_mask[:, x] == 1))[0]
+            if good.size >= 3 and spec1d_smooth[x] > 0.2:
+                if remove_background:
+                    col_hr_shifted = pcmath.lin_interp(yarr - trace_positions[x], trace_image[:, x] - background[x], yarr_hr0)
+                else:
+                    col_hr_shifted = pcmath.lin_interp(yarr - trace_positions[x], trace_image[:, x], yarr_hr0)
+                bad = np.where(col_hr_shifted < 0)[0]
                 if bad.size > 0:
-                    trace_image_rect[bad, x] = np.nan
-                trace_image_rect[:, x] /= np.nansum(trace_image_rect[:, x])
+                    col_hr_shifted[bad] = np.nan
+                trace_image_rect_norm[:, x] = col_hr_shifted / np.nansum(col_hr_shifted)
         
         # Compute trace profile
-        trace_profile_mean = np.nanmean(trace_image_rect, axis=1)
+        trace_profile_median = np.nanmedian(trace_image_rect_norm, axis=1)
+        weights = 1 / (trace_image_rect_norm - np.outer(trace_profile_median, np.ones(nx)))**2
+        bad = np.where(~np.isfinite(weights))
+        weights[bad] = 0
+        trace_profile_mean = pcmath.weighted_mean(trace_image_rect_norm, weights, axis=1)
         
         # Compute cubic spline for profile
         good = np.where(np.isfinite(trace_profile_mean))[0]
-        trace_profile_cspline = scipy.interpolate.CubicSpline(yarr_hr[good], trace_profile_mean[good], extrapolate=False)
+        trace_profile_cspline = scipy.interpolate.CubicSpline(yarr_hr0[good], trace_profile_mean[good], extrapolate=False)
         
         # Ensure trace profile is centered at zero
         prec = 1000
@@ -331,7 +333,7 @@ class SpectralExtractor:
         trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x - trace_max_pos,
                                                               trace_profile_cspline(trace_profile_cspline.x), extrapolate=False)
 
-        # Trim 1 pixel on each end
+        # Trim 2 pixels on each end
         tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
         trace_profile_cspline = scipy.interpolate.CubicSpline(tpx[2*oversample:len(tpx)-2*oversample], tpy[2*oversample:len(tpx)-2*oversample], extrapolate=False)
         
@@ -481,6 +483,31 @@ class SpectralExtractor:
     
         # Return
         return trace_positions
+
+    @staticmethod
+    def compute_background_1d(trace_image, badpix_mask, n=3, background_smooth_width=None, background_smooth_poly_order=None):
+        ny, nx = trace_image.shape
+        background = np.full(nx, np.nan)
+        for x in range(nx):
+            good = np.where(np.isfinite(trace_image[:, x]) & (badpix_mask[:, x] == 1))[0]
+            if good.size < 5:
+                continue
+            S = np.copy(trace_image[good, x])
+            background[x] = np.nanmean(np.sort(S)[0:n])
+
+        # Polynomial filter
+        if background_smooth_width is not None and background_smooth_poly_order is not None:
+            background = pcmath.poly_filter(background, width=background_smooth_width, poly_order=background_smooth_poly_order)
+
+        # Flag negative values
+        bad = np.where(background < 0)[0]
+        if bad.size > 0:
+            background[bad] = 0
+
+        # Error
+        background_err = np.sqrt(background / (n - 1))
+        
+        return background, background_err
 
     @staticmethod
     def boxcar_extraction(trace_image, badpix_mask, trace_positions, extract_aperture, trace_profile_cspline=None, remove_background=False, background=None, background_err=None, read_noise=0, background_smooth_poly_order=3, background_smooth_width=51):

@@ -690,7 +690,7 @@ def weighted_stddev(x, w):
     var = np.nansum(dev ** 2 * weights) / bias_estimator
     return np.sqrt(var)
 
-def weighted_mean(x, w):
+def weighted_mean(x, w, axis=None):
     """Computes the weighted mean of a dataset.
 
     Args:
@@ -700,7 +700,7 @@ def weighted_mean(x, w):
     Returns:
         float: The weighted mean.
     """
-    return np.nansum(x * w) / np.nansum(w)
+    return np.nansum(x * w, axis=axis) / np.nansum(w, axis=axis)
 
 def weighted_combine(y, w, yerr=None, err_type="empirical"):
     """Performs a weighted coadd.
