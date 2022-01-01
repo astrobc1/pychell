@@ -24,6 +24,15 @@ from numba import jit, njit
 import pychell.utils as pcutils
 import pychell.maths as pcmath
 
+# data (Echellogram): The data object to extract.
+# trace_image (np.ndarray): The image containing only one trace.
+# trace_positions (np.ndarray): The trace positions.
+# badpix_mask (np.ndarray): The bad pixel mask (1=good, 0=bad).
+# trace_profile_cspline (scipy.interpolate.CubicSpline): A CubicSpline object used to create the trace profile (grid is relative to zero).
+# extract_aperture (list): The number of pixels [below, above] the trace (relative to trace_positions) to consider for extraction of the desired signal.
+# background_smooth_width (int, optional): How many pixels to use to smooth the background with a rolling median filter. Defaults to None (no smoothing).
+# background_smooth_poly_order (int, optional): The order of the rolling polynomial filter for the background. Defaults to None (no smoothing).
+
 class SpectralExtractor:
     
     #####################
@@ -31,6 +40,11 @@ class SpectralExtractor:
     #####################
     
     def __init__(self, extract_orders=None):
+        """Base constructor for a SpectralExtractor class.
+
+        Args:
+            extract_orders (list, optional): Which orders to extract (relative to the image, starting at 1). Defaults to all orders.
+        """
         self.extract_orders = extract_orders
 
 
@@ -39,6 +53,14 @@ class SpectralExtractor:
     ################################################
 
     def extract_image(self, recipe, data, data_image, badpix_mask=None):
+        """Primary method to extract a single image. Pre-calibration and order tracing are already performed.
+
+        Args:
+            recipe (ReduceRecipe): The recipe object.
+            data (Echellogram): The data object to extract.
+            data_image (np.ndarray): The actual image to extract.
+            badpix_mask (np.ndarray, optional): An initial bad pix mask image (1=good, 0=bad). Defaults to None.
+        """
 
         # Stopwatch
         stopwatch = pcutils.StopWatch()
@@ -65,10 +87,10 @@ class SpectralExtractor:
             orders_list = order_map.orders_list
         
             # A trace mask
-            trace_map_image = recipe.tracer.gen_image(orders_list, ny, nx, mask_left=recipe.mask_left, mask_right=recipe.mask_right, mask_top=recipe.mask_top, mask_bottom=recipe.mask_bottom)
+            trace_map_image = recipe.tracer.gen_image(orders_list, ny, nx, xrange=recipe.xrange, poly_mask_top=recipe.poly_mask_top, poly_mask_bottom=recipe.poly_mask_bottom)
         
             # Mask edge pixels as nan
-            self.mask_image(data_image, recipe.mask_left, recipe.mask_right, recipe.mask_top, recipe.mask_bottom)
+            self.mask_image(data_image, recipe.xrange, recipe.poly_mask_bottom, recipe.poly_mask_top)
         
             # Loop over orders, possibly multi-trace
             for order_index, trace_dict in enumerate(orders_list):
@@ -117,6 +139,14 @@ class SpectralExtractor:
 
     @staticmethod
     def estimate_snr(trace_image):
+        """Crude method to estimate the S/N of the spectrum per 1-dimensional spectral pixel for absorption spectra where the continuum dominates.
+
+        Args:
+            trace_image (np.ndarray): The image containing only one trace.
+
+        Returns:
+            float: The estimated S/N.
+        """
         spec1d = np.nansum(trace_image, axis=0)
         spec1d /= pcmath.weighted_median(spec1d, percentile=0.99)
         spec1d_smooth = np.nansum(pcmath.median_filter2d(trace_image, width=3), axis=0)
@@ -127,6 +157,15 @@ class SpectralExtractor:
 
     @staticmethod
     def plot_extracted_spectra(data, reduced_data):
+        """Primary method to plot the extracted 1d spectrum for all orders.
+
+        Args:
+            data (Echellogram): The data object to extract.
+            reduced_data (np.ndarray): The extracted spectra array with shape=(n_orders, n_traces_per_order, n_pixels, 3). The last dimension contains the flux, flux unc, and badpix mask (1=good, 0=bad).
+
+        Returns:
+            Figure: A Matplotlib Figure object (not yet saved).
+        """
     
         # Numbers
         n_orders = reduced_data.shape[0]
@@ -191,7 +230,22 @@ class SpectralExtractor:
     #########################
 
     @staticmethod
-    def flag_pixels2d(trace_image, badpix_mask, model2d, badpix_threshold=5):
+    def flag_pixels2d(trace_image, badpix_mask, model2d, badpix_threshold=4):
+        """Flags bad pixels in the 2d image based on the residuals between the data and model, which is Extractor dependent.
+
+        Args:
+            trace_image (np.ndarray): The trace image.
+            badpix_mask (np.ndarray): The current bad pixel mask
+            model2d (np.ndarray): The nominal 2d model
+            badpix_threshold (int, optional): Deviations larger than badpix_threshold * stddev(residuals) are flagged. Defaults to 4.
+
+        Returns:
+            np.ndarray: The updated trace image.
+            np.ndarray: The updated badpix mask.
+        """
+
+        trace_image_cp = np.copy(trace_image)
+        badpix_mask_cp = np.copy(badpix_mask)
 
         # Smooth the 2d image
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
@@ -200,35 +254,80 @@ class SpectralExtractor:
         model2d_smooth = pcmath.median_filter2d(trace_image, width=3)
 
         # Normalized residuals
-        norm_res = (trace_image - model2d_smooth) / trace_image_smooth
+        norm_res = (trace_image - model2d_smooth) / np.sqrt(trace_image_smooth)
 
         # Flag
         use = np.where(norm_res != 0)
         bad = np.where(np.abs(norm_res) > badpix_threshold * np.nanstd(norm_res[use]))
         if bad[0].size > 0:
-            badpix_mask[bad] = 0
-            trace_image[bad] = np.nan
+            badpix_mask_cp[bad] = 0
+            trace_image_cp[bad] = np.nan
+        return trace_image_cp, badpix_mask_cp
 
     @staticmethod
-    def mask_image(image, mask_left, mask_right, mask_top, mask_bottom):
+    def mask_image(image, xrange, poly_coeff_bottom, poly_coeff_top):
+        """Masks an image in-place based on left/right enpoints, and top/bottom polynomials.
+
+        Args:
+            image (np.ndarray): The image to mask.
+            xrange (int): The x range to consider.
+            poly_mask_bottom (np.ndarray): The polynomial coefficients to mask the top of the image. The units are in detector pixels.
+            poly_mask_top (np.ndarray): The polynomial coefficients to mask the bottom of the image. The units are in detector pixels.
+        """
+
+        # Dims
         ny, nx = image.shape
-        image[0:mask_bottom, :] = np.nan
-        image[ny-mask_top:, :] = np.nan
-        image[:, 0:mask_left] = np.nan
-        image[:, nx-mask_right:] = np.nan
+        
+        # Helpful arrs
+        xarr = np.arange(nx)
+        yarr = np.arange(ny)
+
+        # Mask left/right
+        image[:, 0:xrange[0]] = np.nan
+        image[:, xrange[1]:] = np.nan
+
+        # Mask bottom/top
+        poly_bottom = np.polyval(poly_coeff_bottom, xarr)
+        poly_top = np.polyval(poly_coeff_top, xarr)
+        for x in range(nx):
+            bad = np.where((yarr < poly_bottom[x]) | (yarr > poly_top[x]))[0]
+            image[bad, x] = np.nan
 
     @staticmethod
-    def compute_extract_aperture(trace_profile_cspline, flux_cutoff=0.05):
-        trace_profile_x, trace_profile = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
-        trace_profile -= np.nanmin(trace_profile)
-        trace_profile /= np.nanmax(trace_profile)
-        good = np.where(trace_profile > flux_cutoff)[0]
-        height = trace_profile_x[np.max(good)] - trace_profile_x[np.min(good)]
-        extract_aperture = [int(np.ceil(height / 2)), int(np.ceil(height / 2))]
+    def compute_extract_aperture(trace_profile_cspline, min_profile_flux=0.05):
+        """Computes the extraction aperture based on where there is enough signal.
+
+        Args:
+            trace_profile_cspline (scipy.interpolate.CubicSpline): A CubicSpline object used to create the trace profile (grid is relative to zero).
+            min_profile_flux (float, optional): The minimum flux (relative to 1) to consider in the trace profile. Defaults to 0.05.
+
+        Returns:
+            list: The recommended number of pixels [below, above] the trace (relative to trace_positions) to consider for extraction of the desired signal.
+        """
+        tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+        tpy -= np.nanmin(tpy)
+        tpy /= np.nanmax(tpy)
+        good = np.where(tpy > min_profile_flux)[0]
+        xi, xf = good.min(), good.max()
+        extract_aperture = [int(np.abs(np.floor(tpx[xi]))), int(np.ceil(tpx[xf]))]
         return extract_aperture
 
     @staticmethod
-    def compute_background_OLD(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, background_smooth_width=51, background_smooth_poly_order=3):
+    def compute_background_1d(trace_image, badpix_mask, trace_positions, extract_aperture, background_smooth_width=None, background_smooth_poly_order=None):
+        """Computes the background signal based on regions of low flux. This works best for slit-fed spectrographs where there is still signal on either side of the trace. Fiber-fed spectrographs must resort to other methods not yet implemented.
+
+        Args:
+            trace_image (np.ndarray): The image containing only one trace.
+            badpix_mask (np.ndarray): The bad pixel mask (1=good, 0=bad).
+            trace_positions (np.ndarray): The trace positions.
+            extract_aperture (list): The number of pixels [below, above] the trace (relative to trace_positions) to consider for extraction of the desired signal.
+            background_smooth_width (int, optional): How many pixels to use to smooth the background with a rolling median filter. Defaults to None (no smoothing).
+            background_smooth_poly_order (int, optional): The order of the rolling polynomial filter for the background. Defaults to None (no smoothing).
+
+        Returns:
+            np.ndarray: The background signal.
+            np.ndarray: The uncertainty in the background signal.
+        """
         
         # Image dims
         ny, nx = trace_image.shape
@@ -246,14 +345,6 @@ class SpectralExtractor:
         # Loop over columns
         for x in range(nx):
             
-            # Compute trace profile for this column
-            P = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x],
-                                      trace_profile_cspline(trace_profile_cspline.x),
-                                      yarr)
-            
-            # Normalize to max
-            P /= np.nanmax(P)
-            
             # Identify regions low in flux
             background_locs = np.where(((yarr < trace_positions[x] - extract_aperture[0]) | (yarr > trace_positions[x] + extract_aperture[1])) & np.isfinite(trace_image_smooth[:, x]))[0]
             
@@ -262,7 +353,7 @@ class SpectralExtractor:
                 continue
             
             # Compute the median counts behind the trace (use 25th percentile to mitigate injecting negative values)
-            background[x] = pcmath.weighted_median(trace_image_smooth[background_locs, x], percentile=0.25)
+            background[x] = np.nanmedian(trace_image_smooth[background_locs, x])
             
             # Compute background
             if background[x] >= 0 and np.isfinite(background[x]):
@@ -271,16 +362,40 @@ class SpectralExtractor:
                     background[x] = np.nan
                 else:
                     background_err[x] = np.sqrt(background[x] / (n_good - 1))
+            else:
+                background[x] = np.nan
+                background_err[x] = np.nan
 
-        # Smooth the background
-        background = pcmath.poly_filter(background, width=background_smooth_width, poly_order=background_smooth_poly_order)
-        background_err = pcmath.poly_filter(background_err, width=background_smooth_width, poly_order=background_smooth_poly_order)
+        # Polynomial filter
+        if background_smooth_width is not None and background_smooth_poly_order is not None:
+            background = pcmath.poly_filter(background, width=background_smooth_width, poly_order=background_smooth_poly_order)
+            background_err = pcmath.poly_filter(background, width=background_smooth_width, poly_order=background_smooth_poly_order)
+
+        # Flag negative values
+        bad = np.where(background < 0)[0]
+        if bad.size > 0:
+            background[bad] = 0
+            background_err[bad] = 0
 
         # Return
         return background, background_err
 
     @staticmethod
-    def compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, oversample, spec1d=None, remove_background=False, background=None):
+    def compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, oversample=1, spec1d=None, remove_background=False, background=None):
+        """Computes the 1-dimensional trace profile (purely vertical).
+
+        Args:
+            trace_image (np.ndarray): The trace image.
+            badpix_mask (np.ndarray): The bad pixel mask (1=good, 0=bad).
+            trace_positions (np.ndarray): The trace positions.
+            oversample (int, optional): An oversampling factor for the trace profile. Defaults to 1.
+            spec1d (np.ndarray, optional): The current 1d spectrum. Defaults to a summation over columns.
+            remove_background (bool, optional): Whether or not to remove the background. Defaults to False.
+            background (np.ndarray, optional): If remove_background is True, this vector is removed before computing the trace profile. Defaults to None.
+
+        Returns:
+            CubicSpline: A scipy.interpolate.CubicSpline object.
+        """
         
         # Image dims
         ny, nx = trace_image.shape
@@ -336,13 +451,29 @@ class SpectralExtractor:
         # Trim 2 pixels on each end
         tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
         trace_profile_cspline = scipy.interpolate.CubicSpline(tpx[2*oversample:len(tpx)-2*oversample], tpy[2*oversample:len(tpx)-2*oversample], extrapolate=False)
-        
 
         # Return
         return trace_profile_cspline
 
     @staticmethod
-    def compute_trace_positions_ccf(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, spec1d=None, window=10, background=None, remove_background=True, trace_pos_poly_order=4):
+    def compute_trace_positions_ccf(trace_image, badpix_mask, trace_profile_cspline, extract_aperture, trace_positions_estimate=None, spec1d=None, ccf_window=10, remove_background=False, background=None, trace_pos_poly_order=2):
+        """Computes the trace positions by cross-correlating the trace profile with each column and fitting a polynomial to the nominal ccf locs.
+
+        Args:
+            trace_image (np.ndarray): The image containing only one trace.
+            badpix_mask (np.ndarray): The bad pixel mask (1=good, 0=bad).
+            trace_profile_cspline (scipy.interpolate.CubicSpline): A CubicSpline object used to create the trace profile (grid is relative to zero).
+            extract_aperture (list): The number of pixels [below, above] the trace (relative to trace_positions) to consider for extraction of the desired signal.
+            trace_positions_estimate (np.ndarray, optional): The current trace positions. If not provided, they are estimated from fitting a polynomial to the centroid of each column.
+            spec1d (np.ndarray, optional): The current 1d spectrum used to determine if a column has sufficient signal. Defaults to a smoothed boxcar spectrum.
+            ccf_window (int, optional): How many total pixels to consider above/below the current trace positions in the ccf. Defaults to 10 (5 above, 5 below).
+            remove_background (bool, optional): Whether or not to remove the background. Defaults to False.
+            background (np.ndarray, optional): The nominal background signal. Defaults to None.
+            trace_pos_poly_order (int, optional): The polynomial order to fit to the ccf positions. Defaults to 2.
+
+        Returns:
+            np.ndarray: The updated trace positions.
+        """
 
         # The image dimensions
         ny, nx = trace_image.shape
@@ -377,28 +508,29 @@ class SpectralExtractor:
             spec1d = pcmath.median_filter1d(spec1d, width=3)
         spec1d_norm = spec1d / pcmath.weighted_median(spec1d, percentile=0.95)
 
-        # Normalize trace profile to 1
+        # Normalize trace profile to max=1
         trace_profile = trace_profile_cspline(trace_profile_cspline.x)
+        # oversample = 1 / np.nanmedian(np.diff(trace_profile_cspline.x))
         trace_profile /= np.nanmax(trace_profile)
 
         # Loop over columns
         for x in range(nx):
             
             # See if column is even worth looking at
-            good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_no_background_smooth[:, x]) & (yarr > trace_positions[x] - np.ceil(window / 2)) & (yarr < trace_positions[x] + np.ceil(window / 2)))[0]
+            good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_no_background_smooth[:, x]) & (yarr > trace_positions_estimate[x] - np.ceil(ccf_window / 2)) & (yarr < trace_positions_estimate[x] + np.ceil(ccf_window / 2)))[0]
             if good.size <= 3 or spec1d_norm[x] < 0.2:
                 continue
             
-            # Normalize data column to 1
+            # Normalize data column to max=1
             data_x = trace_image_no_background_smooth[:, x] / np.nanmax(trace_image_no_background_smooth[:, x])
             
             # CCF lags
-            lags = np.arange(trace_positions[x] - window/2, trace_positions[x] + window/2)
+            lags = np.arange(trace_positions_estimate[x] - ccf_window / 2, trace_positions_estimate[x] + ccf_window / 2)
             
             # Perform CCF
             ccf = pcmath.cross_correlate(yarr, data_x, trace_profile_cspline.x, trace_profile, lags, kind="xc")
 
-            # Normalize to max=1
+            # Normalize to max
             ccf /= np.nanmax(ccf)
             
             # Fit ccf
@@ -425,12 +557,25 @@ class SpectralExtractor:
         if good.size > nx / 6:
             pfit = np.polyfit(xarr[good], y_positions_xc[good], trace_pos_poly_order)
             trace_positions = np.polyval(pfit, xarr)
+        else:
+            trace_positions = np.copy(trace_positions_estimate)
         
         # Return
         return trace_positions
 
     @staticmethod
-    def compute_trace_positions_centroids(trace_image, badpix_mask, trace_positions_estimate=None, extract_aperture=None, trace_pos_poly_order=4, n_iterations=5):
+    def compute_trace_positions_centroids(trace_image, badpix_mask, trace_pos_poly_order=2):
+        """Computes the trace positions by iteratively computing the centroids of each column.
+
+        Args:
+            trace_image (np.ndarray): The image containing only one trace.
+            badpix_mask (np.ndarray): The bad pixel mask (1=good, 0=bad).
+            spec1d (np.ndarray, optional): The current 1d spectrum. Defaults to a summation over columns.
+            trace_pos_poly_order (int, optional): The polynomial order to fit the centroids with. Defaults to 2.
+
+        Returns:
+            np.ndarray: The trace positions.
+        """
 
         # The image dimensions
         ny, nx = trace_image.shape
@@ -442,107 +587,63 @@ class SpectralExtractor:
         # Smooth image
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=3, preserve_nans=False)
 
-        if extract_aperture is None:
-            h2 = int(np.ceil(np.nanmax(np.nansum(badpix_mask, axis=0))))
-            extract_aperture = [h2, h2]
+        # Y centroids
+        ycen = np.full(nx, np.nan)
 
-        # Initiate trace positions
-        trace_positions = np.full(nx, np.nan)
+        # Loop over columns
+        for x in range(nx):
+            
+            # See if column is even worth looking at
+            good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_smooth[:, x]))[0]
+            if good.size <= 3:
+                continue
 
-        for i in range(n_iterations):
-
-            # Y centroids
-            ycen = np.full(nx, np.nan)
-
-            # Loop over columns
-            for x in range(nx):
-                
-                # See if column is even worth looking at
-                if i == 0 and trace_positions_estimate is None:
-                    good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_smooth[:, x]))[0]
-                elif i == 0 and trace_positions_estimate is not None:
-                    good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_smooth[:, x]) & (yarr > trace_positions_estimate[x] - extract_aperture[0]) & (yarr < trace_positions_estimate[x] + extract_aperture[1]))[0]
-                else:
-                    good = np.where((badpix_mask[:, x] == 1) & np.isfinite(trace_image_smooth[:, x]) & (yarr > trace_positions[x] - extract_aperture[0]) & (yarr < trace_positions[x] + extract_aperture[1]))[0]
-                if good.size <= 3:
-                    continue
-
-                # Centroid
-                ycen[x] = pcmath.weighted_mean(good, trace_image_smooth[good, x]**2)
-        
-            # Smooth the deviations
-            ycen_smooth = pcmath.median_filter1d(ycen, width=3)
-            bad = np.where(np.abs(ycen - ycen_smooth) > 0.5)[0]
-            if bad.size > 0:
-                ycen[bad] = np.nan
-            good = np.where(np.isfinite(ycen))[0]
-        
-            # Fit with a polynomial
-            pfit = np.polyfit(xarr[good], ycen[good], trace_pos_poly_order)
-            trace_positions = np.polyval(pfit, xarr)
+            # Biased centroid
+            ycen[x] = pcmath.weighted_mean(good, trace_image_smooth[good, x]**2)
+    
+        # Smooth the deviations
+        ycen_smooth = pcmath.median_filter1d(ycen, width=3)
+        bad = np.where(np.abs(ycen - ycen_smooth) > 0.5)[0]
+        if bad.size > 0:
+            ycen[bad] = np.nan
+        good = np.where(np.isfinite(ycen))[0]
+    
+        # Fit with a polynomial
+        pfit = np.polyfit(xarr[good], ycen[good], trace_pos_poly_order)
+        trace_positions = np.polyval(pfit, xarr)
     
         # Return
         return trace_positions
 
     @staticmethod
-    def compute_background_1d(trace_image, badpix_mask, n=3, background_smooth_width=None, background_smooth_poly_order=None):
-        ny, nx = trace_image.shape
-        background = np.full(nx, np.nan)
-        for x in range(nx):
-            good = np.where(np.isfinite(trace_image[:, x]) & (badpix_mask[:, x] == 1))[0]
-            if good.size < 5:
-                continue
-            S = np.copy(trace_image[good, x])
-            background[x] = np.nanmean(np.sort(S)[0:n])
+    def boxcar_extraction(trace_image, badpix_mask, trace_positions, extract_aperture, trace_profile_cspline, remove_background=False, background=None, read_noise=0):
+        """Standard boxcar extraction. A single column from the data is a function of y pixels ($S_{y}$), and is modeled as:
 
-        # Polynomial filter
-        if background_smooth_width is not None and background_smooth_poly_order is not None:
-            background = pcmath.poly_filter(background, width=background_smooth_width, poly_order=background_smooth_poly_order)
+            F_{y} = A * P_{y}
 
-        # Flag negative values
-        bad = np.where(background < 0)[0]
-        if bad.size > 0:
-            background[bad] = 0
+            where P_{y} is the nominal vertical profile and may be arbitrarily scaled. The parameter $A$ is the scaling of the input signal and is fit for in the least squares sense by minimizing the function:
 
-        # Error
-        background_err = np.sqrt(background / (n - 1))
-        
-        return background, background_err
-
-    @staticmethod
-    def boxcar_extraction(trace_image, badpix_mask, trace_positions, extract_aperture, trace_profile_cspline=None, remove_background=False, background=None, background_err=None, read_noise=0, background_smooth_poly_order=3, background_smooth_width=51):
-        """A flavor of boxcar extraction. A single column from the data is a function of y pixels ($S_{y}$), and is modeled as:
-
-            F_{y} = A * P_{y} + B
-
-            where P_{y} is the nominal vertical profile and may be arbitrarily scaled. A is the scaling of the input signal, and B is the background signal which is ignored if remove_background is False or the background variable is set. The sum is performed over a given window defined by extract_aperture. A and B are determined by minimizing the function:
-
-            phi = \sum_{y} w_{y} (S_{y} - F_{y})^{2} = \sum_{y} w_{y} (S_{y} - (A * (\sum_{y} P_{y}) + B))^{2}
+            phi = \sum_{y} w_{y} (S_{y} - F_{y})^{2} = \sum_{y} w_{y} (S_{y} - A P_{y})^{2}
 
             where
             
             w_{y} = M_{y}, where M_{y} is a binary mask (1=good, 0=bad).
 
-            The final 1d value is then A * \sum_{y} P_{y}.
+            The final 1d value is then A \sum_{y} P_{y}.
 
         Args:
-            trace_image (np.ndarray): The trace image of shape ny, nx.
-            badpix_mask (np.ndarray): The bad pix mask.
+            trace_image (np.ndarray): The image containing only one trace.
+            badpix_mask (np.ndarray): The bad pixel mask (1=good, 0=bad).
             trace_positions (np.ndarray): The trace positions of length nx.
             extract_aperture (np.ndarray): A list of the number of pixels above and below trace_positions for each column.
-            trace_profile_cspline (scipy.interpolate.CubicSpline): A CubicSpline object to construct the trace profile, centered at zero.
+            trace_profile_cspline (scipy.interpolate.CubicSpline): A CubicSpline object used to create the trace profile (grid is relative to zero).
             remove_background (bool, optional): Whether or not to remove the background. Defaults to False.
             background (np.ndarray, optional): The background. Defaults to None.
-            background_err (np.ndarray, optional): The background error. Defaults to None.
-            read_noise (float, optional): The detector read noise. Defaults to 0.
-            background_smooth_poly_order (int, optional): The polynomial order to smooth the background with. Defaults to 51.. Defaults to 3.
-            background_smooth_width (int, optional): The window size of the polynomial filter to smooth the background with. Defaults to 51.
+            read_noise (float, optional): Defaults to 0.
 
         Returns:
             np.ndarray: The 1d flux.
             np.ndarray: The 1d flux uncertainty.
-            np.ndarray: The 1d background.
-            np.ndarray: The 1d background uncertainty.
         """
 
         # Image dims
@@ -551,73 +652,27 @@ class SpectralExtractor:
         # Copy
         trace_image_cp = np.copy(trace_image)
         badpix_mask_cp = np.copy(badpix_mask)
-
-        # Storage arrays
-        spec = np.full(nx, np.nan)
-        spec_err = np.full(nx, np.nan)
         
         # Helper array
         yarr = np.arange(ny)
 
         # Background
-        if remove_background and background is not None:
+        if remove_background:
             trace_image_cp -= np.outer(np.ones(ny), background)
             bad = np.where(trace_image_cp < 0)
             trace_image_cp[bad] = np.nan
             badpix_mask_cp[bad] = 0
 
-        # Loop over columns and compute background and 1d spectrum
-        if remove_background and background is None:
-            background = np.full(nx, np.nan)
-            for x in range(nx):
+        # Storage arrays
+        spec1d = np.full(nx, np.nan)
+        spec1d_err = np.full(nx, np.nan)
 
-                # Copy arrs
-                S_x = np.copy(trace_image_cp[:, x])
-                M_x = np.copy(badpix_mask_cp[:, x])
-
-                # Check if column is worth extracting
-                if np.nansum(M_x) <= 1:
-                    continue
-                
-                # Shift Trace Profile
-                P_x = pcmath.cspline_interp(trace_profile_cspline.x + trace_positions[x], trace_profile_cspline(trace_profile_cspline.x), yarr)
-                
-                # Determine which pixels to use from the aperture
-                #use = np.where((yarr >= trace_positions[x] - extract_aperture[0]) & (yarr <= trace_positions[x] + extract_aperture[1]))[0]
-                use = np.where(M_x)[0]
-
-                # Copy arrays
-                S = np.copy(S_x[use])
-                M = np.copy(M_x[use])
-                P = np.copy(P_x[use])
-
-                # Variance
-                v = read_noise**2 + S
-
-                # Normalize P
-                P /= np.nansum(P) # not necessary but oh well
-
-                # Weights
-                w = np.copy(M)
-
-                # Least squares
-                B = (np.nansum(w * S) - np.nansum(w * P) * np.nansum(w * P * S) / np.nansum(w * P**2)) / (np.nansum(w) - np.nansum(w * P)**2 / np.nansum(w * P**2))
-                background[x] = B
-
-            # Smooth background
-            background, background_err = OptimalExtractor._compute_background1d(background, badpix_mask, extract_aperture, background_smooth_poly_order=background_smooth_poly_order, background_smooth_width=background_smooth_width)
-
-        # Redo the optimal extraction with smoothing the smoothed background
+        # Loop over cols
         for x in range(nx):
 
             # Copy arrs
             S_x = np.copy(trace_image_cp[:, x])
             M_x = np.copy(badpix_mask_cp[:, x])
-
-            # Flag negative vals
-            bad = np.where(S_x < 0)[0]
-            S_x[bad] = np.nan
-            M_x[bad] = 0
                 
             # Check if column is worth extracting
             if np.nansum(M_x) <= 1:
@@ -633,14 +688,14 @@ class SpectralExtractor:
             S = np.copy(S_x[use])
             M = np.copy(M_x[use])
             P = np.copy(P_x[use])
-            P /= np.nansum(P) # not necessary but oh well
+            P /= np.nansum(P)
 
             # Variance
             if remove_background:
                 v = read_noise**2 + S + background_err[x]**2
             else:
                 v = read_noise**2 + S
-            
+
             # Weights
             w = np.copy(M)
             w /= np.nansum(w)
@@ -649,7 +704,7 @@ class SpectralExtractor:
             A = np.nansum(w * P * S) / np.nansum(w * P**2)
 
             # Final 1d spec
-            spec[x] = A * np.nansum(P)
-            spec_err[x] = np.sqrt(np.nansum(v) / (np.nansum(M) - 1))
-        
-        return spec, spec_err, background, background_err
+            spec1d[x] = A * np.nansum(P)
+            spec1d_err[x] = np.sqrt(np.nansum(v) / (np.nansum(M) - 1)) / np.nansum(w * P)
+
+        return spec1d, spec1d_err

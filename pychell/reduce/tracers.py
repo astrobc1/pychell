@@ -35,16 +35,29 @@ import pychell.data.spectraldata as pcspecdata
 class OrderTracer:
     
     @staticmethod
-    def gen_image(orders_list, ny, nx, mask_left=200, mask_right=200, mask_top=20, mask_bottom=20):
+    def gen_image(orders_list, ny, nx, xrange=None, poly_mask_top=None, poly_mask_bottom=None):
+        
+        # Initiate order image
         order_image = np.full((ny, nx), np.nan)
+
+        # Helpful arr
         xarr = np.arange(nx)
+
+        # Xrange
+        if xrange is None:
+            xrange = [0, nx - 1]
+        
+        # Top and bottom bounding polynomials
+        poly_top = np.polyval(poly_mask_top, xarr)
+        poly_bottom = np.polyval(poly_mask_bottom, xarr)
+        
         for o in range(len(orders_list)):
             order_center = np.polyval(orders_list[o]['pcoeffs'], xarr)
-            for x in range(nx):
+            for x in range(xrange[0], xrange[1] + 1):
                 ymid = order_center[x]
                 y_low = int(np.floor(ymid - orders_list[o]['height'] / 2))
                 y_high = int(np.ceil(ymid + orders_list[o]['height'] / 2))
-                if y_low < mask_bottom or y_high > ny - mask_top - 1:
+                if y_low < poly_bottom[x] or y_high > poly_top[x]:
                     continue
                 order_image[y_low:y_high + 1, x] = orders_list[o]['label']
 
@@ -56,17 +69,17 @@ class DensityClusterTracer(OrderTracer):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, n_orders, poly_order=2, poly_mask_bottom=None, poly_mask_top=None, order_spacing=10, heights=10, downsample=4):
+    def __init__(self, n_orders, poly_order=2, poly_mask_bottom=None, poly_mask_top=None, order_spacing=10, order_heights=10, downsample=4):
         self.n_orders = n_orders
         self.poly_order = poly_order
         self.order_spacing = order_spacing
         self.poly_mask_bottom = poly_mask_bottom
         self.poly_mask_top = poly_mask_top
         try:
-            iter(heights)
-            self.heights = heights
+            iter(order_heights)
+            self.order_heights = order_heights
         except:
-            self.heights = np.full(self.n_orders, heights)
+            self.order_heights = np.full(self.n_orders, order_heights)
         self.downsample = downsample
 
 
@@ -86,27 +99,31 @@ class DensityClusterTracer(OrderTracer):
             fiber = None
 
         # Call function
-        orders_list = self._trace(image, self.n_orders, self.poly_order, self.order_spacing, self.heights, recipe.mask_left, recipe.mask_right, self.poly_mask_bottom, self.poly_mask_top, self.downsample, fiber, recipe.n_cores)
+        orders_list = self._trace(image, self.n_orders, self.poly_order, self.order_spacing, self.order_heights, recipe.xrange, self.poly_mask_bottom, self.poly_mask_top, self.downsample, fiber, recipe.n_cores)
 
         # Store result
         data.orders_list = orders_list
 
 
     @staticmethod
-    def _trace(image, n_orders, poly_order=2, order_spacing=10, heights=10, mask_left=200, mask_right=200, poly_mask_bottom=None, poly_mask_top=None, downsample=4, fiber=None, n_cores=1):
+    def _trace(image, n_orders, poly_order=2, order_spacing=10, order_heights=10, xrange=None, poly_mask_bottom=None, poly_mask_top=None, downsample=4, fiber=None, n_cores=1):
 
         try:
-            iter(heights)
+            iter(order_heights)
         except:
-            heights = np.full(n_orders, heights)
+            order_heights = np.full(n_orders, order_heights)
     
         # Image dimensions
         ny, nx = image.shape
+
+        # xrange
+        if xrange is None:
+            xrange = [int(0.1 * nx), int(0.9 * nx)]
     
         # Mask
         image = np.copy(image)
-        image[:, 0:mask_left] = np.nan
-        image[:, nx-mask_right:] = np.nan
+        image[:, 0:xrange[0]] = np.nan
+        image[:, xrange[1] + 1:] = np.nan
 
         # Helpful arrs
         xarr = np.arange(nx)
@@ -124,7 +141,7 @@ class DensityClusterTracer(OrderTracer):
         image_smooth = pcmath.median_filter2d(image, width=5, preserve_nans=False)
         
         # Normalize the flat.
-        image_smooth_norm = pcmath.normalize_image(image_smooth, np.nanmean(heights), order_spacing, percentile=0.99, downsample=4)
+        image_smooth_norm = pcmath.normalize_image(image_smooth, np.nanmean(order_heights), order_spacing, percentile=0.99, downsample=4)
         
         # Downsample in the horizontal direction for performance
         nx_lr = int(nx / downsample)
@@ -193,7 +210,7 @@ class DensityClusterTracer(OrderTracer):
             else:
                 label = int(good_labels[l])
             pfit = np.polyfit(downsample * inds[1], inds[0], 2)
-            orders_list.append({'label': label, 'height': heights[l], 'pcoeffs': pfit})
+            orders_list.append({'label': label, 'height': order_heights[l], 'pcoeffs': pfit})
             
         return orders_list
 
@@ -204,20 +221,18 @@ class PeakTracer(OrderTracer):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, n_orders, poly_order=2, order_spacing=10, heights=10, xleft=None, xright=None, poly_mask_bottom=None, poly_mask_top=None, n_slices=10):
+    def __init__(self, n_orders, poly_order=2, order_spacing=10, order_heights=10, xleft=None, xright=None, n_slices=10):
         self.n_orders = n_orders
         self.poly_order = poly_order
         self.order_spacing = order_spacing
         self.xleft = xleft
         self.xright = xright
-        self.poly_mask_bottom = poly_mask_bottom
-        self.poly_mask_top = poly_mask_top
         self.n_slices = n_slices
         try:
-            iter(heights)
-            self.heights = heights
+            iter(order_heights)
+            self.order_heights = order_heights
         except:
-            self.heights = np.full(self.n_orders, heights)
+            self.order_heights = np.full(self.n_orders, order_heights)
 
 
     ######################
@@ -249,19 +264,19 @@ class PeakTracer(OrderTracer):
             fiber = None
 
         # Call function
-        orders_list = self._trace(image, self.n_orders, self.poly_order, self.order_spacing, self.heights, recipe.mask_left, recipe.mask_right, self.poly_mask_bottom, self.poly_mask_top, fiber, xleft, xright, self.n_slices)
+        orders_list = self._trace(image, self.n_orders, self.poly_order, self.order_spacing, self.order_heights, recipe.xrange, recipe.poly_mask_bottom, recipe.poly_mask_top, fiber, xleft, xright, self.n_slices)
 
         # Store result
         data.orders_list = orders_list
 
 
     @staticmethod
-    def _trace(image, n_orders, poly_order=2, order_spacing=10, heights=10, mask_left=200, mask_right=200, poly_mask_bottom=None, poly_mask_top=None, fiber=None, xleft=None, xright=None, n_slices=10):
+    def _trace(image, n_orders, poly_order=2, order_spacing=None, order_heights=None, xrange=None, poly_mask_bottom=None, poly_mask_top=None, fiber=None, xleft=None, xright=None, n_slices=10):
 
         try:
-            iter(heights)
+            iter(order_heights)
         except:
-            heights = np.full(n_orders, heights)
+            order_heights = np.full(n_orders, order_heights)
 
         # Image dimensions
         ny, nx = image.shape
@@ -270,10 +285,14 @@ class PeakTracer(OrderTracer):
         xarr = np.arange(nx)
         yarr = np.arange(ny)
 
+        # xrange
+        if xrange is None:
+            xrange = [int(0.1 * nx), int(0.9 * nx)]
+    
         # Mask
         image = np.copy(image)
-        image[:, 0:mask_left] = np.nan
-        image[:, nx-mask_right:] = np.nan
+        image[:, 0:xrange[0]] = np.nan
+        image[:, xrange[1] + 1:] = np.nan
 
         # Top and bottom bounding polynomials
         poly_top = np.polyval(poly_mask_top, xarr)
@@ -315,7 +334,7 @@ class PeakTracer(OrderTracer):
         for i in range(n_orders):
             xx = [xslices[i] for i in range(len(xslices)) if peaks[i] is not None]
             yy = [_peaks[i] for _peaks in peaks if _peaks is not None]
-            pfit = np.polyfit(xx, yy, 2)
+            pfit = np.polyfit(xx, yy, poly_order)
             poly_coeffs.append(pfit)
 
         # Ensure the labels are properly sorted
@@ -330,6 +349,6 @@ class PeakTracer(OrderTracer):
                 label = float(str(int(i + 1)) + "." + str(int(fiber)))
             else:
                 label = i + 1
-            orders_list.append({'label': label, 'height': heights[i], 'pcoeffs': poly_coeffs[i]})
+            orders_list.append({'label': label, 'height': order_heights[i], 'pcoeffs': poly_coeffs[i]})
         
         return orders_list

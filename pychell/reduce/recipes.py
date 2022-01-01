@@ -31,7 +31,7 @@ class ReduceRecipe:
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, spectrograph, data_input_path, output_path, do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5, mask_left=50, mask_right=50, mask_top=10, mask_bottom=10, tracer=None, extractor=None, n_cores=1):
+    def __init__(self, spectrograph, data_input_path, output_path, do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5, xrange=None, poly_mask_bottom=None, poly_mask_top=None, tracer=None, extractor=None, n_cores=1):
         """Construct a recipe to reduce a directory.
 
         Args:
@@ -42,10 +42,9 @@ class ReduceRecipe:
             do_dark (bool, optional): Whether or not to perform a dark subtraction. Defaults to True.
             do_flat (bool, optional): Whether or not to perform flat fielding. Defaults to True.
             flat_percentile (float, optional): The flat field percentile. Defaults to 0.5.
-            mask_left (int, optional): The number of pixels to mask on the left of each image. Defaults to 50.
-            mask_right (int, optional): The number of pixels to mask on the right of each image. Defaults to 50.
-            mask_top (int, optional): The number of pixels to mask on the top of each image. Defaults to 10.
-            mask_bottom (int, optional): The number of pixels to mask on the bottom of each image. Defaults to 10.
+            xrange (list, optional): The range of x pixels to consider.
+            poly_mask_bottom (np.ndarray, optional): The polynomial to mask the bottom of the image.
+            poly_mask_top (np.ndarray, optional): The polynomial to mask the top of the image.
             tracer (OrderTracer, optional): The tracer object.
             extractor (SpectralExtractor, optional): The extractor object.
             n_cores (int, optional): The number of cpus to use. Defaults to 1.
@@ -71,10 +70,9 @@ class ReduceRecipe:
         self.flat_percentile = flat_percentile
 
         # Image area
-        self.mask_left = mask_left
-        self.mask_right = mask_right
-        self.mask_top = mask_top
-        self.mask_bottom = mask_bottom
+        self.xrange = xrange
+        self.poly_mask_top = poly_mask_top
+        self.poly_mask_bottom = poly_mask_bottom
 
         # Reduction steps
         self.tracer = tracer
