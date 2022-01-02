@@ -31,7 +31,7 @@ class OptimalExtractor(SpectralExtractor):
                  trace_pos_poly_order=2, trace_pos_refine_window=None,
                  remove_background=False, background_smooth_poly_order=None, background_smooth_width=None,
                  n_iterations=20, badpix_threshold=5,
-                 min_profile_flux=0.05, extract_aperture=None):
+                 min_profile_flux=1E-3, extract_aperture=None):
         """Constructor for the Optimal Extractor object.
 
         Args:
@@ -45,7 +45,7 @@ class OptimalExtractor(SpectralExtractor):
             background_smooth_poly_order (int, optional): The order of the rolling polynomial filter for the background. Defaults to None (no smoothing).
             n_iterations (int, optional): How many iterations to refine the trace positions, trace profile, and flag bad pixels. Defaults to 20.
             badpix_threshold (int, optional): Deviations larger than badpix_threshold * stddev(residuals) are flagged. Defaults to 4.
-            min_profile_flux (float, optional): The minimum flux (relative to 1) to consider in the trace profile. Defaults to 0.05.
+            min_profile_flux (float, optional): The minimum flux (relative to 1) to consider in the trace profile. Defaults to 1E-3.
             extract_aperture (list): The number of pixels [below, above] the trace (relative to trace_positions) to consider for extraction of the desired signal.
         """
 
@@ -93,7 +93,7 @@ class OptimalExtractor(SpectralExtractor):
     def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask,
                        chunk_width=None, oversample=1, trace_pos_poly_order=4, trace_pos_refine_window=None,
                        remove_background=False, background_smooth_poly_order=3, background_smooth_width=51,
-                       n_iterations=5, badpix_threshold=5, min_profile_flux=0.05, _extract_aperture=None):
+                       n_iterations=5, badpix_threshold=5, min_profile_flux=1E-3, _extract_aperture=None):
         
         # Read noise
         read_noise = data.spec_module.parse_itime(data) * data.spec_module.read_noise
@@ -183,9 +183,6 @@ class OptimalExtractor(SpectralExtractor):
             else:
                 extract_aperture = _extract_aperture
 
-            # Update trace positions
-            trace_positions_chunk = OptimalExtractor.compute_trace_positions_ccf(trace_image_chunk, badpix_mask_chunk, trace_profile_cspline, extract_aperture, trace_positions_estimate=trace_positions_chunk, spec1d=None, ccf_window=trace_pos_refine_window, background=background, remove_background=remove_background, trace_pos_poly_order=trace_pos_poly_order)
-
             # Current spec1d (smoothed)
             spec1d_chunk = np.nansum(trace_image_chunk, axis=0)
             spec1d_chunk = pcmath.median_filter1d(spec1d_chunk, width=3)
@@ -200,7 +197,6 @@ class OptimalExtractor(SpectralExtractor):
                     trace_positions_chunk = OptimalExtractor.compute_trace_positions_ccf(trace_image_chunk, badpix_mask_chunk, trace_profile_cspline, extract_aperture, trace_positions_estimate=trace_positions_chunk, spec1d=None, ccf_window=trace_pos_refine_window, background=background, remove_background=remove_background, trace_pos_poly_order=trace_pos_poly_order)
                 else:
                     trace_positions_chunk = OptimalExtractor.compute_trace_positions_ccf(trace_image_chunk, badpix_mask_chunk, trace_profile_cspline, extract_aperture, trace_positions_estimate=trace_positions_chunk, spec1d=spec1d_chunk, ccf_window=trace_pos_refine_window, background=background, remove_background=remove_background, trace_pos_poly_order=trace_pos_poly_order)
-
 
                 # Update trace profile
                 if j == 0:
@@ -247,7 +243,6 @@ class OptimalExtractor(SpectralExtractor):
                         badpix_mask_chunk = badpix_mask_chunk_new
 
         # Average chunks
-        #breakpoint() #matplotlib.use("MacOSX"); plt.plot(np.nanmean(spec1d_chunks, axis=1)); plt.show()
         spec1d = np.nanmean(spec1d_chunks, axis=1)
         spec1d_unc = np.nanmean(spec1d_unc_chunks, axis=1)
 
@@ -344,7 +339,7 @@ class OptimalExtractor(SpectralExtractor):
                 S = np.copy(S_x[use])
                 M = np.copy(M_x[use])
                 P = np.copy(P_x[use])
-                P /= np.nansum(P)
+                P /= np.nansum(P) # Not necessary
 
                 # Variance
                 if remove_background:
@@ -407,11 +402,8 @@ class OptimalExtractor(SpectralExtractor):
         # Initialize model
         model2d = np.full((ny, nx), np.nan)
 
-        # Which 1d spec to use
-        if smooth:
-            spec1d_smooth = pcmath.median_filter1d(spec1d, width=3)
-        else:
-            spec1d_smooth = np.copy(spec1d)
+        # Smooth
+        spec1d_smooth = pcmath.median_filter1d(spec1d, width=3)
 
         # Loop over cols
         for i in range(nx):
@@ -420,9 +412,9 @@ class OptimalExtractor(SpectralExtractor):
             tp = scipy.interpolate.CubicSpline(trace_profile_cspline.x + trace_positions[i], trace_profile_cspline(trace_profile_cspline.x))(yarr)
 
             # Which pixels to use
-            usey = np.where((yarr >= trace_positions[i] - extract_aperture[0] - 0.5) & (yarr <= trace_positions[i] + extract_aperture[1] + 0.5))[0]
+            usey = np.where((yarr >= trace_positions[i] - extract_aperture[0]) & (yarr <= trace_positions[i] + extract_aperture[1]))[0]
 
-            # Normalize
+            # Normalize to sum=1
             tp = tp[usey] / np.nansum(tp[usey])
 
             # Model
@@ -435,7 +427,7 @@ class OptimalExtractor(SpectralExtractor):
         return model2d
 
     @staticmethod
-    def generate_chunks(trace_image, badpix_mask, chunk_width=200):
+    def generate_chunks(trace_image, badpix_mask, chunk_width):
         """Generates a set of chunks which overlap by 50 percent.
 
         Args:

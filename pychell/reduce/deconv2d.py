@@ -80,39 +80,39 @@ class GaussianDeconv2dExtractor(SpectralExtractor):
         ny, nx = trace_image.shape
 
         # Number of chunks
-        n_chunks = 50
+        chunks = SPExtractor.generate_chunks(trace_image, badpix_mask, chunk_width=200)
 
-        # Copy input spectrum
+        # Copy input spectrum and fix nans (inside bounds)
         f = np.copy(spec1d)
+        xarr = np.arange(nx)
+        good = np.where(np.isfinite(f))[0]
         bad = np.where(~np.isfinite(f))[0]
-        f[bad] = 0
+        f[bad] = pcmath.lin_interp(xarr[good], f[good], xarr[bad])
 
         # Stitch points
-        goody, goodx = np.where(badpix_mask)
-        xi, xf = goodx.min(), goodx.max()
-        nnx = xf - xi + 1
-        stitch_points = np.linspace(xi, xf, num=n_chunks + 1).astype(int)
-        yi, yf = goody.min(), goody.max()
-        nny = yf - yi + 1
-        model2d = np.full((ny, nx), np.nan)
+        model2d = np.full((ny, nx, len(chunks)), np.nan)
 
         # Loop over chunks
-        for i in range(n_chunks):
-            xxi, xxf = stitch_points[i], stitch_points[i + 1]
+        for i in range(len(chunks)):
+            xxi, xxf = chunks[i][0], chunks[i][1]
             nnnx = xxf - xxi + 1
             goodyy, _ = np.where(badpix_mask[:, xxi:xxf+1])
             yyi, yyf = goodyy.min(), goodyy.max()
             nnny = yyf - yyi + 1
             S = trace_image[yyi:yyf+1, xxi:xxf+1]
             tp = trace_positions[xxi:xxf+1] - yyi
-            xarr_aperture = np.arange(xxi, xxf+1)
+            xarr_aperture = np.arange(nnnx)
             A = GaussianDeconv2dExtractor.generate_A(S, xarr_aperture, tp, sigma[xxi:xxf+1], q[xxi:xxf+1], theta[xxi:xxf+1], extract_aperture)
             Aflat = A.reshape((nnny*nnnx, nnnx))
             Sflat = S.flatten()
-            model2d[yyi:yyf+1, xxi:xxf+1] = np.matmul(Aflat, f[xxi:xxf+1]).reshape((nnny, nnnx)) + np.sqrt(S)
+            model2d[yyi:yyf+1, xxi:xxf+1, i] = np.matmul(Aflat, f[xxi:xxf+1]).reshape((nnny, nnnx))
             if remove_background:
-                model2d[yyi:yyf+1, xxi:xxf+1] += np.outer(np.ones(nnny), background[xxi:xxf+1])
+                model2d[yyi:yyf+1, xxi:xxf+1, i] += np.outer(np.ones(nnny), background[xxi:xxf+1])
+            
+            model2d[:, xxi:xxi+20, i] = np.nan
+            model2d[:, xxf-20:xxf, i] = np.nan
 
+        model2d = np.nanmean(model2d, axis=2)
         return model2d
 
     @staticmethod
@@ -231,7 +231,7 @@ class GaussianDeconv2dExtractor(SpectralExtractor):
         return trace_image_out
 
 
-class LSQR2dExtractor(GaussianDeconv2dExtractor):
+class LSQRExtractor(GaussianDeconv2dExtractor):
 
     ###############################
     #### CONSTRUCTOR + HELPERS ####
@@ -440,7 +440,7 @@ class LSQR2dExtractor(GaussianDeconv2dExtractor):
 
             # Prep inputs for sparse extraction
             Aflat = A.reshape((nny*nnx, len(xarr_aperture)))
-            S = SP2dExtractor.fix_nans_2d(S, M, tp, extract_aperture)
+            S = SPExtractor.fix_nans_2d(S, M, tp, extract_aperture)
 
             W = np.zeros((nny, nnx))
             for k in range(nny):
@@ -487,7 +487,7 @@ class LSQR2dExtractor(GaussianDeconv2dExtractor):
         return spec1d, spec1d_unc
         
 
-class SP2dExtractor(GaussianDeconv2dExtractor):
+class SPExtractor(GaussianDeconv2dExtractor):
 
     ###############################
     #### CONSTRUCTOR + HELPERS ####
@@ -522,6 +522,107 @@ class SP2dExtractor(GaussianDeconv2dExtractor):
         self.theta = theta
         self.chunk_width = chunk_width
         self.distrust_width = distrust_width
+
+
+    ################################################
+    #### PRIMARY METHOD TO EXTRACT ENTIRE IMAGE ####
+    ################################################
+
+    def extract_image(self, recipe, data, data_image, badpix_mask=None):
+        """Primary method to extract a single image. Pre-calibration and order tracing are already performed.
+
+        Args:
+            recipe (ReduceRecipe): The recipe object.
+            data (Echellogram): The data object to extract.
+            data_image (np.ndarray): The actual image to extract.
+            badpix_mask (np.ndarray, optional): An initial bad pix mask image (1=good, 0=bad). Defaults to None.
+        """
+
+        # Stopwatch
+        stopwatch = pcutils.StopWatch()
+        
+        # The image dimensions
+        ny, nx = data_image.shape
+
+        # The number of orders and fibers (if relevant)
+        n_orders = len(data.order_maps[0].orders_list)
+        n_traces = len(data.order_maps)
+
+        # Default storage is a single HDUList
+        # Last dimension is extracted spectra, uncertainty, badpix mask (1=good, 0=bad)
+        reduced_data = np.full((n_orders, n_traces, nx, 3), np.nan)
+
+        # Convolution matrices
+        conv_matrices = np.empty((n_orders, n_traces, nx, nx), dtype=object)
+
+        # Loop over fibers
+        for fiber_index, order_map in enumerate(data.order_maps):
+
+            # Which orders
+            if self.extract_orders is None:
+                self.extract_orders = np.arange(1, len(order_map.orders_list) + 1).astype(int)
+            
+            # Alias orders list
+            orders_list = order_map.orders_list
+        
+            # A trace mask
+            trace_map_image = recipe.tracer.gen_image(orders_list, ny, nx, xrange=recipe.xrange, poly_mask_top=recipe.poly_mask_top, poly_mask_bottom=recipe.poly_mask_bottom)
+        
+            # Mask edge pixels as nan
+            self.mask_image(data_image, recipe.xrange, recipe.poly_mask_bottom, recipe.poly_mask_top)
+        
+            # Loop over orders, possibly multi-trace
+            for order_index, trace_dict in enumerate(orders_list):
+
+                if order_index + 1 in self.extract_orders:
+                
+                    # Timer
+                    stopwatch.lap(trace_dict['label'])
+
+                    # Print start of trace
+                    print(f" [{data}] Extracting Trace {trace_dict['label']} ...", flush=True)
+                    
+                    # Extract trace
+                    try:
+                        spec1d, spec1d_unc, badpix1d, R = self.extract_trace(data, data_image, trace_map_image, trace_dict, badpix_mask=badpix_mask)
+                        
+                        # Store result
+                        reduced_data[order_index, fiber_index, :, :] = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
+
+                        # Reformat the convolution matrices to save space
+                        breakpoint()
+                        #R_out = np.
+
+                        # Print end of trace
+                        print(f" [{data}] Extracted Trace {trace_dict['label']} in {round(stopwatch.time_since(trace_dict['label']) / 60, 3)} min", flush=True)
+
+                    except:
+                        print(f"Warning! Could not extract trace [{trace_dict['label']}] for observation [{data}]")
+
+        # Plot reduced data
+        fig = self.plot_extracted_spectra(data, reduced_data)
+        
+        # Create a filename
+        obj = data.spec_module.parse_object(data).replace(' ', '_')
+        fname = f"{recipe.output_path}spectra{os.sep}{data.base_input_file_noext}_{obj}_preview.png"
+        
+        # Save
+        plt.savefig(fname)
+        plt.close()
+
+        # Save reduced data
+        fname = f"{recipe.output_path}spectra{os.sep}{data.base_input_file_noext}_{obj}_reduced.fits"
+
+        # Reformat the convolution matrices to save space
+        #for 
+        #hdul = fits.HDUList([fits.PrimaryHDU(reduced_data, header=data.header), fits.])
+        matplotlib.use("MacOSX")
+        #for i in range(nx):
+        #    plt.plot(np.arange(nx) - i, R[i, :])
+        #plt.show()
+        breakpoint()
+        hdu.writeto(fname, overwrite=True, output_verify='ignore')
+
 
     @staticmethod
     def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=1, n_trace_refine_iterations=3, n_extract_iterations=3, trace_pos_refine_window=5, badpix_threshold=5, _extract_aperture=None, sigma=None, q=None, theta=None, chunk_width=200, distrust_width=20):
@@ -582,7 +683,7 @@ class SP2dExtractor(GaussianDeconv2dExtractor):
 
         # Extract Aperture
         if _extract_aperture is None:
-            extract_aperture = SP2dExtractor.compute_extract_aperture(trace_profile_cspline)
+            extract_aperture = SPExtractor.compute_extract_aperture(trace_profile_cspline)
         else:
             extract_aperture = _extract_aperture
 
@@ -591,10 +692,10 @@ class SP2dExtractor(GaussianDeconv2dExtractor):
         for i in range(10):
 
             # Update trace profile
-            trace_profile_cspline = SP2dExtractor.compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, 4, None, background=background)
+            trace_profile_cspline = SPExtractor.compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, 4, None, background=background)
 
             # Update trace positions
-            trace_positions = SP2dExtractor.compute_trace_positions_ccf(trace_image, badpix_mask, trace_profile_cspline, trace_positions, extract_aperture, spec1d=None, window=trace_pos_refine_window, background=background, remove_background=remove_background, trace_pos_poly_order=trace_pos_poly_order)
+            trace_positions = SPExtractor.compute_trace_positions_ccf(trace_image, badpix_mask, trace_profile_cspline, extract_aperture, trace_positions_estimate=trace_positions, spec1d=None, ccf_window=trace_pos_refine_window, remove_background=remove_background, background=background, trace_pos_poly_order=trace_pos_poly_order)
         
         # Iteratively extract spectrum
         for i in range(n_extract_iterations):
@@ -602,16 +703,16 @@ class SP2dExtractor(GaussianDeconv2dExtractor):
             print(f" [{data}] Iteratively Extracting Trace [{i + 1} / {n_extract_iterations}] ...", flush=True)
             
             # Deconv extraction
-            spec1d, spec1d_unc, spec1dt, spec1dt_unc, _ = SP2dExtractor.deconv2dextraction(trace_image, badpix_mask, trace_positions, sigma, q, theta, extract_aperture, background, remove_background, read_noise, chunk_width, distrust_width, oversample)
+            spec1d, spec1d_unc, spec1dt, spec1dt_unc, R = SPExtractor.deconv2dextraction(trace_image, badpix_mask, trace_positions, sigma, q, theta, extract_aperture, background, remove_background, read_noise, chunk_width, distrust_width, oversample)
 
             # Re-map pixels and flag in the 2d image.
             if i < n_extract_iterations - 1:
 
                 # Create the 2d model
-                model2d = SP2dExtractor.compute_model2d(trace_image, badpix_mask, spec1dt, trace_positions, sigma, q, theta, extract_aperture, background, remove_background)
+                model2d = SPExtractor.compute_model2d(trace_image, badpix_mask, spec1dt, trace_positions, sigma, q, theta, extract_aperture, background, remove_background)
 
                 # Flag bad pixels
-                SP2dExtractor.flag_pixels2d(trace_image, badpix_mask, model2d, badpix_threshold)
+                SPExtractor.flag_pixels2d(trace_image, badpix_mask, model2d, badpix_threshold)
 
         # badpix mask
         badpix1d = np.ones(nx)
@@ -620,8 +721,9 @@ class SP2dExtractor(GaussianDeconv2dExtractor):
             spec1dt[bad] = np.nan
             spec1dt_unc[bad] = np.nan
             badpix1d[bad] = 0
+            R[bad, :] = np.nan
         
-        return spec1dt, spec1dt_unc, badpix1d
+        return spec1dt, spec1dt_unc, badpix1d, R
 
 
     ##############################
@@ -658,15 +760,14 @@ class SP2dExtractor(GaussianDeconv2dExtractor):
             trace_image_cp[bad] = 0
 
         # Chunks
-        chunks = SP2dExtractor.generate_chunks(trace_image, badpix_mask_cp, chunk_width=chunk_width)
+        chunks = SPExtractor.generate_chunks(trace_image, badpix_mask_cp, chunk_width=chunk_width)
         n_chunks = len(chunks)
 
-        # Outputs
+        # Outputs (averaged over chunks before returning)
         spec1d = np.full((nx, n_chunks), np.nan)
         spec1dt = np.full((nx, n_chunks), np.nan)
-        spec1dhr = np.full((nx*oversample, n_chunks), np.nan)
-        spec1dthr = np.full((nx*oversample, n_chunks), np.nan)
-            
+        R = np.full((nx, nx, n_chunks), np.nan)
+
         # Loop over and extract chunks
         for i in range(n_chunks):
 
@@ -696,48 +797,52 @@ class SP2dExtractor(GaussianDeconv2dExtractor):
             theta_hr = scipy.interpolate.interp1d(xarr, _theta, fill_value="extrapolate")(xarr_aperture)
 
             # Generate Aperture tensor for this chunk
-            A = SP2dExtractor.generate_A(S, xarr_aperture, tp_hr, sigma_hr, q_hr, theta_hr, extract_aperture)
+            A = SPExtractor.generate_A(S, xarr_aperture, tp_hr, sigma_hr, q_hr, theta_hr, extract_aperture)
 
             # Prep inputs for sparse extraction
             Aflat = A.reshape((nny*nnx, len(xarr_aperture)))
-            S = SP2dExtractor.fix_nans_2d(S, M, tp, extract_aperture)
+            S = SPExtractor.fix_nans_2d(S, M, tp, extract_aperture)
             Sflat = S.flatten()
-            W = np.zeros((nny, nnx))
-            for k in range(nny):
-                for j in range(nnx):
-                    W[k, j] = A[k, j, :].sum()**2 / (S[k, j] + read_noise**2)
-            bad = np.where(~np.isfinite(W))
-            W[bad] = 0
-            Wbig = np.diag(W.flatten())
+            # W = np.zeros((nny, nnx))
+            # for k in range(nny):
+            #     for j in range(nnx):
+            #         W[k, j] = A[k, j, :].sum()**2 / (S[k, j] + read_noise**2)
+            #bad = np.where(~np.isfinite(W))
+            #W[bad] = 0
+            #Wbig = np.diag(W.flatten())
             Ninv = np.diag(1 / Sflat)
             bad = np.where(~np.isfinite(Ninv))
             Ninv[bad] = 0
 
             # Call sparse extraction
-            syhr, sythr, R = SP2dExtractor.extract_SP2d(Aflat, Sflat, Ninv)
-            #breakpoint() #plt.plot(sythr); plt.show()
+            syhr, sythr, _Rhr = SPExtractor.extract_SP2d(Aflat, Sflat, Ninv)
 
             # Bin back to detector grid
-            sy = SP2dExtractor.bin_spec1d(syhr, oversample)
-            syt = SP2dExtractor.bin_spec1d(sythr, oversample)
+            sy = SPExtractor.bin_spec1d(syhr, oversample)
+            syt = SPExtractor.bin_spec1d(sythr, oversample)
 
-            # Mask ends
+            # Mask edge errors
             sy[0:distrust_width] = np.nan
             sy[-distrust_width:] = np.nan
             syt[0:distrust_width] = np.nan
             syt[-distrust_width:] = np.nan
+            _Rhr[0:distrust_width, 0:distrust_width] = np.nan
+            _Rhr[-distrust_width:, -distrust_width:] = np.nan
 
             # Store results
             spec1d[xi:xf+1, i] = sy
             spec1dt[xi:xf+1, i] = syt
             spec1d[xi:xf+1, i] = sy
             spec1dt[xi:xf+1, i] = syt
+            R[xi:xf+1, xi:xf+1, i] = _Rhr
 
         # Final trim of edges
         spec1d[0:xi+distrust_width, 0] = np.nan
         spec1d[xf-distrust_width:, -1] = np.nan
         spec1dt[0:xi+distrust_width, 0] = np.nan
         spec1dt[xf-distrust_width:, -1] = np.nan
+        R[:, 0:xi+distrust_width, 0] = np.nan
+        R[:, xf-distrust_width:, -1] = np.nan
 
         # Correct negatives in reconvolved spectrum
         bad = np.where(spec1dt < 0)[0]
@@ -746,12 +851,43 @@ class SP2dExtractor(GaussianDeconv2dExtractor):
         # Average each chunk
         spec1d = np.nanmean(spec1d, axis=1)
         spec1d_unc = np.sqrt(spec1d)
-        
         spec1dt = np.nanmean(spec1dt, axis=1)
         spec1dt_unc = np.sqrt(spec1dt)
 
+        # For R, make sure each psf is normalized to sum=1
+        RR = np.nanmean(R, axis=2)
+        for i in range(nx):
+            RR[i, :] /= np.nansum(RR[i, :])
+        for i in range(nx):
+            if not np.isclose(np.nansum(RR[i, :]), 1):
+                RR[i, :] = np.nan
+            else:
+                bad = np.where(~np.isfinite(RR[i, :]))[0]
+                RR[i, bad] = 0
+
+        #breakpoint()
+        goody, goodx = np.where(np.isfinite(RR))
+        xi, xf = goodx.min(), goodx.max()
+        for x in range(nx):
+            try:
+                RR[x, 0:xi+20] = 0
+                RR[x, xf - 20:] = 0
+            except:
+                pass
+
+        breakpoint()
+        bad = np.where(RR < 0)
+        RR[bad] = 0
+        for x in range(nx):
+            RR[x, :] /= np.nansum(RR[x, :])
+
+        RR[0:xi-20, :] = np.nan
+        RR[xf - 20:, :] = np.nan
+        #matplotlib.use("MacOSX"); plt.imshow(RR); plt.show()
+        #breakpoint()
+
         # Return
-        return spec1d, spec1d_unc, spec1dt, spec1dt_unc, R
+        return spec1d, spec1d_unc, spec1dt, spec1dt_unc, RR
 
     @staticmethod
     def extract_SP2d(A, S, Ninv):

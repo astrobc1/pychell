@@ -247,14 +247,11 @@ class SpectralExtractor:
         trace_image_cp = np.copy(trace_image)
         badpix_mask_cp = np.copy(badpix_mask)
 
-        # Smooth the 2d image
+        # Smooth the 2d image to normalize redisuals
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
 
-        # Smooth the 2d model
-        model2d_smooth = pcmath.median_filter2d(trace_image, width=3)
-
         # Normalized residuals
-        norm_res = (trace_image - model2d_smooth) / np.sqrt(trace_image_smooth)
+        norm_res = (trace_image - model2d) / np.sqrt(trace_image_smooth)
 
         # Flag
         use = np.where(norm_res != 0)
@@ -294,7 +291,7 @@ class SpectralExtractor:
             image[bad, x] = np.nan
 
     @staticmethod
-    def compute_extract_aperture(trace_profile_cspline, min_profile_flux=0.05):
+    def compute_extract_aperture(trace_profile_cspline, min_profile_flux=0.01):
         """Computes the extraction aperture based on where there is enough signal.
 
         Args:
@@ -305,9 +302,8 @@ class SpectralExtractor:
             list: The recommended number of pixels [below, above] the trace (relative to trace_positions) to consider for extraction of the desired signal.
         """
         tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
-        tpy -= np.nanmin(tpy)
         tpy /= np.nanmax(tpy)
-        good = np.where(tpy > min_profile_flux)[0]
+        good = np.where(tpy >= min_profile_flux)[0]
         xi, xf = good.min(), good.max()
         extract_aperture = [int(np.abs(np.floor(tpx[xi]))), int(np.ceil(tpx[xf]))]
         return extract_aperture
@@ -381,7 +377,7 @@ class SpectralExtractor:
         return background, background_err
 
     @staticmethod
-    def compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, oversample=1, spec1d=None, remove_background=False, background=None):
+    def compute_vertical_trace_profile(trace_image, badpix_mask, trace_positions, oversample=1, spec1d=None, remove_background=False, background=None, min_profile_flux=1E-2):
         """Computes the 1-dimensional trace profile (purely vertical).
 
         Args:
@@ -448,9 +444,31 @@ class SpectralExtractor:
         trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x - trace_max_pos,
                                                               trace_profile_cspline(trace_profile_cspline.x), extrapolate=False)
 
-        # Trim 2 pixels on each end
+        # Trim 1 pixel on each end
         tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
-        trace_profile_cspline = scipy.interpolate.CubicSpline(tpx[2*oversample:len(tpx)-2*oversample], tpy[2*oversample:len(tpx)-2*oversample], extrapolate=False)
+        trace_profile_cspline = scipy.interpolate.CubicSpline(tpx[oversample:len(tpx)-1*oversample], tpy[oversample:len(tpx)-oversample], extrapolate=False)
+
+        # Set profile to zero where is less than min_profile_flux (relative to 1)
+        tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+        tpys = np.sort(tpy)
+        tpy -= np.nanmean(tpys[0:3])
+        tpy /= np.nanmax(tpy)
+        
+        bad_left = np.where((tpx < 0) & (tpy < min_profile_flux))[0]
+        if bad_left.size > 0:
+            tpy[0:bad_left.max()] = 0
+        bad_right = np.where((tpx > 0) & (tpy < min_profile_flux))[0]
+        if bad_right.size > 0:
+            tpy[bad_right.min():] = 0
+
+        # Subtract min_profile_flux
+        tpy -= min_profile_flux
+        bad = np.where(tpy < 0)[0]
+        if bad.size > 0:
+            tpy[bad] = 0
+
+        # Final profile
+        trace_profile_cspline = scipy.interpolate.CubicSpline(tpx, tpy / np.nanmax(tpy), extrapolate=False)
 
         # Return
         return trace_profile_cspline
@@ -491,9 +509,6 @@ class SpectralExtractor:
         # Smooth image
         trace_image_no_background_smooth = pcmath.median_filter2d(trace_image_no_background, width=3, preserve_nans=False)
         
-        # Trace profile
-        trace_profile = trace_profile_cspline(trace_profile_cspline.x)
-        
         # Smooth the image
         bad = np.where(trace_image_no_background_smooth <= 0)
         if bad[0].size > 0:
@@ -504,7 +519,10 @@ class SpectralExtractor:
         
         # 1d spec info
         if spec1d is None:
-            spec1d = np.nansum(trace_image, axis=0)
+            if remove_background:
+                spec1d = np.nansum(trace_image - np.outer(np.ones(ny), np.nanmin(trace_image, axis=0)), axis=0)
+            else:
+                spec1d = np.nansum(trace_image, axis=0)
             spec1d = pcmath.median_filter1d(spec1d, width=3)
         spec1d_norm = spec1d / pcmath.weighted_median(spec1d, percentile=0.95)
 
@@ -554,7 +572,7 @@ class SpectralExtractor:
         good = np.where(np.isfinite(y_positions_xc))[0]
         
         # Fit with a polynomial and generate
-        if good.size > nx / 6:
+        if good.size > 2 * trace_pos_poly_order:
             pfit = np.polyfit(xarr[good], y_positions_xc[good], trace_pos_poly_order)
             trace_positions = np.polyval(pfit, xarr)
         else:

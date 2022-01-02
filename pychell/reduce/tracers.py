@@ -306,7 +306,6 @@ class PeakTracer(OrderTracer):
 
         # Slices
         xslices = np.linspace(xleft + 20, xright - 20, num=n_slices).astype(int)
-        slices = []
         peaks = []
         for i in range(n_slices):
             x = xslices[i]

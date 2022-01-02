@@ -248,7 +248,7 @@ def parse_spec1d(data):
     data.header = fits_data[0].header
     oi = data.order_num - 1
     data.wave = fits_data[0].data[oi, :, 0]
-    #data.flux = fits_data[0].data[oi, :, 1] / fits_data[0].data[oi, :, 4]
+    #data.flux = fits_data[0].data[oi, :, 1] / fits_data[0].data[oi, :, 4] # continuum correction from fiber flat
     data.flux = fits_data[0].data[oi, :, 1]
     data.flux_unc = fits_data[0].data[oi, :, 2]
     data.mask = fits_data[0].data[oi, :, 3]
@@ -380,10 +380,21 @@ class PARVIReduceRecipe(ReduceRecipe):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, data_input_path, output_path, full_flats_path=None, fiber_flats_path=None, darks_path=None, lfc_path=None, badpix_mask_file=None, do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5, mask_left=50, mask_right=50, mask_top=10, mask_bottom=10, tracer=None, extractor=None, n_cores=1, tilts=None):
+    def __init__(self, data_input_path, output_path,
+                 full_flats_path=None, fiber_flats_path=None, darks_path=None, lfc_path=None, badpix_mask_file=None,
+                 do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5,
+                 xrange=[49, 1997],
+                 poly_mask_bottom=np.array([-6.560e-05,  1.524e-01, -4.680e+01]),
+                 poly_mask_top=np.array([-6.03508772e-05,  1.23052632e-01,  1.97529825e+03]),
+                 tracer=None, extractor=None,
+                 n_cores=1):
 
         # Super init
-        super().__init__(spectrograph="PARVI", data_input_path=data_input_path, output_path=output_path, do_bias=do_bias, do_dark=do_dark, do_flat=do_flat, flat_percentile=flat_percentile, mask_left=mask_left, mask_right=mask_right, mask_top=mask_top, mask_bottom=mask_bottom, tracer=tracer, extractor=extractor, n_cores=n_cores)
+        super().__init__(spectrograph="PARVI",
+                         data_input_path=data_input_path, output_path=output_path,
+                         do_bias=do_bias, do_dark=do_dark, do_flat=do_flat, flat_percentile=flat_percentile,
+                         xrange=xrange, poly_mask_top=poly_mask_top, poly_mask_bottom=poly_mask_bottom,
+                         tracer=tracer, extractor=extractor, n_cores=n_cores)
         
         # Store additional PARVI related params
         self.full_flats_path = full_flats_path

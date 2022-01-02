@@ -263,9 +263,10 @@ def parse_spec1d(data):
     data.mask = data.mask[::-1]
     data.flux_unc = data.flux_unc[::-1]
 
-
 def parse_fiber_nums(data):
     return None
+
+ECHELLE_ORDERS = [212, 240]
 
 
 ################################
