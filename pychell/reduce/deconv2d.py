@@ -590,7 +590,7 @@ class SPExtractor(GaussianDeconv2dExtractor):
                         reduced_data[order_index, fiber_index, :, :] = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
 
                         # Reformat the convolution matrices to save space
-                        breakpoint()
+                        #breakpoint()
                         #R_out = np.
 
                         # Print end of trace
@@ -616,11 +616,12 @@ class SPExtractor(GaussianDeconv2dExtractor):
         # Reformat the convolution matrices to save space
         #for 
         #hdul = fits.HDUList([fits.PrimaryHDU(reduced_data, header=data.header), fits.])
-        matplotlib.use("MacOSX")
+        #matplotlib.use("MacOSX")
         #for i in range(nx):
         #    plt.plot(np.arange(nx) - i, R[i, :])
         #plt.show()
-        breakpoint()
+        #breakpoint()
+        hdu = fits.PrimaryHDU(reduced_data, header=data.header)
         hdu.writeto(fname, overwrite=True, output_verify='ignore')
 
 
@@ -875,7 +876,7 @@ class SPExtractor(GaussianDeconv2dExtractor):
             except:
                 pass
 
-        breakpoint()
+        #breakpoint()
         bad = np.where(RR < 0)
         RR[bad] = 0
         for x in range(nx):
