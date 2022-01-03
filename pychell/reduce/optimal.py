@@ -234,7 +234,7 @@ class OptimalExtractor(SpectralExtractor):
                     trace_image_chunk_new, badpix_mask_chunk_new = OptimalExtractor.flag_pixels2d(trace_image_chunk, badpix_mask_chunk, model2d, badpix_threshold)
                     
                     # Break if nothing new is flagged
-                    if np.all(badpix_mask_chunk_new == badpix_mask_chunk) and j + 1 >= n_iterations / 2:
+                    if np.all(badpix_mask_chunk_new == badpix_mask_chunk) and j + 1 >= n_iterations / 10:
                         trace_image_chunk = trace_image_chunk_new
                         badpix_mask_chunk = badpix_mask_chunk_new
                         break

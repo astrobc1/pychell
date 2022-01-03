@@ -259,6 +259,7 @@ class SpectralExtractor:
         if bad[0].size > 0:
             badpix_mask_cp[bad] = 0
             trace_image_cp[bad] = np.nan
+        
         return trace_image_cp, badpix_mask_cp
 
     @staticmethod

@@ -75,8 +75,8 @@ def categorize_raw_data(data_input_path, output_path, full_flats_path=None, fibe
     # Only get latest cals
     dark_group = get_latest_darks(data)
     full_flat_group = get_latest_full_flats(data)
-    fiber_flat_group1 = get_latest_fiber_flats(data, fiber=1)
-    fiber_flat_group3 = get_latest_fiber_flats(data, fiber=3)
+    fiber_flat_group1 = get_latest_fiber_flats(data, fiber='1')
+    fiber_flat_group3 = get_latest_fiber_flats(data, fiber='3')
 
     # Master Darks
     if len(dark_files) > 0:
@@ -129,9 +129,9 @@ def get_latest_full_flats(data):
     group = [d for i, d in enumerate(data["flats"]) if dates[i] == date_use]
     return group
 
-def get_latest_fiber_flats(data, fiber=1):
+def get_latest_fiber_flats(data, fiber):
     dates = [parse_utdate(d) for d in data["fiber_flats"]]
-    fibers = [parse_fiber_nums(d) for d in data["fiber_flats"]]
+    fibers = [parse_fiber_nums(d)[0] for d in data["fiber_flats"]]
     dates_unq = np.unique(dates)
     dates_unq = np.sort(dates_unq)
     date_use = dates_unq[-1]
@@ -187,16 +187,15 @@ def pair_master_flat(data, master_flats):
     data.master_flat = master_flats[0]
 
 def pair_order_maps(data, order_maps):
-    fibers_sci = [int(f) for f in str(parse_fiber_nums(data))]
-    fibers_order_maps = [int(parse_fiber_nums(order_map)) for order_map in order_maps]
-    n_fibers_sci = len(fibers_sci)
+    fibers_sci = parse_fiber_nums(data)
+    fibers_order_maps = np.array([parse_fiber_nums(order_map)[0] for order_map in order_maps], dtype='<U10')
     order_maps_out = []
     for fiber in fibers_sci:
-        k = fibers_order_maps.index(fiber)
-        if k == -1:
+        k = np.where(fibers_order_maps == fiber)[0]
+        if len(k) == 0:
             raise ValueError(f"No fiber flat corresponding to {data}")
         else:
-            order_maps_out.append(order_maps[k])
+            order_maps_out.append(order_maps[k[0]])
     data.order_maps = order_maps_out
 
 def parse_image_num(data):
@@ -234,7 +233,10 @@ def parse_exposure_start_time(data):
     return data.time_obs_start
 
 def parse_fiber_nums(data):
-    return int(data.header["FIBER"])
+    if "fiberflat" in data.base_input_file.lower() or "fibreflat" in data.base_input_file.lower():
+        return [str(data.header["FIBER"])]
+    else:
+        return ["1", "3"]
 
 def compute_echelle_order_num(data=None, order_num=None):
     if order_num is None:
@@ -270,7 +272,7 @@ def gen_master_calib_filename(master_cal):
     if "dark" in fname0:
         return f"master_dark_{master_cal.group[0].utdate}{master_cal.group[0].itime}s.fits"
     elif "fiberflat" in fname0 or "fibreflat" in fname0:
-        return f"master_fiberflat_{master_cal.group[0].utdate}_fiber{parse_fiber_nums(master_cal.group[0])}.fits"
+        return f"master_fiberflat_{master_cal.group[0].utdate}_fiber{parse_fiber_nums(master_cal.group[0])[0]}.fits"
     elif "fullflat" in fname0:
         return f"master_fullflat_{master_cal.group[0].utdate}.fits"
     elif "lfc" in fname0:
