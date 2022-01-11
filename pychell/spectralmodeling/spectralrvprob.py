@@ -128,13 +128,6 @@ class IterativeSpectralRVProb:
         self.data = [data[ss[i]] for i in range(len(jds))]
         for i in range(len(self.data)):
             self.data[i].spec_num = i + 1
-            
-        # Estimate the wavelength bounds for this order
-        #data0 = [d for d in self.data if d.is_good][0]
-        #wave_grid = self.spec_module.estimate_wls(data0)
-        #good = np.where(data0.mask == 1)[0]
-        #pixmin, pixmax = np.max([good[0] - 5, 0]), np.min([good[-1] + 5, len(data0.mask) - 1])
-        #wavemin, wavemax = wave_grid[pixmin], wave_grid[pixmax]
 
     def init_spectral_model(self):
         self.spectral_model.init_templates(self.data)
@@ -178,9 +171,6 @@ class IterativeSpectralRVProb:
         self.rvs_dict['skew'] = np.full((self.n_spec, self.n_iterations), np.nan)
         self.rvs_dict['skew_nightly'] = np.full((self.n_nights, self.n_iterations), np.nan)
         self.rvs_dict['uncskew_nightly'] = np.full((self.n_nights, self.n_iterations), np.nan)
-        
-        # xc grid info
-        self.rvs_dict['xcorrs'] = np.empty(shape=(self.n_spec, self.n_iterations), dtype=np.ndarray)
         
     def print_init_summary(self):
         print("***************************************", flush=True)
@@ -321,17 +311,48 @@ class IterativeSpectralRVProb:
             
     @staticmethod
     def optimize_and_plot_observation(p0, data, spectral_model, obj, optimizer, iter_index, output_path, tag, verbose, stellar_templates):
+
+        # Lock parameters for lower_bound == upper_bound
+        p0.sanity_lock()
+
+        # Initialize model
+        spectral_model.initialize(p0, data, iter_index, stellar_templates)
         
-        if data.is_good and p0.num_varied > 0:
+        # Only fit if data is good and there are params to vary
+        if not data.is_good:
+
+            # If bad, store nans as results
+            opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
+
+            # Return
+            return opt_result
+    
+        # If no params to vary, return initial pars
+        elif p0.num_varied == 0:
+
+            # Store the objective with the model
+            spectral_model.obj = obj
+        
+            # Initialize objective
+            obj.initialize(spectral_model)
             
+            # Initialize optimizer
+            optimizer.initialize(obj)
+
+            # Compute obj
+            f = obj.compute_obj(p0)
+
+            # Result
+            opt_result = dict(pbest=copy.deepcopy(p0), fbest=f, fcalls=0)
+
+            # Return
+            return opt_result
+
+
+        # Else fit the spectrum
+        else:
             # Time the fit
             stopwatch = pcutils.StopWatch()
-        
-            # Sanity lock parameters
-            p0.sanity_lock()
-        
-            # Initialize model
-            spectral_model.initialize(p0, data, iter_index, stellar_templates)
         
             # Store the objective with the model
             spectral_model.obj = obj
@@ -353,9 +374,6 @@ class IterativeSpectralRVProb:
 
             # Plot
             IterativeSpectralRVProb.plot_spectral_model(opt_result["pbest"], data, spectral_model, iter_index, output_path, tag, spectral_model.star.star_name)
-            
-        else:
-            opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
         
         # Return result
         return opt_result
@@ -420,7 +438,8 @@ class IterativeSpectralRVProb:
         plt.plot(wave_data_nm[flagged_inds], residuals[flagged_inds], color="maroon", alpha=0.8, marker='X', markersize=4, lw=0)
         
         # LSF
-        lsf = spectral_model.lsf.build(pars=pars)
+        if spectral_model.lsf is not None:
+            lsf = spectral_model.lsf.build(pars=pars)
         
         # Star
         if spectral_model.star is not None:
@@ -429,28 +448,32 @@ class IterativeSpectralRVProb:
             if not spectral_model.star.from_flat and iter_index != 0:
                 star_wave = spectral_model.star.initial_template[:, 0]
                 star_flux = spectral_model.star.initial_template[:, 1]
-                star_flux = pcmath.doppler_shift(star_wave, pars[spectral_model.star.par_names[0]].value, wave_out=spectral_model.model_wave, flux=star_flux, interp="cspline", kind="exp")
-                star_flux = spectral_model.lsf.convolve_flux(star_flux, lsf=lsf)
+                _, star_flux = pcmath.doppler_shift_flux(star_wave, star_flux, pars[spectral_model.star.par_names[0]].value, wave_out=spectral_model.model_wave)
+                if spectral_model.lsf is not None:
+                    star_flux = spectral_model.lsf.convolve_flux(star_flux, lsf=lsf)
                 star_flux = pcmath.cspline_interp(spectral_model.model_wave, star_flux, wave_data)
                 plt.plot(wave_data_nm, star_flux - 1.2, label='Initial Star', lw=0.8, color='aqua', alpha=0.5)
             
             # Current star
             star_flux = spectral_model.star.build(pars, spectral_model.templates_dict['star'], spectral_model.model_wave)
-            star_flux = spectral_model.lsf.convolve_flux(star_flux, lsf=lsf)
+            if spectral_model.lsf is not None:
+                star_flux = spectral_model.lsf.convolve_flux(star_flux, lsf=lsf)
             star_flux = pcmath.cspline_interp(spectral_model.model_wave, star_flux, wave_data)
             plt.plot(wave_data_nm, star_flux - 1.2, label='Current Star', lw=0.8, color='deeppink', alpha=0.8)
         
         # Tellurics
         if spectral_model.tellurics is not None:
             tell_flux = spectral_model.tellurics.build(pars, spectral_model.templates_dict['tellurics'], spectral_model.model_wave)
-            tell_flux = spectral_model.lsf.convolve_flux(tell_flux, lsf=lsf)
+            if spectral_model.lsf is not None:
+                tell_flux = spectral_model.lsf.convolve_flux(tell_flux, lsf=lsf)
             tell_flux = pcmath.cspline_interp(spectral_model.model_wave, tell_flux, wave_data)
             plt.plot(wave_data_nm, tell_flux - 1.2, label='Tellurics', lw=0.8, color='indigo', alpha=0.2)
         
         # Gas Cell
         if spectral_model.gas_cell is not None:
             gas_flux = spectral_model.gas_cell.build(pars, spectral_model.templates_dict['gas_cell'], spectral_model.model_wave)
-            gas_flux = spectral_model.lsf.convolve_flux(gas_flux, lsf=lsf)
+            if spectral_model.lsf is not None:
+                gas_flux = spectral_model.lsf.convolve_flux(gas_flux, lsf=lsf)
             gas_flux = pcmath.cspline_interp(spectral_model.model_wave, gas_flux, wave_data)
             plt.plot(wave_data_nm, gas_flux - 1.2, label='Gas Cell', lw=0.8, color='green', alpha=0.2)
         
@@ -512,7 +535,6 @@ class IterativeSpectralRVProb:
                     self.rvs_dict['rvsxc'][ispec, iter_index] = ccf_results[ispec][0]
                     self.rvs_dict['uncxc'][ispec, iter_index] = ccf_results[ispec][1]
                     self.rvs_dict['skew'][ispec, iter_index] = ccf_results[ispec][2]
-                    self.rvs_dict['xcorrs'][ispec, iter_index] = np.array([ccf_results[ispec][3], ccf_results[ispec][4]]).T
                 else:
                     self.data[ispec].is_good = False
             
@@ -528,7 +550,6 @@ class IterativeSpectralRVProb:
                     self.rvs_dict['rvsxc'][ispec, iter_index] = ccf_results[0]
                     self.rvs_dict['uncxc'][ispec, iter_index] = ccf_results[1]
                     self.rvs_dict['skew'][ispec, iter_index] = ccf_results[2]
-                    self.rvs_dict['xcorrs'][ispec, iter_index] = np.array([ccf_results[3], ccf_results[4]]).T
                 else:
                     self.data[ispec].is_good = False
                 
@@ -579,9 +600,10 @@ class IterativeSpectralRVProb:
                  marker='.', linewidth=0, alpha=0.7, color=(0.1, 0.8, 0.1), label="FwM [indiv]")
 
         # Individual XC
-        plt.plot(bjds - time_offset,
-                 rvs_dict['rvsxc'][:, iter_index] - np.nanmedian(rvs_dict['rvsxc'][:, iter_index]),
-                 marker='.', linewidth=0, color='black', alpha=0.6, label="XC [indiv]")
+        plt.errorbar(bjds - time_offset,
+                     rvs_dict['rvsxc'][:, iter_index] - np.nanmedian(rvs_dict['rvsxc'][:, iter_index]),
+                     yerr=rvs_dict['uncxc'][:, iter_index],
+                     marker='.', linewidth=0, elinewidth=0.5, color='black', alpha=0.5, label="XC [indiv]")
         
         
         # Nightly Forward Model
@@ -641,7 +663,7 @@ class IterativeSpectralRVProb:
             
         else:
             
-            ccf_result = np.nan, np.nan, np.nan, np.full(400, np.nan), np.full(400, np.nan)
+            ccf_result = np.nan, np.nan, np.nan
             
         return ccf_result
     

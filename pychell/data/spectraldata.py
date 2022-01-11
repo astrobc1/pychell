@@ -232,10 +232,13 @@ class Spec1d(SpecData):
             self.mask[bad] = 0
             
         # Check if 1d spectrum is even worth using
-        if np.nansum(self.mask) < self.mask.size / 4 or np.where(np.isfinite(self.wave))[0].size < 1500 or np.where(np.isfinite(self.flux))[0].size < 1500:
-            self.is_good = False
-        else:
-            self.is_good = True
+        is_good = True
+        nx = len(self.flux)
+        if np.nansum(self.mask) < nx / 4 or np.where(np.isfinite(self.flux))[0].size < nx / 4:
+            is_good = False
+        if self.wave is not None and np.where(np.isfinite(self.wave))[0].size < nx / 4:
+            is_good = False
+        self.is_good = is_good
             
     def parse_header(self):
         """Parse the 1d spectrum fits header.

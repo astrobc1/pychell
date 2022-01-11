@@ -146,7 +146,7 @@ class PolyContinuum(Continuum):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, poly_order=4, coeffs={0: [0.95, 1.0, 1.1], 1: [-1E-3, 1E-4, 1E-3]}):
+    def __init__(self, poly_order=2, coeffs={0: [0.95, 1.0, 1.1], 1: [-1E-3, 1E-4, 1E-3]}):
         """Initiate a polynomial continuum model.
 
         Args:
@@ -180,6 +180,7 @@ class PolyContinuum(Continuum):
                 pars[self.par_names[i]] = BoundedParameter(value=prev.value/10,
                                                            vary=True,
                                                            lower_bound=prev.lower_bound/10, upper_bound=prev.upper_bound/10)
+        
         return pars
     
     
@@ -488,7 +489,7 @@ class AugmentedStar(Star):
 
     def build(self, pars, template, wave_final):
         wave, flux = template[:, 0], template[:, 1]
-        flux = pcmath.doppler_shift(wave, pars[self.par_names[0]].value, wave_out=wave_final, flux=flux, interp='cspline')
+        _, flux = pcmath.doppler_shift_flux(wave, flux, pars[self.par_names[0]].value, wave_out=wave_final)
         return flux
 
 
@@ -635,7 +636,7 @@ class TelluricsTAPAS(Tellurics):
         if self.has_airmass_features:
             flux *= self.build_component(pars, templates, 'airmass')
         if vel != 0:
-            flux = pcmath.doppler_shift(templates[:, 0], wave_out=wave_final, vel=vel, flux=flux, interp='cspline')
+            _, flux = pcmath.doppler_shift_flux(templates[:, 0], flux, vel, wave_out=wave_final)
         else:
             flux = pcmath.cspline_interp(templates[:, 0], flux, wave_final)
         return flux

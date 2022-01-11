@@ -192,42 +192,34 @@ def fwhmtosigma(fwhm):
     """
     return fwhm / np.sqrt(8 * np.log(2))
 
-def doppler_shift(wave, vel, wave_out=None, flux=None, interp='cspline', kind='sr'):
-    """Doppler shifts a signal.
+def doppler_shift_wave(wave, vel):
+    wave_shifted = doppler_shift_SR(wave, vel)
+    return wave_shifted
+
+def doppler_shift_flux(wave, flux, vel, wave_out=None):
+    """Doppler shifts a signal according to the standard SR Doppler formula (radial only) or a differential version of the classical Doppler equation.
 
     Args:
-        wave (np.ndarray): The "rest-frame" wavelength.
+        wave (np.ndarray): The initial wavelengths.
         vel (float): The velocity in m/s.
-        wave_out (np.ndarray, optional): The wave vector for the outputs. Defaults to wave.
         flux (np.ndarray, optional): The spectrum corresponding to wave. Defaults to None.
-        interp (str, optional): The kind of interpolation. Defaults to 'cspline' (cubic spline).
-        kind (str, optional): The kind of Doppler-shift. Defaults to 'sr' (special relativity).
 
     Returns:
         np.ndarray: The Doppler shifted wave vector if flux is None, or the Doppler shifted flux on the wave_out grid otherwise.
     """
-    
+
+    # The shifted wave
+    wave_shifted = doppler_shift_wave(wave, vel)
+
+    # Interpolate the flux
     if wave_out is None:
-        wave_out = wave
-        
-    if kind == 'sr':
-        wave_shifted = _dop_shift_SR(wave, vel)
+        wave_out = wave_shifted
+        flux_out = flux
     else:
-        wave_shifted = _dop_shift_exponential(wave, vel)
-        
-    
-    if interp is None and flux is None:
-        return wave_shifted
-    good = np.where(np.isfinite(wave_shifted) & np.isfinite(flux))[0]
-    if interp == 'cspline':
         flux_out = cspline_interp(wave_shifted, flux, wave_out)
-    elif interp == 'akima':
-        flux_out = scipy.interpolate.Akima1DInterpolator(wave_shifted[good], flux[good])(wave_out)
-    elif interp == 'pchip':
-        flux_out = scipy.interpolate.PchipInterpolator(wave_shifted[good], flux[good], extrapolate=False)(wave_out)
-    else:
-        flux_out = np.interp(wave_out, wave_shifted[good], flux[good], left=np.nan, right=np.nan)
-    return flux_out
+
+    # Return
+    return wave_out, flux_out
     
 def lin_interp(x, y, xnew):
     """Alias for np.interp with np.nan as left and right values.
@@ -275,7 +267,7 @@ def cspline_fit(x, y, knots, weights=None):
     _cspline_fit = scipy.interpolate.LSQUnivariateSpline(xx, yy, t=knots, w=ww, k=3, ext=1)
     return _cspline_fit
 
-def _dop_shift_SR(wave, vel):
+def doppler_shift_SR(wave, vel):
     """Doppler-shift according to the SR equation.
 
     Args:
@@ -287,18 +279,6 @@ def _dop_shift_SR(wave, vel):
     """
     beta = vel / cs.c
     return wave * np.sqrt((1 + beta) / (1 - beta))
-
-def _dop_shift_exponential(wave, vel):
-    """Doppler-shift according to a differential non-SR equation, lambda_f = lambda_0 * exp(v / c).
-
-    Args:
-        wave (np.ndarray or float): The input wavelengths.
-        vel (float): The velocity in m/s.
-
-    Returns:
-        np.ndarray or float: The Doppler-shifted wavelength.
-    """
-    return wave * np.exp(vel / cs.c)
 
 @jit_filter_function
 def fmedian(x):

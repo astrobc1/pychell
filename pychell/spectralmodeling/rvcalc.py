@@ -64,11 +64,45 @@ def gen_nightly_jds(jds, utc_offset=0):
 
     return jds_nightly, n_obs_nights
 
+
+def bin_jds_within_night(jds, sep=0.08):
+
+    # Number of spectra
+    n_obs_tot = len(jds)
+
+    # Keep track of previous night's last index
+    prev_i = 0
+
+    # Calculate mean JD date and number of observations per night for nightly
+    # Assume that observations on separate nights if noon passes.
+    jds_nightly = []
+    n_obs_nights = []
+    if n_obs_tot == 1:
+        jds_nightly.append(jds[0])
+        n_obs_nights.append(1)
+    else:
+        for i in range(n_obs_tot - 1):
+            t_noon = np.ceil(jds[i] + utc_offset / 24) - utc_offset / 24
+            if jds[i+1] > t_noon:
+                jd_avg = np.average(jds[prev_i:i+1])
+                n_obs_night = i - prev_i + 1
+                jds_nightly.append(jd_avg)
+                n_obs_nights.append(n_obs_night)
+                prev_i = i + 1
+        jds_nightly.append(np.average(jds[prev_i:]))
+        n_obs_nights.append(n_obs_tot - prev_i)
+
+    jds_nightly = np.array(jds_nightly, dtype=float) # convert to np arrays
+    n_obs_nights = np.array(n_obs_nights).astype(int)
+
+    return jds_nightly, n_obs_nights
+
+
 ####################################
 #### CROSS-CORRELATION ROUTINES ####
 ####################################
 
-def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_000):
+def brute_force_ccf(p0, spectral_model, iter_index, vel_window=80_000):
     
     # Copy init params
     pars = copy.deepcopy(p0)
@@ -76,14 +110,15 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
     # Get current star vel
     v0 = p0[spectral_model.star.par_names[0]].value
     
-    # Make a vel grid
-    vels = np.arange(v0 - vel_width / 2, v0 + vel_width / 2, vel_step)
+    # Make coarse and fine vel grids
+    vel_step_coarse = 50
+    vels_coarse = np.arange(v0 - vel_window / 2, v0 + vel_window / 2, vel_step_coarse)
 
     # Stores the rms as a function of velocity
-    rmss = np.full(vels.size, dtype=np.float64, fill_value=np.nan)
+    rmss_coarse = np.full(vels_coarse.size, dtype=np.float64, fill_value=np.nan)
     
     # Starting weights are bad pixels
-    weights_init = spectral_model.data.mask
+    weights_init = np.copy(spectral_model.data.mask)
 
     # Wavelength grid for the data
     wave_data = spectral_model.wls.build(pars)
@@ -92,44 +127,91 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_step=50, vel_width=20_00
     rvc_per_pix, _ = compute_rv_content(p0, spectral_model, snr=100) # S/N here doesn't matter
 
     # Weights are 1 / rv info^2
-    star_weights = 1 / rvc_per_pix**2
+    star_weights_init = 1 / rvc_per_pix**2
+
+    # Data flux
+    data_flux = np.copy(spectral_model.data.flux)
     
-    for i in range(vels.size):
+    # Compute RMS for coarse vels
+    for i in range(vels_coarse.size):
         
         # Set the RV parameter to the current step
-        pars[spectral_model.star.par_names[0]].value = vels[i]
+        pars[spectral_model.star.par_names[0]].value = vels_coarse[i]
         
         # Build the model
         _, model_lr = spectral_model.build(pars)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        star_weights_shifted = pcmath.doppler_shift(wave_data, vels[i], flux=star_weights, interp='linear')
+        _, star_weights_shifted = pcmath.doppler_shift_flux(wave_data, star_weights_init, vels_coarse[i], wave_out=wave_data)
         
         # Final weights
         weights = weights_init * star_weights_shifted
+        bad = np.where(weights < 0)[0]
+        weights[bad] = 0
+        good = np.where(weights > 0)[0]
+        if good.size == 0:
+            continue
         
         # Compute the RMS
-        rmss[i] = pcmath.rmsloss(spectral_model.data.flux, model_lr, weights=weights)
+        rmss_coarse[i] = pcmath.rmsloss(data_flux, model_lr, weights=weights, flag_worst=20, remove_edges=20)
 
-    # Extract the best rv
-    M = np.nanargmin(rmss)
-    vels_for_rv = vels + spectral_model.data.bc_vel
-    xcorr_rv_init = vels_for_rv[M]
+    # Extract the best coarse rv
+    M = np.nanargmin(rmss_coarse)
+    xcorr_rv_init = vels_coarse[M]
 
-    # Fit (M-2, M-1, M, M+1, M+2) with parabola to determine true minimum
-    # Fit full ccf curve with gaussian to determine uncertainty, but don't use to determine min since the ccf may be asymmetric, etc.
-    use = np.arange(M - 2, M + 3).astype(int)
+    # Determine the uncertainty from the coarse ccf
     try:
-        pfit = np.polyfit(vels_for_rv[use], rmss[use], 2)
-        xcorr_rv = -1 * pfit[1] / (2 * pfit[0])
         n = np.nansum(spectral_model.data.mask)
-        xcorr_rv_unc, skew = compute_ccf_unc_and_skew(vels_for_rv, rmss, n)
+        xcorr_rv_unc, skew = compute_ccf_unc_and_skew(vels_coarse, rmss_coarse, n)
+        xcorr_rv_unc = np.nan # For now
+    except:
+        return np.nan, np.nan, np.nan
+
+    # Define the fine vels
+    vel_step_fine = 1
+    #vel_window_fine = 4 * xcorr_rv_unc
+    vel_window_fine = 100  # For now
+    vels_fine = np.arange(xcorr_rv_init - vel_window_fine / 2, xcorr_rv_init + vel_window_fine / 2, vel_step_fine)
+    rmss_fine = np.full(vels_fine.size, dtype=np.float64, fill_value=np.nan)
+    
+    # Now do a finer CCF
+    for i in range(vels_fine.size):
+        
+        # Set the RV parameter to the current step
+        pars[spectral_model.star.par_names[0]].value = vels_fine[i]
+        
+        # Build the model
+        _, model_lr = spectral_model.build(pars)
+        
+        # Shift the stellar weights instead of recomputing the rv content.
+        _, star_weights_shifted = pcmath.doppler_shift_flux(wave_data, star_weights_init, vels_fine[i], wave_out=wave_data)
+        
+        # Final weights
+        weights = weights_init * star_weights_shifted
+        bad = np.where(weights < 0)[0]
+        weights[bad] = 0
+        good = np.where(weights > 0)[0]
+        if good.size == 0:
+            continue
+        
+        # Compute the RMS
+        rmss_fine[i] = pcmath.rmsloss(data_flux, model_lr, weights=weights, flag_worst=20, remove_edges=20)
+
+    # Fit (M-2, M-1, ..., M+1, M+2) with parabola to determine true minimum
+    # Extract the best coarse rv
+    #breakpoint()
+    #import matplotlib
+    #matplotlib.use("MacOSX")
+    #plt.plot(vels_coarse, rmss_coarse); plt.show()
+    M = np.nanargmin(rmss_fine)
+    use = np.arange(M - 2, M + 3, 1).astype(int)
+    try:
+        pfit = np.polyfit(vels_fine[use], rmss_fine[use], 2)
+        xcorr_rv = -0.5 * pfit[1] / pfit[0] + spectral_model.data.bc_vel
     except:
         xcorr_rv = np.nan
-        xcorr_rv_unc = np.nan
-        skew = np.nan
 
-    return xcorr_rv, xcorr_rv_unc, skew, vels_for_rv, rmss
+    return xcorr_rv, xcorr_rv_unc, skew
 
 def compute_ccf_unc_and_skew(vels, rmss, n):
     p0 = [1.0, vels[np.nanargmin(rmss)], 5000, 10, 0.1] # amp, mean, sigma, alpha (~skewness), offset

@@ -127,6 +127,8 @@ def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
     opt_result = scipy.optimize.minimize(solve_lsf_model, p0, args=(waves_all, flux_all), method='Nelder-Mead', bounds=bounds)
     pbest = opt_result.x
     sigma = pbest[1]
+    #breakpoint()
+    #matplotlib.use("MacOSX"); plt.plot(lfc_wave, lfc_flux); plt.vlines(lfc_centers_wave_theoretical, ymin=0, ymax=np.nanmax(lfc_flux), color='red')
 
     return sigma
 
@@ -194,7 +196,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
         if times_sci is not None:
             for i in range(n_sci_spec):
                 print(f"Computing cal fiber wls for order {order_index+1} science spectrum {i+1}")
-                #wls_sci_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_sci_calfiber[:, order_index, i], f0, df, poly_order)
+                wls_sci_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_sci_calfiber[:, order_index, i], f0, df, poly_order)
 
         # Loop over science observations, computer wls for science fiber
         if times_sci is not None:
