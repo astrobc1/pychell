@@ -395,8 +395,8 @@ class WeightedMean(TemplateAugmenter):
                 else:
                     residuals_median[ix] = pcmath.weighted_median(rr, ww)
 
-        weights_new[ix] = 1 / (residuals - np.outer(residuals_median, np.ones(specrvprob.n_spec)))**2
-        bad = np.where(~np.isfinite(weights_new))
+        weights_new = 1 / (residuals - np.outer(residuals_median, np.ones(specrvprob.n_spec)))**2
+        bad = np.where(~np.isfinite(weights_new) | (weights == 0))[0]
         weights_new[bad] = 0
         for ix in range(nx):
             ww, rr = weights_new[ix, :], residuals[ix, :]
@@ -427,9 +427,6 @@ class WeightedMean(TemplateAugmenter):
     
         # Update the template
         specrvprob.spectral_model.templates_dict['star'][:, 1] = new_flux
-
-
-
 
 ################################
 #### More Helpful functions ####
