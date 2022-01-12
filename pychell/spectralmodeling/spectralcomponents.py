@@ -506,12 +506,7 @@ class AugmentedStar(Star):
             spectral_model.p0[self.par_names[0]].value = v
             spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
             spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
-        elif iter_index > 1 and self.from_flat:
-            v = -1 * spectral_model.data.bc_vel
-            spectral_model.p0[self.par_names[0]].value = v
-            spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
-            spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
-        else:
+        elif iter_index == 0 and not self.from_flat:
             if self.rv_abs is None:
                 rv_absolute = pcutils.get_stellar_rv(self.star_name)
             else:
@@ -522,6 +517,26 @@ class AugmentedStar(Star):
             spectral_model.p0[self.par_names[0]].value = v
             spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
             spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
+        else:
+            pass # So I remember to do nothing
+
+        
+        # elif iter_index > 1 and self.from_flat:
+        #     v = -1 * spectral_model.data.bc_vel
+        #     spectral_model.p0[self.par_names[0]].value = v
+        #     spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
+        #     spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
+        # elif iter_index > 1:
+        #     if self.rv_abs is None:
+        #         rv_absolute = pcutils.get_stellar_rv(self.star_name)
+        #     else:
+        #         rv_absolute = self.rv_abs
+        #     spec_module = spectral_model.data.spec_module
+        #     rv_zero_point = spec_module.rv_zero_point
+        #     v = rv_absolute + rv_zero_point - spectral_model.data.bc_vel
+        #     spectral_model.p0[self.par_names[0]].value = v
+        #     spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
+        #     spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
 
 
 #########################

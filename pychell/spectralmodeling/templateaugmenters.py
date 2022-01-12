@@ -395,24 +395,21 @@ class WeightedMean(TemplateAugmenter):
                 else:
                     residuals_median[ix] = pcmath.weighted_median(rr, ww)
 
-        
-        weights_new = 1 / (residuals - np.outer(residuals_median, np.ones(specrvprob.n_spec)))**2
+        weights_new[ix] = 1 / (residuals - np.outer(residuals_median, np.ones(specrvprob.n_spec)))**2
         bad = np.where(~np.isfinite(weights_new))
         weights_new[bad] = 0
-        residuals_mean = pcmath.weighted_mean(residuals, weights_new, axis=1)
-        
-        # for ix in range(nx):
-        #     ww, rr = weights[ix, :], residuals[ix, :]
-        #     if np.nansum(ww) == 0:
-        #         residuals_mean[ix] = 0
-        #     else:
-        #         good = np.where((ww > 0) & np.isfinite(ww))[0]
-        #         if good.size == 0:
-        #             residuals_mean[ix] = 0
-        #         elif good.size == 1:
-        #             residuals_mean[ix] = rr[good[0]]
-        #         else:
-        #             residuals_mean[ix] = pcmath.weighted_mean(rr, ww)
+        for ix in range(nx):
+            ww, rr = weights_new[ix, :], residuals[ix, :]
+            if np.nansum(ww) == 0:
+                residuals_mean[ix] = 0
+            else:
+                good = np.where((ww > 0) & np.isfinite(ww))[0]
+                if good.size == 0:
+                    residuals_mean[ix] = 0
+                elif good.size == 1:
+                    residuals_mean[ix] = rr[good[0]]
+                else:
+                    residuals_mean[ix] = pcmath.weighted_mean(rr, ww)
 
         # Change any nans to zero just in case
         bad = np.where(~np.isfinite(residuals_mean))[0]

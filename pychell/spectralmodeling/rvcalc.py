@@ -102,7 +102,7 @@ def bin_jds_within_night(jds, sep=0.08):
 #### CROSS-CORRELATION ROUTINES ####
 ####################################
 
-def brute_force_ccf(p0, spectral_model, iter_index, vel_window=80_000):
+def brute_force_ccf(p0, spectral_model, iter_index, vel_window=200_000):
     
     # Copy init params
     pars = copy.deepcopy(p0)
