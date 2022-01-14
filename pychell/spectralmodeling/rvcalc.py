@@ -202,7 +202,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=200_000):
     #breakpoint()
     #import matplotlib
     #matplotlib.use("MacOSX")
-    #plt.plot(vels_coarse, rmss_coarse); plt.show()
+    #plt.plot((vels_coarse + spectral_model.data.bc_vel + p0.velt.value)/1E3, rmss_coarse); plt.xlabel("Barycentric Absolute RV w/r/t Tellurics [km/s]"); plt.ylabel("RMS"); plt.show()
     M = np.nanargmin(rmss_fine)
     use = np.arange(M - 2, M + 3, 1).astype(int)
     try:

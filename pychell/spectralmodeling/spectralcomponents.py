@@ -426,7 +426,7 @@ class AugmentedStar(Star):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, input_file=None, star_name=None, vel_bounds=[-10_000, 10_000], rv_abs=None):
+    def __init__(self, input_file=None, star_name=None, vel_bounds=[20_000, 20_000], rv_abs=None):
 
         # Call super method
         super().__init__()
@@ -462,7 +462,7 @@ class AugmentedStar(Star):
         else:
             v = 100
         pars[self.par_names[0]] = BoundedParameter(value=v, vary=True,
-                                                   lower_bound=v + self.vel_bounds[0],
+                                                   lower_bound=v - self.vel_bounds[0],
                                                    upper_bound=v + self.vel_bounds[1])
     
         return pars
@@ -504,7 +504,7 @@ class AugmentedStar(Star):
             spectral_model.p0[self.par_names[0]].vary = True
             v = -1 * spectral_model.data.bc_vel
             spectral_model.p0[self.par_names[0]].value = v
-            spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
+            spectral_model.p0[self.par_names[0]].lower_bound = v - self.vel_bounds[0]
             spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
         elif iter_index == 0 and not self.from_flat:
             if self.rv_abs is None:
@@ -515,12 +515,12 @@ class AugmentedStar(Star):
             rv_zero_point = spec_module.rv_zero_point
             v = rv_absolute + rv_zero_point - spectral_model.data.bc_vel
             spectral_model.p0[self.par_names[0]].value = v
-            spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
+            spectral_model.p0[self.par_names[0]].lower_bound = v - self.vel_bounds[0]
             spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
         else:
             pass # So I remember to do nothing
 
-        
+
         # elif iter_index > 1 and self.from_flat:
         #     v = -1 * spectral_model.data.bc_vel
         #     spectral_model.p0[self.par_names[0]].value = v

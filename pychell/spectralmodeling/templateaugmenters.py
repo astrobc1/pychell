@@ -381,9 +381,6 @@ class WeightedMean(TemplateAugmenter):
         # 3. If there's only one spectrum, use those residuals, unless it's nan.
         for ix in range(nx):
             ww, rr = weights[ix, :], residuals[ix, :]
-            ww = np.ones(len(rr))
-            bad = np.where(~np.isfinite(rr))[0]
-            ww[bad] = 0
             if np.nansum(ww) == 0:
                 residuals_median[ix] = 0
             else:
@@ -395,11 +392,18 @@ class WeightedMean(TemplateAugmenter):
                 else:
                     residuals_median[ix] = pcmath.weighted_median(rr, ww)
 
-        weights_new = 1 / (residuals - np.outer(residuals_median, np.ones(specrvprob.n_spec)))**2
-        bad = np.where(~np.isfinite(weights_new) | (weights == 0))[0]
-        weights_new[bad] = 0
+        # Flag outliers
+        weights_final = np.copy(weights)
         for ix in range(nx):
-            ww, rr = weights_new[ix, :], residuals[ix, :]
+            ww, rr = weights[ix, :], residuals[ix, :]
+            n_good = np.where(ww > 0)[0].size
+            if n_good >= 5:
+                bad = np.where(residuals[ix, :] > 4 * np.nanstd(residuals[ix, :] - residuals_median[ix]))[0]
+                weights_final[ix, bad] = 0
+
+        # Final loop
+        for ix in range(nx):
+            ww, rr = weights_final[ix, :], residuals[ix, :]
             if np.nansum(ww) == 0:
                 residuals_mean[ix] = 0
             else:
@@ -412,6 +416,7 @@ class WeightedMean(TemplateAugmenter):
                     residuals_mean[ix] = pcmath.weighted_mean(rr, ww)
 
         # Change any nans to zero just in case
+        #breakpoint()
         bad = np.where(~np.isfinite(residuals_mean))[0]
         if bad.size > 0:
             residuals_mean[bad] = 0
