@@ -257,7 +257,7 @@ class SplineContinuum(Continuum):
     ####################
     
     def initialize(self, spectral_model, iter_index=None):
-        self.spline_wave_set_points = np.linspace(spectral_model.sregion.wavemin, spectral_model.sregion.wavemax, num=self.n_splines + 1)
+        self.spline_wave_set_points = np.linspace(spectral_model.srange.wavemin, spectral_model.srange.wavemax, num=self.n_splines + 1)
 
 class PChipContinuum(Continuum):
     """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
@@ -318,7 +318,7 @@ class PChipContinuum(Continuum):
     ####################
     
     def initialize(self, spectral_model, iter_index=None):
-        self.spline_wave_set_points = np.linspace(spectral_model.sregion.wavemin, spectral_model.sregion.wavemax, num=self.n_splines + 1)
+        self.spline_wave_set_points = np.linspace(spectral_model.srange.wavemin, spectral_model.srange.wavemax, num=self.n_splines + 1)
 
 
 #########################
@@ -873,8 +873,8 @@ class PolyWls(WavelengthSolution):
     ####################
     
     def initialize(self, spectral_model, iter_index=None):
-        self.poly_pixel_lagrange_points = np.linspace(spectral_model.sregion.pixmin,
-                                                      spectral_model.sregion.pixmax,
+        self.poly_pixel_lagrange_points = np.linspace(spectral_model.srange.pixmin,
+                                                      spectral_model.srange.pixmax,
                                                       num=self.poly_order + 1).astype(int)
         wls_estimate = spectral_model.data.spec_module.estimate_wls(spectral_model.data)
         self.nx = len(wls_estimate)
@@ -939,8 +939,8 @@ class SplineWls(WavelengthSolution):
     ####################
     
     def initialize(self, spectral_model, iter_index=None):
-        self.spline_pixel_lagrange_points = np.linspace(spectral_model.sregion.pixmin,
-                                                        spectral_model.sregion.pixmax,
+        self.spline_pixel_lagrange_points = np.linspace(spectral_model.srange.pixmin,
+                                                        spectral_model.srange.pixmax,
                                                         num=self.n_splines + 1).astype(int)
         wls_estimate = spectral_model.data.spec_module.estimate_wls(spectral_model.data)
         self.nx = len(wls_estimate)
@@ -1002,8 +1002,8 @@ class PChipWls(WavelengthSolution):
     ####################
     
     def initialize(self, spectral_model, iter_index=None):
-        self.spline_pixel_lagrange_points = np.linspace(spectral_model.sregion.pixmin,
-                                                        spectral_model.sregion.pixmax,
+        self.spline_pixel_lagrange_points = np.linspace(spectral_model.srange.pixmin,
+                                                        spectral_model.srange.pixmax,
                                                         num=self.n_splines + 1).astype(int)
         wls_estimate = spectral_model.data.spec_module.estimate_wls(spectral_model.data)
         self.nx = len(wls_estimate)
@@ -1075,8 +1075,8 @@ class LegPolyWls(WavelengthSolution):
     ####################
 
     def initialize(self, spectral_model, iter_index=None):
-        self.poly_pixel_lagrange_points = np.linspace(spectral_model.sregion.pixmin,
-                                                      spectral_model.sregion.pixmax,
+        self.poly_pixel_lagrange_points = np.linspace(spectral_model.srange.pixmin,
+                                                      spectral_model.srange.pixmax,
                                                       num=self.poly_order + 1).astype(int)
         wls_estimate = spectral_model.data.specmod.estimate_wls(spectral_model.data)
         self.nx = len(wls_estimate)

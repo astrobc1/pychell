@@ -280,6 +280,18 @@ def doppler_shift_SR(wave, vel):
     beta = vel / cs.c
     return wave * np.sqrt((1 + beta) / (1 - beta))
 
+def doppler_shift_CM(wave, vel):
+    """Doppler-shift according to the classical eq.
+
+    Args:
+        wave (np.ndarray or float): The input wavelengths.
+        vel (float): The velocity in m/s.
+
+    Returns:
+        np.ndarray or float: The Doppler-shifted wavelength.
+    """
+    return wave * np.exp(vel / cs.c)
+
 @jit_filter_function
 def fmedian(x):
     """Fast median calculation for median filtering arrays, called by generic_filter.

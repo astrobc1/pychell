@@ -56,7 +56,7 @@ class CubicSplineLSQ(TemplateAugmenter):
         #    1. Weights are ~ 1 / RMS^2 * TELL_FLUX^2 (both are optional)
 
         # Wave sampling (approx)
-        wave_sampling = 1 / specrvprob.spectral_model.sregion.pix_per_wave()
+        wave_sampling = 1 / specrvprob.spectral_model.srange.pix_per_wave()
 
         # High res stellar flux grid
         wave_star_hr = specrvprob.spectral_model.templates_dict['star'][:, 0]

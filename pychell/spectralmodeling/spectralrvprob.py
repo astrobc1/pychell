@@ -351,29 +351,38 @@ class IterativeSpectralRVProb:
 
         # Else fit the spectrum
         else:
+
             # Time the fit
             stopwatch = pcutils.StopWatch()
         
             # Store the objective with the model
             spectral_model.obj = obj
-        
-            # Initialize objective
-            obj.initialize(spectral_model)
-            
-            # Initialize optimizer
-            optimizer.initialize(obj)
-            
-            # Fit the observation
-            opt_result = optimizer.optimize()
-            
-            # Print diagnostics
-            print(f"Fit observation {data} [{data.spec_num}] in {round((stopwatch.time_since())/60, 2)} min", flush=True)
-            if verbose:
-                print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
-                print(f" Best Fit Parameters:\n{spectral_model.summary(opt_result['pbest'])}", flush=True)
 
-            # Plot
-            IterativeSpectralRVProb.plot_spectral_model(opt_result["pbest"], data, spectral_model, iter_index, output_path, tag, spectral_model.star.star_name)
+            # Catch bad spectra
+            try:
+        
+                # Initialize objective
+                obj.initialize(spectral_model)
+            
+                # Initialize optimizer
+                optimizer.initialize(obj)
+            
+                # Fit the observation
+                opt_result = optimizer.optimize()
+            
+                # Print diagnostics
+                print(f"Fit observation {data} [{data.spec_num}] in {round((stopwatch.time_since())/60, 2)} min", flush=True)
+                if verbose:
+                    print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
+                    print(f" Best Fit Parameters:\n{spectral_model.summary(opt_result['pbest'])}", flush=True)
+
+                # Plot
+                IterativeSpectralRVProb.plot_spectral_model(opt_result["pbest"], data, spectral_model, iter_index, output_path, tag, spectral_model.star.star_name)
+            except:
+
+                # Return nan pars and set to bad
+                opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
+                data.is_good = False
         
         # Return result
         return opt_result
@@ -452,7 +461,7 @@ class IterativeSpectralRVProb:
                 if spectral_model.lsf is not None:
                     star_flux = spectral_model.lsf.convolve_flux(star_flux, lsf=lsf)
                 star_flux = pcmath.cspline_interp(spectral_model.model_wave, star_flux, wave_data)
-                plt.plot(wave_data_nm, star_flux - 1.2, label='Initial Star', lw=0.8, color='aqua', alpha=0.5)
+                plt.plot(wave_data_nm, star_flux - 1.2, label='Initial Star', lw=0.8, color='aqua', alpha=0.6)
             
             # Current star
             star_flux = spectral_model.star.build(pars, spectral_model.templates_dict['star'], spectral_model.model_wave)
@@ -478,10 +487,10 @@ class IterativeSpectralRVProb:
             plt.plot(wave_data_nm, gas_flux - 1.2, label='Gas Cell', lw=0.8, color='green', alpha=0.2)
         
         # X and Y limits
-        plt.xlim(spectral_model.sregion.wavemin / 10 - pad, spectral_model.sregion.wavemax / 10 + pad)
+        plt.xlim(spectral_model.srange.wavemin / 10 - pad, spectral_model.srange.wavemax / 10 + pad)
         plt.ylim(-1.3, 1.2)
             
-        # The legend for each chunk
+        # Legend
         plt.legend(prop={'size': 8}, loc='center left', bbox_to_anchor=(1.0, 0.5))
             
         # X and Y tick parameters
@@ -492,7 +501,7 @@ class IterativeSpectralRVProb:
         plt.xlabel("Wavelength [nm]", fontsize=10)
         plt.ylabel("Norm. flux", fontsize=10)
         
-        # The title of each chunk
+        # The title
         plt.title(f"{star_name.replace('_', ' ')}, Order {data.order_num}, Iteration {iter_index + 1}", fontsize=10)
         
         # Tight layout
@@ -503,6 +512,7 @@ class IterativeSpectralRVProb:
         fig.savefig(fname)
         plt.close()
             
+        # Return the figure
         return fig
     
     ###########################
@@ -553,7 +563,7 @@ class IterativeSpectralRVProb:
                 else:
                     self.data[ispec].is_good = False
                 
-        print('Cross Correlation Finished in ' + str(round((stopwatch.time_since())/60, 3)) + ' min ', flush=True)
+        print(f"Cross Correlation Finished in {round((stopwatch.time_since())/60, 3)} min ", flush=True)
     
     def gen_nightly_rvs(self, iter_index):
         

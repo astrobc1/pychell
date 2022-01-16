@@ -168,11 +168,11 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=200_000):
         return np.nan, np.nan, np.nan
 
     # Define the fine vels
-    vel_step_fine = 1
+    vel_step_fine = 2
     #vel_window_fine = 4 * xcorr_rv_unc
-    vel_window_fine = 100  # For now
+    vel_window_fine = 2000  # For now
     vels_fine = np.arange(xcorr_rv_init - vel_window_fine / 2, xcorr_rv_init + vel_window_fine / 2, vel_step_fine)
-    rmss_fine = np.full(vels_fine.size, dtype=np.float64, fill_value=np.nan)
+    rmss_fine = np.full(vels_fine.size, fill_value=np.nan)
     
     # Now do a finer CCF
     for i in range(vels_fine.size):
@@ -200,9 +200,8 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=200_000):
     # Fit (M-2, M-1, ..., M+1, M+2) with parabola to determine true minimum
     # Extract the best coarse rv
     #breakpoint()
-    #import matplotlib
-    #matplotlib.use("MacOSX")
-    #plt.plot((vels_coarse + spectral_model.data.bc_vel + p0.velt.value)/1E3, rmss_coarse); plt.xlabel("Barycentric Absolute RV w/r/t Tellurics [km/s]"); plt.ylabel("RMS"); plt.show()
+    #import matplotlib; matplotlib.use("MacOSX")
+    #plt.plot((vels_coarse + spectral_model.data.bc_vel)/1E3, rmss_coarse); plt.xlabel("Barycentric Absolute RV w/r/t LFC [km/s]"); plt.ylabel("RMS"); plt.show()
     M = np.nanargmin(rmss_fine)
     use = np.arange(M - 2, M + 3, 1).astype(int)
     try:

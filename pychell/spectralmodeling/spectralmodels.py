@@ -20,11 +20,11 @@ except:
 # Optimize
 from optimize import BoundedParameters, BoundedParameter
 
-#########################
-#### SPECTRAL REGION ####
-#########################
+########################
+#### SPECTRAL RANGE ####
+########################
 
-class SpectralRegion:
+class SpectralRange:
     
     __slots__ = ['pixmin', 'pixmax', 'wavemin', 'wavemax', 'label', 'data_inds']
     
@@ -138,16 +138,16 @@ class IterativeSpectralForwardModel:
         good = np.where(data0.mask == 1)[0]
         if good.size == 0:
             raise ValueError(f"{data[0]} contains no good data")
-        self.sregion = SpectralRegion(pixmin=good[0], pixmax=good[-1], wavemin=data_wave_grid[good[0]], wavemax=data_wave_grid[good[-1]])
-        self.model_dl = (1 / self.sregion.pix_per_wave()) / self.model_resolution
-        self.model_wave = np.arange(self.sregion.wavemin, self.sregion.wavemax, self.model_dl)
+        self.srange = SpectralRange(pixmin=good[0], pixmax=good[-1], wavemin=data_wave_grid[good[0]], wavemax=data_wave_grid[good[-1]])
+        self.model_dl = (1 / self.srange.pix_per_wave()) / self.model_resolution
+        self.model_wave = np.arange(self.srange.wavemin, self.srange.wavemax, self.model_dl)
         self.templates_dict = {}
         if self.star is not None:
-            self.templates_dict["star"] = self.star.init_template(data, self.sregion, self.model_dl)
+            self.templates_dict["star"] = self.star.init_template(data, self.srange, self.model_dl)
         if self.gas_cell is not None:
-            self.templates_dict["gas_cell"] = self.gas_cell.init_template(data, self.sregion, self.model_dl)
+            self.templates_dict["gas_cell"] = self.gas_cell.init_template(data, self.srange, self.model_dl)
         if self.tellurics is not None:
-            self.templates_dict["tellurics"] = self.tellurics.init_template(data, self.sregion, self.model_dl)
+            self.templates_dict["tellurics"] = self.tellurics.init_template(data, self.srange, self.model_dl)
         
     def init_parameters(self, data):
         self.p0 = BoundedParameters()

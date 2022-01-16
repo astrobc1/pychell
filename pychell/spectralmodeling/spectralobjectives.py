@@ -35,8 +35,8 @@ class WeightedSpectralUncRMS(SpectralObjectiveFunction):
 
         Args:
             flag_n_worst_pixels (int): Flags the worse N pixels on each attempt.
-            remove_edges (int): The number of pixels on the left and right to remove.
-            weight_snr (bool, optional): Whether or not to include the weight_snr as weights, ~ 1/snr^2.
+            remove_edges (int): The number of pixels on the left and right to ignore.
+            weight_snr (bool, optional): Whether or not to include the S/N of each pixel as weights, ~ 1/snr^2.
         """
         super().__init__(flag_n_worst_pixels=flag_n_worst_pixels, remove_edges=remove_edges)
         self.weight_snr = weight_snr
@@ -56,7 +56,10 @@ class WeightedSpectralUncRMS(SpectralObjectiveFunction):
             weights = np.copy(self.spectral_model.data.mask)
 
         # Compute rms ignoring bad pixels
-        rms = pcmath.rmsloss(data_flux, flux_model, weights=weights, flag_worst=self.flag_n_worst_pixels, remove_edges=self.remove_edges)
+        try:
+            rms = pcmath.rmsloss(data_flux, flux_model, weights=weights, flag_worst=self.flag_n_worst_pixels, remove_edges=self.remove_edges)
+        except:
+            return 1E6
         
         # Force LSF to be positive everywhere.
         if np.min(self.spectral_model.lsf.build(pars)) < 0:
@@ -66,4 +69,4 @@ class WeightedSpectralUncRMS(SpectralObjectiveFunction):
         return rms
     
     def __repr__(self):
-        return "Spectral objective function: RMS weighted by 1 / flux_unc^2"
+        return f"Spectral objective function with SNR weights: {self.weight_snr}"
