@@ -102,7 +102,7 @@ def bin_jds_within_night(jds, sep=0.08):
 #### CROSS-CORRELATION ROUTINES ####
 ####################################
 
-def brute_force_ccf(p0, spectral_model, iter_index, vel_window=200_000):
+def brute_force_ccf(p0, spectral_model, iter_index, vel_window=2000):
     
     # Copy init params
     pars = copy.deepcopy(p0)
@@ -199,7 +199,6 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=200_000):
 
     # Fit (M-2, M-1, ..., M+1, M+2) with parabola to determine true minimum
     # Extract the best coarse rv
-    #breakpoint()
     #import matplotlib; matplotlib.use("MacOSX")
     #plt.plot((vels_coarse + spectral_model.data.bc_vel)/1E3, rmss_coarse); plt.xlabel("Barycentric Absolute RV w/r/t LFC [km/s]"); plt.ylabel("RMS"); plt.show()
     M = np.nanargmin(rmss_fine)

@@ -502,7 +502,7 @@ class AugmentedStar(Star):
             spectral_model.p0[self.par_names[0]].vary = False
         elif iter_index == 1 and self.from_flat:
             spectral_model.p0[self.par_names[0]].vary = True
-            v = -1 * spectral_model.data.bc_vel
+            v = -1 * spectral_model.data.bc_vel + 100
             spectral_model.p0[self.par_names[0]].value = v
             spectral_model.p0[self.par_names[0]].lower_bound = v - self.vel_bounds[0]
             spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
@@ -513,7 +513,7 @@ class AugmentedStar(Star):
                 rv_absolute = self.rv_abs
             spec_module = spectral_model.data.spec_module
             rv_zero_point = spec_module.rv_zero_point
-            v = rv_absolute + rv_zero_point - spectral_model.data.bc_vel
+            v = rv_absolute + rv_zero_point - spectral_model.data.bc_vel + 100
             spectral_model.p0[self.par_names[0]].value = v
             spectral_model.p0[self.par_names[0]].lower_bound = v - self.vel_bounds[0]
             spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]

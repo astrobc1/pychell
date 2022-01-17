@@ -221,7 +221,8 @@ class IterativeSpectralRVProb:
                 self.optimize_all_observations(iter_index)
             
                 # Run the ccf for all spectra
-                self.cross_correlate_spectra(iter_index)
+                if not (self.spectral_model.star.from_flat and iter_index == 0):
+                    self.cross_correlate_spectra(iter_index)
             
                 # Generate the rvs for each observation
                 self.gen_nightly_rvs(iter_index)
@@ -681,7 +682,7 @@ class IterativeSpectralRVProb:
     @staticmethod
     def cross_correlate_observation(p0, data, spectral_model, iter_index, stellar_templates):
         
-        if data.is_good and (spectral_model.star.from_flat and iter_index == 0):
+        if data.is_good:
 
             try:
         

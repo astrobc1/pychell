@@ -443,6 +443,7 @@ class WeightedMean(TemplateAugmenter):
                 new_flux[bad] = self.max_thresh
     
         # Update the template
+        #breakpoint() #; import matplotlib; matplotlib.use("MacOSX"); plt.plot(residuals); plt.show()
         specrvprob.spectral_model.templates_dict['star'][:, 1] = new_flux
 
 ################################
