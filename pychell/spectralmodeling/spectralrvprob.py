@@ -221,8 +221,8 @@ class IterativeSpectralRVProb:
                 self.optimize_all_observations(iter_index)
             
                 # Run the ccf for all spectra
-                if not (self.spectral_model.star.from_flat and iter_index == 0):
-                    self.cross_correlate_spectra(iter_index)
+                #if not (self.spectral_model.star.from_flat and iter_index == 0):
+                #    self.cross_correlate_spectra(iter_index)
             
                 # Generate the rvs for each observation
                 self.gen_nightly_rvs(iter_index)
