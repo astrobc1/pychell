@@ -374,6 +374,11 @@ class WeightedMean(TemplateAugmenter):
                 weights_hr[bad] = 0
             weights[:, ispec] = weights_hr
 
+        
+        # Sync
+        bad = np.where(~np.isfinite(residuals) | (weights <= 0))
+        residuals[bad] = np.nan
+        weights[bad] = 0
 
         # Co-add residuals. First do a weighted median and flag 4 sigma deviations.
         # 1. If all weights at a given pixel are zero, set median value to zero.
@@ -400,6 +405,13 @@ class WeightedMean(TemplateAugmenter):
             if n_good >= 5:
                 bad = np.where(residuals[ix, :] > 4 * np.nanstd(residuals[ix, :] - residuals_median[ix]))[0]
                 weights_final[ix, bad] = 0
+                residuals[ix, bad] = np.nan
+
+        
+        # Sync
+        bad = np.where(~np.isfinite(residuals) | (weights_final <= 0))
+        residuals[bad] = np.nan
+        weights_final[bad] = 0
 
         # Final loop
         for ix in range(nx):

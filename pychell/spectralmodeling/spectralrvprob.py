@@ -279,6 +279,11 @@ class IterativeSpectralRVProb:
             # Call the parallel job via joblib.
             self.opt_results[:, iter_index] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.optimize_and_plot_observation)(p0s[ispec], self.data[ispec], self.spectral_model, self.obj, self.optimizer, iter_index, self.output_path, self.tag, self.verbose, self.stellar_templates) for ispec in range(self.n_spec))
 
+            # Identify bad
+            for ispec in range(self.n_spec):
+                if not np.isfinite(self.opt_results[ispec, iter_index]["fbest"]):
+                    self.data[ispec].is_good = False
+
         else:
 
             # Fit one observation at a time
@@ -296,6 +301,11 @@ class IterativeSpectralRVProb:
                                                                                          self.output_path,
                                                                                          self.tag, self.verbose,
                                                                                          self.stellar_templates)
+
+                # Identify bad
+                if not np.isfinite(self.opt_results[ispec, iter_index]["fbest"]):
+                    self.data[ispec].is_good = False
+
         
         # Store rvs
         if not (iter_index == 0 and self.spectral_model.star.from_flat):
@@ -314,9 +324,6 @@ class IterativeSpectralRVProb:
 
         # Lock parameters for lower_bound == upper_bound
         p0.sanity_lock()
-
-        # Initialize model
-        spectral_model.initialize(p0, data, iter_index, stellar_templates)
         
         # Only fit if data is good and there are params to vary
         if not data.is_good:
@@ -330,36 +337,48 @@ class IterativeSpectralRVProb:
         # If no params to vary, return initial pars
         elif p0.num_varied == 0:
 
-            # Store the objective with the model
-            spectral_model.obj = obj
-        
-            # Initialize objective
-            obj.initialize(spectral_model)
+            try:
+
+                # Initialize model
+                spectral_model.initialize(p0, data, iter_index, stellar_templates)
+
+                # Store the objective with the model
+                spectral_model.obj = obj
             
-            # Initialize optimizer
-            optimizer.initialize(obj)
+                # Initialize objective
+                obj.initialize(spectral_model)
+                
+                # Initialize optimizer
+                optimizer.initialize(obj)
 
-            # Compute obj
-            f = obj.compute_obj(p0)
+                # Compute obj
+                f = obj.compute_obj(p0)
 
-            # Result
-            opt_result = dict(pbest=copy.deepcopy(p0), fbest=f, fcalls=0)
+                # Result
+                opt_result = dict(pbest=copy.deepcopy(p0), fbest=f, fcalls=0)
+
+            except:
+
+                opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
 
             # Return
             return opt_result
 
 
-        # Else fit the spectrum
+        # Else try to fit the spectrum
         else:
 
             # Time the fit
             stopwatch = pcutils.StopWatch()
-        
-            # Store the objective with the model
-            spectral_model.obj = obj
 
             # Catch bad spectra
             try:
+
+                # Initialize model
+                spectral_model.initialize(p0, data, iter_index, stellar_templates)
+        
+                # Store the objective with the model
+                spectral_model.obj = obj
         
                 # Initialize objective
                 obj.initialize(spectral_model)
@@ -382,7 +401,6 @@ class IterativeSpectralRVProb:
 
                 # Return nan pars and set to bad
                 opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
-                data.is_good = False
         
         # Return result
         return opt_result
