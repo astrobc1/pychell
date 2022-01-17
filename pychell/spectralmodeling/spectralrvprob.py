@@ -663,13 +663,19 @@ class IterativeSpectralRVProb:
     @staticmethod
     def cross_correlate_observation(p0, data, spectral_model, iter_index, stellar_templates):
         
-        if data.is_good or (spectral_model.star.from_flat and iter_index == 0):
+        if data.is_good and (spectral_model.star.from_flat and iter_index == 0):
+
+            try:
         
-            # Initialize
-            spectral_model.initialize(p0, data, iter_index, stellar_templates)
+                # Initialize
+                spectral_model.initialize(p0, data, iter_index, stellar_templates)
         
-            # Run the CCF
-            ccf_result = pcrvcalc.brute_force_ccf(p0, spectral_model, iter_index)
+                # Run the CCF
+                ccf_result = pcrvcalc.brute_force_ccf(p0, spectral_model, iter_index)
+
+            except:
+                
+                ccf_result = np.nan, np.nan, np.nan
             
         else:
             
