@@ -102,7 +102,7 @@ def bin_jds_within_night(jds, sep=0.08):
 #### CROSS-CORRELATION ROUTINES ####
 ####################################
 
-def brute_force_ccf(p0, spectral_model, iter_index, vel_window=2000):
+def brute_force_ccf(p0, spectral_model, iter_index, vel_window=400_000):
     
     # Copy init params
     pars = copy.deepcopy(p0)
@@ -111,7 +111,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=2000):
     v0 = p0[spectral_model.star.par_names[0]].value
     
     # Make coarse and fine vel grids
-    vel_step_coarse = 50
+    vel_step_coarse = 200
     vels_coarse = np.arange(v0 - vel_window / 2, v0 + vel_window / 2, vel_step_coarse)
 
     # Stores the rms as a function of velocity
@@ -158,6 +158,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=2000):
     # Extract the best coarse rv
     M = np.nanargmin(rmss_coarse)
     xcorr_rv_init = vels_coarse[M]
+    breakpoint()
 
     # Determine the uncertainty from the coarse ccf
     try:
