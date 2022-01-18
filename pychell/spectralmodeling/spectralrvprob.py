@@ -44,6 +44,7 @@ class IterativeSpectralRVProb:
                  tag, output_path,
                  bc_corrs=None,
                  optimizer=None, obj=None,
+                 do_ccf=False,
                  n_cores=1, verbose=True):
         """Initiate the top level iterative spectral rv problem object.
 
@@ -104,6 +105,9 @@ class IterativeSpectralRVProb:
         
         # The objective function
         self.obj = obj
+
+        # CCF
+        self.do_ccf = do_ccf
         
         # The optimizer
         self.optimizer = optimizer
@@ -221,8 +225,8 @@ class IterativeSpectralRVProb:
                 self.optimize_all_observations(iter_index)
             
                 # Run the ccf for all spectra
-                #if not (self.spectral_model.star.from_flat and iter_index == 0):
-                #    self.cross_correlate_spectra(iter_index)
+                if not (self.spectral_model.star.from_flat and iter_index == 0) and self.do_ccf:
+                    self.cross_correlate_spectra(iter_index)
             
                 # Generate the rvs for each observation
                 self.gen_nightly_rvs(iter_index)
