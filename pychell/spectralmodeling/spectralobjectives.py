@@ -21,6 +21,9 @@ class SpectralObjectiveFunction:
     
     def initialize(self, spectral_model):
         self.spectral_model = spectral_model
+
+    def mask_tellurics(self):
+        self.spectral_model.mask_tellurics(self.templates_dict['tellurics'])
         
     @property
     def p0(self):
@@ -54,6 +57,11 @@ class WeightedSpectralUncRMS(SpectralObjectiveFunction):
             weights = self.spectral_model.data.mask * data_flux / self.spectral_model.data.flux_unc**2
         else:
             weights = np.copy(self.spectral_model.data.mask)
+
+        # Flag tellurics
+        if self.spectral_model.tellurics is not None and self.spectral_model.tellurics.mask:
+            tell_mask = self.spectral_model.tellurics.mask_tellurics(pars, self.spectral_model.templates_dict['tellurics'], wave_model)
+            weights *= tell_mask
 
         # Compute rms ignoring bad pixels
         try:

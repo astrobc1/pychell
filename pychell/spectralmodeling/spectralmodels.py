@@ -219,7 +219,7 @@ class IterativeSpectralForwardModel:
             model_flux *= self.gas_cell.build(pars, templates_dict['gas_cell'], model_wave)
             
         # All tellurics
-        if self.tellurics is not None:
+        if self.tellurics is not None and not self.tellurics.mask:
             model_flux *= self.tellurics.build(pars, templates_dict['tellurics'], model_wave)
         
         # Fringing from who knows what

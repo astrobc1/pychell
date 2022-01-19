@@ -169,6 +169,33 @@ class CubicSplineLSQ(TemplateAugmenter):
                 # Combine with coherent weights
                 weights_coherent_lr[:, ispec] *= tell_weights
 
+            elif specrvprob.spectral_model.tellurics is not None and specrvprob.spectral_model.tellurics.mask:
+
+                # Build telluric spectrum
+                tell_flux = spectral_model.tellurics.build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
+
+                # Convolve
+                if self.ideconv is not None and hasattr(specrvprob.spectral_model, "lsf") and specrvprob.spectral_model.lsf is not None:
+                    tell_flux = specrvprob.spectral_model.lsf.convolve_flux(tell_flux, pars)
+
+                # Doppler shift
+                tell_wave, tell_flux = pcmath.doppler_shift_flux(wave_data, tell_flux, vel, wave_out=None)
+
+                # Initial mask
+                tell_mask = np.ones(len(wave_data))[0]
+
+                # Mask telluric features
+                bad = np.where(tell_flux < 1 - specrvprob.spectral_model.tellurics.feature_depth)[0]
+                if bad.size > 0:
+                    tell_mask[bad] = 0
+
+                # Combine with unique sampling weights
+                _weights_vec *= tell_mask
+
+                # Combine with same sampling weights
+                weights_coherent_lr[:, ispec] *= tell_mask
+
+
             # Mask weights and RMS weights
             if self.weight_fits:
                 fit_weight = 1 / np.abs(specrvprob.opt_results[ispec, iter_index]["fbest"])

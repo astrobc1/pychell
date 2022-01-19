@@ -558,7 +558,7 @@ class TelluricsTAPAS(Tellurics):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, input_path, location_tag, feature_depth=0.02, vel=[-300, 50, 300], water_depth=[0.05, 1.1, 5.0], airmass_depth=[0.8, 1.1, 3.0]):
+    def __init__(self, input_path, location_tag, feature_depth=0.02, vel=[-300, 50, 300], water_depth=[0.05, 1.1, 5.0], airmass_depth=[0.8, 1.1, 3.0], mask=False):
         """Initiate a TAPAS telluric model.
 
         Args:
@@ -568,6 +568,7 @@ class TelluricsTAPAS(Tellurics):
             vel (list, optional): The lower bound, starting value, and upper bound for the telluric shift in m/s. Defaults to [-300, 50, 300].
             water_depth (list, optional): The lower bound, starting value, and upper bound for the water depth. Defaults to [0.05, 1.1, 5.0].
             airmass_depth (list, optional): The lower bound, starting value, and upper bound for the species which correlate well with airmass (everything but water). Defaults to [0.8, 1.1, 3.0].
+            mask (bool, optional): Whether or not to mask telluric features instead of modeling them. If True, regions with flux less than 1 - feature_depth are masked when modeling.
         """
         super().__init__()
         self.input_path = input_path
@@ -578,6 +579,7 @@ class TelluricsTAPAS(Tellurics):
         self.par_names = ['velt', 'water_depth', 'airmass_depth']
         self.has_water_features, self.has_airmass_features = True, True
         self.feature_depth = feature_depth
+        self.mask = mask
         
         # Input files
         self.species_input_files = {species: f"{self.input_path}telluric_{species}_tapas_{self.location_tag}.npz" for species in self.species}
@@ -665,6 +667,21 @@ class TelluricsTAPAS(Tellurics):
             depth = pars[self.par_names[2]].value
             flux = templates[:, 2]**depth
         return flux
+
+
+    ##############
+    #### MASK ####
+    ##############
+
+    def mask_tellurics(self, pars, templates, wave_out=None):
+        wave = templates[:, 0]
+        if wave_out is None:
+            wave_out = wave
+        mask = np.ones(len(wave_out))
+        flux = self.build(pars, templates, wave_out)
+        bad = np.where(flux < 1 - self.feature_depth)[0]
+        mask[bad] = 0
+        return mask
 
 
 ####################
