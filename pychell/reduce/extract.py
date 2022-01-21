@@ -254,7 +254,7 @@ class SpectralExtractor:
         norm_res = (trace_image - model2d) / np.sqrt(trace_image_smooth)
 
         # Flag
-        use = np.where(norm_res != 0)
+        use = np.where((norm_res != 0) & (badpix_mask == 1))
         bad = np.where(np.abs(norm_res) > badpix_threshold * np.nanstd(norm_res[use]))
         if bad[0].size > 0:
             badpix_mask_cp[bad] = 0
@@ -263,7 +263,7 @@ class SpectralExtractor:
         return trace_image_cp, badpix_mask_cp
 
     @staticmethod
-    def mask_image(image, xrange, poly_coeff_bottom, poly_coeff_top):
+    def mask_image(image, xrange, poly_mask_bottom, poly_mask_top):
         """Masks an image in-place based on left/right enpoints, and top/bottom polynomials.
 
         Args:
@@ -284,9 +284,18 @@ class SpectralExtractor:
         image[:, 0:xrange[0]] = np.nan
         image[:, xrange[1]:] = np.nan
 
-        # Mask bottom/top
-        poly_bottom = np.polyval(poly_coeff_bottom, xarr)
-        poly_top = np.polyval(poly_coeff_top, xarr)
+        # Top polynomial
+        x_bottom = np.array([p[0] for p in poly_mask_bottom], dtype=float)
+        y_bottom = np.array([p[1] for p in poly_mask_bottom], dtype=float)
+        pfit_bottom = np.polyfit(x_bottom, y_bottom, len(x_bottom) - 1)
+        poly_bottom = np.polyval(pfit_bottom, xarr)
+
+        # Bottom polynomial
+        x_top = np.array([p[0] for p in poly_mask_top], dtype=float)
+        y_top = np.array([p[1] for p in poly_mask_top], dtype=float)
+        pfit_top = np.polyfit(x_top, y_top, len(x_top) - 1)
+        poly_top = np.polyval(pfit_top, xarr)
+        
         for x in range(nx):
             bad = np.where((yarr < poly_bottom[x]) | (yarr > poly_top[x]))[0]
             image[bad, x] = np.nan
@@ -434,6 +443,10 @@ class SpectralExtractor:
         # Compute cubic spline for profile
         good = np.where(np.isfinite(trace_profile_mean))[0]
         trace_profile_cspline = scipy.interpolate.CubicSpline(yarr_hr0[good], trace_profile_mean[good], extrapolate=False)
+
+        # Trim 2 pixels on each end
+        tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
+        trace_profile_cspline = scipy.interpolate.CubicSpline(tpx[2*oversample:len(tpx)-2*oversample], tpy[2*oversample:len(tpx)-2*oversample], extrapolate=False)
         
         # Ensure trace profile is centered at zero
         prec = 1000
@@ -444,10 +457,6 @@ class SpectralExtractor:
         trace_max_pos = yhr[consider[np.nanargmax(tphr[consider])]]
         trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x - trace_max_pos,
                                                               trace_profile_cspline(trace_profile_cspline.x), extrapolate=False)
-
-        # Trim 1 pixel on each end
-        tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
-        trace_profile_cspline = scipy.interpolate.CubicSpline(tpx[oversample:len(tpx)-1*oversample], tpy[oversample:len(tpx)-oversample], extrapolate=False)
 
         # Set profile to zero where is less than min_profile_flux (relative to 1)
         tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
@@ -504,32 +513,28 @@ class SpectralExtractor:
         # Remove background
         if remove_background:
             trace_image_no_background = trace_image - np.outer(np.ones(ny), background)
+            bad = np.where(trace_image_no_background < 0)
+            trace_image_no_background[bad] = np.nan
         else:
             trace_image_no_background = np.copy(trace_image)
 
         # Smooth image
         trace_image_no_background_smooth = pcmath.median_filter2d(trace_image_no_background, width=3, preserve_nans=False)
-        
-        # Smooth the image
         bad = np.where(trace_image_no_background_smooth <= 0)
         if bad[0].size > 0:
-            trace_image_no_background[bad] = np.nan
+            trace_image_no_background_smooth[bad] = np.nan
 
         # Cross correlate each data column with the trace profile estimate
         y_positions_xc = np.full(nx, np.nan)
         
-        # 1d spec info
+        # 1d spec
         if spec1d is None:
-            if remove_background:
-                spec1d = np.nansum(trace_image - np.outer(np.ones(ny), np.nanmin(trace_image, axis=0)), axis=0)
-            else:
-                spec1d = np.nansum(trace_image, axis=0)
+            spec1d = np.nansum(trace_image_no_background, axis=0)
             spec1d = pcmath.median_filter1d(spec1d, width=3)
         spec1d_norm = spec1d / pcmath.weighted_median(spec1d, percentile=0.95)
 
         # Normalize trace profile to max=1
         trace_profile = trace_profile_cspline(trace_profile_cspline.x)
-        # oversample = 1 / np.nanmedian(np.diff(trace_profile_cspline.x))
         trace_profile /= np.nanmax(trace_profile)
 
         # Loop over columns
@@ -551,19 +556,16 @@ class SpectralExtractor:
 
             # Normalize to max
             ccf /= np.nanmax(ccf)
-            
-            # Fit ccf
-            iymax = np.nanargmax(ccf)
-            if iymax >= len(lags) - 2 or iymax <= 2:
-                continue
 
+            # Fit ccf
             try:
-                pfit = np.polyfit(lags[iymax-2:iymax+3], ccf[iymax-2:iymax+3], 2)
+                iymax = np.nanargmax(ccf)
+                pfit = np.polyfit(lags[iymax-1:iymax+2], ccf[iymax-1:iymax+2], 2)
+                ypos = -0.5 * pfit[1] / pfit[0]
+                if ypos >= 0 and ypos <= ny - 1:
+                    y_positions_xc[x] = ypos
             except:
                 continue
-
-            # Store the nominal location
-            y_positions_xc[x] = -1 * pfit[1] / (2 * pfit[0])
         
         # Smooth the deviations
         y_positions_xc_smooth = pcmath.median_filter1d(y_positions_xc, width=3)

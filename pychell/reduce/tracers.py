@@ -47,9 +47,17 @@ class OrderTracer:
         if xrange is None:
             xrange = [0, nx - 1]
         
-        # Top and bottom bounding polynomials
-        poly_top = np.polyval(poly_mask_top, xarr)
-        poly_bottom = np.polyval(poly_mask_bottom, xarr)
+        # Top polynomial
+        x_bottom = np.array([p[0] for p in poly_mask_bottom], dtype=float)
+        y_bottom = np.array([p[1] for p in poly_mask_bottom], dtype=float)
+        pfit_bottom = np.polyfit(x_bottom, y_bottom, len(x_bottom) - 1)
+        poly_bottom = np.polyval(pfit_bottom, xarr)
+
+        # Bottom polynomial
+        x_top = np.array([p[0] for p in poly_mask_top], dtype=float)
+        y_top = np.array([p[1] for p in poly_mask_top], dtype=float)
+        pfit_top = np.polyfit(x_top, y_top, len(x_top) - 1)
+        poly_top = np.polyval(pfit_top, xarr)
         
         for o in range(len(orders_list)):
             order_center = np.polyval(orders_list[o]['pcoeffs'], xarr)
@@ -294,14 +302,23 @@ class PeakTracer(OrderTracer):
         image[:, 0:xrange[0]] = np.nan
         image[:, xrange[1] + 1:] = np.nan
 
-        # Top and bottom bounding polynomials
-        poly_top = np.polyval(poly_mask_top, xarr)
-        poly_bottom = np.polyval(poly_mask_bottom, xarr)
+        # Top polynomial
+        x_bottom = np.array([p[0] for p in poly_mask_bottom], dtype=float)
+        y_bottom = np.array([p[1] for p in poly_mask_bottom], dtype=float)
+        pfit_bottom = np.polyfit(x_bottom, y_bottom, len(x_bottom) - 1)
+        poly_bottom = np.polyval(pfit_bottom, xarr)
+
+        # Bottom polynomial
+        x_top = np.array([p[0] for p in poly_mask_top], dtype=float)
+        y_top = np.array([p[1] for p in poly_mask_top], dtype=float)
+        pfit_top = np.polyfit(x_top, y_top, len(x_top) - 1)
+        poly_top = np.polyval(pfit_top, xarr)
+
         for x in range(nx):
             bad = np.where((yarr < poly_bottom[x]) | (yarr > poly_top[x]))[0]
             image[bad, x] = np.nan
 
-        # Smooth the flat.
+        # Smooth the flat
         image_smooth = pcmath.median_filter2d(image, width=3, preserve_nans=False)
 
         # Slices
@@ -318,6 +335,7 @@ class PeakTracer(OrderTracer):
             s /= continuum
             good = np.where(s > 0.7)
             s[good] = 1.0
+            #breakpoint() matplotlib.use("MacOSX")
 
             # Peak finding
             # Estimate peaks in pixel space (just indices)

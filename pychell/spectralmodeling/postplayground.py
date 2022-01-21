@@ -4,6 +4,7 @@ import glob
 import datetime
 import copy
 import os
+import gc
 
 # Maths
 import numpy as np
@@ -29,7 +30,8 @@ def parse_problem(path, order_num):
     print(f"Loading in Spectral RV Problem for Order {order_num}")
     fname = glob.glob(f"{path}Order{order_num}{os.sep}*spectralrvprob*.pkl")[0]
     with open(fname, 'rb') as f:
-        return pickle.load(f)
+        specrvprob = pickle.load(f)
+    return specrvprob
     
 def parse_problems(path, do_orders):
     return [parse_problem(path, order_num) for order_num in do_orders]
