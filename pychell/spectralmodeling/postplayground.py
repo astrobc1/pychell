@@ -33,9 +33,6 @@ def parse_problem(path, order_num):
         specrvprob = pickle.load(f)
     return specrvprob
     
-def parse_problems(path, do_orders):
-    return [parse_problem(path, order_num) for order_num in do_orders]
-
 def parse_fit_metrics(specrvprobs):
     n_orders = len(specrvprobs)
     fit_metrics = np.empty(shape=(n_orders, specrvprobs[0].n_spec, specrvprobs[0].n_iterations), dtype=float)
@@ -44,13 +41,15 @@ def parse_fit_metrics(specrvprobs):
             fit_metrics[o, ispec, :] = [specrvprobs[o].opt_results[ispec, k]["fbest"] for k in range(specrvprobs[0].n_iterations)]
     return fit_metrics
             
-def parse_parameters(specrvprobs):
-    n_orders = len(specrvprobs)
-    pars = np.empty(shape=(n_orders, specrvprobs[0].n_spec, specrvprobs[0].n_iterations), dtype=BoundedParameters)
-    for o in range(n_orders):
-        for ispec in range(specrvprobs[0].n_spec):
-            pars[o, ispec, :] = [specrvprobs[o].opt_results[ispec, k]["pbest"] for k in range(specrvprobs[0].n_iterations)]
-    return pars
+# def parse_parameters(specrvprob):
+#     n_spec = specrvprob.n_spec
+#     n_iterations = specrvprob.n_iterations
+#     n_pars = 
+#     par_vals = np.empty(shape=(n_spec, n_iterations, n_pars), dtype=BoundedParameters)
+#     par_vary = np.empty(shape=(n_spec, n_iterations), dtype=BoundedParameters)
+#     for ispec in range(specrvprobs[0].n_spec):
+#         pars[o, ispec, :] = [specrvprobs[o].opt_results[ispec, k]["pbest"] for k in range(specrvprobs[0].n_iterations)]
+#     return par_names, pars
 
 def parse_rvs(path, do_orders):
     
@@ -821,6 +820,86 @@ def compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=False):
         
     # Return
     return rvcontents
+
+def compute_rv_content(specrvprob, rvs_dict, inject_blaze=False):
+
+    # SNR0 (arbitrary)
+    snr0 = 100
+
+    # Numbers
+    n_spec = specrvprobs[0].n_spec
+    n_nights = len(rvs_dict["n_obs_nights"])
+    n_iterations = specrvprobs[0].n_iterations
+
+    # The RV contents, for each iteration (lower is "better")
+    rvcontents = np.zeros((n_orders, n_spec, n_iterations), dtype=float)
+
+    # The mean wavelength of each order
+    mean_waves = np.zeros(n_orders, dtype=float)
+
+    # S/N
+    snrs_single = 1 / parse_fit_metrics(specrvprobs)
+
+    # Compute RVC for each order and iteration
+    for o in range(n_orders):
+
+        # Find first good observation
+        k = 0
+        for data in specrvprobs[o].data:
+            if data.is_good:
+                k = data.spec_num - 1
+                break
+
+        # Use parameters for the kth osbervation, last iter - Doesn't so much matter here.
+        pars = specrvprobs[o].opt_results[k, -1]['pbest']
+
+        # Initialize
+        specrvprobs[o].spectral_model.initialize(pars, specrvprobs[o].data[k], -1, specrvprobs[o].stellar_templates)
+
+        # Data wave grid
+        data_wave_k = specrvprobs[o].spectral_model.wls.build(pars)
+
+        # Mean wavelength
+        mean_waves[o] = np.nanmean(data_wave_k)
+        
+        # Original templates
+        templates_dictcp = copy.deepcopy(specrvprobs[o].spectral_model.templates_dict)
+        
+        # Compute RVC for this iteration
+        for j in range(n_iterations):
+
+            # Skip first iteration if starting from flat
+            if specrvprobs[0].spectral_model.star.from_flat and j == 0:
+                continue
+
+            # Best fit pars for the kth observation
+            pars = specrvprobs[o].opt_results[k, j]["pbest"]
+
+            # Initialize the kth observation
+            specrvprobs[o].spectral_model.initialize(pars, specrvprobs[o].data[k], j, specrvprobs[o].stellar_templates)
+
+            # Data wave grid
+            data_wave = specrvprobs[o].spectral_model.wls.build(pars)
+            
+            # Set the star in the templates dict
+            specrvprobs[o].spectral_model.templates_dict["star"] = np.copy(specrvprobs[o].stellar_templates[j])
+        
+            # Alias the model wave grid
+            model_wave = specrvprobs[o].spectral_model.model_wave
+
+            # Formula: derivative comes from gas cell / stellar flux, but overall flux further accounts for tellurics and blaze
+            _, rvcontents[o, :, j] = pcrvcalc.compute_rv_content(pars, specrvprobs[o].spectral_model, snr=snr0)
+
+            # Scale to S/N
+            rvcontents[o, :, j] *= (snr0 / snrs_single[o, :, j])
+            
+        # Reset templates dict
+        specrvprobs[o].spectral_model.templates_dict = templates_dictcp
+        
+    # Return
+    return rvcontents
+
+
 
 def compute_nightly_snrs(specrvprobs, rvs_dict):
     

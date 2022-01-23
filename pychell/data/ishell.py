@@ -4,6 +4,7 @@ import importlib
 import sys
 import copy
 import glob
+import pickle
 
 # Astropy fits object
 from astropy.io import fits
@@ -22,6 +23,7 @@ from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
 # Pychell deps
 import pychell.data.spectraldata as pcspecdata
 import pychell.maths as pcmath
+from pychell.reduce.recipes import ReduceRecipe
 
 
 ##############
@@ -269,6 +271,7 @@ def parse_fiber_nums(data):
 ECHELLE_ORDERS = [212, 240]
 
 
+
 ################################
 #### BARYCENTER CORRECTIONS ####
 ################################
@@ -317,6 +320,63 @@ def estimate_wls(data):
 read_noise = 8.0
 dark_current = 0.05
 gain = 1.8
+
+class iSHELLReduceRecipe(ReduceRecipe):
+
+    def __init__(self, data_input_path, output_path, base_flat_field_file, do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5, xrange=None, poly_mask_bottom=None, poly_mask_top=None, tracer=None, extractor=None, n_cores=1):
+        super().__init__(spectrograph="iSHELL",
+                         data_input_path=data_input_path, output_path=output_path,
+                         do_bias=do_bias, do_dark=do_dark, do_flat=do_flat, flat_percentile=flat_percentile,
+                         xrange=xrange, poly_mask_top=poly_mask_top, poly_mask_bottom=poly_mask_bottom,
+                         tracer=tracer, extractor=extractor, n_cores=n_cores)
+        self.base_flat_field_file = base_flat_field_file
+
+    def trace(self):
+        """Traces the orders.
+        """
+        poly_mask_bottom0, poly_mask_top0 = np.copy(self.poly_mask_bottom), np.copy(self.poly_mask_top)
+        for order_map in self.data["order_maps"]:
+            print(f"Tracing orders for {order_map} ...", flush=True)
+            self.poly_mask_bottom, self.poly_mask_top = self.compute_poly_masks(order_map)
+            self.tracer.trace(self, order_map)
+            with open(f"{self.output_path}{os.sep}trace{os.sep}{order_map.base_input_file_noext}_order_map.pkl", 'wb') as f:
+                pickle.dump(order_map.orders_list, f)
+
+            # Reset mask
+            self.poly_mask_bottom, self.poly_mask_top = poly_mask_bottom0, poly_mask_top0
+
+    def compute_poly_masks(self, data):
+        image1 = pcspecdata.RawEchellogram(self.base_flat_field_file, spectrograph="iSHELL").parse_image()
+        image2 = data.parse_image()
+        offset = self.compute_mask_offset(image1, image2)
+        poly_mask_bottom_new, poly_mask_top_new = copy.deepcopy(self.poly_mask_bottom), copy.deepcopy(self.poly_mask_top)
+        poly_mask_bottom_new[0][1] -= offset
+        poly_mask_bottom_new[1][1] -= offset
+        poly_mask_bottom_new[2][1] -= offset
+        poly_mask_top_new[0][1] -= offset
+        poly_mask_top_new[1][1] -= offset
+        poly_mask_top_new[2][1] -= offset
+        return poly_mask_bottom_new, poly_mask_top_new
+
+    @staticmethod
+    def compute_mask_offset(image1, image2):
+        ny, nx = image1.shape
+        lags = np.arange(-200, 201)
+        n_lags = len(lags)
+        n_slices = 100
+        ccfs = np.full((n_lags, n_slices), np.nan)
+        yarr = np.arange(2048)
+        slices = np.linspace(500, ny-500-1, num=n_slices).astype(int)
+        for i in range(n_slices):
+            ii = slices[i]
+            s1 = image1[:, ii] / pcmath.weighted_median(image1[:, ii], percentile=0.95)
+            s2 = image2[:, ii] / pcmath.weighted_median(image2[:, ii], percentile=0.95)
+            ccfs[:, i] = pcmath.cross_correlate(yarr, s1, yarr, s2, lags, kind='xc')
+        ccf = np.nanmedian(ccfs, axis=1)
+        lag_best = lags[np.nanargmax(ccf)]
+        return lag_best
+
+
 
 
 #######################################

@@ -335,7 +335,6 @@ class PeakTracer(OrderTracer):
             s /= continuum
             good = np.where(s > 0.7)
             s[good] = 1.0
-            #breakpoint() matplotlib.use("MacOSX")
 
             # Peak finding
             # Estimate peaks in pixel space (just indices)

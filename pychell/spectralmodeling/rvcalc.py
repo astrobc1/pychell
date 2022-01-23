@@ -22,8 +22,7 @@ import pychell.utils as pcutils
 #### COMPUTE PER-NIGHT JDS (OR BJDS) ####
 #########################################
 
-
-def gen_nightly_jds(jds, utc_offset=0):
+def gen_nightly_jds(jds, utc_offset=0, sep=0.2):
     """Computes nightly (average) JDs (or BJDs) for a time-series observation over many nights. Average times are computed from the mean of the considered times.
 
     Args:
@@ -41,62 +40,28 @@ def gen_nightly_jds(jds, utc_offset=0):
     prev_i = 0
 
     # Calculate mean JD date and number of observations per night for nightly
-    # Assume that observations on separate nights if noon passes.
-    jds_nightly = []
-    n_obs_nights = []
+    # Assume that observations on separate nights if noon passes or if Delta_t > sep.
+    jds_binned = []
+    n_obs_binned = []
     if n_obs_tot == 1:
-        jds_nightly.append(jds[0])
-        n_obs_nights.append(1)
+        jds_binned.append(jds[0])
+        n_obs_binned.append(1)
     else:
         for i in range(n_obs_tot - 1):
             t_noon = np.ceil(jds[i] + utc_offset / 24) - utc_offset / 24
-            if jds[i+1] > t_noon:
+            if jds[i+1] > t_noon or jds[i+1] - jds[i] > sep:
                 jd_avg = np.average(jds[prev_i:i+1])
                 n_obs_night = i - prev_i + 1
-                jds_nightly.append(jd_avg)
-                n_obs_nights.append(n_obs_night)
+                jds_binned.append(jd_avg)
+                n_obs_binned.append(n_obs_night)
                 prev_i = i + 1
-        jds_nightly.append(np.average(jds[prev_i:]))
-        n_obs_nights.append(n_obs_tot - prev_i)
+        jds_binned.append(np.average(jds[prev_i:]))
+        n_obs_binned.append(n_obs_tot - prev_i)
 
-    jds_nightly = np.array(jds_nightly, dtype=float) # convert to np arrays
-    n_obs_nights = np.array(n_obs_nights).astype(int)
+    jds_binned = np.array(jds_binned, dtype=float) # convert to np arrays
+    n_obs_binned = np.array(n_obs_binned).astype(int)
 
-    return jds_nightly, n_obs_nights
-
-
-def bin_jds_within_night(jds, sep=0.08):
-
-    # Number of spectra
-    n_obs_tot = len(jds)
-
-    # Keep track of previous night's last index
-    prev_i = 0
-
-    # Calculate mean JD date and number of observations per night for nightly
-    # Assume that observations on separate nights if noon passes.
-    jds_nightly = []
-    n_obs_nights = []
-    if n_obs_tot == 1:
-        jds_nightly.append(jds[0])
-        n_obs_nights.append(1)
-    else:
-        for i in range(n_obs_tot - 1):
-            t_noon = np.ceil(jds[i] + utc_offset / 24) - utc_offset / 24
-            if jds[i+1] > t_noon:
-                jd_avg = np.average(jds[prev_i:i+1])
-                n_obs_night = i - prev_i + 1
-                jds_nightly.append(jd_avg)
-                n_obs_nights.append(n_obs_night)
-                prev_i = i + 1
-        jds_nightly.append(np.average(jds[prev_i:]))
-        n_obs_nights.append(n_obs_tot - prev_i)
-
-    jds_nightly = np.array(jds_nightly, dtype=float) # convert to np arrays
-    n_obs_nights = np.array(n_obs_nights).astype(int)
-
-    return jds_nightly, n_obs_nights
-
+    return jds_binned, n_obs_binned
 
 ####################################
 #### CROSS-CORRELATION ROUTINES ####
@@ -158,20 +123,19 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=400_000):
     # Extract the best coarse rv
     M = np.nanargmin(rmss_coarse)
     xcorr_rv_init = vels_coarse[M]
-    breakpoint()
 
     # Determine the uncertainty from the coarse ccf
     try:
         n = np.nansum(spectral_model.data.mask)
-        xcorr_rv_unc, skew = compute_ccf_unc_and_skew(vels_coarse, rmss_coarse, n)
-        xcorr_rv_unc = np.nan # For now
+        xcorr_rv_stddev, skew = compute_ccf_moments(vels_coarse, rmss_coarse)
+        n_used = np.nansum(spectral_model.data.mask)
+        xcorr_rv_unc = xcorr_rv_stddev / np.sqrt(n_used)
     except:
         return np.nan, np.nan, np.nan
 
     # Define the fine vels
     vel_step_fine = 2
-    #vel_window_fine = 4 * xcorr_rv_unc
-    vel_window_fine = 2000  # For now
+    vel_window_fine = 1000  # For now
     vels_fine = np.arange(xcorr_rv_init - vel_window_fine / 2, xcorr_rv_init + vel_window_fine / 2, vel_step_fine)
     rmss_fine = np.full(vels_fine.size, fill_value=np.nan)
     
@@ -200,8 +164,6 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=400_000):
 
     # Fit (M-2, M-1, ..., M+1, M+2) with parabola to determine true minimum
     # Extract the best coarse rv
-    #import matplotlib; matplotlib.use("MacOSX")
-    #plt.plot((vels_coarse + spectral_model.data.bc_vel)/1E3, rmss_coarse); plt.xlabel("Barycentric Absolute RV w/r/t LFC [km/s]"); plt.ylabel("RMS"); plt.show()
     M = np.nanargmin(rmss_fine)
     use = np.arange(M - 2, M + 3, 1).astype(int)
     try:
@@ -212,15 +174,15 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=400_000):
 
     return xcorr_rv, xcorr_rv_unc, skew
 
-def compute_ccf_unc_and_skew(vels, rmss, n):
+def compute_ccf_moments(vels, rmss):
     p0 = [1.0, vels[np.nanargmin(rmss)], 5000, 10, 0.1] # amp, mean, sigma, alpha (~skewness), offset
     bounds = [(0.8, 1.2), (p0[1] - 2000, p0[1] + 2000), (100, 1E5), (-100, 100), (-0.5, 0.5)]
     opt_result = scipy.optimize.minimize(fit_ccf_skewnorm, x0=p0, bounds=bounds, args=(vels, rmss), method="Nelder-Mead")
-    ccf_unc = opt_result.x[2] / np.sqrt(n)
+    ccf_stddev = opt_result.x[2]
     alpha = opt_result.x[3]
     delta = alpha / np.sqrt(1 + alpha**2)
     skewness = (4 - np.pi) / 2 * (delta * np.sqrt(2 / np.pi))**3 / (1 - 2 * delta**2 / np.pi)**1.5
-    return ccf_unc, skewness
+    return ccf_stddev, skewness
 
 def fit_ccf_skewnorm(pars, vels, rmss):
     y = -1 * rmss - np.nanmin(-1 * rmss)
@@ -594,7 +556,6 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
         rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr, ww, err_type="empirical")
         
     return rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out
-
 
 def combine_rvs_weighted_mean(rvs, weights, n_obs_nights):
     """Combines RVs considering the differences between all the data points.

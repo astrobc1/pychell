@@ -90,7 +90,7 @@ class SpectralExtractor:
             trace_map_image = recipe.tracer.gen_image(orders_list, ny, nx, xrange=recipe.xrange, poly_mask_top=recipe.poly_mask_top, poly_mask_bottom=recipe.poly_mask_bottom)
         
             # Mask edge pixels as nan
-            self.mask_image(data_image, recipe.xrange, recipe.poly_mask_bottom, recipe.poly_mask_top)
+            #self.mask_image(data_image, recipe.xrange, recipe.poly_mask_bottom, recipe.poly_mask_top)
         
             # Loop over orders, possibly multi-trace
             for order_index, trace_dict in enumerate(orders_list):
