@@ -30,7 +30,7 @@ from astropy.io import fits
 
 # Pychell modules
 import pychell.maths as pcmath
-import pychell.spectralmodeling.data as pcspecdata
+import pychell.data.spectraldata as pcspecdata
 
 class OrderTracer:
     

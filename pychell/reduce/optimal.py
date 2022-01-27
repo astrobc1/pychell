@@ -27,7 +27,7 @@ class OptimalExtractor(SpectralExtractor):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, extract_orders=None, chunk_width=None, oversample=1,
+    def __init__(self, extract_orders=None, chunk_width=None, chunk_overlap=None, oversample=1,
                  trace_pos_poly_order=2, trace_pos_refine_window=9,
                  remove_background=False, background_smooth_poly_order=None, background_smooth_width=None,
                  n_iterations=20, badpix_threshold=5,
@@ -54,6 +54,7 @@ class OptimalExtractor(SpectralExtractor):
 
         # Chunks
         self.chunk_width = chunk_width
+        self.chunk_overlap = chunk_overlap
 
         # Oversample trace profile
         self.oversample = oversample
@@ -85,13 +86,13 @@ class OptimalExtractor(SpectralExtractor):
                       trace_map_image, trace_dict,
                       badpix_mask=None):
         return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask,
-                                   self.chunk_width, self.oversample, self.trace_pos_poly_order, self.trace_pos_refine_window,
+                                   self.chunk_width, self.chunk_overlap, self.oversample, self.trace_pos_poly_order, self.trace_pos_refine_window,
                                    self.remove_background, self.background_smooth_poly_order, self.background_smooth_width,
                                    self.n_iterations, self.badpix_threshold, self.min_profile_flux, self._extract_aperture)
 
     @staticmethod
     def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask,
-                       chunk_width=None, oversample=1, trace_pos_poly_order=4, trace_pos_refine_window=None,
+                       chunk_width=None, chunk_overlap=None, oversample=1, trace_pos_poly_order=4, trace_pos_refine_window=None,
                        remove_background=False, background_smooth_poly_order=3, background_smooth_width=51,
                        n_iterations=5, badpix_threshold=5, min_profile_flux=1E-3, _extract_aperture=None):
         
@@ -143,7 +144,7 @@ class OptimalExtractor(SpectralExtractor):
             badpix_mask[bad] = 0
 
         # Chunks (each chunk overlaps 50% with both neighboring chunks)
-        chunks = OptimalExtractor.generate_chunks(trace_image, badpix_mask, chunk_width=chunk_width)
+        chunks = OptimalExtractor.generate_chunks(trace_image, badpix_mask, chunk_width=chunk_width, chunk_overlap=chunk_overlap)
         n_chunks = len(chunks)
 
         # Storage arrays
@@ -262,8 +263,7 @@ class OptimalExtractor(SpectralExtractor):
                         badpix_mask_chunk = badpix_mask_chunk_new
 
         # Average chunks
-        #breakpoint()
-        spec1d = np.nanmean(spec1d_chunks, axis=1)
+        spec1d = np.nanmedian(spec1d_chunks, axis=1)
         spec1d_unc = np.nanmean(spec1d_unc_chunks, axis=1)
 
         # 1d badpix mask
@@ -447,7 +447,7 @@ class OptimalExtractor(SpectralExtractor):
         return model2d
 
     @staticmethod
-    def generate_chunks(trace_image, badpix_mask, chunk_width):
+    def generate_chunks(trace_image, badpix_mask, chunk_width, chunk_overlap):
         """Generates a set of chunks which overlap by 50 percent.
 
         Args:
@@ -468,12 +468,14 @@ class OptimalExtractor(SpectralExtractor):
         chunk_width = np.min([chunk_width, nnx])
         chunks = []
         chunks.append([xi, xi + chunk_width])
-        for i in range(1, int(2 * np.ceil(nnx / chunk_width))):
-            vi = chunks[i-1][1] - int(chunk_width / 2)
+        if chunk_overlap is None:
+            chunk_overlap = 0.5
+        for i in range(1, int(1/(1-chunk_overlap) * np.ceil(nnx / chunk_width))):
+            vi = chunks[i-1][0] + int((1 - chunk_overlap) * chunk_width)
             vf = np.min([vi + chunk_width, xf])
             chunks.append([vi, vf])
             if vf == xf:
-                if vf - vi < chunk_width / 2:
+                if vf - vi < (1 - chunk_overlap) * chunk_width:
                    del chunks[-1]
                    chunks[-1][-1] = xf
                 break

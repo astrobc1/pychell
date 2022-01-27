@@ -66,7 +66,7 @@ class SpecData:
 
     @property
     def spec_module(self):
-        return importlib.import_module(f"pychell.spectrographs.{self.spectrograph.lower()}")
+        return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
 
 class Echellogram(SpecData):
     

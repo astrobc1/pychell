@@ -18,7 +18,7 @@ import pychell
 import pychell.maths as pcmath
 import pychell.spectralmodeling.rvcalc as pcrvcalc
 import pychell.utils as pcutils
-from pychell.spectralmodeling.data import Spec1d
+from pychell.data.spectraldata import Spec1d
 from pychell.spectralmodeling.models import IterativeSpectralForwardModel
 
 # Plots
@@ -731,7 +731,7 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
     
     @property
     def spec_module(self):
-        return importlib.import_module(f"pychell.spectrographs.{self.spectrograph.lower()}")
+        return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
     
     @property
     def n_spec(self):

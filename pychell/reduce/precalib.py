@@ -23,7 +23,7 @@ from numba import jit, njit, prange
 
 # Pychell modules
 import pychell.maths as pcmath
-import pychell.spectralmodeling.data as pcspecdata
+import pychell.data.spectraldata as pcspecdata
 
 def gen_master_calib_images(data, do_bias, do_dark, do_flat, flat_percentile=None):
     

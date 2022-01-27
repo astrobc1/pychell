@@ -6,14 +6,14 @@ import copy
 import numpy as np
 
 # Pychell deps
-from pychell.spectralmodeling.spectralrvprob import IterativeSpectralRVProb
-import pychell.spectralmodeling.spectralmodels as pcsm
-from pychell.spectralmodeling.spectralobjectives import WeightedSpectralUncRMS
-from pychell.spectralmodeling.templateaugmenters import WeightedMedian
+from pychell.spectralmodeling.problems import IterativeSpectralRVProb
+import pychell.spectralmodeling.models as pcsm
+from pychell.spectralmodeling.objectives import WeightedSpectralUncRMS
+from pychell.spectralmodeling.templateaugmenters import WeightedMean
 import pychell.data.ishell as ishell
 
 # Optimize deps
-from optimize.optimizers import IterativeNelderMead
+from optimize import IterativeNelderMead
 
 # Define basic info
 spectrograph = "iSHELL"
@@ -53,17 +53,17 @@ for order_num in do_orders:
                                                         tellurics=tellurics,
                                                         order_num=order_num,
                                                         n_iterations=5,
-                                                        model_resolution=8)
+                                                        model_resolution=1)
     
     # Create the "Problem" object.
     specrvprob = IterativeSpectralRVProb(spectrograph=spectrograph,
                                          spectral_model=spectral_model,
                                          data_input_path=data_input_path, filelist=filelist, output_path=output_path,
                                          tag=tag,
-                                         augmenter=WeightedMedian(max_thresh=1.005, downweight_tellurics=False),
+                                         augmenter=WeightedMean(),
                                          obj=WeightedSpectralUncRMS(),
                                          optimizer=IterativeNelderMead(),
-                                         n_cores=1,
+                                         n_cores=8,
                                          verbose=True)
     
     # Run RVs for this order

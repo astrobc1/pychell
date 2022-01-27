@@ -21,7 +21,7 @@ from barycorrpy import get_BC_vel
 from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
 
 # Pychell deps
-import pychell.spectralmodeling.data as pcspecdata
+import pychell.data.spectraldata as pcspecdata
 import pychell.maths as pcmath
 from pychell.reduce.recipes import ReduceRecipe
 
