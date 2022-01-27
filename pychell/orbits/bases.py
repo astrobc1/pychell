@@ -1,5 +1,5 @@
 import numpy as np
-import pychell.orbits.planetmaths as planetmath
+import pychell.orbits.maths as planetmath
 
 class OrbitBasis:
     """An abstract orbit basis class, not useful on its own. Each method must define to_standard and from_standard below.

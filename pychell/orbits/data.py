@@ -1,14 +1,11 @@
-# Optimize deps
-from optimize.data import SimpleSeries, CompositeSimpleSeries
-
 # Maths
 import numpy as np
 import pandas as pd
 
 
-class RVData(SimpleSeries):
+class RVData:
     
-    __slots__ = ['x', 'y', 'yerr', 'mask', 'label', 'wavelength']
+    __slots__ = ['t', 'rv', 'rverr', 'instname', 'wavelength']
     
     def __init__(self, t, rv, rverr, instname=None, wavelength=None):
         """Construct an RV data object for a particular instrument.
@@ -20,27 +17,14 @@ class RVData(SimpleSeries):
             instname (np.ndarray, optional): The label for this dataset. Defaults to None initially, and is then replaced by the the key provided when constructing a composite dataset.
             wavelength (np.ndarray, optional): The effective wavelength of the dataset. Defaults to None.
         """
-        super().__init__(t, rv, yerr=rverr, label=instname)
+        self.t = t
+        self.rv = rv
+        self.rverr = rverr
+        self.instname = instname
         self.wavelength = wavelength
 
     def __repr__(self):
         return f"{len(self.t)} RVs from {self.instname}"
-
-    @property
-    def t(self):
-        return self.x
-
-    @property
-    def rv(self):
-        return self.y
-
-    @property
-    def rverr(self):
-        return self.yerr
-
-    @property
-    def instname(self):
-        return self.label
 
     @property
     def time_baseline(self):
@@ -68,12 +52,16 @@ class RVData(SimpleSeries):
         """
         if usecols is None:
             usecols = (0, 1, 2)
-        t, rvs, rvs_unc = np.loadtxt(fname, delimiter=delimiter, usecols=usecols, unpack=True, skiprows=skiprows)
-        data = cls(t, rvs, rvs_unc, instname=instname, wavelength=wavelength)
+        t, rv, rverr = np.loadtxt(fname, delimiter=delimiter, usecols=usecols, unpack=True, skiprows=skiprows)
+        data = cls(t, rv, rverr, instname=instname, wavelength=wavelength)
         return data
 
 
-class CompositeRVData(CompositeSimpleSeries):
+class CompositeRVData(dict):
+
+    def __init__(self):
+        super().__init__()
+        self.indices = {}
 
     @classmethod
     def from_radvel_file(cls, fname, wavelengths=None):
@@ -127,31 +115,21 @@ class CompositeRVData(CompositeSimpleSeries):
             np.savetxt(f, out, fmt='%f,%f,%f,%s')
         
     def gen_instname_vec(self):
-        return self.gen_label_vec()
+        return self.gen_tel_vec()
  
     def get_view(self, instnames):
-        """Returns a view into sub data objects. Really just a forward method, propogating instnames -> labels.
-
+        """Returns a view into sub data objects.
         Args:
-            instnames (list): A list of instruments as strings.
-
+            labels (str or list of strings): The labels to get.
         Returns:
-            CompositeData: A view into the original data object (not a copy).
+            type(self): A view into the original data object.
         """
-        return super().get_view(labels=instnames)
+        data_view = self.__class__()
+        instnames = np.atleast_1d(instnames)
+        for instname in instnames:
+            data_view[instname] = self[instname]
+        return data_view
     
-    @property
-    def t(self):
-        return self.x
-
-    @property
-    def rv(self):
-        return self.y
-
-    @property
-    def rverr(self):
-        return self.yerr
-
     @property
     def time_baseline(self):
         """T_max - T_min
@@ -161,3 +139,85 @@ class CompositeRVData(CompositeSimpleSeries):
         """
         t = self.t
         return np.nanmax(t) - np.nanmin(t)
+
+    
+    def gen_tel_vec(self):
+        """Generates a vector where each index corresponds to the label of measurement x, sorted by x as well.
+
+        Returns:
+            np.ndarray: The label vector sorted according to self.indices.
+        """
+        tel_vec = np.empty(self.n, dtype='<U50')
+        for data in self.values():
+            tel_vec[self.indices[data.instname]] = data.instname
+        return tel_vec
+
+    def get_vec(self, attr, sort=True, labels=None):
+        """Gets a vector for certain labels and possibly sorts it.
+
+        Args:
+            attr (str): The attribute to get.
+            sort (bool): Whether or not to sort the returned vector according to x.
+            labels (list of strings, optional): The labels to get. Defaults to all.
+
+        Returns:
+            np.ndarray: The vector, sorted according to x if sort=True.
+        """
+        n = np.sum([data.t.size for data in self.values()])
+        if labels is None:
+            labels = list(self.keys())
+        if sort:
+            out = np.zeros(n)
+            for label in labels:
+                out[self.indices[label]] = getattr(self[label], attr)
+        else:
+            out = np.array([], dtype=float)
+            for label in labels:
+                out = np.concatenate((out, getattr(self[label], attr)))
+        return out
+    
+    def gen_indices(self):
+        """Utility function to generate the indices of each dataset (when sorted according to x).
+
+        Returns:
+            dict: A dictionary with keys = data labels, values = numpy array of indices (ints).
+        """
+        indices = {}
+        tel_vec = np.array([], dtype="<U50")
+        t = np.array([], dtype=float)
+        for data in self.values():
+            t = np.concatenate((t, data.t))
+            tel_vec = np.concatenate((tel_vec, np.full(len(data.t), fill_value=data.instname, dtype="<U50")))
+        ss = np.argsort(t)
+        tel_vec = tel_vec[ss]
+        for data in self.values():
+            inds = np.where(tel_vec == data.instname)[0]
+            indices[data.instname] = inds
+        return indices
+    
+    def __setitem__(self, instname, data):
+        super().__setitem__(instname, data)
+        self.indices = self.gen_indices()
+
+    @property
+    def t(self):
+        return self.get_vec("t")
+
+    @property
+    def rv(self):
+        return self.get_vec("rv")
+
+    @property
+    def rverr(self):
+        return self.get_vec("rverr")
+    
+    def __delitem__(self, key):
+        super().__delitem__(key)
+        self.indices = self.gen_indices()
+
+    def __repr__(self):
+        s = ""
+        for _data in self.values():
+            s += f"   {_data}\n"
+        s = s[0:-1]
+        return s

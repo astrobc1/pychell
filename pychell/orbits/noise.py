@@ -9,33 +9,7 @@ from optimize.noise import WhiteNoiseProcess, GaussianProcess
 from optimize.kernels import CorrelatedNoiseKernel
 
 # Import rv kernels into namespace
-from pychell.orbits.rvkernels import ChromaticKernelJ1, ChromaticKernelJ2, ChromaticKernelJ3
-
-################
-#### JITTER ####
-################
-
-class RVJitter(WhiteNoiseProcess):
-    
-    def compute_data_errors(self, pars):
-        """Computes the errors added in quadrature for all datasets corresponding to this kernel.
-
-        Args:
-            pars (Parameters): The parameters to use.
-            
-        Returns:
-            np.ndarray: The final data errors.
-        """
-    
-        # Get intrinsic data errors
-        errors = self.data.get_errors()
-        
-        # Add jitter in quadrature
-        for label in self.data:
-            inds = self.data.indices[label]
-            errors[inds] = np.sqrt(errors[inds]**2 + pars[f"jitter_{label}"].value**2)
-        
-        return errors
+from pychell.orbits.kernels import ChromaticKernelJ1, ChromaticKernelJ2, ChromaticKernelJ3
 
 
 #############

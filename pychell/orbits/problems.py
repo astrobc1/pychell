@@ -16,10 +16,10 @@ from PyAstronomy.pyTiming import pyPeriod
 # Pychell deps
 import pychell
 import pychell.utils as pcutils
-import pychell.orbits.planetmaths as planetmath
+import pychell.orbits.maths as planetmath
 
 # Optimize
-from optimize.frameworks import BayesianProblem
+from optimize.problems import OptProblem
 from optimize.noise import CorrelatedNoiseProcess, GaussianProcess
 
 # Plots
@@ -31,15 +31,13 @@ PLOTLY_COLORS = pcutils.PLOTLY_COLORS
 COLORS_HEX_GADFLY = pcutils.COLORS_HEX_GADFLY
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
-class RVProblem(BayesianProblem):
-    """The primary, top-level container for Exoplanet optimization problems. As of now, this only deals with RV data. Photometric modeling will be included in future updates, but will leverage existing libraries (Batman, etc.).
-    """
+class RVProblem(OptProblem):
     
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, output_path=None, p0=None, post=None, optimizer=None, sampler=None, star_name=None, tag=None):
+    def __init__(self, p0=None, post=None, star_name=None, tag=None, output_path=None):
         """Constructs the primary exoplanet problem object.
 
         Args:
@@ -52,7 +50,7 @@ class RVProblem(BayesianProblem):
         """
         
         # Pass relevant items to base class constructor
-        super().__init__(p0=p0, optimizer=optimizer, sampler=sampler, post=post)
+        super().__init__(name=f"RV Modeling for {star_name}", p0=p0, obj=post)
         
         # The output path
         self.output_path = output_path
@@ -67,22 +65,21 @@ class RVProblem(BayesianProblem):
         self.full_tag = f"{self.star_name}_{self.tag}"
         
         # Generate latex labels for the parameters.
-        self._gen_latex_labels()
+        self.gen_latex_labels()
         
         # Make a color map for plotting.
-        self._make_color_map()
+        self.make_color_map()
         
-    def _make_color_map(self):
+    def make_color_map(self):
         self.color_map = {}
         color_index = 0
-        for like in self.post.values():
+        for like in self.post.likes.values():
             for instname in like.model.data:
                 if instname not in self.color_map:
                     self.color_map[instname] = COLORS_HEX_GADFLY[color_index % len(COLORS_HEX_GADFLY)]
                     color_index += 1
-        
-        
-    def _gen_latex_labels(self):
+            
+    def gen_latex_labels(self):
         planets_dict = self.planets_dict
     
         for par in self.p0.values():
@@ -152,14 +149,13 @@ class RVProblem(BayesianProblem):
                 pickle.dump(mcmc_result, f)
         return mcmc_result
     
-    def run_mapfit(self, save=True):
+    def run_mapfit(self, optimizer, save=True):
         """Runs the optimizer.
             
         Returns:
             dict: A dictionary with the optimize results.
         """
-        self.initialize()
-        map_result = self.optimizer.optimize()
+        map_result = optimizer.optimize(p0=self.p0, obj=self.post)
         if save:
             fname = f"{self.output_path}{self.star_name.replace(' ', '_')}_map_results_{pcutils.gendatestr(time=True)}_{self.tag}.pkl"
             with open(fname, 'wb') as f:
@@ -201,7 +197,7 @@ class RVProblem(BayesianProblem):
         phases_hr_one_period = planetmath.get_phases(t_hr_one_period, per, tc)
         
         # Build high res model for this planet
-        planet_model_phased = self.like0.model.build_planet(pars, t_hr_one_period, planet_index)
+        planet_model_phased = self.post.like0.model.build_planet(pars, t_hr_one_period, planet_index)
         
         # Sort the phased model
         ss = np.argsort(phases_hr_one_period)
@@ -214,27 +210,29 @@ class RVProblem(BayesianProblem):
         unc_data_all = np.array([], dtype=float)
         
         # Loop over likes
-        for like in self.post.values():
+        for like in self.post.likes.values():
             
             # Compute the final residuals
-            residuals = like.model.compute_residuals(pars)
+            residuals = like.compute_residuals(pars)
             
             # Compute the noise model
-            if isinstance(like.model.noise_process, CorrelatedNoiseProcess):
-                errors = like.model.compute_data_errors(pars, include_corr_error=False)
+            if isinstance(like.noise_process, CorrelatedNoiseProcess):
+                errors = like.compute_data_errors(pars)
+                gp, _ = like.noise_process.predict(pars, data_errors=errors, linpred=residuals, xdata=like.model.data.t)
+                residuals -= gp
             else:
-                errors = like.model.compute_data_errors(pars)
+                errors = like.compute_data_errors(pars)
             
             # Loop over instruments and plot each
             for data in like.model.data.values():
-                errors_arr = errors[like.model.data.indices[data.label]]
-                data_arr = residuals[like.model.data.indices[data.label]] + like.model.build_planet(pars, data.t, planet_index)
+                errors_arr = errors[like.model.data.indices[data.instname]]
+                data_arr = residuals[like.model.data.indices[data.instname]] + like.model.build_planet(pars, data.t, planet_index)
                 phases_data = planetmath.get_phases(data.t, per, tc)
                 fig.add_trace(plotly.graph_objects.Scatter(x=phases_data, y=data_arr,
                                                            error_y=dict(array=errors_arr),
-                                                           name=f"<b>{data.label}</b>",
+                                                           name=f"<b>{data.instname}</b>",
                                                            mode='markers',
-                                                           marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.8))))
+                                                           marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.instname], a=0.8))))
                 
                 # Store for binning at the end
                 phases_data_all = np.concatenate((phases_data_all, phases_data))
@@ -259,7 +257,7 @@ class RVProblem(BayesianProblem):
         # Labels
         fig.update_xaxes(title_text='<b>Phase</b>')
         fig.update_yaxes(title_text='<b>RV [m/s]</b>')
-        fig.update_layout(title=f"<b>{self.star_name} {self.like0.model.planets_dict[planet_index]['label']} <br> P = {round(per, 6)}, K = {round(k, 2)} e = {round(ecc, 3)}</b>")
+        fig.update_layout(title=f"<b>{self.star_name} {self.post.like0.model.planets_dict[planet_index]['label']} <br> P = {round(per, 6)}, K = {round(k, 2)} e = {round(ecc, 3)}</b>")
         fig.update_layout(template="plotly_white")
         fig.update_layout(font=dict(size=16))
         fig.update_xaxes(tickprefix="<b>",ticksuffix ="</b><br>")
@@ -314,21 +312,23 @@ class RVProblem(BayesianProblem):
         fig = plotly.subplots.make_subplots(rows=2, cols=1)
         
         # Get the high resolution Keplerian model + trend
-        if self.like0.model.n_planets > 0 or self.like0.model.trend_model.poly_order > 0:
+        if self.post.like0.model.n_planets > 0 or self.post.like0.model.trend_poly_order > 0:
             
             # Generate a high resolution data grid.
-            t_data_all = self.data_t
+            t_data_all = np.array([], dtype=float)
+            for like in self.post.likes.values():
+                t_data_all = np.concatenate((t_data_all, like.model.data.t))
             t_start, t_end = np.nanmin(t_data_all), np.nanmax(t_data_all)
             dt = t_end - t_start
             t_hr = np.linspace(t_start - dt / 100, t_end + dt / 100, num=n_model_pts)
         
             # Generate the high res Keplerian + Trend model.
-            model_arr_hr = self.like0.model.builder(pars, t_hr)
+            model_arr_hr = self.post.like0.model.build(pars, t_hr)
             
             # Label
-            if self.like0.model.n_planets > 0 and self.like0.model.trend_model.poly_order > 0:
+            if self.post.like0.model.n_planets > 0 and self.post.like0.model.trend_poly_order > 0:
                 name = "<b>Keplerian + Trend Model</b>"
-            elif self.like0.model.n_planets > 0 and self.like0.model.trend_model.poly_order == 0:
+            elif self.post.like0.model.n_planets > 0 and self.post.like0.model.trend_poly_order == 0:
                 name = "<b>Keplerian Model</b>"
             else:
                 name = "<b>Trend Model</b>"
@@ -343,15 +343,17 @@ class RVProblem(BayesianProblem):
         # 1. Plot high res GP if present
         # 2. Plot data
         color_index = 0
-        for like in self.post.values():
+        for like in self.post.likes.values():
 
             # Correlated Noise
-            if isinstance(like.model.noise_process, CorrelatedNoiseProcess):
+            if isinstance(like.noise_process, CorrelatedNoiseProcess):
                 
-                # Make hr arrays for GP
-                time_gp_hr = np.array([], dtype=float)
-                gps_hr = {}
-                residuals_raw = like.model.compute_raw_residuals(pars)
+                # Make hr arrays for high res GP
+                t_gp_hr = np.array([], dtype=float)
+                gp_hr = np.array([], dtype=float)
+                gp_error_hr = np.array([], dtype=float)
+                residuals_with_gp = like.compute_residuals(pars)
+                errors = like.compute_data_errors(pars)
                 for i in range(like.model.data.t.size):
                     
                     # Create a time array centered on this point
@@ -360,127 +362,118 @@ class RVProblem(BayesianProblem):
                                            num=kernel_sampling)
                     
                     # Sample GP for this window
-                    _gps_hr = like.model.noise_process.compute_noise_components(pars=pars, linpred=residuals_raw, xpred=t_hr_window)
-                    for noise_label in _gps_hr:
-                        if i == 0:
-                            gps_hr[noise_label] = np.array([], dtype=float), np.array([], dtype=float)
-                        gps_hr[noise_label] = np.concatenate((gps_hr[noise_label][0], _gps_hr[noise_label][0])), np.concatenate((gps_hr[noise_label][1], _gps_hr[noise_label][1]))
+                    _gp_hr, _gp_error_hr = like.noise_process.predict(pars, data_errors=errors, linpred=residuals_with_gp, xdata=like.model.data.t, xpred=t_hr_window)
 
                     # Store
-                    time_gp_hr = np.concatenate((time_gp_hr, t_hr_window))
+                    t_gp_hr = np.concatenate((t_gp_hr, t_hr_window))
+                    gp_hr = np.concatenate((gp_hr, _gp_hr))
+                    gp_error_hr = np.concatenate((gp_error_hr, _gp_error_hr))
                     
                 # Sort each
-                ss = np.argsort(time_gp_hr)
-                time_gp_hr = time_gp_hr[ss]
-                for noise_label in gps_hr:
-                    gps_hr[noise_label] = gps_hr[noise_label][0][ss], gps_hr[noise_label][1][ss]
-                    
+                ss = np.argsort(t_gp_hr)
+                t_gp_hr = t_gp_hr[ss]
+                gp_hr = gp_hr[ss]
+                gp_error_hr = gp_error_hr[ss]
                 
                 # Compute data errors
-                errors = like.model.noise_process.compute_data_errors(pars, include_corr_error=False, linpred=residuals_raw)
+                errors = like.compute_data_errors(pars)
+                    
+                # Get the relevant variables
+                t_gp_hr -= time_offset
+                gp_hr_lower, gp_hr_upper = gp_hr - gp_error_hr, gp_hr + gp_error_hr
                 
-                # Plot each GP
-                for noise_label in gps_hr:
+                # For legend
+                instnames = list(like.model.data.keys())
+                label = f"<b>GP ["
+                for instname in instnames:
+                    label += f"{instname},"
+                label = label[0:-1]
+                label += "]</b>"
                     
-                    # Get the relevant variables
-                    tt = time_gp_hr - time_offset
-                    gp, gp_unc = gps_hr[noise_label][0], gps_hr[noise_label][1]
-                    gp_lower, gp_upper = gp - gp_unc, gp + gp_unc
-                    
-                    # For legend
-                    label = f"<b>{noise_label.replace('_', ' ')}</b>"
-                        
-                    # Plot the actual GP
-                    if color_map == "instrument":
-                        for instname in like.model.data:
-                            if instname in noise_label:
-                                color_line = pcutils.hex_to_rgba(self.color_map[instname], a=0.6)
-                                color_fill = pcutils.hex_to_rgba(self.color_map[instname], a=0.3)
-                                break
-                    elif color_map == "wavelength":
-                        for wave in np.unique(like.model.noise_process.kernel.wave_vec):
-                            if str(int(wave)) in noise_label:
-                                color_line = pcutils.csscolor_to_rgba(pcutils.PLOTLY_COLORS[color_index], a=0.6)
-                                color_fill = pcutils.csscolor_to_rgba(pcutils.PLOTLY_COLORS[color_index], a=0.3)
-                                color_index += 1
-                    fig.add_trace(plotly.graph_objects.Scatter(x=tt, y=gp,
-                                                                line=dict(width=0.8, color=color_line),
-                                                                name=label, showlegend=False),
-                                    row=1, col=1)
-                    
-                    # Plot the gp unc
-                    fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([tt, tt[::-1]]),
-                                                                y=np.concatenate([gp_upper, gp_lower[::-1]]),
-                                                                fill='toself',
-                                                                line=dict(color=color_line, width=1),
-                                                                fillcolor=color_fill,
-                                                                name=label, showlegend=True),
-                                    row=1, col=1)
-                    color_index += 1
+                # Plot the actual GP
+                if color_map == "instrument":
+                    color_line = pcutils.hex_to_rgba(self.color_map[instname], a=0.6)
+                    color_fill = pcutils.hex_to_rgba(self.color_map[instname], a=0.3)
+
+                fig.add_trace(plotly.graph_objects.Scatter(x=t_gp_hr, y=gp_hr,
+                                                            line=dict(width=0.8, color=color_line),
+                                                            name=label, showlegend=False),
+                                row=1, col=1)
                 
-                # Generate the residuals without noise
-                residuals = like.model.compute_residuals(pars)
+                # Plot the gp unc
+                fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([t_gp_hr, t_gp_hr[::-1]]),
+                                                            y=np.concatenate([gp_hr_upper, gp_hr_lower[::-1]]),
+                                                            fill='toself',
+                                                            line=dict(color=color_line, width=1),
+                                                            fillcolor=color_fill,
+                                                            name=label, showlegend=True),
+                                row=1, col=1)
+                color_index += 1
+
+                # Get GP
+                gp, _ = like.noise_process.predict(pars, data_errors=errors, linpred=residuals_with_gp, xdata=like.model.data.t)
+                residuals_no_gp = residuals_with_gp - gp
                 
                 # Plot each instrument
                 for data in like.model.data.values():
                     
                     # Raw data - zero point
-                    data_arr = data.rv - pars[f"gamma_{data.label}"].value
+                    data_arr = data.rv - pars[f"gamma_{data.instname}"].value
                     
                     # Errors
-                    errors_arr = errors[like.model.data.indices[data.label]]
+                    errors_arr = errors[like.model.data.indices[data.instname]]
                     
                     # Final residuals
-                    residuals_arr = residuals[like.model.data.indices[data.label]]
+                    residuals_arr = residuals_no_gp[like.model.data.indices[data.instname]]
                     
                     # Plot rvs
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr,
                                                                error_y=dict(array=errors_arr),
-                                                               name=data.label,
+                                                               name=data.instname,
                                                                mode='markers',
-                                                               marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14)),
+                                                               marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.instname], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14)),
                                   row=1, col=1)
                     
                     # Plot residuals
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=residuals_arr,
                                                                error_y=dict(array=errors_arr),
                                                                mode='markers',
-                                                               marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14), showlegend=False),
+                                                               marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.instname], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14), showlegend=False),
                                   row=2, col=1)
             
 
             else:
                 
                 # Generate the residuals
-                residuals = like.model.compute_residuals(pars)
+                residuals = like.compute_residuals(pars)
                 
                 # Compute data errors
-                errors = like.model.noise_process.compute_data_errors(pars)
+                errors = like.compute_data_errors(pars)
                 
                 for data in like.model.data.values():
                     
                     # Raw data - zero point
-                    data_arr = data.rv - pars[f"gamma_{data.label}"].value
+                    data_arr = data.rv - pars[f"gamma_{data.instname}"].value
                     
                     # Errors
-                    errors_arr = errors[like.model.data.indices[data.label]]
+                    errors_arr = errors[like.model.data.indices[data.instname]]
                     
                     # Final residuals
-                    residuals_arr = residuals[like.model.data.indices[data.label]]
+                    residuals_arr = residuals[like.model.data.indices[data.instname]]
                     
                     # Plot rvs
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr,
                                                                error_y=dict(array=errors_arr),
-                                                               name=data.label,
+                                                               name=data.instname,
                                                                mode='markers',
-                                                               marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14)),
+                                                               marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.instname], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14)),
                                   row=1, col=1)
                     
                     # Plot residuals
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=residuals_arr,
                                                                error_y=dict(array=errors_arr),
                                                                mode='markers',
-                                                               marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.label], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14), showlegend=False),
+                                                               marker=dict(color=pcutils.hex_to_rgba(self.color_map[data.instname], a=0.9), line=dict(width=2, color='DarkSlateGrey'), size=14), showlegend=False),
                                   row=2, col=1)
 
         # Labels
@@ -528,7 +521,7 @@ class RVProblem(BayesianProblem):
     def compute_components(self, pars):
         
         comps = {}
-        for like in self.post.values():
+        for like in self.post.likes.values():
             
             # Time
             comps[f"{like.label}_data_t"] = like.model.data.t
@@ -1194,18 +1187,14 @@ class RVProblem(BayesianProblem):
         return planet_dicts
 
     @property
+    def post(self):
+        return self.obj
+
+    @property
     def instnames(self):
         return list(self.data.keys())
     
     @property
     def planets_dict(self):
-        return self.like0.model.planets_dict
+        return self.post.like0.model.planets_dict
     
-    @property
-    def data_t(self):
-        t = np.array([], dtype=float)
-        for like in self.post.values():
-            for data in self.post.values():
-                t = np.concatenate((t, like.model.data.t))
-        t = np.sort(t)
-        return t

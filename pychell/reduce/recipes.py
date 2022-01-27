@@ -22,7 +22,7 @@ from joblib import Parallel, delayed
 # Pychell modules
 import pychell.utils as pcutils
 import pychell.maths as pcmath
-import pychell.data as pcdata
+import pychell.spectralmodeling as pcdata
 import pychell.reduce.precalib as pccalib
 
 class ReduceRecipe:

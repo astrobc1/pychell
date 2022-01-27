@@ -3,7 +3,6 @@ import numpy as np
 
 # optimize deps
 from optimize.kernels import CorrelatedNoiseKernel
-import optimize.maths as optmath
 
 # pychell
 import pychell.maths as pcmath

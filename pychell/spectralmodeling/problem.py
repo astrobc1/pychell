@@ -10,13 +10,16 @@ import numpy as np
 # Multiprocessing
 from joblib import Parallel, delayed
 
+# Optimize
+import optimize.problems
+
 # pychell
 import pychell
 import pychell.maths as pcmath
 import pychell.spectralmodeling.rvcalc as pcrvcalc
 import pychell.utils as pcutils
-from pychell.data.spectraldata import Spec1d
-from pychell.spectralmodeling.spectralmodels import IterativeSpectralForwardModel
+from pychell.spectralmodeling.data import Spec1d
+from pychell.spectralmodeling.models import IterativeSpectralForwardModel
 
 # Plots
 import matplotlib.pyplot as plt
@@ -29,7 +32,7 @@ except:
 #### PRIMARY TYPE ####
 ######################
 
-class IterativeSpectralRVProb:
+class IterativeSpectralRVProb(optimize.problems.OptProblem):
     """The primary container for a spectral forward model problem where the goal is to provide precise RVs.
     """
     
@@ -352,9 +355,6 @@ class IterativeSpectralRVProb:
             
                 # Initialize objective
                 obj.initialize(spectral_model)
-                
-                # Initialize optimizer
-                optimizer.initialize(obj)
 
                 # Compute obj
                 f = obj.compute_obj(p0)
@@ -373,11 +373,10 @@ class IterativeSpectralRVProb:
         # Else try to fit the spectrum
         else:
 
-            # Time the fit
-            stopwatch = pcutils.StopWatch()
-
-            # Catch bad spectra
             try:
+
+                # Time the fit
+                stopwatch = pcutils.StopWatch()
 
                 # Initialize model
                 spectral_model.initialize(p0, data, iter_index, stellar_templates)
@@ -386,13 +385,10 @@ class IterativeSpectralRVProb:
                 spectral_model.obj = obj
         
                 # Initialize objective
-                obj.initialize(spectral_model)
-            
-                # Initialize optimizer
-                optimizer.initialize(obj)
-            
-                # Fit the observation
-                opt_result = optimizer.optimize()
+                obj.spectral_model = spectral_model
+
+                # Fit
+                opt_result = optimizer.optimize(p0, obj=obj)
             
                 # Print diagnostics
                 print(f"Fit observation {data} [{data.spec_num}] in {round((stopwatch.time_since())/60, 2)} min", flush=True)
@@ -400,9 +396,10 @@ class IterativeSpectralRVProb:
                     print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
                     print(f" Best Fit Parameters:\n{spectral_model.summary(opt_result['pbest'])}", flush=True)
 
-                # Plot
-                IterativeSpectralRVProb.plot_spectral_model(opt_result["pbest"], data, spectral_model, iter_index, output_path, tag, spectral_model.star.star_name)
-            except:
+                    # Plot
+                    IterativeSpectralRVProb.plot_spectral_model(opt_result["pbest"], data, spectral_model, iter_index, output_path, tag, spectral_model.star.star_name)
+
+            except NotImplementedError:
 
                 # Return nan pars and set to bad
                 opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
@@ -734,7 +731,7 @@ class IterativeSpectralRVProb:
     
     @property
     def spec_module(self):
-        return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
+        return importlib.import_module(f"pychell.spectrographs.{self.spectrograph.lower()}")
     
     @property
     def n_spec(self):

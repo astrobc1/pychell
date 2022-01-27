@@ -2,13 +2,13 @@ name = 'orbits'
 
 # optimize
 from optimize import BayesianParameters, BayesianParameter, priors
-from optimize.optimizers import IterativeNelderMead, SciPyMinimizer
+from optimize.neldermead import IterativeNelderMead
 from optimize.kernels import QuasiPeriodic
 from optimize.samplers import ZeusSampler, emceeSampler
 
 # pychell
-from pychell.data.rvdata import *
-from pychell.orbits.rvmodels import *
-from pychell.orbits.rvnoise import *
-from pychell.orbits.rvobjectives import *
-from pychell.orbits.rvprob import *
+from pychell.orbits.data import *
+from pychell.orbits.models import *
+from pychell.orbits.noise import *
+from pychell.orbits.objectives import *
+from pychell.orbits.problems import *

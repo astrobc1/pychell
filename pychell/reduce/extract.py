@@ -24,15 +24,6 @@ from numba import jit, njit
 import pychell.utils as pcutils
 import pychell.maths as pcmath
 
-# data (Echellogram): The data object to extract.
-# trace_image (np.ndarray): The image containing only one trace.
-# trace_positions (np.ndarray): The trace positions.
-# badpix_mask (np.ndarray): The bad pixel mask (1=good, 0=bad).
-# trace_profile_cspline (scipy.interpolate.CubicSpline): A CubicSpline object used to create the trace profile (grid is relative to zero).
-# extract_aperture (list): The number of pixels [below, above] the trace (relative to trace_positions) to consider for extraction of the desired signal.
-# background_smooth_width (int, optional): How many pixels to use to smooth the background with a rolling median filter. Defaults to None (no smoothing).
-# background_smooth_poly_order (int, optional): The order of the rolling polynomial filter for the background. Defaults to None (no smoothing).
-
 class SpectralExtractor:
     
     #####################

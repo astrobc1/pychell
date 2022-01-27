@@ -18,6 +18,9 @@ class SpectralObjectiveFunction:
         
     def compute_obj(self, pars):
         raise NotImplementedError(f"Must Implement a compute_obj method for the class {self.__class__.__name__}")
+
+    def __call__(self, *args, **kwargs):
+        return self.compute_obj(*args, **kwargs)
     
     def initialize(self, spectral_model):
         self.spectral_model = spectral_model

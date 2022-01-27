@@ -16,7 +16,6 @@ except:
     warnings.warn("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
 
 # Maths
-from scipy import constants as cs # cs.c = speed of light in m/s
 import numpy as np
 import scipy.interpolate # Cubic spline LSQ fitting
 

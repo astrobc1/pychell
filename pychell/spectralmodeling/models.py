@@ -18,7 +18,7 @@ except:
     print("Could not locate gadfly stylesheet, using default matplotlib stylesheet.")
 
 # Optimize
-from optimize import BoundedParameters, BoundedParameter
+from optimize.parameters import BoundedParameters, BoundedParameter
 
 ########################
 #### SPECTRAL RANGE ####
@@ -288,4 +288,4 @@ class IterativeSpectralForwardModel:
 #### SPECTRAL MODEL COMPONENTS ####
 ###################################
 
-from .spectralcomponents import *
+from .components import *

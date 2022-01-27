@@ -11,7 +11,7 @@ import pychell.maths as pcmath
 import pychell.utils as pcutils
 
 # Optimize
-from optimize import BoundedParameters, BoundedParameter
+from optimize.parameters import BoundedParameters, BoundedParameter
 
 
 ####################
