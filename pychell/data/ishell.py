@@ -54,17 +54,17 @@ def categorize_raw_data(data_input_path, output_path):
     data['science'] = [pcspecdata.RawEchellogram(input_file=sci_file, spectrograph="iSHELL") for sci_file in sci_files]
 
     # Darks assumed to contain dark in filename
-    dark_files = glob.glob(data_input_path + '*dark*.fits')
-    if len(dark_files) > 0:
-        data['darks'] = [pcspecdata.RawEchellogram(input_file=dark_files[f], spectrograph="iSHELL") for f in range(len(dark_files))]
-        dark_groups = group_darks(data['darks'])
-        data['master_darks'] = [pcspecdata.MasterCal(dark_group, output_path + "calib" + os.sep) for dark_groups in dark_group]
+    # dark_files = glob.glob(data_input_path + '*dark*.fits')
+    # if len(dark_files) > 0:
+    #     data['darks'] = [pcspecdata.RawEchellogram(input_file=dark_files[f], spectrograph="iSHELL") for f in range(len(dark_files))]
+    #     dark_groups = group_darks(data['darks'])
+    #     data['master_darks'] = [pcspecdata.MasterCal(dark_group, output_path + "calib" + os.sep) for dark_groups in dark_group]
     
-        for sci in data['science']:
-            pair_master_dark(sci, data['master_darks'])
+    #     for sci in data['science']:
+    #         pair_master_dark(sci, data['master_darks'])
         
-        for flat in data['flats']:
-            pair_master_dark(flat, data['master_darks'])
+    #     for flat in data['flats']:
+    #         pair_master_dark(flat, data['master_darks'])
     
     # iSHELL flats must contain flat in the filename
     flat_files = glob.glob(data_input_path + '*flat*.fits')
