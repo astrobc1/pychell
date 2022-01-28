@@ -4,5 +4,5 @@ pychell API reference
 RV Problems
 +++++++++++
 
-.. automodule:: pychell.orbits.rvprob
+.. automodule:: pychell.orbits.problems
     :members:

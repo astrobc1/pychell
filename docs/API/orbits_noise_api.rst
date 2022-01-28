@@ -4,10 +4,10 @@ pychell API reference
 Noise Modeling
 ++++++++++++++
 
-.. automodule:: pychell.orbits.rvnoise
+.. automodule:: pychell.orbits.noise
     :members:
     :show-inheritance:
 
-.. automodule:: pychell.orbits.rvkernels
+.. automodule:: pychell.orbits.kernels
     :members:
     :show-inheritance:

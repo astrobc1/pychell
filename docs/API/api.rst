@@ -8,4 +8,4 @@ pychell API reference
     Reduction <reduce_api>
     Radial Velocity Generation <spectralmodeling_api>
     Radial Velocity Fitting <orbits_api>
-    Data Containers <data_api>
+    Data Containers and Spectrographs <data_api>

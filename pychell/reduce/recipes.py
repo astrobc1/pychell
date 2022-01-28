@@ -26,13 +26,15 @@ import pychell.spectralmodeling as pcdata
 import pychell.reduce.precalib as pccalib
 
 class ReduceRecipe:
+    """Base class for reduce recipes, the top level reduction objects.
+    """
     
     ###############################
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
     def __init__(self, spectrograph, data_input_path, output_path, do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5, xrange=None, poly_mask_bottom=None, poly_mask_top=None, tracer=None, extractor=None, n_cores=1):
-        """Construct a recipe to reduce a directory.
+        """Construct a recipe to reduce a directory of data.
 
         Args:
             spectrograph (str): The name of the spectrograph.

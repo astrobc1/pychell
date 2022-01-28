@@ -27,7 +27,7 @@ class OptimalExtractor(SpectralExtractor):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, extract_orders=None, chunk_width=None, chunk_overlap=None, oversample=1,
+    def __init__(self, extract_orders=None, chunk_width=None, chunk_overlap=0.5, oversample=1,
                  trace_pos_poly_order=2, trace_pos_refine_window=9,
                  remove_background=False, background_smooth_poly_order=None, background_smooth_width=None,
                  n_iterations=20, badpix_threshold=5,
@@ -37,6 +37,7 @@ class OptimalExtractor(SpectralExtractor):
         Args:
             extract_orders (list, optional): Which orders to extract. Defaults to all orders.
             chunk_width (int, optional): The width of a chunk. Defaults to None.
+            chunk_overlap (int, optional): The fraction which chunks overlap. Defaults to 0.5.
             oversample (int, optional): The oversampling factor for the trace profile. Defaults to 1.
             trace_pos_poly_order (int, optional): The polynomial order for the trace positions. Defaults to 2.
             trace_pos_refine_window (float, optional): How many total pixels to consider above/below the estimated trace positions when refining it. Defaults to 10 (5 above, 5 below).

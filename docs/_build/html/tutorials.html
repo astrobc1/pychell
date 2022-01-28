@@ -7,8 +7,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Tutorials &#8212; pychell  documentation</title>
     
-  <link href="_static/css/theme.css" rel="stylesheet" />
-  <link href="_static/css/index.c5995385ac14fb8791e8eb36b4908be2.css" rel="stylesheet" />
+  <link href="_static/css/theme.css" rel="stylesheet">
+  <link href="_static/css/index.ff1ffe594081f20da1ef19478df9384b.css" rel="stylesheet">
 
     
   <link rel="stylesheet"
@@ -22,23 +22,26 @@
       
 
     
-    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-    <link rel="stylesheet" href="_static/sphinx-book-theme.e8f53015daec13862f6db5e763c41738.css" type="text/css" />
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="_static/sphinx-book-theme.css?digest=84ace793992934648b4de8eed757e5a2" />
     
-  <link rel="preload" as="script" href="_static/js/index.1c5a1a01449ed65a7b51.js">
+  <link rel="preload" as="script" href="_static/js/index.be7d3bbb2ef33a8344ce.js">
 
-    <script id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
+    <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
     <script src="_static/jquery.js"></script>
     <script src="_static/underscore.js"></script>
     <script src="_static/doctools.js"></script>
-    <script src="_static/sphinx-book-theme.12a9622fbb08dcb3a2a40b2c02b83a57.js"></script>
+    <script src="_static/sphinx-book-theme.9d8b4a8b9bb19db25eeaddc40d639ba2.js"></script>
     <link rel="shortcut icon" href="_static/pychell_logo.ico"/>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Extending" href="extending.html" />
     <link rel="prev" title="Installation" href="installation.html" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="docsearch:language" content="en" />
+    <meta name="docsearch:language" content="None">
+    
+
+    <!-- Google Analytics -->
     
   </head>
   <body data-spy="scroll" data-target="#bd-toc-nav" data-offset="80">
@@ -50,10 +53,19 @@
     <div class="container-xl">
       <div class="row">
           
-<div class="col-12 col-md-3 bd-sidebar site-navigation show" id="site-navigation">
+<!-- Checkboxes to toggle the left sidebar -->
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle navigation sidebar">
+<label class="overlay" for="__navigation">
+    <div class="visually-hidden">Toggle navigation sidebar</div>
+</label>
+<div class="col-12 col-md-3 bd-sidebar site-navigation " id="site-navigation">
     
         <div class="navbar-brand-box">
     <a class="navbar-brand text-wrap" href="index.html">
+      
+        <!-- `logo` is deprecated in Sphinx 4.0, so remove this when we stop supporting 3 -->
+        
+      
       
       <img src="_static/pychell_logo.png" class="logo" alt="logo">
       
@@ -83,7 +95,7 @@
   </a>
  </li>
  <li class="toctree-l1 has-children">
-  <a class="reference internal" href="api.html">
+  <a class="reference internal" href="API/api.html">
    API
   </a>
   <input class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" type="checkbox"/>
@@ -93,7 +105,7 @@
   </label>
   <ul>
    <li class="toctree-l2 has-children">
-    <a class="reference internal" href="reduce_api.html">
+    <a class="reference internal" href="API/reduce_api.html">
      Reduction
     </a>
     <input class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" type="checkbox"/>
@@ -103,29 +115,29 @@
     </label>
     <ul>
      <li class="toctree-l3">
-      <a class="reference internal" href="reduce_calib_api.html">
+      <a class="reference internal" href="API/reduce_recipes_api.html">
+       Recipes
+      </a>
+     </li>
+     <li class="toctree-l3">
+      <a class="reference internal" href="API/reduce_calib_api.html">
        Calibration
       </a>
      </li>
      <li class="toctree-l3">
-      <a class="reference internal" href="reduce_order_map_api.html">
+      <a class="reference internal" href="API/reduce_order_map_api.html">
        Order Tracing
       </a>
      </li>
      <li class="toctree-l3">
-      <a class="reference internal" href="reduce_extraction_api.html">
+      <a class="reference internal" href="API/reduce_extraction_api.html">
        Extraction
-      </a>
-     </li>
-     <li class="toctree-l3">
-      <a class="reference internal" href="reduce_recipes_api.html">
-       Recipes
       </a>
      </li>
     </ul>
    </li>
    <li class="toctree-l2 has-children">
-    <a class="reference internal" href="spectralmodeling_api.html">
+    <a class="reference internal" href="API/spectralmodeling_api.html">
      Radial Velocity Generation
     </a>
     <input class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" type="checkbox"/>
@@ -135,24 +147,24 @@
     </label>
     <ul>
      <li class="toctree-l3">
-      <a class="reference internal" href="spectralmodeling_spectral_models_api.html">
+      <a class="reference internal" href="API/spectralmodeling_spectral_models_api.html">
        Spectral Models
       </a>
      </li>
      <li class="toctree-l3">
-      <a class="reference internal" href="spectralmodeling_template_augmenters_api.html">
+      <a class="reference internal" href="API/spectralmodeling_template_augmenters_api.html">
        Template Augmenters
       </a>
      </li>
      <li class="toctree-l3">
-      <a class="reference internal" href="spectralmodeling_computing_rvs_api.html">
+      <a class="reference internal" href="API/spectralmodeling_computing_rvs_api.html">
        Computing RVs
       </a>
      </li>
     </ul>
    </li>
    <li class="toctree-l2 has-children">
-    <a class="reference internal" href="orbits_api.html">
+    <a class="reference internal" href="API/orbits_api.html">
      Radial Velocity Fitting
     </a>
     <input class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" type="checkbox"/>
@@ -162,35 +174,30 @@
     </label>
     <ul>
      <li class="toctree-l3">
-      <a class="reference internal" href="orbits_problems_api.html">
+      <a class="reference internal" href="API/orbits_problems_api.html">
        Problems (Primary interface)
       </a>
      </li>
      <li class="toctree-l3">
-      <a class="reference internal" href="orbits_data_api.html">
-       Data
+      <a class="reference internal" href="API/orbits_models_api.html">
+       Keplerian Models
       </a>
      </li>
      <li class="toctree-l3">
-      <a class="reference internal" href="orbits_noise_api.html">
+      <a class="reference internal" href="API/orbits_noise_api.html">
        Noise Modeling
       </a>
      </li>
      <li class="toctree-l3">
-      <a class="reference internal" href="orbits_models_api.html">
-       Keplerian Models and Trends
-      </a>
-     </li>
-     <li class="toctree-l3">
-      <a class="reference internal" href="orbits_objectives_api.html">
-       Objectives (Likelihoods)
+      <a class="reference internal" href="API/orbits_objectives_api.html">
+       Objectives (Bayesian)
       </a>
      </li>
     </ul>
    </li>
    <li class="toctree-l2">
-    <a class="reference internal" href="data_api.html">
-     Data Containers
+    <a class="reference internal" href="API/data_api.html">
+     Data Containers and Spectrographs
     </a>
    </li>
   </ul>
@@ -211,22 +218,22 @@
 
 
           
+<!-- This is an invisible pixel that we watch to see if we've scrolled. -->
+<div class="sbt-scroll-pixel-helper"></div>
 <main class="col py-md-3 pl-md-4 bd-content overflow-auto" role="main">
     
     <div class="topbar container-xl fixed-top">
     <div class="topbar-contents row">
         <div class="col-12 col-md-3 bd-topbar-whitespace site-navigation show"></div>
         <div class="col pl-md-4 topbar-main">
-            
-            <button id="navbar-toggler" class="navbar-toggler ml-0" type="button" data-toggle="collapse"
-                data-toggle="tooltip" data-placement="bottom" data-target=".site-navigation" aria-controls="navbar-menu"
-                aria-expanded="true" aria-label="Toggle navigation" aria-controls="site-navigation"
-                title="Toggle navigation" data-toggle="tooltip" data-placement="left">
-                <i class="fas fa-bars"></i>
-                <i class="fas fa-arrow-left"></i>
-                <i class="fas fa-arrow-up"></i>
-            </button>
-            
+            <div class="topbar-left">
+                
+                <label class="nav-toggle-button" for="__navigation">
+                    <div class="visually-hidden">Toggle navigation</div>
+                    <i class="fas fa-bars"></i>
+                </label>
+                
+            </div>
             
 <div class="dropdown-buttons-trigger">
     <button id="dropdown-buttons-trigger" class="btn btn-secondary topbarbtn" aria-label="Download this page"><i
@@ -241,7 +248,7 @@
                 data-placement="left">.rst</button></a>
         <!-- Download PDF via print -->
         <button type="button" id="download-print" class="btn btn-secondary topbarbtn" title="Print to PDF"
-            onClick="window.print()" data-toggle="tooltip" data-placement="left">.pdf</button>
+                onclick="printPdf(this)" data-toggle="tooltip" data-placement="left">.pdf</button>
     </div>
 </div>
 
@@ -259,7 +266,7 @@
         </div>
 
         <!-- Table of contents -->
-        <div class="d-none d-md-block col-md-2 bd-toc show">
+        <div class="d-none d-md-block col-md-2 bd-toc show noprint">
             
             <div class="tocsection onthispage pt-5 pb-3">
                 <i class="fas fa-list"></i> Contents
@@ -289,21 +296,54 @@
 </div>
     <div id="main-content" class="row">
         <div class="col-12 col-md-9 pl-md-3 pr-md-0">
-        
+            <!-- Table of contents that is only displayed when printing the page -->
+            <div id="jb-print-docs-body" class="onlyprint">
+                <h1>Tutorials</h1>
+                <!-- Table of contents -->
+                <div id="print-main-content">
+                    <div id="jb-print-toc">
+                        
+                        <div>
+                            <h2> Contents </h2>
+                        </div>
+                        <nav aria-label="Page">
+                            <ul class="visible nav section-nav flex-column">
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#reduction">
+   Reduction
+  </a>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#computing-radial-velocities">
+   Computing Radial Velocities
+  </a>
+ </li>
+ <li class="toc-h2 nav-item toc-entry">
+  <a class="reference internal nav-link" href="#radial-velocity-fitting">
+   Radial Velocity Fitting
+  </a>
+ </li>
+</ul>
+
+                        </nav>
+                    </div>
+                </div>
+            </div>
+            
               <div>
                 
   <div class="section" id="tutorials">
-<span id="quickstart"></span><h1>Tutorials<a class="headerlink" href="#tutorials" title="Permalink to this headline">¶</a></h1>
+<h1>Tutorials<a class="headerlink" href="#tutorials" title="Permalink to this headline">¶</a></h1>
 <div class="section" id="reduction">
 <h2>Reduction<a class="headerlink" href="#reduction" title="Permalink to this headline">¶</a></h2>
-<p>Below is an example which reduces and extracts an echellogram of Vega observed with the iSHELL spectrograph in Kgas mode (~2.3 microns). Flat division is performed, but not dark or bias subtraction.</p>
+<p>Below is an example which reduces and extracts an echellogram of Vega observed with the iSHELL spectrograph in Kgas mode (~2.3 microns).</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Base python</span>
 <span class="kn">import</span> <span class="nn">os</span>
 
 <span class="c1"># pychell deps</span>
 <span class="kn">from</span> <span class="nn">pychell.reduce.recipes</span> <span class="kn">import</span> <span class="n">ReduceRecipe</span>
-<span class="kn">from</span> <span class="nn">pychell.reduce.extract</span> <span class="kn">import</span> <span class="n">OptimalExtractor</span>
-<span class="kn">from</span> <span class="nn">pychell.reduce.tracers</span> <span class="kn">import</span> <span class="n">DensityClusterTracer</span>
+<span class="kn">from</span> <span class="nn">pychell.reduce.optimal</span> <span class="kn">import</span> <span class="n">OptimalExtractor</span>
+<span class="kn">from</span> <span class="nn">pychell.reduce.trace</span> <span class="kn">import</span> <span class="n">PeakTracer</span>
 
 <span class="c1"># Basic info</span>
 <span class="n">spectrograph</span> <span class="o">=</span> <span class="s2">&quot;iSHELL&quot;</span>
@@ -311,21 +351,23 @@
 <span class="n">output_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getcwd</span><span class="p">()</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span> <span class="o">+</span> <span class="s2">&quot;ReduceOutputs&quot;</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span>
 
 <span class="c1"># Order tracing</span>
-<span class="n">tracer</span> <span class="o">=</span> <span class="n">DensityClusterTracer</span><span class="p">(</span><span class="n">n_orders</span><span class="o">=</span><span class="mi">29</span><span class="p">,</span> <span class="n">poly_order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">heights</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">order_spacing</span><span class="o">=</span><span class="mi">20</span><span class="p">)</span>
+<span class="n">tracer</span> <span class="o">=</span> <span class="n">PeakTracer</span><span class="p">(</span><span class="n">n_orders</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">poly_order</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">order_heights</span><span class="o">=</span><span class="mi">28</span><span class="p">,</span> <span class="n">order_spacing</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">xleft</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">xright</span><span class="o">=</span><span class="mi">2048</span><span class="o">-</span><span class="mi">210</span><span class="p">,</span> <span class="n">n_slices</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
 
-<span class="c1"># Extraction</span>
-<span class="n">extractor</span> <span class="o">=</span> <span class="n">OptimalExtractor</span><span class="p">(</span><span class="n">trace_pos_poly_order</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">oversample</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
-                            <span class="n">n_trace_refine_iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">n_extract_iterations</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
-                            <span class="n">badpix_threshold</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">trace_pos_refine_window</span><span class="o">=</span><span class="mi">15</span><span class="p">)</span>
+<span class="c1"># Extractor</span>
+<span class="n">extractor</span> <span class="o">=</span> <span class="n">OptimalExtractor</span><span class="p">(</span><span class="n">trace_pos_poly_order</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">oversample</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">extract_orders</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">20</span><span class="p">],</span> <span class="n">badpix_threshold</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">remove_background</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">chunk_width</span><span class="o">=</span><span class="mi">2048</span><span class="p">,</span> <span class="n">chunk_overlap</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">n_iterations</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">trace_pos_refine_window</span><span class="o">=</span><span class="mi">13</span><span class="p">,</span> <span class="n">background_smooth_poly_order</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">background_smooth_width</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">min_profile_flux</span><span class="o">=</span><span class="mf">0.01</span><span class="p">)</span>
 
-<span class="c1"># Create the primary Recipe class</span>
-<span class="n">recipe</span> <span class="o">=</span> <span class="n">ReduceRecipe</span><span class="p">(</span><span class="n">spectrograph</span><span class="o">=</span><span class="n">spectrograph</span><span class="p">,</span>
-                       <span class="n">data_input_path</span><span class="o">=</span><span class="n">data_input_path</span><span class="p">,</span> <span class="n">output_path</span><span class="o">=</span><span class="n">output_path</span><span class="p">,</span>
-                       <span class="n">do_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">do_flat</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">do_dark</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">flat_percentile</span><span class="o">=</span><span class="mf">0.75</span><span class="p">,</span>
-                       <span class="n">mask_left</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">mask_right</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">mask_top</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span> <span class="n">mask_bottom</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
-                       <span class="n">tracer</span><span class="o">=</span><span class="n">tracer</span><span class="p">,</span>
-                       <span class="n">extractor</span><span class="o">=</span><span class="n">extractor</span><span class="p">,</span>
-                       <span class="n">n_cores</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+<span class="c1"># Create the recipe</span>
+<span class="n">recipe</span> <span class="o">=</span> <span class="n">ReduceRecipe</span><span class="p">(</span><span class="n">spectrograph</span><span class="o">=</span><span class="s2">&quot;iSHELL&quot;</span><span class="p">,</span> <span class="n">data_input_path</span><span class="o">=</span><span class="n">data_input_path</span><span class="p">,</span> <span class="n">output_path</span><span class="o">=</span><span class="n">output_path</span><span class="p">,</span>
+                      <span class="n">do_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">do_dark</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">do_flat</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">flat_percentile</span><span class="o">=</span><span class="mf">0.75</span><span class="p">,</span>
+                      <span class="n">xrange</span><span class="o">=</span><span class="p">[</span><span class="mi">199</span><span class="p">,</span> <span class="mi">1847</span><span class="p">],</span>
+                      <span class="n">poly_mask_bottom</span><span class="o">=</span><span class="p">[[</span><span class="mi">200</span><span class="p">,</span> <span class="mi">172</span><span class="p">],</span> <span class="p">[</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">262</span><span class="p">],</span> <span class="p">[</span><span class="mi">1800</span><span class="p">,</span> <span class="mi">290</span><span class="p">]],</span>
+                      <span class="n">poly_mask_top</span><span class="o">=</span><span class="p">[[</span><span class="mi">200</span><span class="p">,</span> <span class="mi">1834</span><span class="p">],</span> <span class="p">[</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">1916</span><span class="p">],</span> <span class="p">[</span><span class="mi">1800</span><span class="p">,</span> <span class="mi">1932</span><span class="p">]],</span>
+                      <span class="n">tracer</span><span class="o">=</span><span class="n">tracer</span><span class="p">,</span>
+                      <span class="n">extractor</span><span class="o">=</span><span class="n">extractor</span><span class="p">,</span>
+                      <span class="n">n_cores</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+<span class="c1"># Init the data</span>
+<span class="n">recipe</span><span class="o">.</span><span class="n">init_data</span><span class="p">()</span>
 
 <span class="c1"># Reduce the night</span>
 <span class="n">recipe</span><span class="o">.</span><span class="n">reduce</span><span class="p">()</span>
@@ -335,8 +377,8 @@
 <p>An output directory will be created in an output folder <code class="docutils literal notranslate"><span class="pre">Vega</span></code>. Each sub folder contains the following:</p>
 <ol class="arabic simple">
 <li><p><strong>calib</strong> - Any master dark, bias, and flat calibration images.</p></li>
-<li><p><strong>spectra</strong> - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_traces, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons. Plots for each echellogram are also included.</p></li>
-<li><p><strong>trace</strong> - Order map information.</p></li>
+<li><p><strong>spectra</strong> - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_traces, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons. Plots for each echellogram are also generated.</p></li>
+<li><p><strong>trace</strong> - Order map information stored in a pickle file.</p></li>
 </ol>
 </div>
 <div class="section" id="computing-radial-velocities">
@@ -352,14 +394,14 @@ Then in the example gj699_ishell_rvs_example.py, change the templates_path varia
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
 
 <span class="c1"># Pychell deps</span>
-<span class="kn">from</span> <span class="nn">pychell.spectralmodeling.spectralrvprob</span> <span class="kn">import</span> <span class="n">IterativeSpectralRVProb</span>
-<span class="kn">import</span> <span class="nn">pychell.spectralmodeling.spectralmodels</span> <span class="k">as</span> <span class="nn">pcsm</span>
-<span class="kn">from</span> <span class="nn">pychell.spectralmodeling.spectralobjectives</span> <span class="kn">import</span> <span class="n">WeightedSpectralUncRMS</span>
-<span class="kn">from</span> <span class="nn">pychell.spectralmodeling.templateaugmenters</span> <span class="kn">import</span> <span class="n">WeightedMedian</span>
+<span class="kn">from</span> <span class="nn">pychell.spectralmodeling.problems</span> <span class="kn">import</span> <span class="n">IterativeSpectralRVProb</span>
+<span class="kn">import</span> <span class="nn">pychell.spectralmodeling.models</span> <span class="k">as</span> <span class="nn">pcsm</span>
+<span class="kn">from</span> <span class="nn">pychell.spectralmodeling.objectives</span> <span class="kn">import</span> <span class="n">WeightedSpectralUncRMS</span>
+<span class="kn">from</span> <span class="nn">pychell.spectralmodeling.templateaugmenters</span> <span class="kn">import</span> <span class="n">WeightedMean</span>
 <span class="kn">import</span> <span class="nn">pychell.data.ishell</span> <span class="k">as</span> <span class="nn">ishell</span>
 
 <span class="c1"># Optimize deps</span>
-<span class="kn">from</span> <span class="nn">optimize.optimizers</span> <span class="kn">import</span> <span class="n">IterativeNelderMead</span>
+<span class="kn">from</span> <span class="nn">optimize</span> <span class="kn">import</span> <span class="n">IterativeNelderMead</span>
 
 <span class="c1"># Define basic info</span>
 <span class="n">spectrograph</span> <span class="o">=</span> <span class="s2">&quot;iSHELL&quot;</span>
@@ -399,17 +441,17 @@ Then in the example gj699_ishell_rvs_example.py, change the templates_path varia
                                                         <span class="n">tellurics</span><span class="o">=</span><span class="n">tellurics</span><span class="p">,</span>
                                                         <span class="n">order_num</span><span class="o">=</span><span class="n">order_num</span><span class="p">,</span>
                                                         <span class="n">n_iterations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
-                                                        <span class="n">model_resolution</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>
+                                                        <span class="n">model_resolution</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
     
     <span class="c1"># Create the &quot;Problem&quot; object.</span>
     <span class="n">specrvprob</span> <span class="o">=</span> <span class="n">IterativeSpectralRVProb</span><span class="p">(</span><span class="n">spectrograph</span><span class="o">=</span><span class="n">spectrograph</span><span class="p">,</span>
                                          <span class="n">spectral_model</span><span class="o">=</span><span class="n">spectral_model</span><span class="p">,</span>
                                          <span class="n">data_input_path</span><span class="o">=</span><span class="n">data_input_path</span><span class="p">,</span> <span class="n">filelist</span><span class="o">=</span><span class="n">filelist</span><span class="p">,</span> <span class="n">output_path</span><span class="o">=</span><span class="n">output_path</span><span class="p">,</span>
                                          <span class="n">tag</span><span class="o">=</span><span class="n">tag</span><span class="p">,</span>
-                                         <span class="n">augmenter</span><span class="o">=</span><span class="n">WeightedMedian</span><span class="p">(</span><span class="n">max_thresh</span><span class="o">=</span><span class="mf">1.005</span><span class="p">,</span> <span class="n">downweight_tellurics</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                                         <span class="n">augmenter</span><span class="o">=</span><span class="n">WeightedMean</span><span class="p">(),</span>
                                          <span class="n">obj</span><span class="o">=</span><span class="n">WeightedSpectralUncRMS</span><span class="p">(),</span>
                                          <span class="n">optimizer</span><span class="o">=</span><span class="n">IterativeNelderMead</span><span class="p">(),</span>
-                                         <span class="n">n_cores</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+                                         <span class="n">n_cores</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span>
                                          <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     
     <span class="c1"># Run RVs for this order</span>
@@ -423,65 +465,152 @@ Then in the example gj699_ishell_rvs_example.py, change the templates_path varia
 <li><p><strong>RVs</strong> - Plots of the individual and per-night (co-added) RVs for each iteration, plots of CCF skew vs. RVs for each iteration, and the RVs stored in a <code class="docutils literal notranslate"><span class="pre">.npz</span></code> file.</p></li>
 <li><p><strong>Templates</strong> - Stores stellar templates in .npz files.</p></li>
 </ol>
-<p>A <code class="docutils literal notranslate"><span class="pre">.pkl</span></code> file of the SpectralRVProb instance is also saved which may be used to generate wavelength solutions, look at best fit parameters, etc.</p>
+<p>A pickle file of the SpectralRVProb object is also saved which may be used to generate wavelength solutions, look at best fit parameters, etc.</p>
 </div>
 <div class="section" id="radial-velocity-fitting">
 <h2>Radial Velocity Fitting<a class="headerlink" href="#radial-velocity-fitting" title="Permalink to this headline">¶</a></h2>
-<p>Coming soon…</p>
+<p>Below is an example which fits RVs of KELT-24 which hosts a transiting hot Jupiter. Here we fit RVs from TRES and SONG.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Base Python</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="c1"># Maths</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="c1"># pychell deps</span>
+<span class="kn">import</span> <span class="nn">pychell.data.rvdata</span> <span class="k">as</span> <span class="nn">pcrvdata</span>
+<span class="kn">import</span> <span class="nn">pychell.orbits</span> <span class="k">as</span> <span class="nn">pco</span>
+
+<span class="c1"># Optimize deps</span>
+<span class="kn">import</span> <span class="nn">optimize</span> <span class="k">as</span> <span class="nn">opt</span>
+
+<span class="c1"># Path name </span>
+<span class="n">path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="vm">__file__</span><span class="p">))</span> <span class="o">+</span> <span class="n">os</span><span class="o">.</span><span class="n">sep</span>
+<span class="n">fname</span> <span class="o">=</span> <span class="s1">&#39;kelt24_rvs.txt&#39;</span>
+<span class="n">star_name</span> <span class="o">=</span> <span class="s1">&#39;KELT-24&#39;</span>
+<span class="n">mstar</span> <span class="o">=</span> <span class="mf">1.460</span>
+<span class="n">mstar_unc</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.059</span><span class="p">,</span> <span class="mf">0.055</span><span class="p">]</span>
+<span class="n">jitter_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;SONG&#39;</span><span class="p">:</span> <span class="mi">30</span><span class="p">,</span> <span class="s1">&#39;TRES&#39;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+
+<span class="c1"># All data in one dictionary</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pcrvdata</span><span class="o">.</span><span class="n">CompositeRVData</span><span class="o">.</span><span class="n">from_radvel_file</span><span class="p">(</span><span class="n">fname</span><span class="p">,</span> <span class="n">wavelengths</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+
+<span class="c1"># Init parameters and planets dictionary</span>
+<span class="n">pars</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">BayesianParameters</span><span class="p">()</span>
+<span class="n">planets_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="c1"># Planet 1</span>
+<span class="n">planets_dict</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;b&quot;</span><span class="p">,</span> <span class="s2">&quot;basis&quot;</span><span class="p">:</span> <span class="n">pco</span><span class="o">.</span><span class="n">bases</span><span class="o">.</span><span class="n">TCOrbitBasis</span><span class="p">(</span><span class="mi">1</span><span class="p">)}</span>
+<span class="n">per1</span> <span class="o">=</span> <span class="mf">5.5514926</span>
+<span class="n">per1_unc</span> <span class="o">=</span> <span class="mf">0.0000081</span>
+<span class="n">tc1</span> <span class="o">=</span>  <span class="mf">2457147.0529</span>
+<span class="n">tc1_unc</span> <span class="o">=</span> <span class="mf">0.002</span>
+<span class="n">ecc1</span> <span class="o">=</span> <span class="mf">0.077</span>
+<span class="n">ecc1_unc</span> <span class="o">=</span> <span class="mf">0.024</span> <span class="o">*</span> <span class="mi">2</span>
+<span class="n">w1</span> <span class="o">=</span> <span class="mi">55</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">180</span>
+<span class="n">w1_unc</span> <span class="o">=</span> <span class="mi">15</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">180</span>
+
+<span class="c1"># Note that here the RVs will not help to constrain the period or tc because they are better constrained by the transits, but here we float them for demonstration.</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;per1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">BayesianParameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">per1</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;per1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">pco</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">Gaussian</span><span class="p">(</span><span class="n">per1</span><span class="p">,</span> <span class="n">per1_unc</span><span class="p">))</span>
+
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;tc1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">BayesianParameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">tc1</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;tc1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">pco</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">Gaussian</span><span class="p">(</span><span class="n">tc1</span><span class="p">,</span> <span class="n">tc1_unc</span><span class="p">))</span>
+
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;ecc1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">BayesianParameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">ecc1</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;ecc1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">pco</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">Uniform</span><span class="p">(</span><span class="mf">1E-10</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;ecc1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">pco</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">Gaussian</span><span class="p">(</span><span class="n">ecc1</span><span class="p">,</span> <span class="n">ecc1_unc</span><span class="p">))</span>
+
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;w1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">BayesianParameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">w1</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;w1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">pco</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">Gaussian</span><span class="p">(</span><span class="n">w1</span><span class="p">,</span> <span class="n">w1_unc</span><span class="p">))</span>
+
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;k1&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">BayesianParameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="mi">462</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">pars</span><span class="p">[</span><span class="s2">&quot;k1&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">pco</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">Positive</span><span class="p">())</span>
+
+<span class="c1"># Gamma offsets, don&#39;t include gamma dot or ddot yet</span>
+<span class="k">for</span> <span class="n">instname</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+    <span class="c1"># np.pi/100 incase median is zero</span>
+    <span class="n">pars</span><span class="p">[</span><span class="s2">&quot;gamma_&quot;</span> <span class="o">+</span> <span class="n">instname</span><span class="p">]</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">BayesianParameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nanmedian</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="n">instname</span><span class="p">]</span><span class="o">.</span><span class="n">rv</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="o">/</span><span class="mi">100</span><span class="p">,</span> <span class="n">vary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">pars</span><span class="p">[</span><span class="s2">&quot;gamma_&quot;</span> <span class="o">+</span> <span class="n">instname</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">pco</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">Gaussian</span><span class="p">(</span><span class="n">pars</span><span class="p">[</span><span class="s2">&quot;gamma_&quot;</span> <span class="o">+</span> <span class="n">instname</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
+
+<span class="c1"># jitter</span>
+<span class="k">for</span> <span class="n">instname</span> <span class="ow">in</span> <span class="n">data</span><span class="p">:</span>
+    <span class="n">pname</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;jitter_</span><span class="si">{</span><span class="n">instname</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">BayesianParameter</span><span class="p">(</span><span class="n">value</span><span class="o">=</span><span class="n">jitter_dict</span><span class="p">[</span><span class="n">instname</span><span class="p">],</span> <span class="n">vary</span><span class="o">=</span><span class="n">jitter_dict</span><span class="p">[</span><span class="n">instname</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span><span class="o">.</span><span class="n">vary</span><span class="p">:</span>
+        <span class="n">pars</span><span class="p">[</span><span class="n">pname</span><span class="p">]</span><span class="o">.</span><span class="n">add_prior</span><span class="p">(</span><span class="n">pco</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">JeffreysSG</span><span class="p">(</span><span class="mf">1E-10</span><span class="p">,</span> <span class="mi">100</span><span class="p">))</span>
+
+<span class="c1"># noise, model, and like</span>
+<span class="n">likes</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">noise_process</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">WhiteNoiseProcess</span><span class="p">()</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">RVModel</span><span class="p">(</span><span class="n">planets_dict</span><span class="o">=</span><span class="n">planets_dict</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">trend_poly_order</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">likes</span><span class="p">[</span><span class="s2">&quot;rvs&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">RVLikelihood</span><span class="p">(</span><span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span> <span class="n">noise_process</span><span class="o">=</span><span class="n">noise_process</span><span class="p">)</span>
+
+<span class="c1"># Posterior</span>
+<span class="n">post</span> <span class="o">=</span> <span class="n">opt</span><span class="o">.</span><span class="n">Posterior</span><span class="p">(</span><span class="n">likes</span><span class="o">=</span><span class="n">likes</span><span class="p">)</span>
+
+<span class="c1"># Exoplanet problem</span>
+<span class="n">rvprob</span> <span class="o">=</span> <span class="n">pco</span><span class="o">.</span><span class="n">RVProblem</span><span class="p">(</span><span class="n">p0</span><span class="o">=</span><span class="n">pars</span><span class="p">,</span> <span class="n">output_path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span> <span class="n">star_name</span><span class="o">=</span><span class="n">star_name</span><span class="p">,</span> <span class="n">post</span><span class="o">=</span><span class="n">post</span><span class="p">,</span> <span class="n">tag</span><span class="o">=</span><span class="s2">&quot;EXAMPLE&quot;</span><span class="p">)</span>
+
+<span class="c1"># Map fit</span>
+<span class="n">map_result</span> <span class="o">=</span> <span class="n">rvprob</span><span class="o">.</span><span class="n">run_mapfit</span><span class="p">(</span><span class="n">opt</span><span class="o">.</span><span class="n">IterativeNelderMead</span><span class="p">(</span><span class="n">maximize</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+
+<span class="n">pbest</span> <span class="o">=</span> <span class="n">map_result</span><span class="p">[</span><span class="s2">&quot;pbest&quot;</span><span class="p">]</span>
+
+<span class="n">rvprob</span><span class="o">.</span><span class="n">plot_full_rvs</span><span class="p">(</span><span class="n">pbest</span><span class="p">)</span>
+<span class="n">rvprob</span><span class="o">.</span><span class="n">plot_phased_rvs_all</span><span class="p">(</span><span class="n">pbest</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">pbest</span><span class="p">)</span>
+
+<span class="n">mcmc_result</span> <span class="o">=</span> <span class="n">rvprob</span><span class="o">.</span><span class="n">run_mcmc</span><span class="p">(</span><span class="n">opt</span><span class="o">.</span><span class="n">emceeSampler</span><span class="p">(),</span> <span class="n">p0</span><span class="o">=</span><span class="n">pbest</span><span class="p">,</span> <span class="n">n_burn_steps</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">n_taus_thresh</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">n_min_steps</span><span class="o">=</span><span class="mi">5000</span><span class="p">)</span>
+<span class="n">rvprob</span><span class="o">.</span><span class="n">corner_plot</span><span class="p">(</span><span class="n">mcmc_result</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>To then run the example, open a terminal window and run <code class="docutils literal notranslate"><span class="pre">python</span> <span class="pre">kelt24.py</span></code>. This will perform a maximum a posteriori fit to the RVs followed by MCMC sampling to determine the posterior distributions.</p>
+<img alt="_images/kelt24_corner.png" src="_images/kelt24_corner.png" />
+<img alt="_images/kelt24_rvs_full.png" src="_images/kelt24_rvs_full.png" />
+<img alt="_images/kelt24_rvs_phased.png" src="_images/kelt24_rvs_phased.png" />
 </div>
 </div>
 
 
               </div>
               
-        
             
-
-
-
-<div class='prev-next-bottom'>
-    
-    <div id="prev">
-        <a class="left-prev" href="installation.html" title="previous page">
-            <i class="prevnext-label fas fa-angle-left"></i>
-            <div class="prevnext-info">
-                <p class="prevnext-label">previous</p>
-                <p class="prevnext-title">Installation</p>
-            </div>
-        </a>
+                <!-- Previous / next buttons -->
+<div class='prev-next-area'> 
+    <a class='left-prev' id="prev-link" href="installation.html" title="previous page">
+        <i class="fas fa-angle-left"></i>
+        <div class="prev-next-info">
+            <p class="prev-next-subtitle">previous</p>
+            <p class="prev-next-title">Installation</p>
+        </div>
+    </a>
+    <a class='right-next' id="next-link" href="extending.html" title="next page">
+    <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Extending</p>
     </div>
-     <div id="next">
-        <a class="right-next" href="extending.html" title="next page">
-            <div class="prevnext-info">
-                <p class="prevnext-label">next</p>
-                <p class="prevnext-title">Extending</p>
-            </div>
-            <i class="prevnext-label fas fa-angle-right"></i>
-        </a>
-     </div>
-
+    <i class="fas fa-angle-right"></i>
+    </a>
 </div>
-        
+            
         </div>
     </div>
-    <footer class="footer mt-5 mt-md-0">
-    <div class="container">
-      <p>
-        
-          By Bryson Cale<br/>
-        
-            &copy; Copyright 2020, Bryson Cale.<br/>
-      </p>
-    </div>
-  </footer>
+    <footer class="footer">
+  <p>
+    
+      By Bryson Cale<br/>
+    
+        &copy; Copyright 2020, Bryson Cale.<br/>
+  </p>
+</footer>
 </main>
 
 
       </div>
     </div>
   
-  <script src="_static/js/index.1c5a1a01449ed65a7b51.js"></script>
+  <script src="_static/js/index.be7d3bbb2ef33a8344ce.js"></script>
 
-  
   </body>
 </html>

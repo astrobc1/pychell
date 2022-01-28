@@ -26,6 +26,15 @@ import pychell.maths as pcmath
 import pychell.data.spectraldata as pcspecdata
 
 def gen_master_calib_images(data, do_bias, do_dark, do_flat, flat_percentile=None):
+    """Generates the master calibration images.
+
+    Args:
+        data (dict): All of the the data.
+        do_bias (bool): Whether or not to create a master bias image. Must have master_bias as a key.
+        do_dark (bool): Whether or not to create a master dark image. Must have master_dark as a key.
+        do_flat (bool): Whether or not to create a master flat image. Must have master_flat as a key.
+        flat_percentile (float, optional): The flat field percentage to normalize the master flat to. Defaults to None.
+    """
     
     # Bias image (only 1)
     if do_bias:
@@ -52,6 +61,17 @@ def gen_master_calib_images(data, do_bias, do_dark, do_flat, flat_percentile=Non
             mfiberflat.save(mfiberflat_image)
 
 def gen_master_flat(master_flat, do_bias, do_dark, flat_percentile=0.5):
+    """Generate a master flat image.
+
+    Args:
+        master_flat (MasterCal): The master flat object with the attribute group containing the individual flats.
+        do_bias (bool): Whether or not to perform a master bias correction.
+        do_dark (bool): Whether or not to perform a master dark correction.
+        flat_percentile (float, optional): The flat field percentage to normalize the master flat to. Defaults to None.
+
+    Returns:
+        np.ndarray: The master dark image.
+    """
     
     # Generate a data cube
     flats_cube = pcspecdata.Echellogram.generate_cube(master_flat.group)
@@ -79,13 +99,14 @@ def gen_master_flat(master_flat, do_bias, do_dark, flat_percentile=0.5):
     return master_flat_image
 
 def gen_master_dark(master_dark, do_bias):
-    """Computes a median master flat field image from a subset of flat field images. Dark and bias subtraction is also performed if set.
+    """Generate a master dark image.
 
-        Args:
-            group (list): The list of DarkImages.
-            bias_subtraction (bool): Whether or not to perform bias subtraction. If so, each dark must have a master_bias attribute.
-        Returns:
-            master_dark (np.ndarray): The median combined master dark image
+    Args:
+        master_dark (MasterCal): The master dark object with the attribute group containing the individual darks.
+        do_bias (bool): Whether or not to perform a master bias correction.
+
+    Returns:
+        np.ndarray: The master flat field image.
     """
     # Generate a data cube
     n_darks = len(master_dark.group)
@@ -108,19 +129,30 @@ def gen_master_dark(master_dark, do_bias):
     return master_dark_image
 
 def gen_master_bias(master_bias):
-    """Generates a median master bias image.
+    """Generate a master bias image.
 
     Args:
-        group (list): The list of BiasImages.
+        master_bias (MasterCal): The master bias object with the attribute group containing the individual bias images.
+
     Returns:
-        master_bias (np.ndarray): The master bias image.
+        np.ndarray: The master bias image.
     """
     bias_cube = group[0].generate_cube(master_bias.group)
     master_bias_image = np.nanmedian(bias_cube, axis=0)
     return master_bias_image
     
 def gen_master_fiber_flat(master_fiber_flat, do_bias, do_dark, do_flat):
+    """Generate a master fiber flat image.
 
+    Args:
+        master_flat (MasterCal): The master flat object with the attribute group containing the individual flats.
+        do_bias (bool): Whether or not to perform a master bias correction.
+        do_dark (bool): Whether or not to perform a master dark correction.
+        flat_percentile (float, optional): The flat field percentage to normalize the master flat to. Defaults to None.
+
+    Returns:
+        np.ndarray: The master dark image.
+    """
     # Generate a data cube
     n_fiber_flats = len(master_fiber_flat.group)
     fiber_flats_cube = pcspecdata.Echellogram.generate_cube(master_fiber_flat.group)
@@ -147,8 +179,16 @@ def gen_master_fiber_flat(master_fiber_flat, do_bias, do_dark, do_flat):
     # Return
     return master_fiber_flat_image
 
-
 def pre_calibrate(data, data_image, do_bias, do_dark, do_flat):
+    """Perform bias, dark, and flat field corrections after calibration images are generated.
+
+    Args:
+        data (Echellogram): The data to calibrate.
+        data_image ([type]): The image corresponding to data to calibrate.
+        do_bias (bool): Whether or not to perform a master bias correction.
+        do_dark (bool): Whether or not to perform a master dark correction.
+        do_flat (bool): Whether or not to perform a master flat correction.
+    """
     
     # Bias correction
     if do_bias:

@@ -1,12 +1,10 @@
-.. _quickstart:
 
 Tutorials
 *********
 
 Reduction
 =========
-
-Below is an example which reduces and extracts an echellogram of Vega observed with the iSHELL spectrograph in Kgas mode (~2.3 microns). Flat division is performed, but not dark or bias subtraction.
+Below is an example which reduces and extracts an echellogram of Vega observed with the iSHELL spectrograph in Kgas mode (~2.3 microns).
 
 .. literalinclude:: ../examples/Vega_reduction/vega_ishell_reduction.py
    :language: python
@@ -16,8 +14,8 @@ To run the example, open a terminal window and run ``python vega_ishell_reductio
 An output directory will be created in an output folder ``Vega``. Each sub folder contains the following:
 
 #. **calib** - Any master dark, bias, and flat calibration images.
-#. **spectra** - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_traces, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons. Plots for each echellogram are also included.
-#. **trace** - Order map information.
+#. **spectra** - Reduced and extracted 1-dimensional spectra stored in .fits files. shape=(n_orders, n_traces, n_pixels, 3). The last index is for flux, flux unc, and bad pixels (1=good, 0=bad). The flux and unc are in units of photoelectrons. Plots for each echellogram are also generated.
+#. **trace** - Order map information stored in a pickle file.
 
 
 Computing Radial Velocities
@@ -39,10 +37,23 @@ Summaries of fits are printed after each fit if verbose=True. An output director
 #. **RVs** - Plots of the individual and per-night (co-added) RVs for each iteration, plots of CCF skew vs. RVs for each iteration, and the RVs stored in a ``.npz`` file.
 #. **Templates** - Stores stellar templates in .npz files.
 
-A ``.pkl`` file of the SpectralRVProb instance is also saved which may be used to generate wavelength solutions, look at best fit parameters, etc.
+A pickle file of the SpectralRVProb object is also saved which may be used to generate wavelength solutions, look at best fit parameters, etc.
 
 
 Radial Velocity Fitting
 =======================
 
-Coming soon...
+Below is an example which fits RVs of KELT-24 which hosts a transiting hot Jupiter. Here we fit RVs from TRES and SONG.
+
+.. literalinclude:: ../examples/KELT-24_rv_fitting/kelt24.py
+   :language: python
+
+To then run the example, open a terminal window and run ``python kelt24.py``. This will perform a maximum a posteriori fit to the RVs followed by MCMC sampling to determine the posterior distributions.
+
+.. image:: ../examples/KELT-24_rv_fitting/kelt24_corner.png
+
+.. image:: ../examples/KELT-24_rv_fitting/kelt24_rvs_full.png
+
+.. image:: ../examples/KELT-24_rv_fitting/kelt24_rvs_phased.png
+
+

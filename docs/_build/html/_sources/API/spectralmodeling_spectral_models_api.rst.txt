@@ -1,9 +1,10 @@
 pychell API reference
 =====================
 
-Likelihoods
-+++++++++++
 
-.. automodule:: pychell.orbits.rvobjectives
+Spectral Models
++++++++++++++++
+
+.. automodule:: pychell.spectralmodeling.models
     :members:
     :show-inheritance:

@@ -4,6 +4,6 @@ pychell API reference
 RV Models
 +++++++++
 
-.. automodule:: pychell.orbits.rvmodels
+.. automodule:: pychell.orbits.models
     :members:
     :show-inheritance:

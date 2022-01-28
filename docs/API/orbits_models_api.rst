@@ -1,9 +1,9 @@
 pychell API reference
 =====================
 
-Orbits Data
-+++++++++++
+RV Models
++++++++++
 
-.. automodule:: pychell.data.rvdata
+.. automodule:: pychell.orbits.models
     :members:
     :show-inheritance:

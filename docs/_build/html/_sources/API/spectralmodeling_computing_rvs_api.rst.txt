@@ -1,8 +1,9 @@
 pychell API reference
 =====================
 
-Order Tracing
+
+Computing RVs
 +++++++++++++
 
-.. automodule:: pychell.reduce.tracers
+.. automodule:: pychell.spectralmodeling.rvcalc
     :members:

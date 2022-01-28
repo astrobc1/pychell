@@ -1,7 +1,6 @@
 pychell API reference
 =====================
 
-
 Reduce Recipes
 ++++++++++++++
 

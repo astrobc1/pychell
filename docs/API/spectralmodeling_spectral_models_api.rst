@@ -5,6 +5,6 @@ pychell API reference
 Spectral Models
 +++++++++++++++
 
-.. automodule:: pychell.spectralmodeling.spectralmodels
+.. automodule:: pychell.spectralmodeling.models
     :members:
     :show-inheritance:

@@ -7,7 +7,6 @@ from optimize.kernels import QuasiPeriodic
 from optimize.samplers import ZeusSampler, emceeSampler
 
 # pychell
-from pychell.orbits.data import *
 from pychell.orbits.models import *
 from pychell.orbits.noise import *
 from pychell.orbits.objectives import *
