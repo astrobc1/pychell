@@ -282,7 +282,7 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
             else:
                 p0s = []
                 for ispec in range(self.n_spec):
-                    p0s.append(self.opt_results[ispec, iter_index - 1]["pbest"])
+                    p0s.append(copy.deepcopy(self.opt_results[ispec, iter_index - 1]["pbest"]))
             
             # Call the parallel job via joblib.
             self.opt_results[:, iter_index] = Parallel(n_jobs=self.n_cores, verbose=0, batch_size=1)(delayed(self.optimize_and_plot_observation)(p0s[ispec], self.data[ispec], self.spectral_model, self.obj, self.optimizer, iter_index, self.output_path, self.tag, self.verbose, self.stellar_templates) for ispec in range(self.n_spec))
@@ -399,7 +399,7 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
                     # Plot
                     IterativeSpectralRVProb.plot_spectral_model(opt_result["pbest"], data, spectral_model, iter_index, output_path, tag, spectral_model.star.star_name)
 
-            except NotImplementedError:
+            except:
 
                 # Return nan pars and set to bad
                 opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)

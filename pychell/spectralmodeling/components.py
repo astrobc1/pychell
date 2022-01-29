@@ -172,7 +172,7 @@ class PolyContinuum(Continuum):
         # Poly parameters
         for i in range(self.poly_order + 1):
             if i in self.coeffs:
-                pars[self.par_names[i]] = BoundedParameter(value=self.coeffs[i][0],
+                pars[self.par_names[i]] = BoundedParameter(value=self.coeffs[i][1],
                                                             vary=True,
                                                             lower_bound=self.coeffs[i][0], upper_bound=self.coeffs[i][2])
             else:
@@ -230,10 +230,10 @@ class SplineContinuum(Continuum):
     def init_parameters(self, data):
         pars = BoundedParameters()
         for ispline in range(self.n_splines + 1):
-            pars[self.par_names[ispline]] = BoundedParameter(value=1.0,
+            pars[self.par_names[ispline]] = BoundedParameter(value=self.spline[1],
                                                              vary=True,
-                                                             lower_bound=0.25,
-                                                             upper_bound=1.2)
+                                                             lower_bound=self.spline[0],
+                                                             upper_bound=self.spline[2])
         return pars
     
     

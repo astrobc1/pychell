@@ -305,7 +305,7 @@ def compute_exposure_midpoint(data):
 #########################
 
 def estimate_wls(data):
-    oi = data.order_num - 1 + 3
+    oi = data.order_num - 1
     waves = np.array([quad_set_point_1[oi], quad_set_point_2[oi], quad_set_point_3[oi]])
     pcoeffs = pcmath.poly_coeffs(quad_pixel_set_points, waves)
     wls = np.polyval(pcoeffs, np.arange(data.flux.size))

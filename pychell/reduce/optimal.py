@@ -208,21 +208,20 @@ class OptimalExtractor(SpectralExtractor):
                 # Background
                 background, background_err = OptimalExtractor.compute_background_1d(trace_image_chunk, badpix_mask_chunk, trace_positions_chunk, extract_aperture, background_smooth_width=background_smooth_width, background_smooth_poly_order=background_smooth_poly_order)
 
+            # Initial spectrum
+            spec1d_chunk, spec1d_unc_chunk = OptimalExtractor.optimal_extraction(trace_image_chunk, badpix_mask_chunk, trace_positions_chunk, trace_profile_cspline, extract_aperture, remove_background=remove_background, background=background, background_err=background_err, read_noise=read_noise, n_iterations=1, spec1d0=spec1d_chunk)
+
             # Main loop
             for j in range(n_iterations):
 
                 print(f" [{data}] Extracting Trace {trace_dict['label']}, Chunk [{i + 1}/{n_chunks}], Iter [{j + 1}/{n_iterations}] ...", flush=True)
 
                 # Update trace positions
-                if j == 0:
-                    trace_positions_chunk = OptimalExtractor.compute_trace_positions_ccf(trace_image_chunk, badpix_mask_chunk, trace_profile_cspline, extract_aperture, trace_positions_estimate=trace_positions_chunk, spec1d=None, ccf_window=trace_pos_refine_window, background=background, remove_background=remove_background, trace_pos_poly_order=trace_pos_poly_order)
-                elif j < n_iterations / 5:
+                if j < n_iterations / 5:
                     trace_positions_chunk = OptimalExtractor.compute_trace_positions_ccf(trace_image_chunk, badpix_mask_chunk, trace_profile_cspline, extract_aperture, trace_positions_estimate=trace_positions_chunk, spec1d=spec1d_chunk, ccf_window=trace_pos_refine_window, background=background, remove_background=remove_background, trace_pos_poly_order=trace_pos_poly_order)
 
                 # Update trace profile
-                if j == 0:
-                    trace_profile_cspline = OptimalExtractor.compute_vertical_trace_profile(trace_image_chunk, badpix_mask_chunk, trace_positions_chunk, oversample, None, remove_background=remove_background, background=background)
-                elif j < n_iterations / 5:
+                if j < n_iterations / 5:
                     trace_profile_cspline = OptimalExtractor.compute_vertical_trace_profile(trace_image_chunk, badpix_mask_chunk, trace_positions_chunk, oversample, spec1d_chunk, remove_background=remove_background, background=background)
 
                 # Extract Aperture
@@ -236,10 +235,7 @@ class OptimalExtractor(SpectralExtractor):
                     background, background_err = OptimalExtractor.compute_background_1d(trace_image_chunk, badpix_mask_chunk, trace_positions_chunk, extract_aperture, background_smooth_width=background_smooth_width, background_smooth_poly_order=background_smooth_poly_order)
 
                 # Optimal extraction
-                if j == 0:
-                    spec1d_chunk, spec1d_unc_chunk = OptimalExtractor.optimal_extraction(trace_image_chunk, badpix_mask_chunk, trace_positions_chunk, trace_profile_cspline, extract_aperture, remove_background=remove_background, background=background, background_err=background_err, read_noise=read_noise, n_iterations=1, spec1d0=None)
-                else:
-                    spec1d_chunk, spec1d_unc_chunk = OptimalExtractor.optimal_extraction(trace_image_chunk, badpix_mask_chunk, trace_positions_chunk, trace_profile_cspline, extract_aperture, remove_background=remove_background, background=background, background_err=background_err, read_noise=read_noise, n_iterations=1, spec1d0=spec1d_chunk)
+                spec1d_chunk, spec1d_unc_chunk = OptimalExtractor.optimal_extraction(trace_image_chunk, badpix_mask_chunk, trace_positions_chunk, trace_profile_cspline, extract_aperture, remove_background=remove_background, background=background, background_err=background_err, read_noise=read_noise, n_iterations=1, spec1d0=spec1d_chunk)
 
                 # Store results
                 spec1d_chunks[xi:xf+1, i] = spec1d_chunk
@@ -264,8 +260,8 @@ class OptimalExtractor(SpectralExtractor):
                         badpix_mask_chunk = badpix_mask_chunk_new
 
         # Average chunks
-        spec1d = np.nanmedian(spec1d_chunks, axis=1)
-        spec1d_unc = np.nanmean(spec1d_unc_chunks, axis=1)
+        spec1d = OptimalExtractor.combine_chunks(spec1d_chunks, chunks)
+        spec1d_unc = OptimalExtractor.combine_chunks(spec1d_unc_chunks, chunks)
 
         # 1d badpix mask
         badpix1d = np.ones(nx)
@@ -481,3 +477,26 @@ class OptimalExtractor(SpectralExtractor):
                    chunks[-1][-1] = xf
                 break
         return chunks
+
+    @staticmethod
+    def combine_chunks(spec1d_chunks, chunks):
+        nx, n_chunks = spec1d_chunks.shape
+        spec1d = np.full(nx, np.nan)
+        distances = np.full_like(spec1d_chunks, np.nan)
+        xarr = np.arange(nx)
+        for i in range(n_chunks):
+            chunk_center = np.mean(chunks[i])
+            distances[:, i] = np.abs(xarr - chunk_center)
+        for x in range(nx):
+            s = np.copy(spec1d_chunks[x, :])
+            bad = np.where(~np.isfinite(s))[0]
+            w = 1 / distances[x, :]**2
+            w[bad] = 0
+            s[bad] = np.nan
+            bad = np.where(~np.isfinite(w))[0]
+            w[bad] = 0
+            s[bad] = np.nan
+            if np.nansum(w) > 0:
+                spec1d[x] = pcmath.weighted_mean(s, w)
+        return spec1d
+        
