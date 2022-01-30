@@ -361,44 +361,48 @@ class WeightedMean(TemplateAugmenter):
             if not specrvprob.data[ispec].is_good:
                 continue
             
-            # Best fit pars
-            pars = specrvprob.opt_results[ispec, iter_index]["pbest"]
-        
-            # Init the chunk
-            specrvprob.spectral_model.initialize(pars, specrvprob.data[ispec], iter_index, specrvprob.stellar_templates)
-        
-            # Generate the low res model
-            wave_data, model_lr = specrvprob.spectral_model.build(pars)
+            try:
+                # Best fit pars
+                pars = specrvprob.opt_results[ispec, iter_index]["pbest"]
             
-            # Residuals
-            residuals_lr = specrvprob.data[ispec].flux - model_lr
-
-            # Shift to a pseudo rest frame
-            if specrvprob.spectral_model.star.from_flat:
-                vel = specrvprob.data[ispec].bc_vel
-            else:
-                vel = -1 * pars[specrvprob.spectral_model.star.par_names[0]].value
-
-            wave_star_rest = pcmath.doppler_shift_wave(wave_data, vel)
-            residuals[:, ispec] = pcmath.cspline_interp(wave_star_rest, residuals_lr, current_stellar_template[:, 0])
-
-            # Telluric weights, must doppler shift them as well.
-            if self.weight_tellurics:
-                tell_flux = specrvprob.spectral_model.tellurics.build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
-                if specrvprob.spectral_model.lsf is not None:
-                    tell_flux = specrvprob.spectral_model.lsf.convolve_flux(tell_flux, pars)
-                _, tell_flux = pcmath.doppler_shift_flux(wave_data, tell_flux, vel)
-                tell_weights = tell_flux**2
-                weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
-            else:
-                weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec]
+                # Init the chunk
+                specrvprob.spectral_model.initialize(pars, specrvprob.data[ispec], iter_index, specrvprob.stellar_templates)
             
-            # Interpolate to a high res grid
-            weights_hr = pcmath.lin_interp(wave_star_rest, weights_lr, current_stellar_template[:, 0])
-            bad = np.where((weights_hr < 0) | ~np.isfinite(weights_hr))[0]
-            if bad.size > 0:
-                weights_hr[bad] = 0
-            weights[:, ispec] = weights_hr
+                # Generate the low res model
+                wave_data, model_lr = specrvprob.spectral_model.build(pars)
+                
+                # Residuals
+                residuals_lr = specrvprob.data[ispec].flux - model_lr
+
+                # Shift to a pseudo rest frame
+                if specrvprob.spectral_model.star.from_flat:
+                    vel = specrvprob.data[ispec].bc_vel
+                else:
+                    vel = -1 * pars[specrvprob.spectral_model.star.par_names[0]].value
+
+                wave_star_rest = pcmath.doppler_shift_wave(wave_data, vel)
+                residuals[:, ispec] = pcmath.cspline_interp(wave_star_rest, residuals_lr, current_stellar_template[:, 0])
+
+                # Telluric weights, must doppler shift them as well.
+                if self.weight_tellurics:
+                    tell_flux = specrvprob.spectral_model.tellurics.build(pars, specrvprob.spectral_model.templates_dict["tellurics"], wave_data)
+                    if specrvprob.spectral_model.lsf is not None:
+                        tell_flux = specrvprob.spectral_model.lsf.convolve_flux(tell_flux, pars)
+                    _, tell_flux = pcmath.doppler_shift_flux(wave_data, tell_flux, vel)
+                    tell_weights = tell_flux**2
+                    weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec] * tell_weights
+                else:
+                    weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec]
+                
+                # Interpolate to a high res grid
+                weights_hr = pcmath.lin_interp(wave_star_rest, weights_lr, current_stellar_template[:, 0])
+                bad = np.where((weights_hr < 0) | ~np.isfinite(weights_hr))[0]
+                if bad.size > 0:
+                    weights_hr[bad] = 0
+                weights[:, ispec] = weights_hr
+            except:
+                data.is_good = False
+                weights[:, ispec] = 0
 
         
         # Sync
