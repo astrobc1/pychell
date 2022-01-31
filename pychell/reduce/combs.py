@@ -137,7 +137,7 @@ def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
 #### WLS ####
 #############
 
-def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wave_estimate_calfiber, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, method="nearest", poly_order=6, n_cores=1, static_index=0):
+def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wave_estimate_calfiber, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, method="adopt_cal", poly_order=4, n_cores=1, static_index=0):
     """Wrapper to compute the wavelength solution for all spectra.
 
     Args:
@@ -202,14 +202,13 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
         if times_sci is not None:
             for i in range(n_sci_spec):
                 print(f"Computing sci fiber wls for order {order_index+1} science spectrum {i+1}")
-                if method == "interp":
-                    for x in range(nx):
-                        wls_sci_scifiber[x, order_index, i] = np.interp(times_sci[i], times_lfc_cal, wls_cal_scifiber[x, order_index, :], left=wls_cal_scifiber[x, order_index, 0], right=wls_cal_scifiber[x, order_index, -1])
-                elif method == "nearest":
+                if method == "nearest":
                     k_cal_nearest = np.nanargmin(np.abs(times_sci[i] - times_lfc_cal))
                     wls_sci_scifiber[:, order_index, i] = np.copy(wls_cal_scifiber[:, order_index, k_cal_nearest])
                 elif method == "static":
-                    wls_sci_scifiber[:, order_index, i] = np.copy(wls_cal_scifiber[:, order_index, static_index])
+                    wls_sci_scifiber[:, order_index, i] = np.copy(wls_sci_scifiber[:, order_index, static_index])
+                elif method == "adopt_cal":
+                    wls_sci_scifiber[:, order_index, i] = np.copy(wls_sci_calfiber[:, order_index, i])
                 else:
                     raise ValueError("method must be nearest or interp")
 

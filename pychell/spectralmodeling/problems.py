@@ -45,6 +45,7 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
                  spectral_model,
                  augmenter,
                  tag, output_path,
+                 spec_mod_func=None,
                  bc_corrs=None,
                  optimizer=None, obj=None,
                  do_ccf=False,
@@ -91,6 +92,11 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
         # The actual output path
         self.output_path += self.tag + os.sep
         self.create_output_paths()
+
+        if spec_mod_func is None:
+            self.spec_mod_func = lambda module: None
+        else:
+            self.spec_mod_func = spec_mod_func
         
         # Initialize the data
         self.init_data()
@@ -127,7 +133,7 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
         input_files = [self.data_input_path + f for f in np.atleast_1d(np.genfromtxt(self.data_input_path + self.filelist, dtype='<U100', comments='#').tolist())]
         
         # Load in each observation for this order
-        data = [Spec1d(fname, self.order_num, ispec + 1, self.spectrograph, self.crop_pix) for ispec, fname in enumerate(input_files)]
+        data = [Spec1d(fname, self.order_num, ispec + 1, self.spectrograph, self.crop_pix, self.spec_mod_func) for ispec, fname in enumerate(input_files)]
         
         # Sort the data
         jds = np.array([self.spec_module.compute_exposure_midpoint(d) for d in data], dtype=float)
@@ -731,7 +737,8 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
     
     @property
     def spec_module(self):
-        return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
+        #return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
+        return pcutils.modify_and_import_module(f"pychell.data.{self.spectrograph.lower()}", self.spec_mod_func)
     
     @property
     def n_spec(self):

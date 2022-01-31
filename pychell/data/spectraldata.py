@@ -9,6 +9,7 @@ from astropy.io import fits
 
 # Pychell deps
 import pychell.maths as pcmath
+import pychell.utils as pcutils
 
 ####################
 #### BASE TYPES ####
@@ -16,7 +17,7 @@ import pychell.maths as pcmath
 
 class SpecData:
     
-    def __init__(self, input_file, spectrograph):
+    def __init__(self, input_file, spectrograph, spec_mod_func=None):
         """Base constructor for a SpecData object.
 
         Args:
@@ -24,6 +25,10 @@ class SpecData:
         """
         self.input_file = input_file
         self.spectrograph = spectrograph
+        if spec_mod_func is None:
+            self.spec_mod_func = lambda module: None
+        else:
+            self.spec_mod_func = spec_mod_func
     
     def __eq__(self, other):
         return self.input_file == other.input_file
@@ -66,7 +71,8 @@ class SpecData:
 
     @property
     def spec_module(self):
-        return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
+        #return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
+        return pcutils.modify_and_import_module(f"pychell.data.{self.spectrograph.lower()}", self.spec_mod_func)
 
 class Echellogram(SpecData):
     
@@ -110,7 +116,7 @@ class Echellogram(SpecData):
 
 class RawEchellogram(Echellogram):
 
-    def __init__(self, input_file, spectrograph):
+    def __init__(self, input_file, spectrograph, spec_mod_func=None):
         """Construct a RawEchellogram object.
 
         Args:
@@ -118,7 +124,7 @@ class RawEchellogram(Echellogram):
         """
         
         # Call super init
-        super().__init__(input_file, spectrograph)
+        super().__init__(input_file, spectrograph, spec_mod_func)
 
         # Parse the header
         if self.spectrograph is not None:
@@ -157,7 +163,7 @@ class MasterCal(Echellogram):
 class Spec1d(SpecData):
     
     # Store the input file, spec, and order num
-    def __init__(self, input_file, order_num, spec_num, spectrograph, crop_pix):
+    def __init__(self, input_file, order_num, spec_num, spectrograph, crop_pix, spec_mod_func=None):
         """Constructs a SpecData1d object.
 
         Args:
@@ -168,7 +174,7 @@ class Spec1d(SpecData):
             crop_pix (list): How many pixels to crop on the left (crop_pix[0]) and right (crop_pix[1]).
         """
 
-        super().__init__(input_file, spectrograph)
+        super().__init__(input_file, spectrograph, spec_mod_func)
         
         # Order number and observation number
         self.order_num = order_num

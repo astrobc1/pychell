@@ -198,3 +198,15 @@ def flatten_jagged_list(x):
         x_out = np.concatenate((x_out, x[i]))
         inds += [(i, j) for j in range(len(x[i]))]
     return x_out, inds
+
+def modify_and_import_module(module_name, modification_func):
+    module = importlib.import_module(module_name)
+    modification_func(module)
+    # spec = importlib.util.find_spec(module_name)
+    # source = spec.loader.get_source(module_name)
+    # new_source = modification_func(source)
+    # module = importlib.util.module_from_spec(spec)
+    # codeobj = compile(new_source, module.__spec__.origin, 'exec')
+    # exec(codeobj, module.__dict__)
+    # sys.modules[module_name] = module
+    return module
