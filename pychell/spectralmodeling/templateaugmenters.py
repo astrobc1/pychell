@@ -401,7 +401,7 @@ class WeightedMean(TemplateAugmenter):
                     weights_hr[bad] = 0
                 weights[:, ispec] = weights_hr
             except:
-                data.is_good = False
+                specrvprob.data[ispec].is_good = False
                 weights[:, ispec] = 0
 
         
