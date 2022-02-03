@@ -152,6 +152,10 @@ class OptimalExtractor(SpectralExtractor):
         spec1d_chunks = np.full((nx, n_chunks), np.nan)
         spec1d_unc_chunks = np.full((nx, n_chunks), np.nan)
 
+        # Store profiles
+        trace_profile_cspline_chunks = []
+
+
         # Extract chunk by chunk
         for i in range(n_chunks):
 

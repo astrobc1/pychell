@@ -14,7 +14,7 @@ import scipy.stats
 import matplotlib.pyplot as plt
 
 # optimize deps
-from optimize.knowledge import BoundedParameters
+from optimize import BoundedParameters
 
 # Pychell deps
 import pychell.spectralmodeling.rvcalc as pcrvcalc

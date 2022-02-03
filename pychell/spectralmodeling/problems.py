@@ -1,3 +1,6 @@
+# Dill
+import dill
+
 # Base Python
 import importlib
 import copy
@@ -93,10 +96,8 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
         self.output_path += self.tag + os.sep
         self.create_output_paths()
 
-        if spec_mod_func is None:
-            self.spec_mod_func = lambda module: None
-        else:
-            self.spec_mod_func = spec_mod_func
+        # Spec mod func
+        self.spec_mod_func = spec_mod_func
         
         # Initialize the data
         self.init_data()

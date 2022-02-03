@@ -11,3 +11,5 @@ from pychell.orbits.models import *
 from pychell.orbits.noise import *
 from pychell.orbits.objectives import *
 from pychell.orbits.problems import *
+import pychell.orbits.bases as bases
+from pychell.data.rvdata import *

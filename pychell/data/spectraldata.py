@@ -25,10 +25,7 @@ class SpecData:
         """
         self.input_file = input_file
         self.spectrograph = spectrograph
-        if spec_mod_func is None:
-            self.spec_mod_func = lambda module: None
-        else:
-            self.spec_mod_func = spec_mod_func
+        self.spec_mod_func = spec_mod_func
     
     def __eq__(self, other):
         return self.input_file == other.input_file

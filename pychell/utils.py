@@ -201,7 +201,8 @@ def flatten_jagged_list(x):
 
 def modify_and_import_module(module_name, modification_func):
     module = importlib.import_module(module_name)
-    modification_func(module)
+    if modification_func is not None:
+        modification_func(module)
     # spec = importlib.util.find_spec(module_name)
     # source = spec.loader.get_source(module_name)
     # new_source = modification_func(source)
