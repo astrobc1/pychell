@@ -195,7 +195,7 @@ class Spec1d(SpecData):
         self.spec_module.parse_spec1d(self)
         
         # Normalize to 98th percentile
-        if self.is_good:
+        if not hasattr(self, "is_good") or self.is_good:
             medflux = pcmath.weighted_median(self.flux, percentile=0.98)
             self.flux /= medflux
             self.flux_unc /= medflux
