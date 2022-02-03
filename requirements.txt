@@ -16,3 +16,4 @@ emcee>=3.0.2
 webcolors>=1.11.1
 pyreduce-astro>=0.5.8
 sphinx_book_theme>=0.1.7
+dill>=0.3.4

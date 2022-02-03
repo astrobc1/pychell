@@ -195,53 +195,55 @@ class Spec1d(SpecData):
         self.spec_module.parse_spec1d(self)
         
         # Normalize to 98th percentile
-        medflux = pcmath.weighted_median(self.flux, percentile=0.98)
-        self.flux /= medflux
-        self.flux_unc /= medflux
-        
-        # Enforce the pixels are cropped (ideally they are already cropped and this has no effect, but still optional)
-        if self.crop_pix is not None:
-            if self.crop_pix[0] > 0:
-                self.flux[0:self.crop_pix[0]] = np.nan
-                self.flux_unc[0:self.crop_pix[0]] = np.nan
-                self.mask[0:self.crop_pix[0]] = 0
-            if self.crop_pix[1] > 0:
-                self.flux[-self.crop_pix[1]:] = np.nan
-                self.flux_unc[-self.crop_pix[1]:] = np.nan
-                self.mask[-self.crop_pix[1]:] = 0
+        if self.is_good:
+            medflux = pcmath.weighted_median(self.flux, percentile=0.98)
+            self.flux /= medflux
+            self.flux_unc /= medflux
             
-        # Sanity
-        bad = np.where((self.flux <= 0.0) | ~np.isfinite(self.flux) | (self.mask == 0) | ~np.isfinite(self.mask) | ~np.isfinite(self.flux_unc))[0]
-        if bad.size > 0:
-            self.flux[bad] = np.nan
-            self.flux_unc[bad] = np.nan
-            self.mask[bad] = 0
-            
-        # More sanity
-        if self.wave is not None:
-            bad = np.where(~np.isfinite(self.wave))[0]
+            # Enforce the pixels are cropped (ideally they are already cropped and this has no effect, but still optional)
+            if self.crop_pix is not None:
+                if self.crop_pix[0] > 0:
+                    self.flux[0:self.crop_pix[0]] = np.nan
+                    self.flux_unc[0:self.crop_pix[0]] = np.nan
+                    self.mask[0:self.crop_pix[0]] = 0
+                if self.crop_pix[1] > 0:
+                    self.flux[-self.crop_pix[1]:] = np.nan
+                    self.flux_unc[-self.crop_pix[1]:] = np.nan
+                    self.mask[-self.crop_pix[1]:] = 0
+                
+            # Sanity
+            bad = np.where((self.flux <= 0.0) | ~np.isfinite(self.flux) | (self.mask == 0) | ~np.isfinite(self.mask) | ~np.isfinite(self.flux_unc))[0]
             if bad.size > 0:
-                self.wave[bad] = np.nan
                 self.flux[bad] = np.nan
                 self.flux_unc[bad] = np.nan
                 self.mask[bad] = 0
-            
-        # Further flag any clearly deviant pixels
-        flux_smooth = pcmath.median_filter1d(self.flux, width=7)
-        bad = np.where(np.abs(flux_smooth - self.flux) > 0.3)[0]
-        if bad.size > 0:
-            self.flux[bad] = np.nan
-            self.flux_unc[bad] = np.nan
-            self.mask[bad] = 0
-            
-        # Check if 1d spectrum is even worth using
-        is_good = True
-        nx = len(self.flux)
-        if np.nansum(self.mask) < nx / 4 or np.where(np.isfinite(self.flux))[0].size < nx / 4:
-            is_good = False
-        if self.wave is not None and np.where(np.isfinite(self.wave))[0].size < nx / 4:
-            is_good = False
-        self.is_good = is_good
+                
+            # More sanity
+            if self.wave is not None:
+                bad = np.where(~np.isfinite(self.wave))[0]
+                if bad.size > 0:
+                    self.wave[bad] = np.nan
+                    self.flux[bad] = np.nan
+                    self.flux_unc[bad] = np.nan
+                    self.mask[bad] = 0
+                
+            # Further flag any clearly deviant pixels
+            flux_smooth = pcmath.median_filter1d(self.flux, width=7)
+            bad = np.where(np.abs(flux_smooth - self.flux) > 0.3)[0]
+            if bad.size > 0:
+                self.flux[bad] = np.nan
+                self.flux_unc[bad] = np.nan
+                self.mask[bad] = 0
+                
+            # Check if 1d spectrum is even worth using
+            is_good = True
+            nx = len(self.flux)
+            if np.nansum(self.mask) < nx / 4 or np.where(np.isfinite(self.flux))[0].size < nx / 4:
+                is_good = False
+            if self.wave is not None and np.where(np.isfinite(self.wave))[0].size < nx / 4:
+                is_good = False
+            self.is_good = is_good
+
             
     def parse_header(self):
         """Parse the 1d spectrum fits header.

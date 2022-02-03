@@ -254,16 +254,20 @@ def group_flats(flats):
 def parse_spec1d(data):
     
     # Load the flux, flux unc, and bad pix arrays
-    fits_data = fits.open(data.input_file)[0]
-    fits_data.verify('fix')
-    data.header = fits_data.header
-    oi = data.order_num - 1
-    data.flux, data.flux_unc, data.mask = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
+    try:
+        fits_data = fits.open(data.input_file)[0]
+        fits_data.verify('fix')
+        data.header = fits_data.header
+        oi = data.order_num - 1
+        data.flux, data.flux_unc, data.mask = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
 
-    # Flip the data so wavelength is increasing for iSHELL data
-    data.flux = data.flux[::-1]
-    data.mask = data.mask[::-1]
-    data.flux_unc = data.flux_unc[::-1]
+        # Flip the data so wavelength is increasing for iSHELL data
+        data.flux = data.flux[::-1]
+        data.mask = data.mask[::-1]
+        data.flux_unc = data.flux_unc[::-1]
+    except:
+        print(f"Warning! Could not load in {data}")
+        data.is_good = False
 
 def parse_fiber_nums(data):
     return None
