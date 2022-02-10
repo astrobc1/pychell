@@ -10,6 +10,7 @@ RADIUS_EARTH_CM = 6.371009E8 # radius of earth in cm
 YEAR_EARTH_DAYS = 365.25 # one year for earth in days
 K_JUPITER_P_EARTH = 28.4329 # the semi-amplitude of jupiter for a one year orbit
 MSUN_KG = 1.988435E30 # The mass of the sun in kg
+RSUN_M = 6.957E8 # Radius of sun in meters
 G_MKS = scipy.constants.G # The Newtonian gravitational constant in mks units
 AU_M = 1.496E11 # 1 AU in meters
 
@@ -320,3 +321,20 @@ def planet_signal(t, per, tp, ecc, w, k):
 
     # Return rv
     return rv
+
+def period_from_transit_duration(mstar, rstar, tdur):
+    """Compute the orbital period from the transit duration
+
+    Args:
+        mstar (float): The stellar mass in solar units.
+        rstar (float): The stellar radius in solar units.
+        tdur (float): The transit duration in days.
+
+    Returns:
+        float: The orbital period in days.
+    """
+    mstar_mks = mstar * MSUN_KG
+    rstar_mks = rstar * RSUN_M
+    tdur_mks = tdur * 86400
+    per = np.pi * G_MKS * mstar_mks * tdur_mks**3 / (4 * rstar_mks**3)
+    return per / 86400

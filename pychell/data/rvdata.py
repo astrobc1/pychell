@@ -147,7 +147,7 @@ class CompositeRVData(dict):
         Returns:
             np.ndarray: The label vector sorted according to self.indices.
         """
-        tel_vec = np.empty(self.n, dtype='<U50')
+        tel_vec = np.empty(len(self.t), dtype='<U50')
         for data in self.values():
             tel_vec[self.indices[data.instname]] = data.instname
         return tel_vec

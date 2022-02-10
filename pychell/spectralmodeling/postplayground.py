@@ -151,7 +151,7 @@ def combine_bis(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
     rvs_dict['skew_nightly_out'] = result[2]
     rvs_dict['uncskew_nightly_out'] = result[3]
       
-def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, n_flag_iters=10, thresh=4):
+def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, n_flag_iters=10, thresh=4, max_rms=None):
     
     # Numbers
     n_orders = len(specrvprobs)
@@ -180,6 +180,10 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
             # FwM RVs
             rvsfwm = rvs_dict['rvsfwm'][o, :, j]
             weights = mask[o, :, j] / fit_metrics[o, :, j]**2
+            if max_rms is not None:
+                bad = np.where(fit_metrics[o, :, j] > max_rms)[0]
+                if bad.size > 0:
+                    weights[bad] = 0
             rvs_dict['rvsfwm_nightly'][o, :, j], rvs_dict['uncfwm_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsfwm, weights, n_obs_nights)
             
             # XC RVs
@@ -192,6 +196,11 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
 
     # Generate weights
     weights = gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices)
+
+    if max_rms is not None:
+        bad = np.where(fit_metrics > max_rms)
+        if bad[0].size > 0:
+            weights[bad] = 0
     
     # Get RVs for single iteration
     rvsfwm_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
@@ -230,10 +239,7 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
     
     # Write to files for radvel
     spectrograph = specrvprobs[0].spectrograph
-    try:
-        star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
-    except:
-        star_name = specrvprobs[0].target_dict['name']
+    star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
     time_tag = pcutils.gendatestr(time=False)
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
     telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')

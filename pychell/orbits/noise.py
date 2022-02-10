@@ -9,455 +9,93 @@ from optimize.noise import WhiteNoiseProcess, GaussianProcess
 from optimize.kernels import CorrelatedNoiseKernel
 
 # Import rv kernels into namespace
-from pychell.orbits.kernels import ChromaticKernelJ1, ChromaticKernelJ2, ChromaticKernelJ3
-
-
-#############
-#### GPs ####
-#############
-
-class RVGP(GaussianProcess):
-    
-    def compute_data_errors(self, pars, include_corr_error=False, linpred=None):
-        """Computes the errors added in quadrature for all datasets corresponding to this kernel.
-        Args:
-            pars (Parameters): The parameters to use.
-        Returns:
-            np.ndarray: The data errors.
-        """
-        
-        # Get intrinsic data errors
-        errors = self.data.get_errors()
-        
-        # Add per-instrument jitter terms in quadrature
-        for data in self.data.values():
-            inds = self.data.indices[data.label]
-            pname = f"jitter_{data.label}"
-            errors[inds] = np.sqrt(errors[inds]**2 + pars[pname].value**2)
-            
-        # Compute GP error
-        if include_corr_error:
-            for data in self.data.values():
-                inds = self.data.indices[data.label]
-                gp_error = self.compute_corr_error(pars, linpred=linpred, xpred=data.t)
-                errors[inds] = np.sqrt(errors[inds]**2 + gp_error**2)
-                    
-        return errors
+from pychell.orbits.kernels import ChromaticKernelJ1, ChromaticKernelJ2
 
 class ChromaticProcessJ1(GaussianProcess):
     
-    def __init__(self, data=None, label=None, par_names=None):
-        super().__init__(data=data, label=label, kernel=ChromaticKernelJ1(data=data, par_names=par_names))
-                    
-    def compute_data_errors(self, pars, include_corr_error=False, linpred=None):
-        """Computes the errors added in quadrature for all datasets corresponding to this kernel.
-        Args:
-            pars (Parameters): The parameters to use.
-        Returns:
-            np.ndarray: The data errors.
-        """
+    def __init__(self, par_names=None):
+        super().__init__(kernel=ChromaticKernelJ1(par_names=par_names))
+
+    def compute_cov_matrix(self, pars, x1, x2, amp_vec1, amp_vec2, data_errors=None, include_uncorrelated_error=True):
+
+        # Get K
+        K = self.kernel.compute_cov_matrix(pars, x1, x2, amp_vec1, amp_vec2)
+
+        # Data errors
+        if include_uncorrelated_error:
+            np.fill_diagonal(K, np.diag(K) + data_errors**2)
         
-        # Get intrinsic data errors
-        errors = self.data.get_errors()
+        return K
         
-        # Add per-instrument jitter terms in quadrature
-        for data in self.data.values():
-            inds = self.data.indices[data.label]
-            pname = f"jitter_{data.label}"
-            errors[inds] = np.sqrt(errors[inds]**2 + pars[pname].value**2)
-            
-        # Compute GP error
-        if include_corr_error:
-            for data in self.data.values():
-                inds = self.data.indices[data.label]
-                gp_error = self.compute_corr_error(pars, linpred=linpred, xpred=data.t, instname=data.label)
-                errors[inds] = np.sqrt(errors[inds]**2 + gp_error**2)
-                    
-        return errors
-        
-    def realize(self, pars, linpred, instname, xpred=None):
-        """Realize the GP (predict/ssample at arbitrary points).
-        Args:
-            pars (Parameters): The parameters to use.
-            residuals (np.ndarray): The residuals before the GP is subtracted.
-            xpred (np.ndarray): The vector to realize the GP on.
-            errors (np.ndarray): The errorbars, already added in quadrature.
-        Returns:
-            np.ndarray OR tuple: If stddev is False, only the mean GP is returned. If stddev is True, the uncertainty in the GP is computed and returned as well. The mean GP is computed through a linear optimization.
-        """
+    def predict(self, pars, linpred, amp_vec_data, amp, xdata, xpred=None, data_errors=None):
         
         # Get grids
-        xdata = self.data.x
         if xpred is None:
             xpred = xdata
         
         # Get K
-        self.initialize(p0=pars, x1=xdata, xpred=xdata, instname1=None, instname2=None)
-        K = self.compute_cov_matrix(pars, include_uncorr_error=True)
+        amp_vec_pred = np.full(len(xpred), amp)
+        K = self.compute_cov_matrix(pars, xdata, xdata, amp_vec_data, amp_vec_data, data_errors=data_errors, include_uncorrelated_error=True)
         
         # Compute version of K without intrinsic data error
-        self.initialize(p0=pars, x1=xpred, xpred=xdata, instname1=instname, instname2=None)
-        Ks = self.compute_cov_matrix(pars, include_uncorr_error=False)
+        Ks = self.compute_cov_matrix(pars, xpred, xdata, amp_vec_pred, amp_vec_data, data_errors=None, include_uncorrelated_error=False)
 
         # Avoid overflow errors by reducing the matrix.
         L = cho_factor(K)
+
+        # Solve
         alpha = cho_solve(L, linpred)
         mu = np.dot(Ks, alpha).flatten()
 
-        return mu
-    
-    def compute_noise_components(self, pars, linpred, xpred=None):
-        if xpred is None:
-            xpred = self.data.x
-        comps = {}
-        for data in self.data.values():
-            comps[f"GP {data.label}"] = self.compute_gp_with_error(pars=pars, linpred=linpred, instname=data.label, xpred=xpred)
-        return comps
-          
-    def compute_corr_error(self, pars, instname, linpred, xpred=None):
-        
-        # Get grids
-        xdata = self.data.x
-        if xpred is None:
-            xpred = xdata
-            
-        # Get K
-        self.initialize(p0=pars, x1=xdata, xpred=xdata, instname1=None, instname2=None)
-        K = self.compute_cov_matrix(pars, include_uncorr_error=True)
-
-        # Avoid overflow errors by reducing the matrix.
-        L = cho_factor(K)
-
-        self.initialize(p0=pars, x1=xpred, xpred=xdata, instname1=instname, instname2=None)
-        Ks = self.compute_cov_matrix(pars, include_uncorr_error=False)
-            
-        self.initialize(p0=pars, x1=xpred, xpred=xpred, instname1=instname, instname2=instname)
-        Kss = self.compute_cov_matrix(pars, include_uncorr_error=False)
-        
+        # Compute uncertainty
+        Kss = self.compute_cov_matrix(pars, xpred, xpred, amp_vec_pred, amp_vec_pred, data_errors=None, include_uncorrelated_error=False)
         B = cho_solve(L, Ks.T)
-        
-        gp_error = np.sqrt(np.array(np.diag(Kss - np.dot(Ks, B))).flatten())
-        
-        return gp_error
-    
-    def compute_gp_with_error(self, pars, linpred, instname, xpred=None):
-        
-        # Get grids
-        xdata = self.data.x
-        if xpred is None:
-            xpred = xdata
-        
-        # Get K
-        self.initialize(p0=pars, x1=xdata, xpred=xdata, instname1=None, instname2=None)
-        K = self.compute_cov_matrix(pars, include_uncorr_error=True)
-        
-        # Compute version of K without intrinsic data error
-        self.initialize(p0=pars, x1=xpred, xpred=xdata, instname1=instname, instname2=None)
-        Ks = self.compute_cov_matrix(pars, include_uncorr_error=False)
-
-        # Avoid overflow errors by reducing the matrix.
-        L = cho_factor(K)
-        alpha = cho_solve(L, linpred)
-        mu = np.dot(Ks, alpha).flatten()
-        
-        # Kss
-        self.initialize(pars, x1=xpred, xpred=xpred, instname1=instname, instname2=instname)
-        Kss = self.compute_cov_matrix(pars, include_uncorr_error=False)
-        
-        B = cho_solve(L, Ks.T)
-        
         error = np.sqrt(np.array(np.diag(Kss - np.dot(Ks, B))).flatten())
-        
+
+        # Return
         return mu, error
-    
-    def compute_residuals(self, pars, linpred):
-        residuals = np.copy(linpred)
-        for data in self.data.values():
-            residuals[self.data.indices[data.label]] -= self.realize(pars=pars, linpred=linpred, instname=data.label, xpred=data.t)
-        return residuals
-        
-    
-    def initialize(self, p0, x1=None, xpred=None, instname1=None, instname2=None):
-        self.kernel.initialize(p0=p0, x1=x1, xpred=xpred, instname1=instname1, instname2=instname2)
 
 
-
-        
 class ChromaticProcessJ2(GaussianProcess):
     
-    def __init__(self, data=None, label=None, par_names=None, wavelength0=550):
-        super().__init__(data=data, label=label, kernel=ChromaticKernelJ2(data=data, par_names=par_names, wavelength0=wavelength0))
-                    
-    def compute_data_errors(self, pars, include_corr_error=False, linpred=None):
-        """Computes the errors added in quadrature for all datasets corresponding to this kernel.
-        Args:
-            pars (Parameters): The parameters to use.
-        Returns:
-            np.ndarray: The data errors.
-        """
+    def __init__(self, par_names=None, wavelength0=550):
+        super().__init__(kernel=ChromaticKernelJ2(par_names=par_names, wavelength0=wavelength0))
+
+    def compute_cov_matrix(self, pars, x1, x2, wave_vec1, wave_vec2, data_errors=None, include_uncorrelated_error=True):
+
+        # Get K
+        K = self.kernel.compute_cov_matrix(pars, x1, x2, wave_vec1, wave_vec2)
+
+        # Data errors
+        if include_uncorrelated_error:
+            np.fill_diagonal(K, np.diag(K) + data_errors**2)
+
+        return K
         
-        # Get intrinsic data errors
-        errors = self.data.get_errors()
-        
-        # Add per-instrument jitter terms in quadrature
-        for data in self.data.values():
-            inds = self.data.indices[data.label]
-            pname = f"jitter_{data.label}"
-            errors[inds] = np.sqrt(errors[inds]**2 + pars[pname].value**2)
-            
-        # Compute GP error
-        if include_corr_error:
-            for data in self.data.values():
-                inds = self.data.indices[data.label]
-                gp_error = self.compute_corr_error(pars, linpred=linpred, xpred=data.t, wavelength=data.wavelength)
-                errors[inds] = np.sqrt(errors[inds]**2 + gp_error**2)
-                    
-        return errors
-        
-    def realize(self, pars, linpred, wavelength, xpred=None):
-        """Realize the GP (predict/ssample at arbitrary points).
-        Args:
-            pars (Parameters): The parameters to use.
-            residuals (np.ndarray): The residuals before the GP is subtracted.
-            xpred (np.ndarray): The vector to realize the GP on.
-            errors (np.ndarray): The errorbars, already added in quadrature.
-        Returns:
-            np.ndarray OR tuple: If stddev is False, only the mean GP is returned. If stddev is True, the uncertainty in the GP is computed and returned as well. The mean GP is computed through a linear optimization.
-        """
+    def predict(self, pars, linpred, wave_vec_data, wave, xdata, xpred=None, data_errors=None):
         
         # Get grids
-        xdata = self.data.x
         if xpred is None:
             xpred = xdata
         
         # Get K
-        self.initialize(p0=pars, x1=xdata, xpred=xdata, wave1=None, wave2=None)
-        K = self.compute_cov_matrix(pars, include_uncorr_error=True)
+        wave_vec_pred = np.full(len(xpred), wave)
+        K = self.compute_cov_matrix(pars, xdata, xdata, wave_vec_data, wave_vec_data, data_errors=data_errors, include_uncorrelated_error=True)
         
         # Compute version of K without intrinsic data error
-        self.initialize(p0=pars, x1=xpred, xpred=xdata, wave1=wavelength, wave2=None)
-        Ks = self.compute_cov_matrix(pars, include_uncorr_error=False)
+        Ks = self.compute_cov_matrix(pars, xpred, xdata, wave_vec_pred, wave_vec_data, data_errors=None, include_uncorrelated_error=False)
 
         # Avoid overflow errors by reducing the matrix.
         L = cho_factor(K)
+
+        # Solve
         alpha = cho_solve(L, linpred)
         mu = np.dot(Ks, alpha).flatten()
 
-        return mu
-    
-    def compute_noise_components(self, pars, linpred, xpred=None):
-        if xpred is None:
-            xpred = self.data.x
-        comps = {}
-        for wave in np.unique(self.kernel.wave_vec):
-            instnames = [data.label for data in self.data.values() if data.wavelength == wave]
-            label = f"GP λ={int(wave)} ["
-            for instname in instnames:
-                label += f"{instname},"
-            label = label[0:-1]
-            label += "]"
-            comps[label] = self.compute_gp_with_error(pars=pars, linpred=linpred, wavelength=wave, xpred=xpred)
-        return comps
-          
-    def compute_corr_error(self, pars, wavelength, linpred, xpred=None):
-        
-        # Get grids
-        xdata = self.data.x
-        if xpred is None:
-            xpred = xdata
-            
-        # Get K
-        self.initialize(p0=pars, x1=xdata, xpred=xdata, wave1=None, wave2=None)
-        K = self.compute_cov_matrix(pars, include_uncorr_error=True)
-
-        # Avoid overflow errors by reducing the matrix.
-        L = cho_factor(K)
-
-        self.initialize(p0=pars, x1=xpred, xpred=xdata, wave1=wavelength, wave2=None)
-        Ks = self.compute_cov_matrix(pars, include_uncorr_error=False)
-            
-        self.initialize(p0=pars, x1=xpred, xpred=xpred, wave1=wave1, wave2=wave2)
-        Kss = self.compute_cov_matrix(pars, include_uncorr_error=False)
-        
+        # Compute uncertainty
+        Kss = self.compute_cov_matrix(pars, xpred, xpred, wave_vec_pred, wave_vec_pred, data_errors=None, include_uncorrelated_error=False)
         B = cho_solve(L, Ks.T)
-        
-        gp_error = np.sqrt(np.array(np.diag(Kss - np.dot(Ks, B))).flatten())
-        
-        return gp_error
-    
-    def compute_gp_with_error(self, pars, linpred, wavelength, xpred=None):
-        
-        # Get grids
-        xdata = self.data.x
-        if xpred is None:
-            xpred = xdata
-        
-        # Get K
-        self.initialize(p0=pars, x1=xdata, xpred=xdata, wave1=None, wave2=None)
-        K = self.compute_cov_matrix(pars, include_uncorr_error=True)
-        
-        # Compute version of K without intrinsic data error
-        self.initialize(p0=pars, x1=xpred, xpred=xdata, wave1=wavelength, wave2=None)
-        Ks = self.compute_cov_matrix(pars, include_uncorr_error=False)
-
-        # Avoid overflow errors by reducing the matrix.
-        L = cho_factor(K)
-        alpha = cho_solve(L, linpred)
-        mu = np.dot(Ks, alpha).flatten()
-        
-        # Kss
-        self.initialize(pars, x1=xpred, xpred=xpred, wave1=wavelength, wave2=wavelength)
-        Kss = self.compute_cov_matrix(pars, include_uncorr_error=False)
-        
-        B = cho_solve(L, Ks.T)
-        
         error = np.sqrt(np.array(np.diag(Kss - np.dot(Ks, B))).flatten())
-        
+
+        # Return
         return mu, error
-    
-    def compute_residuals(self, pars, linpred):
-        residuals = np.copy(linpred)
-        for data in self.data.values():
-            residuals[self.data.indices[data.label]] -= self.realize(pars=pars, linpred=linpred, wavelength=data.wavelength, xpred=data.t)
-        return residuals
-        
-    
-    def initialize(self, p0, x1=None, xpred=None, wave1=None, wave2=None):
-        self.kernel.initialize(p0=p0, x1=x1, xpred=xpred, wave1=wave1, wave2=wave2)
-
-
-class ChromaticProcessJ3(GaussianProcess):
-    
-    def __init__(self, data=None, label=None, par_names=None):
-        super().__init__(data=data, label=label, kernel=ChromaticKernelJ3(data=data, par_names=par_names))
-                    
-    def compute_data_errors(self, pars, include_corr_error=False, linpred=None):
-        """Computes the errors added in quadrature for all datasets corresponding to this kernel.
-        Args:
-            pars (Parameters): The parameters to use.
-        Returns:
-            np.ndarray: The data errors.
-        """
-        
-        # Get intrinsic data errors
-        errors = self.data.get_errors()
-        
-        # Add per-instrument jitter terms in quadrature
-        for data in self.data.values():
-            inds = self.data.indices[data.label]
-            pname = f"jitter_{data.label}"
-            errors[inds] = np.sqrt(errors[inds]**2 + pars[pname].value**2)
-            
-        # Compute GP error
-        if include_corr_error:
-            for data in self.data.values():
-                inds = self.data.indices[data.label]
-                gp_error = self.compute_corr_error(pars, linpred=linpred, xpred=data.t, instname=data.label)
-                errors[inds] = np.sqrt(errors[inds]**2 + gp_error**2)
-                    
-        return errors
-        
-    def realize(self, pars, linpred, instname, xpred=None):
-        """Realize the GP (predict/ssample at arbitrary points).
-        Args:
-            pars (Parameters): The parameters to use.
-            residuals (np.ndarray): The residuals before the GP is subtracted.
-            xpred (np.ndarray): The vector to realize the GP on.
-            errors (np.ndarray): The errorbars, already added in quadrature.
-        Returns:
-            np.ndarray OR tuple: If stddev is False, only the mean GP is returned. If stddev is True, the uncertainty in the GP is computed and returned as well. The mean GP is computed through a linear optimization.
-        """
-        
-        # Get grids
-        xdata = self.data.x
-        if xpred is None:
-            xpred = xdata
-        
-        # Get K
-        self.initialize(p0=pars, x1=xdata, xpred=xdata, instname1=None, instname2=None)
-        K = self.compute_cov_matrix(pars, include_uncorr_error=True)
-        
-        # Compute version of K without intrinsic data error
-        self.initialize(p0=pars, x1=xpred, xpred=xdata, instname1=instname, instname2=None)
-        Ks = self.compute_cov_matrix(pars, include_uncorr_error=False)
-
-        # Avoid overflow errors by reducing the matrix.
-        L = cho_factor(K)
-        alpha = cho_solve(L, linpred)
-        mu = np.dot(Ks, alpha).flatten()
-
-        return mu
-    
-    def compute_noise_components(self, pars, linpred, xpred=None):
-        if xpred is None:
-            xpred = self.data.x
-        comps = {}
-        for data in self.data.values():
-            comps[f"GP {data.label}"] = self.compute_gp_with_error(pars=pars, linpred=linpred, instname=data.label, xpred=xpred)
-        return comps
-          
-    def compute_corr_error(self, pars, instname, linpred, xpred=None):
-        
-        # Get grids
-        xdata = self.data.x
-        if xpred is None:
-            xpred = xdata
-            
-        # Get K
-        self.initialize(p0=pars, x1=xdata, xpred=xdata, instname1=None, instname2=None)
-        K = self.compute_cov_matrix(pars, include_uncorr_error=True)
-
-        # Avoid overflow errors by reducing the matrix.
-        L = cho_factor(K)
-
-        self.initialize(p0=pars, x1=xpred, xpred=xdata, instname1=instname, instname2=None)
-        Ks = self.compute_cov_matrix(pars, include_uncorr_error=False)
-            
-        self.initialize(p0=pars, x1=xpred, xpred=xpred, instname1=instname, instname2=instname)
-        Kss = self.compute_cov_matrix(pars, include_uncorr_error=False)
-        
-        B = cho_solve(L, Ks.T)
-        
-        gp_error = np.sqrt(np.array(np.diag(Kss - np.dot(Ks, B))).flatten())
-        
-        return gp_error
-    
-    def compute_gp_with_error(self, pars, linpred, instname, xpred=None):
-        
-        # Get grids
-        xdata = self.data.x
-        if xpred is None:
-            xpred = xdata
-        
-        # Get K
-        self.initialize(p0=pars, x1=xdata, xpred=xdata, instname1=None, instname2=None)
-        K = self.compute_cov_matrix(pars, include_uncorr_error=True)
-        
-        # Compute version of K without intrinsic data error
-        self.initialize(p0=pars, x1=xpred, xpred=xdata, instname1=instname, instname2=None)
-        Ks = self.compute_cov_matrix(pars, include_uncorr_error=False)
-
-        # Avoid overflow errors by reducing the matrix.
-        L = cho_factor(K)
-        alpha = cho_solve(L, linpred)
-        mu = np.dot(Ks, alpha).flatten()
-        
-        # Kss
-        self.initialize(pars, x1=xpred, xpred=xpred, instname1=instname, instname2=instname)
-        Kss = self.compute_cov_matrix(pars, include_uncorr_error=False)
-        
-        B = cho_solve(L, Ks.T)
-        
-        error = np.sqrt(np.array(np.diag(Kss - np.dot(Ks, B))).flatten())
-        
-        return mu, error
-    
-    def compute_residuals(self, pars, linpred):
-        residuals = np.copy(linpred)
-        for data in self.data.values():
-            residuals[self.data.indices[data.label]] -= self.realize(pars=pars, linpred=linpred, instname=data.label, xpred=data.t)
-        return residuals
-        
-    
-    def initialize(self, p0, x1=None, xpred=None, instname1=None, instname2=None):
-        self.kernel.initialize(p0=p0, x1=x1, xpred=xpred, instname1=instname1, instname2=instname2)

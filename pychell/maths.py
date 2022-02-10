@@ -958,6 +958,30 @@ def poly_filter(y, width, poly_order=3):
     y_out[0:ilow] = np.nan
     y_out[ihigh + 1:] = np.nan
     return y_out
+
+def poly_filter2(x, y, width, poly_order=3):
+    """Filters a signal with polynomials.
+
+    Args:
+        x (np.ndarray): The grid for the signal to filter.
+        y (np.ndarray): The signal to filter.
+        width (int): The rolling width in pixels, must be odd.
+        poly_order (int, optional): The polynomial order. Defaults to 3.
+
+    Returns:
+        np.ndarray: The filtered array.
+    """
+    nx = len(x)
+    y_out = np.full(nx, np.nan)
+    for i in range(nx):
+        good = np.where((x > x[i] - width/2) & (x < x[i] + width/2))[0]
+        if good.size < poly_order + 1:
+            continue
+        xx, yy = x[good], y[good]
+        good = np.where(np.isfinite(xx) & np.isfinite(yy))[0]
+        pfit = np.polyfit(xx[good], yy[good], poly_order)
+        y_out[i] = np.polyval(pfit, x[i])
+    return y_out
         
 #@jit
 def normalize_image(image, height, order_spacing, percentile=0.99, downsample=4):

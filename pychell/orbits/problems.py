@@ -67,17 +67,6 @@ class RVProblem(OptProblem):
         # Generate latex labels for the parameters.
         self.gen_latex_labels()
         
-        # Make a color map for plotting.
-        self.make_color_map()
-        
-    def make_color_map(self):
-        self.color_map = {}
-        color_index = 0
-        for like in self.post.likes.values():
-            for instname in like.model.data:
-                if instname not in self.color_map:
-                    self.color_map[instname] = COLORS_HEX_GADFLY[color_index % len(COLORS_HEX_GADFLY)]
-                    color_index += 1
             
     def gen_latex_labels(self):
         planets_dict = self.planets_dict
@@ -162,6 +151,7 @@ class RVProblem(OptProblem):
                 pickle.dump(map_result, f)
         return map_result
     
+
     ###################################
     #### Standard Plotting Methods ####
     ###################################
@@ -218,8 +208,9 @@ class RVProblem(OptProblem):
             # Compute the noise model
             if isinstance(like.noise_process, CorrelatedNoiseProcess):
                 errors = like.compute_data_errors(pars)
-                gp, _ = like.noise_process.predict(pars, data_errors=errors, linpred=residuals, xdata=like.model.data.t)
-                residuals -= gp
+                noise_components = like.compute_noise_components(pars, like.datax)
+                for comp in noise_components:
+                    residuals[noise_components[comp][2]] -= noise_components[comp][0][noise_components[comp][2]]
             else:
                 errors = like.compute_data_errors(pars)
             
@@ -289,7 +280,7 @@ class RVProblem(OptProblem):
             plots.append(plot)
         return plots
         
-    def plot_full_rvs(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=500, kernel_window=10, plot_width=1800, plot_height=1200, save=True, color_map="instrument"):
+    def plot_full_rvs(self, pars=None, ffp=None, n_model_pts=5000, time_offset=2450000, kernel_sampling=500, kernel_window=10, plot_width=1800, plot_height=1200, save=True):
         """Creates an rv plot for the full dataset and rv model.
 
         Args:
@@ -342,78 +333,68 @@ class RVProblem(OptProblem):
         # Loop over likes and:
         # 1. Plot high res GP if present
         # 2. Plot data
-        color_index = 0
         for like in self.post.likes.values():
 
             # Correlated Noise
             if isinstance(like.noise_process, CorrelatedNoiseProcess):
                 
                 # Make hr arrays for high res GP
+                noise_components_temp = like.compute_noise_components(pars, like.model.data.t[0:2])
+                noise_labels = list(noise_components_temp.keys())
                 t_gp_hr = np.array([], dtype=float)
-                gp_hr = np.array([], dtype=float)
-                gp_error_hr = np.array([], dtype=float)
-                residuals_with_gp = like.compute_residuals(pars)
-                errors = like.compute_data_errors(pars)
+                gps_hr = {label : np.array([], dtype=float) for label in noise_labels}
+                gps_error_hr = {label : np.array([], dtype=float) for label in noise_labels}
+                residuals = like.compute_residuals(pars)
                 for i in range(like.model.data.t.size):
                     
                     # Create a time array centered on this point
                     t_hr_window = np.linspace(like.model.data.t[i] - kernel_window,
-                                           like.model.data.t[i] + kernel_window,
-                                           num=kernel_sampling)
+                                              like.model.data.t[i] + kernel_window,
+                                              num=kernel_sampling)
+                    t_gp_hr = np.concatenate((t_gp_hr, t_hr_window))
                     
                     # Sample GP for this window
-                    _gp_hr, _gp_error_hr = like.noise_process.predict(pars, data_errors=errors, linpred=residuals_with_gp, xdata=like.model.data.t, xpred=t_hr_window)
-
-                    # Store
-                    t_gp_hr = np.concatenate((t_gp_hr, t_hr_window))
-                    gp_hr = np.concatenate((gp_hr, _gp_hr))
-                    gp_error_hr = np.concatenate((gp_error_hr, _gp_error_hr))
+                    noise_components = like.compute_noise_components(pars, t_hr_window)
+                    for comp in noise_components:
+                        gps_hr[comp] = np.concatenate((gps_hr[comp], noise_components[comp][0]))
+                        gps_error_hr[comp] = np.concatenate((gps_error_hr[comp], noise_components[comp][1]))
                     
                 # Sort each
                 ss = np.argsort(t_gp_hr)
                 t_gp_hr = t_gp_hr[ss]
-                gp_hr = gp_hr[ss]
-                gp_error_hr = gp_error_hr[ss]
-                
-                # Compute data errors
-                errors = like.compute_data_errors(pars)
-                    
-                # Get the relevant variables
-                t_gp_hr -= time_offset
-                gp_hr_lower, gp_hr_upper = gp_hr - gp_error_hr, gp_hr + gp_error_hr
-                
-                # For legend
-                instnames = list(like.model.data.keys())
-                label = f"<b>GP ["
-                for instname in instnames:
-                    label += f"{instname},"
-                label = label[0:-1]
-                label += "]</b>"
-                    
-                # Plot the actual GP
-                if color_map == "instrument":
-                    color_line = pcutils.hex_to_rgba(self.color_map[instname], a=0.6)
-                    color_fill = pcutils.hex_to_rgba(self.color_map[instname], a=0.3)
+                for label in noise_labels:
+                    gps_hr[label] = gps_hr[label][ss]
+                    gps_error_hr[label] = gps_error_hr[label][ss]
 
-                fig.add_trace(plotly.graph_objects.Scatter(x=t_gp_hr, y=gp_hr,
-                                                            line=dict(width=0.8, color=color_line),
-                                                            name=label, showlegend=False),
-                                row=1, col=1)
-                
-                # Plot the gp unc
-                fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([t_gp_hr, t_gp_hr[::-1]]),
-                                                            y=np.concatenate([gp_hr_upper, gp_hr_lower[::-1]]),
-                                                            fill='toself',
-                                                            line=dict(color=color_line, width=1),
-                                                            fillcolor=color_fill,
-                                                            name=label, showlegend=True),
-                                row=1, col=1)
-                color_index += 1
+                # Data errors
+                data_errors = like.compute_data_errors(pars)
+                    
+                # Plot the GPs
+                for label in noise_labels:
 
-                # Get GP
-                gp, _ = like.noise_process.predict(pars, data_errors=errors, linpred=residuals_with_gp, xdata=like.model.data.t)
-                residuals_no_gp = residuals_with_gp - gp
+                    # Colors
+                    color_line = pcutils.hex_to_rgba(self.color_map[label], a=0.6)
+                    color_fill = pcutils.hex_to_rgba(self.color_map[label], a=0.3)
+
+                    fig.add_trace(plotly.graph_objects.Scatter(x=t_gp_hr - time_offset, y=gps_hr[label],
+                                                              line=dict(width=0.8, color=color_line),
+                                                              name=label, showlegend=False),
+                                  row=1, col=1)
                 
+                    # Plot the gp unc
+                    gp_hr_lower, gps_hr_upper = gps_hr[label] - gps_error_hr[label], gps_hr[label] + gps_error_hr[label]
+                    fig.add_trace(plotly.graph_objects.Scatter(x=np.concatenate([t_gp_hr, t_gp_hr[::-1]]) - time_offset,
+                                                               y=np.concatenate([gps_hr_upper, gp_hr_lower[::-1]]),
+                                                               fill='toself',
+                                                               line=dict(width=1, color=color_line),
+                                                               fillcolor=color_fill,
+                                                               name=label, showlegend=True),
+                                  row=1, col=1)
+                
+                noise_components = like.compute_noise_components(pars, like.datax)
+                for comp in noise_components:
+                    residuals[noise_components[comp][2]] -= noise_components[comp][0][noise_components[comp][2]]
+
                 # Plot each instrument
                 for data in like.model.data.values():
                     
@@ -421,10 +402,10 @@ class RVProblem(OptProblem):
                     data_arr = data.rv - pars[f"gamma_{data.instname}"].value
                     
                     # Errors
-                    errors_arr = errors[like.model.data.indices[data.instname]]
+                    errors_arr = data_errors[like.model.data.indices[data.instname]]
                     
                     # Final residuals
-                    residuals_arr = residuals_no_gp[like.model.data.indices[data.instname]]
+                    residuals_arr = residuals[like.model.data.indices[data.instname]]
                     
                     # Plot rvs
                     fig.add_trace(plotly.graph_objects.Scatter(x=data.t - time_offset, y=data_arr,
@@ -513,46 +494,15 @@ class RVProblem(OptProblem):
             corner_plot.savefig(self.output_path + self.star_name.replace(' ', '_') + '_corner_' + pcutils.gendatestr(time=True) + "_" + self.tag + '.png')
         return corner_plot
         
-        
-    ######################
-    #### COMPONENTS ######
-    ######################
-    
-    def compute_components(self, pars):
-        
-        comps = {}
-        for like in self.post.likes.values():
-            
-            # Time
-            comps[f"{like.label}_data_t"] = like.model.data.t
-            
-            # Errors
-            comps[f"{like.label}_data_rverr"] = like.model.data.rverr
-            
-            # Zero point corrected data
-            comps[f"{like.label}_data_rv"] = like.model.data.rv - like.model.trend_model.build_trend_zero(pars, t=like.model.data.t)
-            
-            # Global trend
-            if like.model.trend_model.poly_order > 0:
-                comps[f"{like.label}_global_trend"] = like.model.trend_model.build_global_trend(pars, t=like.model.data.t)
-            
-            # GPs
-            residuals_raw = like.model.compute_raw_residuals(pars)
-            comps[f"{like.label}_gps"] = like.model.noise_process.compute_noise_components(pars=pars, linpred=residuals_raw)
-            
-            # Planets
-            for planet_index in like.model.planets_dict:
-                comps[f"{like.label}_planet_{planet_index}"] = like.model.build_planet(pars, like.model.data.t, planet_index)
-                
-        return comps
+
 
     #################################
     #### BRUTE FORCE PERIODOGRAM ####
     #################################
             
-    def brute_force_periodogram(self, periods, planet_index=1, n_cores=1):
+    def brute_force_periodogram(self, optimizer, periods, planet_index=1, n_cores=1):
         # Run in parallel
-        results = Parallel(n_jobs=n_cores, verbose=0, batch_size=1)(delayed(self._brute_force_wrapper)(self, periods[i], planet_index) for i in tqdm.tqdm(range(len(periods))))
+        results = Parallel(n_jobs=n_cores, verbose=0, batch_size=1)(delayed(self._brute_force_wrapper)(self, optimizer, periods[i], planet_index) for i in tqdm.tqdm(range(len(periods))))
         return results
 
             
@@ -945,7 +895,7 @@ class RVProblem(OptProblem):
     #### MODEL COMPARISON ####
     ##########################
     
-    def model_comparison(self, save=True):
+    def model_comparison(self, optimizer, save=True):
         """Runs a model comparison for all combinations of planets.
 
         Returns:
@@ -976,17 +926,15 @@ class RVProblem(OptProblem):
             # Remove all other planets except this combo.
             for planet_index in planets_dict_cp:
                 if planet_index not in planets_dict:
-                    self.like0.model.kep_model._disable_planet_pars(p0, planets_dict_cp, planet_index)
+                    _optprob.post.like0.model.disable_planet_pars(p0, planets_dict_cp, planet_index)
             
             # Set planets dict for each model
-            for like in _optprob.post.values():
-                like.model.kep_model.planets_dict = planets_dict
-            
-            # Pars
-            _optprob.set_pars(p0)
+            for like in _optprob.post.likes.values():
+                like.model.planets_dict = planets_dict
 
             # Run the max like
-            opt_result = _optprob.run_mapfit(save=False)
+            _optprob.p0 = p0
+            opt_result = _optprob.run_mapfit(optimizer, save=False)
             
             # Alias best fit params
             pbest = opt_result['pbest']
@@ -995,16 +943,13 @@ class RVProblem(OptProblem):
             lnL = _optprob.post.compute_logL(pbest)
             
             # Run the BIC
-            bic = _optprob.optimizer.obj.compute_bic(pbest)
+            bic = _optprob.post.compute_bic(pbest)
             
             # Run the AICc
-            aicc = _optprob.optimizer.obj.compute_aicc(pbest)
+            aicc = _optprob.post.compute_aicc(pbest)
             
             # Red chi 2
-            try:
-                redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest, include_uncorr_error=False)
-            except:
-                redchi2 = _optprob.optimizer.obj.compute_redchi2(pbest)
+            redchi2 = _optprob.post.compute_redchi2(pbest)
             
             # Store
             mc_results.append({'planets_dict': planets_dict, 'lnL': lnL, 'bic': bic, 'aicc': aicc, 'pbest': pbest, 'redchi2': redchi2})
@@ -1162,9 +1107,9 @@ class RVProblem(OptProblem):
     ###############
     
     @staticmethod
-    def _brute_force_wrapper(rvprob, per, planet_index):
+    def _brute_force_wrapper(rvprob, optimizer, per, planet_index):
         rvprob.p0[f"per{planet_index}"].value = per
-        opt_result = rvprob.run_mapfit(save=False)
+        opt_result = rvprob.run_mapfit(optimizer, save=False)
         return opt_result
 
     @staticmethod
