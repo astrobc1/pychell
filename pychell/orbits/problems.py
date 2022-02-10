@@ -20,6 +20,7 @@ import pychell.orbits.maths as planetmath
 
 # Optimize
 from optimize.problems import OptProblem
+import optimize.samplers
 from optimize.noise import CorrelatedNoiseProcess, GaussianProcess
 
 # Plots
@@ -1020,7 +1021,7 @@ class RVProblem(OptProblem):
                 wdist.append(w)
                 kdist.append(k)
                 mdist.append(planetmath.compute_mass(per, ecc, k, mstar))
-            val, unc_low, unc_high = self.sampler.chain_uncertainty(mdist)
+            val, unc_low, unc_high = optimize.samplers.emceeLikeSampler.chain_uncertainty(mdist)
             if mstar_unc is not None:
                 unc_low = np.sqrt(unc_low**2 + planetmath.compute_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[0]**2)
                 unc_high = np.sqrt(unc_high**2 + planetmath.compute_mass_deriv_mstar(per, ecc, k, mstar)**2 * mstar_unc[1]**2)
@@ -1065,7 +1066,7 @@ class RVProblem(OptProblem):
                 kdist.append(k)
                 a = planetmath.compute_sa(per, mstar)
                 adist.append(a)
-            val, unc_low, unc_high = self.sampler.chain_uncertainty(adist)
+            val, unc_low, unc_high = optimize.samplers.emceeLikeSampler.chain_uncertainty(adist)
             da_dMstar = planetmath.compute_sa_deriv_mstar(per, mstar) # in AU / M_SUN
             unc_low = np.sqrt(unc_low**2 + da_dMstar**2 * mstar_unc[0]**2)
             unc_high = np.sqrt(unc_high**2 + da_dMstar**2 * mstar_unc[1]**2)
