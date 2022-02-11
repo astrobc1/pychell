@@ -137,7 +137,7 @@ def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
 #### WLS ####
 #############
 
-def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wave_estimate_calfiber, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, method="adopt_cal", poly_order=4, n_cores=1, static_index=0):
+def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wave_estimate_calfiber, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, mode="static", poly_order=4, n_cores=1, static_index=0):
     """Wrapper to compute the wavelength solution for all spectra.
 
     Args:
@@ -149,7 +149,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
         lfc_cal_calfiber (np.ndarray): The LFC spectra for the LFC exposures for the calibraiton fiber with the same shape.
         lfc_cal_scifiber (np.ndarray): The LFC spectra for the LFC exposures for the science fiber with the same shape.
         do_orders (list, optional): Which orders to do. Defaults to all orders.
-        method (str): How to use the appropriate wavelength solutions compute the science fiber wls. Defaults to "nearest", which uses the closest wavelength solution in time for the science fiber.
+        mode (str): How to use the appropriate wavelength solutions compute the science fiber wls. Defaults to "nearest", which uses the closest wavelength solution in time for the science fiber.
 
     Returns:
         np.ndarray: The wavelength solutions for the science spectra, science fiber with shape (n_pixels, n_orders, n_spectra).
@@ -196,21 +196,24 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
         if times_sci is not None:
             for i in range(n_sci_spec):
                 print(f"Computing cal fiber wls for order {order_index+1} science spectrum {i+1}")
-                wls_sci_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_sci_calfiber[:, order_index, i], f0, df, poly_order)
+                try:
+                    wls_sci_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_sci_calfiber[:, order_index, i], f0, df, poly_order)
+                except:
+                    pass
 
         # Loop over science observations, computer wls for science fiber
         if times_sci is not None:
             for i in range(n_sci_spec):
                 print(f"Computing sci fiber wls for order {order_index+1} science spectrum {i+1}")
-                if method == "nearest":
+                if mode == "nearest":
                     k_cal_nearest = np.nanargmin(np.abs(times_sci[i] - times_lfc_cal))
                     wls_sci_scifiber[:, order_index, i] = np.copy(wls_cal_scifiber[:, order_index, k_cal_nearest])
-                elif method == "static":
+                elif mode == "static":
                     wls_sci_scifiber[:, order_index, i] = np.copy(wls_sci_scifiber[:, order_index, static_index])
-                elif method == "adopt_cal":
+                elif mode == "adopt_cal":
                     wls_sci_scifiber[:, order_index, i] = np.copy(wls_sci_calfiber[:, order_index, i])
                 else:
-                    raise ValueError("method must be nearest or interp")
+                    raise ValueError("mode must be nearest, static, or interp")
 
     return wls_sci_scifiber, wls_sci_calfiber, wls_cal_scifiber, wls_cal_calfiber
 
