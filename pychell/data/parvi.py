@@ -205,6 +205,7 @@ def parse_object(data):
     return data.object
     
 def parse_utdate(data):
+    utc_offset = -8
     jdlocstart = parse_exposure_start_time(data) + TimeDelta(utc_offset*3600, format='sec')
     y, m, d = str(jdlocstart.datetime.year), str(jdlocstart.datetime.month), str(jdlocstart.datetime.day)
     if len(m) == 1:
