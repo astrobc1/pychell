@@ -167,34 +167,34 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
             self.rvs_dict["bjds"] = bc_corrs[:, 0]
             self.rvs_dict["bc_vels"] = bc_corrs[:, 1]
         
-        # Get the nightly jds
-        self.rvs_dict["bjds_nightly"], self.rvs_dict["n_obs_nights"] = pcrvcalc.gen_nightly_jds(self.rvs_dict["bjds"], utc_offset=self.spec_module.utc_offset)
+        # Get the binned jds
+        self.rvs_dict["bjds_binned"], self.rvs_dict["indices"] = pcrvcalc.bin_jds_for_site(self.rvs_dict["bjds"], self.spec_module.observatory['site'])
         
         # Individual and per-night Forward Modeled RVs
         self.rvs_dict["rvsfwm"] = np.full((self.n_spec, self.n_iterations), np.nan)
-        self.rvs_dict["rvsfwm_nightly"] = np.full((self.n_nights, self.n_iterations), np.nan)
-        self.rvs_dict["uncfwm_nightly"] = np.full((self.n_nights, self.n_iterations), np.nan)
+        self.rvs_dict["rvsfwm_binned"] = np.full((self.n_nights, self.n_iterations), np.nan)
+        self.rvs_dict["uncfwm_binned"] = np.full((self.n_nights, self.n_iterations), np.nan)
         
         # Individual and per-night XC RVs
         self.rvs_dict["rvsxc"] = np.full((self.n_spec, self.n_iterations), np.nan)
         self.rvs_dict['uncxc'] = np.full((self.n_spec, self.n_iterations), np.nan)
-        self.rvs_dict["rvsxc_nightly"] = np.full((self.n_nights, self.n_iterations), np.nan)
-        self.rvs_dict["uncxc_nightly"] = np.full((self.n_nights, self.n_iterations), np.nan)
+        self.rvs_dict["rvsxc_binned"] = np.full((self.n_nights, self.n_iterations), np.nan)
+        self.rvs_dict["uncxc_binned"] = np.full((self.n_nights, self.n_iterations), np.nan)
         
         # skew info
         self.rvs_dict['skew'] = np.full((self.n_spec, self.n_iterations), np.nan)
-        self.rvs_dict['skew_nightly'] = np.full((self.n_nights, self.n_iterations), np.nan)
-        self.rvs_dict['uncskew_nightly'] = np.full((self.n_nights, self.n_iterations), np.nan)
+        self.rvs_dict['skew_binned'] = np.full((self.n_nights, self.n_iterations), np.nan)
+        self.rvs_dict['uncskew_binned'] = np.full((self.n_nights, self.n_iterations), np.nan)
         
     def print_init_summary(self):
         print("***************************************", flush=True)
-        print(f"** Target: {self.spectral_model.star.star_name.replace('_', ' ')}", flush=True)
-        print(f"** Spectrograph: {self.spec_module.observatory['name']} / {self.spectrograph}", flush=True)
-        print(f"** Observations: {self.n_spec} spectra, {self.n_nights} nights", flush=True)
-        print(f"** Image Order: {self.order_num}", flush=True)
-        print(f"** Tag: {self.tag}", flush=True)
-        print(f"** Iterations: {self.n_iterations}", flush=True)
-        print(f"** N Cores: {self.n_cores}", flush=True)
+        print(f"Target: {self.spectral_model.star.star_name.replace('_', ' ')}", flush=True)
+        print(f"Observatory: {self.spec_module.observatory['name']} / {self.spectrograph}", flush=True)
+        print(f"Observations: {self.n_spec} spectra, {self.n_nights} nights", flush=True)
+        print(f"Echelle Order: {self.order_num}", flush=True)
+        print(f"Tag: {self.tag}", flush=True)
+        print(f"N Cores: {self.n_cores}", flush=True)
+        print(f"{self.spectral_model}", flush=True)
         print("***************************************", flush=True)
         
     ##################
@@ -239,7 +239,7 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
                     self.cross_correlate_spectra(iter_index)
             
                 # Generate the rvs for each observation
-                self.gen_nightly_rvs(iter_index)
+                self.bin_rvs(iter_index)
             
                 # Plot the rvs
                 self.plot_rvs(iter_index)
@@ -256,10 +256,10 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
                     rvs_std = np.nanstd(self.rvs_dict['rvsxc'][:, iter_index])
                     print(f"  Stddev of all xc RVs: {round(rvs_std, 4)} m/s", flush=True)
                 if self.n_nights > 1:
-                    rvs_std = np.nanstd(self.rvs_dict['rvsfwm_nightly'][:, iter_index])
-                    print(f"  Stddev of all fwm nightly RVs: {round(rvs_std, 4)} m/s", flush=True)
-                    rvs_std = np.nanstd(self.rvs_dict['rvsxc_nightly'][:, iter_index])
-                    print(f"  Stddev of all xc nightly RVs: {round(rvs_std, 4)} m/s", flush=True)
+                    rvs_std = np.nanstd(self.rvs_dict['rvsfwm_binned'][:, iter_index])
+                    print(f"  Stddev of all fwm binned RVs: {round(rvs_std, 4)} m/s", flush=True)
+                    rvs_std = np.nanstd(self.rvs_dict['rvsxc_binned'][:, iter_index])
+                    print(f"  Stddev of all xc binned RVs: {round(rvs_std, 4)} m/s", flush=True)
                     
                 # Augment the template
                 if iter_index < self.n_iterations - 1:
@@ -592,7 +592,7 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
                 
         print(f"Cross Correlation Finished in {round((stopwatch.time_since())/60, 3)} min ", flush=True)
     
-    def gen_nightly_rvs(self, iter_index):
+    def bin_rvs(self, iter_index):
         
         # The RMS from the forward model fit
         fit_metrics = np.full(self.n_spec, np.nan)
@@ -603,25 +603,26 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
         weights = 1 / fit_metrics**2
         
         # The FwM RVs
-        rvsfwm_nightly, uncfwm_nightly = pcrvcalc.compute_nightly_rvs_single_order(self.rvs_dict["rvsfwm"][:, iter_index], weights, self.rvs_dict['n_obs_nights'])
-        self.rvs_dict['rvsfwm_nightly'][:, iter_index] = rvsfwm_nightly
-        self.rvs_dict['uncfwm_nightly'][:, iter_index] = uncfwm_nightly
+        rvsfwm_binned, uncfwm_binned = pcrvcalc.bin_rvs_single_order(self.rvs_dict["rvsfwm"][:, iter_index], weights, self.rvs_dict['indices'])
+        self.rvs_dict['rvsfwm_binned'][:, iter_index] = rvsfwm_binned
+        self.rvs_dict['uncfwm_binned'][:, iter_index] = uncfwm_binned
         
         # The XC RVs
-        rvsxc_nightly, uncxc_nightly = pcrvcalc.compute_nightly_rvs_single_order(self.rvs_dict['rvsxc'][:, iter_index], weights, self.rvs_dict['n_obs_nights'])
-        self.rvs_dict['rvsxc_nightly'][:, iter_index] = rvsxc_nightly
-        self.rvs_dict['uncxc_nightly'][:, iter_index] = uncxc_nightly
+        if self.do_ccf:
+            rvsxc_binned, uncxc_binned = pcrvcalc.bin_rvs_single_order(self.rvs_dict['rvsxc'][:, iter_index], weights, self.rvs_dict['indices'])
+            self.rvs_dict['rvsxc_binned'][:, iter_index] = rvsxc_binned
+            self.rvs_dict['uncxc_binned'][:, iter_index] = uncxc_binned
         
         # The XC skew
-        skew_nightly, uncskew_nightly = pcrvcalc.compute_nightly_rvs_single_order(self.rvs_dict['skew'][:, iter_index], weights, self.rvs_dict['n_obs_nights'])
-        self.rvs_dict['skew_nightly'][:, iter_index] = skew_nightly
-        self.rvs_dict['uncskew_nightly'][:, iter_index] = uncskew_nightly
+        skew_binned, uncskew_binned = pcrvcalc.bin_rvs_single_order(self.rvs_dict['skew'][:, iter_index], weights, self.rvs_dict['indices'])
+        self.rvs_dict['skew_binned'][:, iter_index] = skew_binned
+        self.rvs_dict['uncskew_binned'][:, iter_index] = uncskew_binned
 
     def plot_rvs(self, iter_index, time_offset=2450000):
         """Plots all RVs and cross-correlation analysis after forward modeling all spectra.
         """
         
-        # Plot the rvs, nightly rvs, xcorr rvs, xcorr nightly rvs
+        # Plot the rvs, binned rvs, xcorr rvs, xcorr binned rvs
         plot_width, plot_height = 1800, 600
         dpi = 200
         plt.figure(num=1, figsize=(int(plot_width / dpi), int(plot_height / dpi)), dpi=200)
@@ -629,7 +630,7 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
         # Aliases
         rvs_dict = self.rvs_dict
         bjds = rvs_dict["bjds"]
-        bjdsn = rvs_dict["bjds_nightly"]
+        bjdsn = rvs_dict["bjds_binned"]
         
         # Individual Forward Model
         plt.plot(bjds - time_offset,
@@ -643,17 +644,17 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
                      marker='.', linewidth=0, elinewidth=0.5, color='black', alpha=0.5, label="XC [indiv]")
         
         
-        # Nightly Forward Model
+        # binned Forward Model
         plt.errorbar(bjdsn - time_offset,
-                     rvs_dict['rvsfwm_nightly'][:, iter_index] - np.nanmedian(rvs_dict['rvsfwm_nightly'][:, iter_index]),
-                     yerr=rvs_dict['uncfwm_nightly'][:, iter_index],
-                     marker='o', linewidth=0, elinewidth=1, label='FwM [nightly]', color=(0, 114/255, 189/255))
+                     rvs_dict['rvsfwm_binned'][:, iter_index] - np.nanmedian(rvs_dict['rvsfwm_binned'][:, iter_index]),
+                     yerr=rvs_dict['uncfwm_binned'][:, iter_index],
+                     marker='o', linewidth=0, elinewidth=1, label='FwM [binned]', color=(0, 114/255, 189/255))
         
-        # Nightly XC
+        # binned XC
         plt.errorbar(bjdsn - time_offset,
-                     rvs_dict['rvsxc_nightly'][:, iter_index] - np.nanmedian(rvs_dict['rvsxc_nightly'][:, iter_index]),
-                     yerr=rvs_dict['uncxc_nightly'][:, iter_index],
-                     marker='X', linewidth=0, alpha=0.8, label='XC [nightly]', color='darkorange', elinewidth=1)
+                     rvs_dict['rvsxc_binned'][:, iter_index] - np.nanmedian(rvs_dict['rvsxc_binned'][:, iter_index]),
+                     yerr=rvs_dict['uncxc_binned'][:, iter_index],
+                     marker='X', linewidth=0, alpha=0.8, label='XC [binned]', color='darkorange', elinewidth=1)
         
         # Plot labels
         plt.title(f"{self.spectral_model.star.star_name.replace('_', ' ')}, Order {self.order_num}, Iteration {iter_index + 1}")
@@ -674,8 +675,8 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
         # Plot the skew vs. XC RV
         plt.figure(1, figsize=(12, 7), dpi=200)
         
-        plt.errorbar(rvs_dict['rvsxc_nightly'][:, iter_index], rvs_dict['skew_nightly'][:, iter_index],
-                     xerr=rvs_dict['uncxc_nightly'][:, iter_index], yerr=rvs_dict['uncskew_nightly'][:, iter_index],
+        plt.errorbar(rvs_dict['rvsxc_binned'][:, iter_index], rvs_dict['skew_binned'][:, iter_index],
+                     xerr=rvs_dict['uncxc_binned'][:, iter_index], yerr=rvs_dict['uncskew_binned'][:, iter_index],
                      marker='o', lw=0, elinewidth=1)
         
         # Annotate
@@ -755,7 +756,7 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
     
     @property
     def bjdsn(self):
-        return self.rvs_dict["bjds_nightly"]
+        return self.rvs_dict["bjds_binned"]
 
     @property
     def p0(self):
@@ -766,8 +767,8 @@ class IterativeSpectralRVProb(optimize.problems.OptProblem):
         return self.spectral_model.n_iterations
     
     @property
-    def model_resolution(self):
-        return self.spectral_model.model_resolution
+    def oversample(self):
+        return self.spectral_model.oversample
     
     @property
     def crop_pix(self):

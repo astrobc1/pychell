@@ -14,6 +14,11 @@ from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as units
 
+# Barycorrpy
+from barycorrpy import get_BC_vel
+from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
+
+
 # Pychell deps
 import pychell.maths as pcmath
 import pychell.data.spectraldata as pcspecdata
@@ -26,6 +31,8 @@ spectrograph = 'NIRSPEC'
 observatory = {
     "name": "Keck"
 }
+
+utc_offset = -10
     
 def categorize_raw_data(data_input_path, output_path):
 
@@ -211,6 +218,29 @@ def print_reduction_summary(data):
             print('    ' + str(sci_this_target[0].master_flat))
 
 
+def compute_exposure_midpoint(data):
+    return parse_exposure_start_time(data).jd + parse_itime(data) / (2 * 86400)
+
+def compute_barycenter_corrections(data, star_name):
+        
+    # Star name
+    star_name = star_name.replace('_', ' ')
+    
+    # Compute the JD UTC mid point (possibly weighted)
+    jdmid = compute_exposure_midpoint(data)
+    
+    # BJD
+    bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    
+    # bc vel
+    bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    
+    # Add to data
+    data.bjd = bjd
+    data.bc_vel = bc_vel
+    
+    return bjd, bc_vel
+
 #########################
 #### BASIC WAVE INFO ####
 #########################
@@ -235,10 +265,10 @@ rv_zero_point = 0
 quad_pixel_set_points = [1, 512, 1023]
 
 # Left most set point for the quadratic wavelength solution
-quad_set_point_1 = np.array([19900.00 - 36, 20400.00 + 2, 20600.00,21500.00,22200.00,22800.00,23600.00])
+quad_set_point_1 = np.array([19900.00 - 36, 19900.00 - 36 + 470, 20600.00,21500.00,22200.00,22800.00,23600.00])
 
 # Middle set point for the quadratic wavelength solution
-quad_set_point_2 = np.array([20050.00 - 40.5, 20550.00 + 2, 20950.00, 21600.00, 22350.00, 23000.00, 23750.00])
+quad_set_point_2 = np.array([20050.00 - 40.5, 20050.00 - 40.5 + 470, 20950.00, 21600.00, 22350.00, 23000.00, 23750.00])
 
 # Right most set point for the quadratic wavelength solution
-quad_set_point_3 = np.array([20200.00 - 40, 20700.00 + 2, 21300.00, 21700.00, 22500.00, 23200.00, 23900.00])
+quad_set_point_3 = np.array([20200.00 - 40, 20200.00 - 40 + 470, 21300.00, 21700.00, 22500.00, 23200.00, 23900.00])

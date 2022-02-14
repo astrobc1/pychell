@@ -5,14 +5,15 @@ import sys
 import copy
 import glob
 
-# Astropy fits object
+# Astropy
 from astropy.io import fits
-
-# Maths
-import numpy as np
+from astropy.coordinates import EarthLocation
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as units
+
+# Maths
+import numpy as np
 import sklearn.cluster
 
 # Barycorrpy
@@ -30,12 +31,10 @@ import pychell.maths as pcmath
 
 observatory = {
     'name': 'Cerro Paranal',
-    'lat': None,
-    'lon': None,
-    'alt': None
+    'site': EarthLocation.of_site("Cerro Paranal")
 }
 
-utc_offset = -3
+echelle_orders = None
 
 ######################
 #### DATA PARSING ####
@@ -53,32 +52,6 @@ def parse_exposure_start_time(data):
     data.time_obs_start = Time(float(data.header['MJD-OBS']) + 2400000.5, scale='utc', format='jd')
     return data.time_obs_start
 
-# def parse_spec1d(data):
-    
-#     # Load the flux, flux unc, and bad pix arrays
-#     fits_data = fits.open(data.input_file)
-#     fits_data.verify('fix')
-#     data.header = fits_data[0].header
-#     oi = data.order_num - 1
-#     #data.wave = fits_data[1].data.WAVE.flatten().astype(float)
-#     #data.flux = fits_data[1].data.FLUX_EL_SKYSUB.flatten().astype(float)
-#     #data.flux_unc = fits_data[1].data.ERR.flatten().astype(float)
-#     #data.wave = fits_data[1].data.WAVE.flatten().astype(float)
-#     #data.flux = fits_data[1].data.FLUX_EL_SKYSUB.flatten().astype(float)
-
-
-#     data.flux_unc = np.full(len(data.wave), 1E-3)
-#     data.mask = np.ones(len(data.wave))
-#     good = np.where(data.wave > 4500)[0]
-#     data.wave = data.wave[good]
-#     data.flux = data.flux[good]
-#     data.flux_unc = data.flux_unc[good]
-#     data.mask = data.mask[good]
-
-#     data.wave = pcmath.doppler_shift_wave(data.wave, -1 * data.header['HIERARCH ESO QC BERV'])
-
-#ECHELLE_ORDERS = [212, 240]
-
 
 ################################
 #### BARYCENTER CORRECTIONS ####
@@ -88,15 +61,6 @@ def compute_barycenter_corrections(data, star_name):
         
     # Star name
     star_name = star_name.replace('_', ' ')
-    
-    # Compute the JD UTC mid point (possibly weighted)
-    #jdmid = compute_exposure_midpoint(data)
-    
-    # BJD
-    #bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
-    
-    # bc vel
-    #bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
     
     # Add to data
     bjd = data.header['HIERARCH ESO QC BJD']

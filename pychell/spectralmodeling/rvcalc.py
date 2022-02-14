@@ -22,16 +22,19 @@ import pychell.utils as pcutils
 #### COMPUTE PER-NIGHT JDS (OR BJDS) ####
 #########################################
 
-def gen_nightly_jds(jds, utc_offset=0, sep=0.2):
-    """Computes nightly (average) JDs (or BJDs) for a time-series observation over many nights. Average times are computed from the mean of the considered times.
+def bin_jds_for_site(jds, site, sep=0.5):
+    """Computes binned times for a multiple observations.
 
     Args:
         jds (np.ndarray): An array of sorted JDs (or BJDs).
-        utc_offset (int): The number of hours offset from UTC.
+        site (EarthLocation): The astropy.coordinates.EarthLocation object.
     Returns:
-        np.ndarray: The average nightly jds.
-        np.ndarray: The number of observations each night with data, of length n_nights.
+        np.ndarray: The average binned jds (unweighted).
+        np.ndarray: An array of length n_nights where each entry contains the indices of the observations for that night as a tuple (first, last).
     """
+
+    # UTC offset
+    utc_offset = pcutils.get_utc_offset(site)
     
     # Number of spectra
     n_obs_tot = len(jds)
@@ -39,10 +42,11 @@ def gen_nightly_jds(jds, utc_offset=0, sep=0.2):
     # Keep track of previous night's last index
     prev_i = 0
 
-    # Calculate mean JD date and number of observations per night for nightly
+    # Calculate mean JD date and number of observations per night for binned
     # Assume that observations on separate nights if noon passes or if Delta_t > sep.
     jds_binned = []
     n_obs_binned = []
+    indices_binned = []
     if n_obs_tot == 1:
         jds_binned.append(jds[0])
         n_obs_binned.append(1)
@@ -50,18 +54,20 @@ def gen_nightly_jds(jds, utc_offset=0, sep=0.2):
         for i in range(n_obs_tot - 1):
             t_noon = np.ceil(jds[i] + utc_offset / 24) - utc_offset / 24
             if jds[i+1] > t_noon or jds[i+1] - jds[i] > sep:
-                jd_avg = np.average(jds[prev_i:i+1])
+                jd_avg = np.mean(jds[prev_i:i+1])
                 n_obs_night = i - prev_i + 1
                 jds_binned.append(jd_avg)
                 n_obs_binned.append(n_obs_night)
+                indices_binned.append([prev_i, i])
                 prev_i = i + 1
-        jds_binned.append(np.average(jds[prev_i:]))
+        indices_binned.append([prev_i, n_obs_tot - 1])
+        jds_binned.append(np.mean(jds[prev_i:]))
         n_obs_binned.append(n_obs_tot - prev_i)
 
     jds_binned = np.array(jds_binned, dtype=float) # convert to np arrays
-    n_obs_binned = np.array(n_obs_binned).astype(int)
+    n_obs_binned = np.array(n_obs_binned)
 
-    return jds_binned, n_obs_binned
+    return jds_binned, indices_binned
 
 ####################################
 #### CROSS-CORRELATION ROUTINES ####
@@ -448,63 +454,32 @@ def compute_rv_content(pars, spectral_model, snr=100):
 #### CO-ADDING RVS ####
 #######################
 
-def bin_rvs_to_nights(jds, rvs, unc, err_type="empirical"):
-    """A simple wrapper function to bin RVs to 1 per night.
-
-    Args:
-        jds (np.ndarray): The individual BJDs of length n_obs.
-        rvs (np.ndarray): The individual RVs of length n_obs.
-        unc (np.ndarray): The corresponding RV errors of length n_obs.
-        
-    Returns:
-        np.ndarray: The nightly BJDs.
-        np.ndarray: The nightly RVs.
-        np.ndarray: The nightly RV errors.
-    """
-    
-    # Get nightly JDs
-    jds_nightly, n_obs_nights = gen_nightly_jds(jds, sep=0.5)
-    
-    # Number of nights
-    n_nights = len(n_obs_nights)
-    
-    # Initialize nightly rvs and errors
-    rvs_nightly = np.full(n_nights, np.nan, dtype=float)
-    unc_nightly = np.full(n_nights, np.nan, dtype=float)
-    
-    # For each night, coadd RVs
-    for i, f, l in pcutils.nightly_iteration(n_obs_nights):
-        rr, uncc = rvs[f:l].flatten(), unc[f:l].flatten()
-        ww = 1 / uncc**2
-        rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=uncc, err_type="empirical")
-    
-    return jds_nightly, rvs_nightly, unc_nightly
-
-def compute_nightly_rvs_single_order(rvs, weights, n_obs_nights):
-    """Computes nightly RVs for a single order.
+def bin_rvs_single_order(rvs, weights, indices):
+    """Computes binned RVs for a single order.
 
     Args:
         rvs (np.ndarray): The individual rvs array of shape (n_obs, n_chunks).
         weights (np.ndarray): The weights, also of shape (n_obs, n_chunks).
-        n_obs_nights (np.ndarray): The number of observations per night.
+        indices (np.ndarray): Array of length n_bins where each entry is a list of length 2 containing the start, stop index of each bin.
     """
     
     # The number of spectra and nights
     n_spec = len(rvs)
-    n_nights = len(n_obs_nights)
+    n_nights = len(indices)
     
-    # Initialize the nightly rvs and uncertainties
-    rvs_nightly = np.full(n_nights, np.nan)
-    unc_nightly = np.full(n_nights, np.nan)
+    # Initialize the binned rvs and uncertainties
+    rvs_binned = np.full(n_nights, np.nan)
+    unc_binned = np.full(n_nights, np.nan)
     
-    for i, f, l in pcutils.nightly_iteration(n_obs_nights):
-        rr = rvs[f:l].flatten()
-        ww = weights[f:l].flatten()
-        rvs_nightly[i], unc_nightly[i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
+    for i in range(n_nights):
+        f, l = indices[i]
+        rr = rvs[f:l+1].flatten()
+        ww = weights[f:l+1].flatten()
+        rvs_binned[i], unc_binned[i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
             
-    return rvs_nightly, unc_nightly
+    return rvs_binned, unc_binned
 
-def combine_relative_rvs(rvs, weights, n_obs_nights):
+def combine_relative_rvs(rvs, weights, indices):
     """Combines RVs considering the differences between all the data points.
     
     Args:
@@ -515,7 +490,7 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
     
     # Numbers
     n_orders, n_spec = rvs.shape
-    n_nights = len(n_obs_nights)
+    n_nights = len(indices)
     
     # Determine differences and weights tensors
     rvlij = np.full((n_orders, n_spec, n_spec), np.nan)
@@ -532,15 +507,15 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
     rvli = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
     for l in range(n_orders):
         for i in range(n_spec):
-            rr = rvlij[l, i, :]
-            ww = wlij[l, i, :]
+            rr = np.copy(rvlij[l, i, :])
+            ww = np.copy(wlij[l, i, :])
             rvli[l, i], _ = pcmath.weighted_combine(rr, ww)
     
     # Output arrays
     rvs_single_out = np.full(n_spec, fill_value=np.nan)
     unc_single_out = np.full(n_spec, fill_value=np.nan)
-    rvs_nightly_out = np.full(n_nights, fill_value=np.nan)
-    unc_nightly_out = np.full(n_nights, fill_value=np.nan)
+    rvs_binned_out = np.full(n_nights, fill_value=np.nan)
+    unc_binned_out = np.full(n_nights, fill_value=np.nan)
     bad = np.where(~np.isfinite(wli))
     if bad[0].size > 0:
         wli[bad] = 0
@@ -550,14 +525,15 @@ def combine_relative_rvs(rvs, weights, n_obs_nights):
         rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rvli[:, i].flatten(), wli[:, i].flatten())
         
     # Per-night RVs
-    for i, f, l in pcutils.nightly_iteration(n_obs_nights):
-        rr = rvli[:, f:l].flatten()
-        ww = wli[:, f:l].flatten()
-        rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr, ww, err_type="empirical")
+    for i in range(n_nights):
+        f, l = indices[i]
+        rr = rvli[:, f:l+1].flatten()
+        ww = wli[:, f:l+1].flatten()
+        rvs_binned_out[i], unc_binned_out[i] = pcmath.weighted_combine(rr, ww, err_type="empirical")
         
-    return rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out
+    return rvs_single_out, unc_single_out, rvs_binned_out, unc_binned_out
 
-def combine_rvs_weighted_mean(rvs, weights, n_obs_nights):
+def combine_rvs_weighted_mean(rvs, weights, indices):
     """Combines RVs considering the differences between all the data points.
     
     Args:
@@ -572,8 +548,8 @@ def combine_rvs_weighted_mean(rvs, weights, n_obs_nights):
     # Output arrays
     rvs_single_out = np.full(n_spec, fill_value=np.nan)
     unc_single_out = np.full(n_spec, fill_value=np.nan)
-    rvs_nightly_out = np.full(n_nights, fill_value=np.nan)
-    unc_nightly_out = np.full(n_nights, fill_value=np.nan)
+    rvs_binned_out = np.full(n_nights, fill_value=np.nan)
+    unc_binned_out = np.full(n_nights, fill_value=np.nan)
     
     # Offset each order and chunk
     rvs_offset = np.copy(rvs)
@@ -585,9 +561,10 @@ def combine_rvs_weighted_mean(rvs, weights, n_obs_nights):
         ww = weights[:, i]
         rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rr.flatten(), ww.flatten())
         
-    for i, f, l in pcutils.nightly_iteration(n_obs_nights):
-        rr = rvs_offset[:, f:l]
-        ww = weights[:, f:l]
-        rvs_nightly_out[i], unc_nightly_out[i] = pcmath.weighted_combine(rr.flatten(), ww.flatten())
+    for i in range(n_nights):
+        f, l = indices[i]
+        rr = rvs_offset[:, f:l+1].flatten()
+        ww = weights[:, f:l+1].flatten()
+        rvs_binned_out[i], unc_binned_out[i] = pcmath.weighted_combine(rr, ww)
         
-    return rvs_single_out, unc_single_out, rvs_nightly_out, unc_nightly_out
+    return rvs_single_out, unc_single_out, rvs_binned_out, unc_binned_out

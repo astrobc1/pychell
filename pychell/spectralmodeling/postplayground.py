@@ -61,19 +61,19 @@ def parse_rvs(path, do_orders):
     rvs0 = np.load(fname)
     n_spec, n_iterations = rvs0['rvsfwm'].shape
     n_orders = len(do_orders)
-    n_nights = len(rvs0['n_obs_nights'])
+    n_bins = len(rvs0['bjds_binned'])
     rvs_dict['bjds'] = rvs0['bjds']
-    rvs_dict['bjds_nightly'] = rvs0['bjds_nightly']
-    rvs_dict['n_obs_nights'] = rvs0['n_obs_nights']
+    rvs_dict['bjds_binned'] = rvs0['bjds_binned']
+    rvs_dict['indices'] = rvs0['indices']
     
     # Create arrays
     rvs_dict['rvsfwm'] = np.full(shape=(n_orders, n_spec, n_iterations), fill_value=np.nan)
-    rvs_dict['rvsfwm_nightly'] = np.full(shape=(n_orders, n_nights, n_iterations), fill_value=np.nan)
-    rvs_dict['uncfwm_nightly'] = np.full(shape=(n_orders, n_nights, n_iterations), fill_value=np.nan)
+    rvs_dict['rvsfwm_binned'] = np.full(shape=(n_orders, n_bins, n_iterations), fill_value=np.nan)
+    rvs_dict['uncfwm_binned'] = np.full(shape=(n_orders, n_bins, n_iterations), fill_value=np.nan)
     rvs_dict['rvsxc'] = np.full(shape=(n_orders, n_spec, n_iterations), fill_value=np.nan)
     rvs_dict['uncxc'] = np.full(shape=(n_orders, n_spec, n_iterations), fill_value=np.nan)
-    rvs_dict['rvsxc_nightly'] = np.full(shape=(n_orders, n_nights, n_iterations), fill_value=np.nan)
-    rvs_dict['uncxc_nightly'] = np.full(shape=(n_orders, n_nights, n_iterations), fill_value=np.nan)
+    rvs_dict['rvsxc_binned'] = np.full(shape=(n_orders, n_bins, n_iterations), fill_value=np.nan)
+    rvs_dict['uncxc_binned'] = np.full(shape=(n_orders, n_bins, n_iterations), fill_value=np.nan)
     rvs_dict['skew'] = np.full(shape=(n_orders, n_spec, n_iterations), fill_value=np.nan)
 
     # Load in rvs for each order
@@ -82,12 +82,12 @@ def parse_rvs(path, do_orders):
         fname = glob.glob(f"{path}Order{do_orders[o]}{os.sep}RVs{os.sep}*.npz")[0]
         rvfile = np.load(fname)
         rvs_dict['rvsfwm'][o, :, :] = rvfile['rvsfwm']
-        rvs_dict['rvsfwm_nightly'][o, :] = rvfile['rvsfwm_nightly']
-        rvs_dict['uncfwm_nightly'][o, :] = rvfile['uncfwm_nightly']
+        rvs_dict['rvsfwm_binned'][o, :] = rvfile['rvsfwm_binned']
+        rvs_dict['uncfwm_binned'][o, :] = rvfile['uncfwm_binned']
         rvs_dict['rvsxc'][o, :, :] = rvfile['rvsxc']
         rvs_dict['uncxc'][o, :, :] = rvfile['uncxc']
-        rvs_dict['rvsxc_nightly'][o, :, :] = rvfile['rvsxc_nightly']
-        rvs_dict['uncxc_nightly'][o, :, :] = rvfile['uncxc_nightly']
+        rvs_dict['rvsxc_binned'][o, :, :] = rvfile['rvsxc_binned']
+        rvs_dict['uncxc_binned'][o, :, :] = rvfile['uncxc_binned']
         rvs_dict['skew'][o, :, :] = rvfile['skew']
 
     return rvs_dict
@@ -120,36 +120,36 @@ def parse_residuals(self):
 #### ACTIONS ####
 #################
 
-def combine_bis(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
+# def combine_bis(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
     
-    # Numbers
-    n_orders = len(specrvprobs)
-    do_orders = [specrvprobs[o].order_num for o in range(len(specrvprobs))]
-    n_spec = specrvprobs[0].n_spec
-    n_nights = specrvprobs[0].n_nights
-    n_iterations = specrvprobs[0].n_iterations
-    n_obs_nights = rvs_dict["n_obs_nights"]
+#     # Numbers
+#     n_orders = len(specrvprobs)
+#     do_orders = [specrvprobs[o].order_num for o in range(len(specrvprobs))]
+#     n_spec = specrvprobs[0].n_spec
+#     n_bins = specrvprobs[0].n_bins
+#     n_iterations = specrvprobs[0].n_iterations
+#     indices = rvs_dict["indices"]
     
-    # Which iterations to use for each order
-    if iter_indices is None:
-        iter_indices = [n_iterations - 1] * n_orders
+#     # Which iterations to use for each order
+#     if iter_indices is None:
+#         iter_indices = [n_iterations - 1] * n_orders
     
-    # Mask rvs from user input
-    mask = gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict)
+#     # Mask rvs from user input
+#     mask = gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict)
     
-    # Combine BIS
-    bis_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    weights_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    for o in range(n_orders):
-        bis_single_iter[o, :] = rvs_dict["bis"][o, :, iter_indices[o]]
-        weights_single_iter[o, :] = mask[o, :, iter_indices[o]] # 1  / rvs_dict["bis"][o, :, iter_indices[o]] * mask[]
-    result = pcrvcalc.combine_relative_rvs(bis_single_iter, weights_single_iter, n_obs_nights)
+#     # Combine BIS
+#     bis_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+#     weights_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
+#     for o in range(n_orders):
+#         bis_single_iter[o, :] = rvs_dict["bis"][o, :, iter_indices[o]]
+#         weights_single_iter[o, :] = mask[o, :, iter_indices[o]] # 1  / rvs_dict["bis"][o, :, iter_indices[o]] * mask[]
+#     result = pcrvcalc.combine_relative_rvs(bis_single_iter, weights_single_iter, indices)
 
-    # Add to dictionary
-    rvs_dict['skew_out'] = result[0]
-    rvs_dict['uncbis_out'] = result[1]
-    rvs_dict['skew_nightly_out'] = result[2]
-    rvs_dict['uncskew_nightly_out'] = result[3]
+#     # Add to dictionary
+#     rvs_dict['skew_out'] = result[0]
+#     rvs_dict['uncbis_out'] = result[1]
+#     rvs_dict['skew_binned_out'] = result[2]
+#     rvs_dict['uncskew_binned_out'] = result[3]
       
 def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, n_flag_iters=10, thresh=4, max_rms=None):
     
@@ -157,15 +157,16 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
     n_orders = len(specrvprobs)
     do_orders = [specrvprobs[o].order_num for o in range(len(specrvprobs))]
     n_spec = specrvprobs[0].n_spec
-    n_rv_chunks = len(rvs_dict['bjds_nightly'])
+    n_bins = len(rvs_dict["indices"])
+    n_rv_chunks = len(rvs_dict['bjds_binned'])
     n_iterations = specrvprobs[0].n_iterations
-    n_obs_nights = rvs_dict["n_obs_nights"]
+    indices = rvs_dict["indices"]
 
-    # Overwrite shape of nightly rvs
-    rvs_dict['rvsfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    rvs_dict['uncfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    rvs_dict['rvsxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    rvs_dict['uncxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    # Overwrite shape of binned rvs
+    rvs_dict['rvsfwm_binned'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncfwm_binned'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['rvsxc_binned'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncxc_binned'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
     
     # Mask rvs from user input
     mask = gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict)
@@ -173,7 +174,7 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
     # Parse fit metrics
     fit_metrics = parse_fit_metrics(specrvprobs)
     
-    # Re-combine nightly rvs for each order with the mask
+    # Re-combine binned rvs for each order with the mask
     for o in range(n_orders):
         for j in range(n_iterations):
             
@@ -184,11 +185,11 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
                 bad = np.where(fit_metrics[o, :, j] > max_rms)[0]
                 if bad.size > 0:
                     weights[bad] = 0
-            rvs_dict['rvsfwm_nightly'][o, :, j], rvs_dict['uncfwm_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsfwm, weights, n_obs_nights)
+            rvs_dict['rvsfwm_binned'][o, :, j], rvs_dict['uncfwm_binned'][o, :, j] = pcrvcalc.bin_rvs_single_order(rvsfwm, weights, indices)
             
             # XC RVs
             rvsxc = rvs_dict['rvsxc'][o, :, j]
-            rvs_dict['rvsxc_nightly'][o, :, j], rvs_dict['uncxc_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsxc, weights, n_obs_nights)
+            rvs_dict['rvsxc_binned'][o, :, j], rvs_dict['uncxc_binned'][o, :, j] = pcrvcalc.bin_rvs_single_order(rvsxc, weights, indices)
     
     # Which iterations to use for each order
     if iter_indices is None:
@@ -213,20 +214,21 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
     # Iteratively Combine and flag RVs
     for i in range(n_flag_iters):
         print(f"Combining RVs, iteration {i+1}")
-        result_fwm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, n_obs_nights)
+        result_fwm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, indices)
         rvs, unc, rvsn, uncn = (*result_fwm,)
     
         # Flag bad RVs
         n_bad = 0
-        for inight, f, l in pcutils.nightly_iteration(n_obs_nights):
-            rr, ww = rvsfwm_single_iter[:, f:l], weights_single_iter[:, f:l]
+        for inight in range(n_bins):
+            f, l = indices[inight]
+            rr, ww = rvsfwm_single_iter[:, f:l+1], weights_single_iter[:, f:l+1]
             if np.nansum(ww) == 0:
                 continue
             res_norm = (rr - rvsn[inight])
             bad = np.where(np.abs(res_norm) > thresh * np.nanstd(res_norm))
             if bad[0].size > 0:
-               rvsfwm_single_iter[:, f:l][bad] = np.nan
-               weights_single_iter[:, f:l][bad] = 0
+               rvsfwm_single_iter[:, f:l+1][bad] = np.nan
+               weights_single_iter[:, f:l+1][bad] = 0
                n_bad += len(bad[0])
         if n_bad == 0:
             break
@@ -234,15 +236,15 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
     # Add to dictionary
     rvs_dict['rvsfwm_out'] = result_fwm[0]
     rvs_dict['uncfwm_out'] = result_fwm[1]
-    rvs_dict['rvsfwm_nightly_out'] = result_fwm[2]
-    rvs_dict['uncfwm_nightly_out'] = result_fwm[3]
+    rvs_dict['rvsfwm_binned_out'] = result_fwm[2]
+    rvs_dict['uncfwm_binned_out'] = result_fwm[3]
     
     # Write to files for radvel
     spectrograph = specrvprobs[0].spectrograph
     star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
     time_tag = pcutils.gendatestr(time=False)
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
-    telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')
+    telvec_binned = np.full(n_rv_chunks, spectrograph, dtype='<U20')
     
     # FwM
     fname = f"{path}rvsfwm_{spectrograph}_{star_name}_{time_tag}.txt"
@@ -251,126 +253,13 @@ def combine_rvs_iteratively(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indi
     with open(fname, 'w+') as f:
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
-    fname = f"{path}rvsfwm_nightly_{spectrograph}_{star_name}_{time_tag}.txt"
-    good = np.where(np.isfinite(rvs_dict['rvsfwm_nightly_out']) & np.isfinite(rvs_dict['uncfwm_nightly_out']))[0]
-    t, rvs, unc, telvec = rvs_dict['bjds_nightly'][good], rvs_dict['rvsfwm_nightly_out'][good], rvs_dict['uncfwm_nightly_out'][good], telvec_nightly[good]
+    fname = f"{path}rvsfwm_binned_{spectrograph}_{star_name}_{time_tag}.txt"
+    good = np.where(np.isfinite(rvs_dict['rvsfwm_binned_out']) & np.isfinite(rvs_dict['uncfwm_binned_out']))[0]
+    t, rvs, unc, telvec = rvs_dict['bjds_binned'][good], rvs_dict['rvsfwm_binned_out'][good], rvs_dict['uncfwm_binned_out'][good], telvec_binned[good]
     with open(fname, 'w+') as f:
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
   
-def combine_rvs(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None):
-    
-    # Numbers
-    n_orders = len(specrvprobs)
-    do_orders = [specrvprobs[o].order_num for o in range(len(specrvprobs))]
-    n_spec = specrvprobs[0].n_spec
-    n_rv_chunks = len(rvs_dict['bjds_nightly'])
-    n_iterations = specrvprobs[0].n_iterations
-    n_obs_nights = rvs_dict["n_obs_nights"]
-
-    # Overwrite shape of nightly rvs
-    rvs_dict['rvsfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    rvs_dict['uncfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    rvs_dict['rvsxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    rvs_dict['uncxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    
-    # Mask rvs from user input
-    mask = gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict)
-    
-    # Parse fit metrics
-    fit_metrics = parse_fit_metrics(specrvprobs)
-    
-    # Re-combine nightly rvs for each order with the mask
-    for o in range(n_orders):
-        for j in range(n_iterations):
-
-            if (j == 0 and specrvprobs[0].spectral_model.star.from_flat):
-                continue
-            
-            # FwM RVs
-            rvsfwm = rvs_dict['rvsfwm'][o, :, j]
-            weights = mask[o, :, j] / fit_metrics[o, :, j]**2
-            rvs_dict['rvsfwm_nightly'][o, :, j], rvs_dict['uncfwm_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsfwm, weights, n_obs_nights)
-            
-            # XC RVs
-            rvsxc = rvs_dict['rvsxc'][o, :, j]
-            rvs_dict['rvsxc_nightly'][o, :, j], rvs_dict['uncxc_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsxc, weights, n_obs_nights)
-        
-    # Summary of rvs
-    print_rv_summary(rvs_dict, do_orders, iter_indices)
-    
-    # Which iterations to use for each order
-    if iter_indices is None:
-        iter_indices = [n_iterations - 1] * n_orders
-
-    # Generate weights
-    weights = gen_rv_weights(specrvprobs, rvs_dict, mask, iter_indices)
-    
-    # Combine RVs for NM
-    rvsfwm_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    weights_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    for o in range(n_orders):
-        rvsfwm_single_iter[o, :] = rvs_dict["rvsfwm"][o, :, iter_indices[o]]
-        weights_single_iter[o, :] = weights[o, :, iter_indices[o]]
-    result_fwm = pcrvcalc.combine_relative_rvs(rvsfwm_single_iter, weights_single_iter, n_obs_nights)
-
-    # Add to dictionary
-    rvs_dict['rvsfwm_out'] = result_fwm[0]
-    rvs_dict['uncfwm_out'] = result_fwm[1]
-    rvs_dict['rvsfwm_nightly_out'] = result_fwm[2]
-    rvs_dict['uncfwm_nightly_out'] = result_fwm[3]
-
-    # Combine RVs for XC
-    rvsxc_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    weights_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    for o in range(n_orders):
-        rvsxc_single_iter[o, :] = rvs_dict["rvsxc"][o, :, iter_indices[o]]
-        weights_single_iter[o, :] = weights[o, :, iter_indices[o]]
-    result_xc = pcrvcalc.combine_relative_rvs(rvsxc_single_iter, weights_single_iter, n_obs_nights)
-
-    # Add to dictionary
-    rvs_dict['rvsxc_out'] = result_xc[0]
-    rvs_dict['uncxc_out'] = result_xc[1]
-    rvs_dict['rvsxc_nightly_out'] = result_xc[2]
-    rvs_dict['uncxc_nightly_out'] = result_xc[3]
-    
-    # Write to files for radvel
-    spectrograph = specrvprobs[0].spectrograph
-    try:
-        star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
-    except:
-        star_name = specrvprobs[0].target_dict['name']
-    time_tag = pcutils.gendatestr(time=False)
-    telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
-    telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')
-    
-    # FwM
-    fname = f"{path}rvsfwm_{spectrograph}_{star_name}_{time_tag}.txt"
-    good = np.where(np.isfinite(rvs_dict['rvsfwm_out']) & np.isfinite(rvs_dict['uncfwm_out']))[0]
-    t, rvs, unc, telvec = rvs_dict['bjds'][good], rvs_dict['rvsfwm_out'][good], rvs_dict['uncfwm_out'][good], telvec_single[good]
-    with open(fname, 'w+') as f:
-        f.write("time,mnvel,errvel,tel\n")
-        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
-    fname = f"{path}rvsfwm_nightly_{spectrograph}_{star_name}_{time_tag}.txt"
-    good = np.where(np.isfinite(rvs_dict['rvsfwm_nightly_out']) & np.isfinite(rvs_dict['uncfwm_nightly_out']))[0]
-    t, rvs, unc, telvec = rvs_dict['bjds_nightly'][good], rvs_dict['rvsfwm_nightly_out'][good], rvs_dict['uncfwm_nightly_out'][good], telvec_nightly[good]
-    with open(fname, 'w+') as f:
-        f.write("time,mnvel,errvel,tel\n")
-        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
-        
-    # XC
-    fname = f"{path}rvsxc_{spectrograph}_{star_name}_{time_tag}.txt"
-    good = np.where(np.isfinite(rvs_dict['rvsxc_out']) & np.isfinite(rvs_dict['uncxc_out']))[0]
-    t, rvs, unc, telvec = rvs_dict['bjds'][good], rvs_dict['rvsxc_out'][good], rvs_dict['uncxc_out'][good], telvec_single[good]
-    with open(fname, 'w+') as f:
-        f.write("time,mnvel,errvel,tel\n")
-        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
-    fname = f"{path}rvsxc_nightly_{spectrograph}_{star_name}_{time_tag}.txt"
-    good = np.where(np.isfinite(rvs_dict['rvsxc_nightly_out']) & np.isfinite(rvs_dict['uncxc_nightly_out']))[0]
-    t, rvs, unc, telvec = rvs_dict['bjds_nightly'][good], rvs_dict['rvsxc_nightly_out'][good], rvs_dict['uncxc_nightly_out'][good], telvec_nightly[good]
-    with open(fname, 'w+') as f:
-        f.write("time,mnvel,errvel,tel\n")
-        np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
 
 def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=None, templates=None):
 
@@ -378,15 +267,15 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
     n_orders = len(specrvprobs)
     do_orders = [specrvprobs[o].order_num for o in range(len(specrvprobs))]
     n_spec = specrvprobs[0].n_spec
-    n_rv_chunks = len(rvs_dict['bjds_nightly'])
+    n_rv_chunks = len(rvs_dict['bjds_binned'])
     n_iterations = specrvprobs[0].n_iterations
-    n_obs_nights = rvs_dict["n_obs_nights"]
+    indices = rvs_dict["indices"]
 
-    # Overwrite shape of nightly rvs
-    rvs_dict['rvsfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    rvs_dict['uncfwm_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    rvs_dict['rvsxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
-    rvs_dict['uncxc_nightly'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    # Overwrite shape of binned rvs
+    rvs_dict['rvsfwm_binned'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncfwm_binned'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['rvsxc_binned'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
+    rvs_dict['uncxc_binned'] = np.full((n_orders, n_rv_chunks, n_iterations), np.nan)
     
     # Mask rvs from user input
     mask = gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict)
@@ -394,7 +283,7 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
     # Parse fit metrics
     fit_metrics = parse_fit_metrics(specrvprobs)
     
-    # Re-combine nightly rvs for each order with the mask
+    # Re-combine binned rvs for each order with the mask
     for o in range(n_orders):
         for j in range(n_iterations):
 
@@ -404,11 +293,11 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
             # FwM RVs
             rvsfwm = rvs_dict['rvsfwm'][o, :, j]
             weights = mask[o, :, j] / fit_metrics[o, :, j]**2
-            rvs_dict['rvsfwm_nightly'][o, :, j], rvs_dict['uncfwm_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsfwm, weights, n_obs_nights)
+            rvs_dict['rvsfwm_binned'][o, :, j], rvs_dict['uncfwm_binned'][o, :, j] = pcrvcalc.compute_binned_rvs_single_order(rvsfwm, weights, indices)
             
             # XC RVs
             rvsxc = rvs_dict['rvsxc'][o, :, j]
-            rvs_dict['rvsxc_nightly'][o, :, j], rvs_dict['uncxc_nightly'][o, :, j] = pcrvcalc.compute_nightly_rvs_single_order(rvsxc, weights, n_obs_nights)
+            rvs_dict['rvsxc_binned'][o, :, j], rvs_dict['uncxc_binned'][o, :, j] = pcrvcalc.compute_binned_rvs_single_order(rvsxc, weights, indices)
         
     # Summary of rvs
     print_rv_summary(rvs_dict, do_orders, iter_indices)
@@ -426,13 +315,13 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
     for o in range(n_orders):
         rvsfwm_single_iter[o, :] = rvs_dict["rvsfwm"][o, :, iter_indices[o]] - pcmath.weighted_mean(rvs_dict["rvsfwm"][o, :, iter_indices[o]], weights[o, :, iter_indices[o]])
         weights_single_iter[o, :] = weights[o, :, iter_indices[o]]
-    result_fwm = pcrvcalc.combine_rvs_weighted_mean(rvsfwm_single_iter, weights_single_iter, n_obs_nights)
+    result_fwm = pcrvcalc.combine_rvs_weighted_mean(rvsfwm_single_iter, weights_single_iter, indices)
 
     # Add to dictionary
     rvs_dict['rvsfwm_out'] = result_fwm[0]
     rvs_dict['uncfwm_out'] = result_fwm[1]
-    rvs_dict['rvsfwm_nightly_out'] = result_fwm[2]
-    rvs_dict['uncfwm_nightly_out'] = result_fwm[3]
+    rvs_dict['rvsfwm_binned_out'] = result_fwm[2]
+    rvs_dict['uncfwm_binned_out'] = result_fwm[3]
 
     # Combine RVs for XC
     rvsxc_single_iter = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
@@ -440,20 +329,20 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
     for o in range(n_orders):
         rvsxc_single_iter[o, :] = rvs_dict["rvsxc"][o, :, iter_indices[o]] - pcmath.weighted_mean(rvs_dict["rvsxc"][o, :, iter_indices[o]], weights[o, :, iter_indices[o]])
         weights_single_iter[o, :] = weights[o, :, iter_indices[o]]
-    result_xc = pcrvcalc.combine_rvs_weighted_mean(rvsxc_single_iter, weights_single_iter, n_obs_nights)
+    result_xc = pcrvcalc.combine_rvs_weighted_mean(rvsxc_single_iter, weights_single_iter, indices)
 
     # Add to dictionary
     rvs_dict['rvsxc_out'] = result_xc[0]
     rvs_dict['uncxc_out'] = result_xc[1]
-    rvs_dict['rvsxc_nightly_out'] = result_xc[2]
-    rvs_dict['uncxc_nightly_out'] = result_xc[3]
+    rvs_dict['rvsxc_binned_out'] = result_xc[2]
+    rvs_dict['uncxc_binned_out'] = result_xc[3]
     
     # Write to files for radvel
     spectrograph = specrvprobs[0].spectrograph
     star_name = specrvprobs[0].spectral_model.star.star_name.replace(' ', '_')
     time_tag = pcutils.gendatestr(time=False)
     telvec_single = np.full(n_spec, spectrograph, dtype='<U20')
-    telvec_nightly = np.full(n_rv_chunks, spectrograph, dtype='<U20')
+    telvec_binned = np.full(n_rv_chunks, spectrograph, dtype='<U20')
     
     # FwM
     fname = f"{path}rvsfwm_{spectrograph}_{star_name}_{time_tag}.txt"
@@ -462,9 +351,9 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
     with open(fname, 'w+') as f:
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
-    fname = f"{path}rvsfwm_nightly_{spectrograph}_{star_name}_{time_tag}.txt"
-    good = np.where(np.isfinite(rvs_dict['rvsfwm_nightly_out']) & np.isfinite(rvs_dict['uncfwm_nightly_out']))[0]
-    t, rvs, unc, telvec = rvs_dict['bjds_nightly'][good], rvs_dict['rvsfwm_nightly_out'][good], rvs_dict['uncfwm_nightly_out'][good], telvec_nightly[good]
+    fname = f"{path}rvsfwm_binned_{spectrograph}_{star_name}_{time_tag}.txt"
+    good = np.where(np.isfinite(rvs_dict['rvsfwm_binned_out']) & np.isfinite(rvs_dict['uncfwm_binned_out']))[0]
+    t, rvs, unc, telvec = rvs_dict['bjds_binned'][good], rvs_dict['rvsfwm_binned_out'][good], rvs_dict['uncfwm_binned_out'][good], telvec_binned[good]
     with open(fname, 'w+') as f:
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
@@ -476,9 +365,9 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
     with open(fname, 'w+') as f:
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
-    fname = f"{path}rvsxc_nightly_{spectrograph}_{star_name}_{time_tag}.txt"
-    good = np.where(np.isfinite(rvs_dict['rvsxc_nightly_out']) & np.isfinite(rvs_dict['uncxc_nightly_out']))[0]
-    t, rvs, unc, telvec = rvs_dict['bjds_nightly'][good], rvs_dict['rvsxc_nightly_out'][good], rvs_dict['uncxc_nightly_out'][good], telvec_nightly[good]
+    fname = f"{path}rvsxc_binned_{spectrograph}_{star_name}_{time_tag}.txt"
+    good = np.where(np.isfinite(rvs_dict['rvsxc_binned_out']) & np.isfinite(rvs_dict['uncxc_binned_out']))[0]
+    t, rvs, unc, telvec = rvs_dict['bjds_binned'][good], rvs_dict['rvsxc_binned_out'][good], rvs_dict['uncxc_binned_out'][good], telvec_binned[good]
     with open(fname, 'w+') as f:
         f.write("time,mnvel,errvel,tel\n")
         np.savetxt(f, np.array([t, rvs, unc, telvec], dtype=object).T, fmt="%f,%f,%f,%s")
@@ -486,11 +375,11 @@ def combine_rvs_simple(path, specrvprobs, rvs_dict, bad_rvs_dict, iter_indices=N
 def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False, time_offset=2450000, figsize=(8, 4), dpi=200):
         
     # Unpack rvs
-    bjds, bjds_nightly = rvs_dict['bjds'], rvs_dict['bjds_nightly']
+    bjds, bjds_binned = rvs_dict['bjds'], rvs_dict['bjds_binned']
     if which == 'fwm':
-        rvs_single, unc_single, rvs_nightly, unc_nightly = rvs_dict['rvsfwm_out'], rvs_dict['uncfwm_out'], rvs_dict['rvsfwm_nightly_out'], rvs_dict['uncfwm_nightly_out']
+        rvs_single, unc_single, rvs_binned, unc_binned = rvs_dict['rvsfwm_out'], rvs_dict['uncfwm_out'], rvs_dict['rvsfwm_binned_out'], rvs_dict['uncfwm_binned_out']
     else:
-        rvs_single, unc_single, rvs_nightly, unc_nightly = rvs_dict['rvsxc_out'], rvs_dict['uncxc_out'], rvs_dict['rvsxc_nightly_out'], rvs_dict['uncxc_nightly_out']
+        rvs_single, unc_single, rvs_binned, unc_binned = rvs_dict['rvsxc_out'], rvs_dict['uncxc_out'], rvs_dict['rvsxc_binned_out'], rvs_dict['uncxc_binned_out']
         
     # Figure
     fig = plt.figure(figsize=figsize, dpi=dpi)
@@ -501,9 +390,9 @@ def plot_final_rvs(path, specrvprobs, rvs_dict, which="fwm", show=False, time_of
                  linewidth=0, elinewidth=1, marker='o', markersize=4, markerfacecolor=pcutils.COLORS_HEX_GADFLY[2],
                  color=pcutils.COLORS_HEX_GADFLY[2], mec='black', alpha=0.7, label="Single exposure")
 
-    # Nightly RVs
-    plt.errorbar(bjds_nightly - time_offset, rvs_nightly,
-                 yerr=unc_nightly,
+    # binned RVs
+    plt.errorbar(bjds_binned - time_offset, rvs_binned,
+                 yerr=unc_binned,
                  linewidth=0, elinewidth=2, marker='o', markersize=8, markerfacecolor=pcutils.COLORS_HEX_GADFLY[0],
                  color='black', mec='black', alpha=0.9, label="Co-added")
     
@@ -595,8 +484,8 @@ def rvprec_vs_snr(path, specrvprobs, rvs_dict, bad_rvs_dict, show=False):
     # Single exposures snr
     snrs_single = 1 / rmss
 
-    # Nightly SNR
-    snrs_nightly = compute_nightly_snrs(specrvprobs, rvs_dict)
+    # binned SNR
+    snrs_binned = compute_binned_snrs(specrvprobs, rvs_dict)
 
     # Convert to resolution elt
     ang_per_pix = np.zeros(len(specrvprobs), dtype=float)
@@ -608,10 +497,10 @@ def rvprec_vs_snr(path, specrvprobs, rvs_dict, bad_rvs_dict, show=False):
         good = np.where(np.isfinite(wave_data))[0]
         ang_per_pix[o] = (wave_data[-1] - wave_data[0]) / (good[-1] - good[0])
         snrs_single[o, :, :] = snrs_single[o, :, :] * np.sqrt(fwhms[o] / ang_per_pix[o])
-        snrs_nightly[o, :, :] = snrs_nightly[o, :, :] * np.sqrt(fwhms[o] / ang_per_pix[o])
+        snrs_binned[o, :, :] = snrs_binned[o, :, :] * np.sqrt(fwhms[o] / ang_per_pix[o])
 
     # Average over orders
-    snrs_nightly = np.nanmean(snrs_nightly[:, :, -1], axis=0)
+    snrs_binned = np.nanmean(snrs_binned[:, :, -1], axis=0)
 
     # Average over orders
     snrs_single = np.nanmean(snrs_single[:, :, -1], axis=0)
@@ -622,36 +511,36 @@ def rvprec_vs_snr(path, specrvprobs, rvs_dict, bad_rvs_dict, show=False):
     # Uncertainty of single exposure rvs
     unc_single = rvs_dict["uncfwm_out"]
 
-    # Uncertainty of nightly rvs
-    unc_nightly = rvs_dict["uncfwm_nightly_out"]
+    # Uncertainty of binned rvs
+    unc_binned = rvs_dict["uncfwm_binned_out"]
 
-    return snrs_single, unc_single, snrs_nightly, unc_nightly
+    return snrs_single, unc_single, snrs_binned, unc_binned
     
 def compute_empirical_rvprec(path, specrvprobs, rvs_dict, templates=None, iter_indices=None, inject_blaze=True):
 
     # Numbers
     n_orders = len(specrvprobs)
     n_spec = specrvprobs[0].n_spec
-    n_nights = len(rvs_dict["n_obs_nights"])
+    n_bins = len(rvs_dict["indices"])
 
     # Compute rv contents for each night
     rvcontents_theo_single_exposures = compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=inject_blaze)
     
     # Really want to compare within a night
-    rvcontents_theo = np.zeros(shape=(n_orders, n_nights), dtype=float)
-    rvcontents_emp = np.zeros(shape=(n_orders, n_nights), dtype=float)
+    rvcontents_theo = np.zeros(shape=(n_orders, n_bins), dtype=float)
+    rvcontents_emp = np.zeros(shape=(n_orders, n_bins), dtype=float)
 
     # Extract the desired iteration
     for o in range(n_orders):
-        for i, f, l in pcutils.nightly_iteration(rvs_dict['n_obs_nights']):
-            v = np.nansum(1 / rvcontents_theo_single_exposures[o, f:l, iter_indices[o]]**2)**-0.5
+        for i, f, l in pcutils.binned_iteration(rvs_dict['indices']):
+            v = np.nansum(1 / rvcontents_theo_single_exposures[o, f:l+1, iter_indices[o]]**2)**-0.5
             if np.isfinite(v):
                 rvcontents_theo[o, i] = v
             else:
                 rvcontents_theo[o, i] = np.nan
 
             # Empirical are just the per-order error bars, co-added across exposures
-            rvcontents_emp[o, i] = rvs_dict["uncfwm_nightly"][o, i, iter_indices[o]]
+            rvcontents_emp[o, i] = rvs_dict["uncfwm_binned"][o, i, iter_indices[o]]
 
     # Average theoretical and empirical across nights
     rvcontents_theo = np.nanmean(rvcontents_theo, axis=1)
@@ -687,13 +576,6 @@ def compute_empirical_rvprec(path, specrvprobs, rvs_dict, templates=None, iter_i
 ###############
 #### MISC. ####
 ###############
-
-def spec_indices_from_night(night_index, n_obs_night):
-    if night_index == 0:
-        return np.arange(n_obs_night[0]).astype(int)
-    else:
-        s = np.cumsum(n_obs_night)[night_index - 1]
-        return np.arange(s, s + n_obs_night[night_index]).astype(int)
      
 def gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict):
     
@@ -701,7 +583,7 @@ def gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict):
     n_orders = len(specrvprobs)
     n_spec = specrvprobs[0].n_spec
     n_iterations = specrvprobs[0].n_iterations
-    n_obs_nights = rvs_dict["n_obs_nights"]
+    indices = rvs_dict["indices"]
     
     # Initialize a mask
     mask = np.ones(shape=(n_orders, n_spec, n_iterations), dtype=float)
@@ -709,7 +591,7 @@ def gen_rv_mask(specrvprobs, rvs_dict, bad_rvs_dict):
     # Mask all spectra for a given night
     if 'bad_nights' in bad_rvs_dict:
         for inight in bad_rvs_dict['bad_nights']:
-            inds = spec_indices_from_night(inight, n_obs_nights)
+            inds = np.arange(indices[inight][0], indices[inight][1]+1).astype(int)
             mask[:, inds, :] = 0
             rvs_dict['rvsfwm'][:, inds, :] = np.nan
             rvs_dict['rvsxc'][:, inds, :] = np.nan
@@ -756,7 +638,7 @@ def compute_rv_contents(specrvprobs, rvs_dict, inject_blaze=False):
     # Numbers
     n_orders = len(specrvprobs)
     n_spec = specrvprobs[0].n_spec
-    n_nights = len(rvs_dict["n_obs_nights"])
+    n_bins = len(rvs_dict["indices"])
     n_iterations = specrvprobs[0].n_iterations
 
     # The RV contents, for each iteration (lower is "better")
@@ -834,7 +716,7 @@ def compute_rv_content(specrvprob, rvs_dict, inject_blaze=False):
 
     # Numbers
     n_spec = specrvprobs[0].n_spec
-    n_nights = len(rvs_dict["n_obs_nights"])
+    n_bins = len(rvs_dict["indices"])
     n_iterations = specrvprobs[0].n_iterations
 
     # The RV contents, for each iteration (lower is "better")
@@ -907,26 +789,27 @@ def compute_rv_content(specrvprob, rvs_dict, inject_blaze=False):
 
 
 
-def compute_nightly_snrs(specrvprobs, rvs_dict):
+def compute_binned_snrs(specrvprobs, rvs_dict):
     
     # Numbers
     n_orders = len(specrvprobs)
     n_spec = specrvprobs[0].n_spec
-    n_nights = len(rvs_dict["n_obs_nights"])
+    n_bins = len(rvs_dict["indices"])
     n_iterations = specrvprobs[0].n_iterations
-    n_obs_nights = rvs_dict["n_obs_nights"]
+    indices = rvs_dict["indices"]
 
     # Parse the rms
     rms = parse_fit_metrics(specrvprobs)
-    nightly_snrs = np.zeros((n_orders, n_nights, n_iterations))
+    binned_snrs = np.zeros((n_orders, n_bins, n_iterations))
 
     # Loop over orders, iterations, and observations
     for o in range(n_orders):
-        for i, f, l in pcutils.nightly_iteration(n_obs_nights):
+        for i in range(n_bins):
+            f, l = indices[i]
             for j in range(n_iterations):
-                nightly_snrs[o, i, j] = np.nansum((1 / rms[o, f:l, j])**2)**0.5
+                binned_snrs[o, i, j] = np.nansum((1 / rms[o, f:l+1, j])**2)**0.5
                 
-    return nightly_snrs
+    return binned_snrs
 
 def print_rv_summary(rvs_dict, do_orders, iter_indices):
     
@@ -936,8 +819,8 @@ def print_rv_summary(rvs_dict, do_orders, iter_indices):
     for o in range(n_orders):
         print(f"Order {do_orders[o]}")
         for k in range(n_iterations):
-            stddev = np.nanstd(rvs_dict['rvsfwm_nightly'][o, :, k])
-            stddevxc = np.nanstd(rvs_dict['rvsxc_nightly'][o, :, k])
+            stddev = np.nanstd(rvs_dict['rvsfwm_binned'][o, :, k])
+            stddevxc = np.nanstd(rvs_dict['rvsxc_binned'][o, :, k])
                 
             if k == iter_indices[o]:
                 print(f" ** Iteration {k + 1} [FwM]: {round(stddev, 4)} m/s")

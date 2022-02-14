@@ -93,7 +93,7 @@ class IterativeSpectralForwardModel:
                  fringing=None,
                  order_num=None,
                  n_iterations=10,
-                 model_resolution=8,
+                 oversample=8,
                  crop_pix=[200, 200]):
         """Initiate an iterative spectral forward model object.
 
@@ -107,7 +107,7 @@ class IterativeSpectralForwardModel:
             fringing (FPCavityFringing, optional): The fringing model. Defaults to None.
             order_num (int): The order number.
             n_iterations (int, optional): The number of iterations, or number of times to augment the template(s). Defaults to 10.
-            model_resolution (int, optional): The oversample factor of the model relative to the data, which is important for proper convolution. Defaults to 8.
+            oversample (int, optional): The oversample factor of the model relative to the data, which is important for proper convolution. Defaults to 8.
             crop_pix (list, optional): How many pixels to crop on the left and right of the observation when ordered accordibg to wavelength. Defaults to [200, 200].
         """
         
@@ -115,7 +115,7 @@ class IterativeSpectralForwardModel:
         self.order_num = order_num
         
         # Model resolution
-        self.model_resolution = model_resolution
+        self.oversample = oversample
         
         # Number of iterations
         self.n_iterations = n_iterations
@@ -139,7 +139,7 @@ class IterativeSpectralForwardModel:
         if good.size == 0:
             raise ValueError(f"{data[0]} contains no good data")
         self.srange = SpectralRange(pixmin=good[0], pixmax=good[-1], wavemin=data_wave_grid[good[0]], wavemax=data_wave_grid[good[-1]])
-        self.model_dl = (1 / self.srange.pix_per_wave()) / self.model_resolution
+        self.model_dl = (1 / self.srange.pix_per_wave()) / self.oversample
         self.model_wave = np.arange(self.srange.wavemin, self.srange.wavemax, self.model_dl)
         self.templates_dict = {}
         if self.star is not None:
@@ -282,7 +282,23 @@ class IterativeSpectralForwardModel:
             for pname in self.gas_cell.par_names:
                 s += f"  {pars[pname]}\n"
         return s
-    
+
+    def __repr__(self):
+        s = f"Spectral Forward Model, {round(self.srange.wavemin, 1)} - {round(self.srange.wavemax, 1)} Å, oversample = {self.oversample}, \n"
+        if self.wls is not None:
+            s += f"  {self.wls}\n"
+        if self.continuum is not None:
+            s += f"  {self.continuum}\n"
+        if self.lsf is not None:
+            s += f"  {self.lsf}\n"
+        if self.star is not None:
+            s += f"  {self.star}\n"
+        if self.tellurics is not None:
+            s += f"  {self.tellurics}\n"
+        if self.gas_cell is not None:
+            s += f"  {self.gas_cell}\n"
+        s = s[0:-1]
+        return s
 
 ###################################
 #### SPECTRAL MODEL COMPONENTS ####

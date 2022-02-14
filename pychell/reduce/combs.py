@@ -193,7 +193,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
             wls_cal_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_cal_calfiber[:, order_index, i], f0, df, poly_order)
 
         # Loop over science spectra and compute wls for cal fiber
-        if times_sci is not None:
+        if times_sci is not None and mode != "static":
             for i in range(n_sci_spec):
                 print(f"Computing cal fiber wls for order {order_index+1} science spectrum {i+1}")
                 try:
@@ -209,7 +209,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
                     k_cal_nearest = np.nanargmin(np.abs(times_sci[i] - times_lfc_cal))
                     wls_sci_scifiber[:, order_index, i] = np.copy(wls_cal_scifiber[:, order_index, k_cal_nearest])
                 elif mode == "static":
-                    wls_sci_scifiber[:, order_index, i] = np.copy(wls_sci_scifiber[:, order_index, static_index])
+                    wls_sci_scifiber[:, order_index, i] = np.copy(wls_cal_scifiber[:, order_index, 0])
                 elif mode == "adopt_cal":
                     wls_sci_scifiber[:, order_index, i] = np.copy(wls_sci_calfiber[:, order_index, i])
                 else:

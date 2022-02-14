@@ -7,6 +7,7 @@ import numpy as np
 
 # Astropy
 from astropy.io import fits
+from astropy.coordinates import EarthLocation
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as units
@@ -22,15 +23,12 @@ import pychell.maths as pcmath
 #### Name and Site ####
 #######################
 
-spectrograph = 'MINERVA'
 observatory = {
-    'name': 'Whipple',
-    'lat': 31.6884,
-    'lon': -110.8854,
-    'alt': np.nan,
+    "name": "Whipple",
+    "site": EarthLocation.of_site("Whipple")
 }
 
-utc_offset = -7
+echelle_orders = [94, 122]
 
 
 ######################
@@ -67,7 +65,7 @@ def parse_spec1d(data):
     fits_data = fits.open(data.input_file)[0]
     fits_data.verify('fix')
     data.header = fits_data.header
-    oi = data.order_num - 1
+    oi = (echelle_orders[1] - echelle_orders[0]) - (data.order_num - echelle_orders[0])
     data.wave, data.flux, data.flux_unc, data.mask = fits_data.data[oi, :, 0].astype(np.float64), fits_data.data[oi, :, 1].astype(np.float64), fits_data.data[oi, :, 2].astype(np.float64), fits_data.data[oi, :, 3].astype(np.float64)
 
 def parse_telescope(data):
@@ -121,4 +119,4 @@ def estimate_wls(data):
 
 rv_zero_point = -2410.0
 
-lsf_width = [0.014, 0.021, 0.027]
+lsf_width = [0.021, 0.0235, 0.026]

@@ -5,14 +5,15 @@ import sys
 import copy
 import glob
 
-# Astropy fits object
+# Astropy
 from astropy.io import fits
-
-# Maths
-import numpy as np
+from astropy.coordinates import EarthLocation
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as units
+
+# Maths
+import numpy as np
 import sklearn.cluster
 
 # Barycorrpy
@@ -30,12 +31,8 @@ import pychell.maths as pcmath
 
 observatory = {
     'name': 'La Silla Observatory',
-    'lat': None,
-    'lon': None,
-    'alt': None
+    'site': EarthLocation.of_site('La Silla Observatory')
 }
-
-utc_offset = -3
 
 ######################
 #### DATA PARSING ####
@@ -53,23 +50,23 @@ def parse_exposure_start_time(data):
     data.time_obs_start = Time(float(data.header['MJD-OBS']) + 2400000.5, scale='utc', format='jd')
     return data.time_obs_start
 
-def parse_spec1d(data):
+# def parse_spec1d(data):
     
-    # Load the flux, flux unc, and bad pix arrays
-    fits_data = fits.open(data.input_file)
-    fits_data.verify('fix')
-    data.header = fits_data[0].header
-    oi = data.order_num - 1
-    data.wave = fits_data[1].data.WAVE.flatten().astype(float)
-    data.flux = fits_data[1].data.FLUX.flatten().astype(float)
-    #data.flux_unc = fits_data[1].data.ERR.flatten().astype(float)
-    data.flux_unc = np.full(len(data.wave), 1E-3)
-    data.mask = np.ones(len(data.wave))
-    good = np.where(data.wave > 4500)[0]
-    data.wave = data.wave[good]
-    data.flux = data.flux[good]
-    data.flux_unc = data.flux_unc[good]
-    data.mask = data.mask[good]
+#     # Load the flux, flux unc, and bad pix arrays
+#     fits_data = fits.open(data.input_file)
+#     fits_data.verify('fix')
+#     data.header = fits_data[0].header
+#     oi = data.order_num - 1
+#     data.wave = fits_data[1].data.WAVE.flatten().astype(float)
+#     data.flux = fits_data[1].data.FLUX.flatten().astype(float)
+#     #data.flux_unc = fits_data[1].data.ERR.flatten().astype(float)
+#     data.flux_unc = np.full(len(data.wave), 1E-3)
+#     data.mask = np.ones(len(data.wave))
+#     good = np.where(data.wave > 4500)[0]
+#     data.wave = data.wave[good]
+#     data.flux = data.flux[good]
+#     data.flux_unc = data.flux_unc[good]
+#     data.mask = data.mask[good]
 
 #ECHELLE_ORDERS = [212, 240]
 

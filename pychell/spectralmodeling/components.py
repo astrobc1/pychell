@@ -198,6 +198,10 @@ class PolyContinuum(Continuum):
         
         return poly_cont
 
+
+    def __repr__(self):
+        return f"Polynomial continuum: poly_order = {self.poly_order}"
+
 class SplineContinuum(Continuum):
     """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
     """
@@ -258,6 +262,9 @@ class SplineContinuum(Continuum):
     
     def initialize(self, spectral_model, iter_index=None):
         self.spline_wave_set_points = np.linspace(spectral_model.srange.wavemin, spectral_model.srange.wavemax, num=self.n_splines + 1)
+
+    def __repr__(self):
+        return f"Cubic spline continuum: n_splines = {self.n_splines}"
 
 class PChipContinuum(Continuum):
     """  Blaze transmission model through a polynomial and/or splines, ideally used after a flat field correction or after remove_continuum but not required.
@@ -396,6 +403,9 @@ class DynamicGasCell(GasCell):
         flux = flux ** pars[self.par_names[1]].value
         return pcmath.cspline_interp(wave, flux, wave_final)
 
+    def __repr__(self):
+        return f"Dynamic gas cell: {self.input_file}"
+
 class StaticGasCell(GasCell):
     """A static gas cell model (no modifications).
     """
@@ -407,6 +417,9 @@ class StaticGasCell(GasCell):
     def build(self, pars, template, wave_final):
         wave, flux = template[:, 0], template[:, 1]
         return pcmath.cspline_interp(wave, flux, wave_final)
+
+    def __repr__(self):
+        return f"Static gas cell {self.input_file}"
 
 
 #####################
@@ -539,6 +552,12 @@ class AugmentedStar(Star):
         #     spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
 
 
+    def __repr__(self):
+        if self.from_flat:
+            return f"Augmented star: (from flat)"
+        else:
+            return f"Augmented star: {self.input_file}"
+
 #########################
 #### TELLURIC MODELS ####
 #########################
@@ -558,12 +577,12 @@ class TelluricsTAPAS(Tellurics):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
 
-    def __init__(self, input_path, location_tag, feature_depth=0.02, vel=[-300, 50, 300], water_depth=[0.05, 1.1, 5.0], airmass_depth=[0.8, 1.1, 3.0], mask=False):
+    def __init__(self, input_path, site_tag, feature_depth=0.02, vel=[-300, 50, 300], water_depth=[0.05, 1.1, 5.0], airmass_depth=[0.8, 1.1, 3.0], mask=False):
         """Initiate a TAPAS telluric model.
 
         Args:
             input_path (str): The full path to the directory containing the six speciesn files.
-            location_tag (str): The location tag present in the filename for each species.
+            site_tag (str): The location tag present in the filename for each species.
             feature_depth (float, optional): If a set of templates (water, everything else) has a dynamic range of less than feature_depth, that set is ignored. Defaults to 0.02 (2 percent).
             vel (list, optional): The lower bound, starting value, and upper bound for the telluric shift in m/s. Defaults to [-300, 50, 300].
             water_depth (list, optional): The lower bound, starting value, and upper bound for the water depth. Defaults to [0.05, 1.1, 5.0].
@@ -572,7 +591,7 @@ class TelluricsTAPAS(Tellurics):
         """
         super().__init__()
         self.input_path = input_path
-        self.location_tag = location_tag
+        self.site_tag = site_tag
         self.vel = vel
         self.water_depth = water_depth
         self.airmass_depth = airmass_depth
@@ -582,7 +601,7 @@ class TelluricsTAPAS(Tellurics):
         self.mask = mask
         
         # Input files
-        self.species_input_files = {species: f"{self.input_path}telluric_{species}_tapas_{self.location_tag}.npz" for species in self.species}
+        self.species_input_files = {species: f"{self.input_path}telluric_{species}_tapas_{self.site_tag}.npz" for species in self.species}
 
     def init_parameters(self, data):
         
@@ -684,6 +703,9 @@ class TelluricsTAPAS(Tellurics):
         return mask
 
 
+    def __repr__(self):
+        return f"Static TAPAS tellurics for {self.site_tag}"
+
 ####################
 #### LSF MODELS ####
 ####################
@@ -780,6 +802,10 @@ class HermiteLSF(LSF):
             lsf += pars[self.par_names[i+1]].value * herm[:, i+1]
         lsf /= np.nansum(lsf)
         return lsf
+
+
+    def __repr__(self):
+        return f"Hermite Gaussian LSF: order = {self.hermdeg}"
 
 class StaticLSFWidth(LSF):
     """A model for a perect LSF (known a priori).
@@ -897,6 +923,10 @@ class PolyWls(WavelengthSolution):
         self.nx = len(wls_estimate)
         self.poly_wave_lagrange_zero_points = wls_estimate[self.poly_pixel_lagrange_points]
 
+    def __repr__(self):
+        return f"Polynomial wavelength solution: poly_order = {self.poly_order}"
+
+
 class SplineWls(WavelengthSolution):
     """A cubic spline wavelength solution model.
     """
@@ -962,6 +992,10 @@ class SplineWls(WavelengthSolution):
         wls_estimate = spectral_model.data.spec_module.estimate_wls(spectral_model.data)
         self.nx = len(wls_estimate)
         self.spline_wave_lagrange_zero_points = wls_estimate[self.spline_pixel_lagrange_points]
+
+    def __repr__(self):
+        return f"Cubic spline wavelength solution: n_splines = {self.n_splines}"
+
 
 class PChipWls(WavelengthSolution):
     """A cubic spline wavelength solution model.
@@ -1117,6 +1151,8 @@ class StaticWls(WavelengthSolution):
     def initialize(self, spectral_model, iter_index=None):
         self.data = spectral_model.data
 
+    def __repr__(self):
+        return "Static wavelength solution"
 
 ######################
 #### MISC. MODELS ####

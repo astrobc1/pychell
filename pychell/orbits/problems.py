@@ -379,7 +379,7 @@ class RVProblem(OptProblem):
 
                     fig.add_trace(plotly.graph_objects.Scatter(x=t_gp_hr - time_offset, y=gps_hr[label],
                                                               line=dict(width=0.8, color=color_line),
-                                                              name=label, showlegend=False),
+                                                              name=f"<b>{label}<b/>", showlegend=False),
                                   row=1, col=1)
                 
                     # Plot the gp unc
@@ -389,7 +389,7 @@ class RVProblem(OptProblem):
                                                                fill='toself',
                                                                line=dict(width=1, color=color_line),
                                                                fillcolor=color_fill,
-                                                               name=label, showlegend=True),
+                                                               name=f"<b>{label}<b/>", showlegend=True),
                                   row=1, col=1)
                 
                 noise_components = like.compute_noise_components(pars, like.datax)

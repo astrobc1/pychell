@@ -6,14 +6,15 @@ import copy
 import glob
 import pickle
 
-# Astropy fits object
+# Astropy
 from astropy.io import fits
-
-# Maths
-import numpy as np
+from astropy.coordinates import EarthLocation
 from astropy.coordinates import SkyCoord
 from astropy.time import Time
 import astropy.units as units
+
+# Maths
+import numpy as np
 import sklearn.cluster
 
 # Barycorrpy
@@ -31,13 +32,26 @@ from pychell.reduce.recipes import ReduceRecipe
 ##############
 
 observatory = {
-    'name': 'IRTF',
-    'lat': 19.826218316666665,
-    'lon': -155.4719987888889,
-    'alt': 4168.066848
+    "name": "irtf",
+    "site" : EarthLocation.of_site("irtf"),
 }
 
-utc_offset = -10
+########################
+#### ECHELLE ORDERS ####
+########################
+
+echelle_orders = [215, 239]
+#echelle_orders = [212, 240]
+
+
+##########################
+#### PRIMARY DETECTOR ####
+##########################
+
+# List of detectors.
+read_noise = 8.0
+dark_current = 0.05
+gain = 1.8
 
 ######################
 #### DATA PARSING ####
@@ -258,7 +272,7 @@ def parse_spec1d(data):
         fits_data = fits.open(data.input_file)[0]
         fits_data.verify('fix')
         data.header = fits_data.header
-        oi = data.order_num - 1
+        oi = data.order_num - echelle_orders[0]
         data.flux, data.flux_unc, data.mask = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
 
         # Flip the data so wavelength is increasing for iSHELL data
@@ -271,8 +285,6 @@ def parse_spec1d(data):
 
 def parse_fiber_nums(data):
     return None
-
-ECHELLE_ORDERS = [212, 240]
 
 
 
@@ -289,10 +301,10 @@ def compute_barycenter_corrections(data, star_name):
     jdmid = compute_exposure_midpoint(data)
     
     # BJD
-    bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname="irtf", leap_update=True)[0][0]
     
     # bc vel
-    bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
+    bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname="irtf", leap_update=True)[0][0]
     
     # Add to data
     data.bjd = bjd
@@ -309,9 +321,7 @@ def compute_exposure_midpoint(data):
 #########################
 
 def estimate_wls(data):
-    oi = data.order_num - 1
-    waves = np.array([quad_set_point_1[oi], quad_set_point_2[oi], quad_set_point_3[oi]])
-    pcoeffs = pcmath.poly_coeffs(quad_pixel_set_points, waves)
+    pcoeffs = pcmath.poly_coeffs(wls_pixel_lagrange_points, wls_wave_lagrange_points[data.order_num])
     wls = np.polyval(pcoeffs, np.arange(data.flux.size))
     return wls
 
@@ -319,11 +329,6 @@ def estimate_wls(data):
 ################################
 #### REDUCTION / EXTRACTION ####
 ################################
-
-# List of detectors.
-read_noise = 8.0
-dark_current = 0.05
-gain = 1.8
 
 class iSHELLReduceRecipe(ReduceRecipe):
 
@@ -399,15 +404,37 @@ lsf_width = [0.08, 0.11, 0.15]
 # RV Zero point for stellar template (don't yet know why this is needed - what are simbad absolute rvs relative to?)
 rv_zero_point = -6817.0
 
-
 # Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
-quad_pixel_set_points = [199, 1023.5, 1847]
+wls_pixel_lagrange_points = [199, 1023.5, 1847]
 
-# Left most set point for the quadratic wavelength solution
-quad_set_point_1 = [24545.57561435, 24431.48444449, 24318.40830764, 24206.35776048, 24095.33986576, 23985.37381209, 23876.43046386, 23768.48974584, 23661.54443537, 23555.56359209, 23450.55136357, 23346.4923953, 23243.38904298, 23141.19183839, 23039.90272625, 22939.50127095, 22840.00907242, 22741.40344225, 22643.6481698, 22546.74892171, 22450.70934177, 22355.49187891, 22261.08953053, 22167.42305394, 22074.72848136, 21982.75611957, 21891.49178289, 21801.07332421, 21711.43496504]
-
-# Middle set point for the quadratic wavelength solution
-quad_set_point_2 = [24628.37672608, 24513.79686837, 24400.32734124, 24287.85495107, 24176.4424356, 24066.07880622, 23956.7243081, 23848.39610577, 23741.05658955, 23634.68688897, 23529.29771645, 23424.86836784, 23321.379387, 23218.80573474, 23117.1876433, 23016.4487031, 22916.61245655, 22817.65768889, 22719.56466802, 22622.34315996, 22525.96723597, 22430.41612825, 22335.71472399, 22241.83394135, 22148.73680381, 22056.42903627, 21964.91093944, 21874.20764171, 21784.20091295]
-
-# Right most set point for the quadratic wavelength solution
-quad_set_point_3 = [24705.72472863, 24590.91231465, 24476.99298677, 24364.12010878, 24252.31443701, 24141.55527091, 24031.82506843, 23923.12291214, 23815.40789995, 23708.70106907, 23602.95596074, 23498.18607941, 23394.35163611, 23291.44815827, 23189.49231662, 23088.42080084, 22988.26540094, 22888.97654584, 22790.57559244, 22693.02942496, 22596.33915038, 22500.49456757, 22405.49547495, 22311.25574559, 22217.91297633, 22125.33774808, 22033.50356525, 21942.41058186, 21852.24253555]
+wls_wave_lagrange_points = {
+    212: [24545.57561435, 24628.37672608, 24705.72472863],
+    213: [24431.48444449, 24513.79686837, 24590.91231465],
+    214: [24318.40830764, 24400.32734124, 24476.99298677],
+    215: [24206.35776048, 24287.85495107, 24364.12010878],
+    216: [24095.33986576, 24176.4424356, 24252.31443701],
+    217: [23985.37381209, 24066.07880622, 24141.55527091],
+    218: [23876.43046386, 23956.7243081, 24031.82506843],
+    219: [23768.48974584, 23848.39610577, 23923.12291214],
+    220: [23661.54443537, 23741.05658955, 23815.40789995],
+    221: [23555.56359209, 23634.68688897, 23708.70106907],
+    222: [23450.55136357, 23529.29771645, 23602.95596074],
+    223: [23346.4923953, 23424.86836784, 23498.18607941],
+    224: [23243.38904298, 23321.379387, 23394.35163611],
+    225: [23141.19183839, 23218.80573474, 23291.44815827],
+    226: [23039.90272625, 23117.1876433, 23189.49231662],
+    227: [22939.50127095, 23016.4487031, 23088.42080084],
+    228: [22840.00907242, 22916.61245655, 22988.26540094],
+    229: [22741.40344225, 22817.65768889, 22888.97654584],
+    230: [22643.6481698, 22719.56466802, 22790.57559244],
+    231: [22546.74892171, 22622.34315996, 22693.02942496],
+    232: [22450.70934177, 22525.96723597, 22596.33915038],
+    233: [22355.49187891, 22430.41612825, 22500.49456757],
+    234: [22261.08953053, 22335.71472399, 22405.49547495],
+    235: [22167.42305394, 22241.83394135, 22311.25574559],
+    236: [22074.72848136, 22148.73680381, 22217.91297633],
+    237: [21982.75611957, 22056.42903627, 22125.33774808],
+    238: [21891.49178289, 21964.91093944, 22033.50356525],
+    239: [21801.07332421, 21874.20764171, 21942.41058186],
+    240: [21711.43496504, 21784.20091295, 21852.24253555]
+}

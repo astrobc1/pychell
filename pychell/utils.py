@@ -155,25 +155,6 @@ def module_from_file(fname):
     spec.loader.exec_module(module)
     return module
 
-def nightly_iteration(n_obs_nights):
-    """A generator for iterating over observations within a given night.
-
-    Args:
-        n_obs_nights (np.ndarray): The number of observations on each night.
-
-    Yields:
-        int: The night index.
-        int: The index of the first observation for this night.
-        int: The index of the last observation for this night + 1. The additional + 1 is so one can index the array via array[f:l].
-    """
-    n_nights = len(n_obs_nights)
-    f, l = 0, n_obs_nights[0]
-    for i in range(n_nights):
-        yield i, f, l
-        if i < n_nights - 1:
-            f += n_obs_nights[i]
-            l += n_obs_nights[i+1]
-
 def list_diff(l1, l2):
     return [i for i in l1 + l2 if i not in l1 or i not in l2]
 
@@ -185,9 +166,6 @@ def get_stellar_rv(star_name):
 
 def get_spec_module(spectrograph):
     return importlib.import_module(f"pychell.data.{spectrograph.lower()}")
-
-def get_utc_offset(spectrograph):
-    return get_spec_module(spectrograph).utc_offset
 
 
 def flatten_jagged_list(x):
@@ -203,11 +181,12 @@ def modify_and_import_module(module_name, modification_func):
     module = importlib.import_module(module_name)
     if modification_func is not None:
         modification_func(module)
-    # spec = importlib.util.find_spec(module_name)
-    # source = spec.loader.get_source(module_name)
-    # new_source = modification_func(source)
-    # module = importlib.util.module_from_spec(spec)
-    # codeobj = compile(new_source, module.__spec__.origin, 'exec')
-    # exec(codeobj, module.__dict__)
-    # sys.modules[module_name] = module
     return module
+
+def get_utc_offset(site=None, lon=None):
+    if site is not None:
+        return int(site.lon.value / 15)
+    else:
+        return int(lon.value / 15)
+    
+
