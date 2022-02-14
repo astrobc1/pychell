@@ -29,6 +29,7 @@ from pychell.reduce.recipes import ReduceRecipe
 #### NAME AND SITE ####
 #######################
 
+spectrograph = "PARVI"
 observatory = {
     "name" : "Palomar",
     "site" : EarthLocation.of_site("Palomar")

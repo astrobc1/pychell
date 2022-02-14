@@ -161,6 +161,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
     # Numbers
     nx, n_orders = wave_estimate_scifiber.shape
     xarr = np.arange(nx).astype(float)
+    #breakpoint()
     if do_orders is None:
         do_orders = np.arange(1, n_orders + 1).astype(int).tolist()
 
@@ -199,7 +200,7 @@ def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wa
                 try:
                     wls_sci_calfiber[:, order_index, i] = compute_wls(wave_estimate_calfiber[:, order_index], lfc_sci_calfiber[:, order_index, i], f0, df, poly_order)
                 except:
-                    pass
+                    print(f"Failed to compute the wls for order {do_orders[o]}")
 
         # Loop over science observations, computer wls for science fiber
         if times_sci is not None:
