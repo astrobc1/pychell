@@ -12,7 +12,7 @@ import scipy.constants as cs
 from astropy.io import fits
 from astropy.coordinates import EarthLocation
 from astropy.coordinates import SkyCoord
-from astropy.time import Time
+from astropy.time import Time, TimeDelta
 import astropy.units as units
 
 # Barycorrpy
