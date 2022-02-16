@@ -772,6 +772,44 @@ def cross_correlate(x1, y1, x2, y2, lags, kind="rms"):
 
     return corrfun
 
+
+def cross_correlate_doppler(x1, y1, x2, y2, vels, kind="rms"):
+    """Cross-correlation in "pixel" space.
+
+    Args:
+        y1 (np.ndarray): The array to cross-correlate.
+        y2 (np.ndarray): The array to cross-correlate against.
+        lags (np.ndarray): An array of lags (shifts), must be integers.
+        kind (str): Which kind of XC to perform. "rms" computes the rms loss at each lag. Otherwise a standard XC is performed. Note this implies the ccf is flipped for "rms"
+
+    Returns:
+        np.ndarray: The cross-correlation function
+    """
+    # Shifts y2 and compares it to y1
+    n1 = y1.size
+    n2 = y2.size
+  
+    nvels = vels.size
+    
+    corrfun = np.zeros(nvels, dtype=float)
+    corrfun[:] = np.nan
+    for i in range(nvels):
+        y2_shifted = np.interp(x1, doppler_shift_wave(x2, vels[i]), y2, left=np.nan, right=np.nan)
+        good = np.where(np.isfinite(y2_shifted) & np.isfinite(y1))[0]
+        if good.size < 3:
+            continue
+        vec_cross = y1 * y2_shifted
+        weights = np.ones(n1, dtype=np.float64)
+        bad = np.where(~np.isfinite(vec_cross))[0]
+        if bad.size > 0:
+            weights[bad] = 0
+        if kind.lower() == "rms":
+            corrfun[i] = rmsloss(y1, y2_shifted, weights=weights)
+        else:
+            corrfun[i] = np.nansum(vec_cross * weights) / np.nansum(weights)
+
+    return corrfun
+
 def intersection(x, y, yval, precision=1):
     """Computes the intersection (x value) of signal y with yval.
 

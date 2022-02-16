@@ -470,8 +470,7 @@ class AugmentedStar(Star):
             else:
                 rv_absolute = self.rv_abs
             spec_module = data[0].spec_module
-            rv_zero_point = spec_module.rv_zero_point
-            v = rv_absolute + rv_zero_point
+            v = rv_absolute
         else:
             v = 100
         pars[self.par_names[0]] = BoundedParameter(value=v, vary=True,
@@ -525,8 +524,7 @@ class AugmentedStar(Star):
             else:
                 rv_absolute = self.rv_abs
             spec_module = spectral_model.data.spec_module
-            rv_zero_point = spec_module.rv_zero_point
-            v = rv_absolute + rv_zero_point - spectral_model.data.bc_vel + 100
+            v = rv_absolute - spectral_model.data.bc_vel + 100
             spectral_model.p0[self.par_names[0]].value = v
             spectral_model.p0[self.par_names[0]].lower_bound = v - self.vel_bounds[0]
             spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]
@@ -545,8 +543,7 @@ class AugmentedStar(Star):
         #     else:
         #         rv_absolute = self.rv_abs
         #     spec_module = spectral_model.data.spec_module
-        #     rv_zero_point = spec_module.rv_zero_point
-        #     v = rv_absolute + rv_zero_point - spectral_model.data.bc_vel
+        #     v = rv_absolute - spectral_model.data.bc_vel
         #     spectral_model.p0[self.par_names[0]].value = v
         #     spectral_model.p0[self.par_names[0]].lower_bound = v + self.vel_bounds[0]
         #     spectral_model.p0[self.par_names[0]].upper_bound = v + self.vel_bounds[1]

@@ -401,9 +401,6 @@ gas_cell_file = "methane_gas_cell_ishell_kgas.npz"
 # LSF width
 lsf_width = [0.08, 0.11, 0.15]
 
-# RV Zero point for stellar template (don't yet know why this is needed - what are simbad absolute rvs relative to?)
-rv_zero_point = -6817.0
-
 # Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
 wls_pixel_lagrange_points = [199, 1023.5, 1847]
 

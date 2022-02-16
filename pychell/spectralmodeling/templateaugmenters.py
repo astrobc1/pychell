@@ -458,7 +458,6 @@ class WeightedMean(TemplateAugmenter):
                     residuals_mean[ix] = pcmath.weighted_mean(rr, ww)
 
         # Change any nans to zero just in case
-        #breakpoint()
         bad = np.where(~np.isfinite(residuals_mean))[0]
         if bad.size > 0:
             residuals_mean[bad] = 0
@@ -473,7 +472,6 @@ class WeightedMean(TemplateAugmenter):
                 new_flux[bad] = self.max_thresh
     
         # Update the template
-        #breakpoint() #; import matplotlib; matplotlib.use("MacOSX"); plt.plot(residuals); plt.show()
         specrvprob.spectral_model.templates_dict['star'][:, 1] = new_flux
 
 ################################
