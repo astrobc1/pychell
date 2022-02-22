@@ -40,8 +40,8 @@ observatory = {
 #### ECHELLE ORDERS ####
 ########################
 
-echelle_orders = [215, 239]
-#echelle_orders = [212, 240]
+#echelle_orders = [215, 239]
+echelle_orders = [212, 240]
 
 
 ##########################
