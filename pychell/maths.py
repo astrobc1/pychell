@@ -196,7 +196,7 @@ def doppler_shift_wave(wave, vel):
     wave_shifted = doppler_shift_SR(wave, vel)
     return wave_shifted
 
-def doppler_shift_flux(wave, flux, vel, wave_out=None):
+def doppler_shift_flux(wave, flux, vel):
     """Doppler shifts a signal according to the standard SR Doppler formula (radial only) or a differential version of the classical Doppler equation.
 
     Args:
@@ -212,14 +212,10 @@ def doppler_shift_flux(wave, flux, vel, wave_out=None):
     wave_shifted = doppler_shift_wave(wave, vel)
 
     # Interpolate the flux
-    if wave_out is None:
-        wave_out = wave_shifted
-        flux_out = flux
-    else:
-        flux_out = cspline_interp(wave_shifted, flux, wave_out)
+    flux_out = cspline_interp(wave_shifted, flux, wave)
 
     # Return
-    return wave_out, flux_out
+    return flux_out
     
 def lin_interp(x, y, xnew):
     """Alias for np.interp with np.nan as left and right values.
@@ -421,64 +417,73 @@ def median_filter2d(x, width, preserve_nans=True):
         
     return out
 
-@njit
-def convolve1d(x, k, padleft, padright):
-    """Numerical convolution for a 1d signal.
+# @njit
+# def convolve1d(x, k, padleft, padright):
+#     """Numerical convolution for a 1d signal.
 
-    Args:
-        x (np.ndarray): The input signal, must be uniform spacing.
-        k (np.ndarray): The kernel, must have the same grid spacing as x.
-        padleft (int): The left pad.
-        padright (int): The right pad.
+#     Args:
+#         x (np.ndarray): The input signal, must be uniform spacing.
+#         k (np.ndarray): The kernel, must have the same grid spacing as x.
+#         padleft (int): The left pad.
+#         padright (int): The right pad.
 
-    Returns:
-        np.ndarray: The convolved signal.
-    """
+#     Returns:
+#         np.ndarray: The convolved signal.
+#     """
 
-    # Length of each
-    nx = len(x)
-    nk = len(k)
+#     # Length of each
+#     nx = len(x)
+#     nk = len(k)
 
-    # The left and right padding
-    n_pad = numba.int64(nk / 2)
+#     # The left and right padding
+#     n_pad = numba.int64(nk / 2)
 
-    # Output vector
-    out = np.zeros(x.shape)
+#     # Output vector
+#     out = np.zeros(x.shape)
 
-    # Flip the kernel (just a view, no new vector is allocated)
-    kf = k[::-1]
+#     # Flip the kernel (just a view, no new vector is allocated)
+#     kf = k[::-1]
 
-    # Left values
-    for i in range(n_pad):
-        s = 0.0
-        for j in range(nk):
-            ii = i - n_pad + j
-            if ii < 0:
-                s += padleft * kf[j]
-            else:
-                s += x[ii] * kf[j]
-        out[i] = s
+#     # Left values
+#     for i in range(n_pad):
+#         s = 0.0
+#         for j in range(nk):
+#             ii = i - n_pad + j
+#             if ii < 0:
+#                 s += padleft * kf[j]
+#             else:
+#                 s += x[ii] * kf[j]
+#         out[i] = s
 
-    # Middle values
-    for i in range(n_pad, nx-n_pad):
-        s = 0.0
-        for j in range(nk):
-            s += x[i - n_pad + j] * kf[j]
-        out[i] = s
+#     # Middle values
+#     for i in range(n_pad, nx-n_pad):
+#         s = 0.0
+#         for j in range(nk):
+#             s += x[i - n_pad + j] * kf[j]
+#         out[i] = s
 
-    # Right values
-    for i in range(nx-n_pad, nx):
-        s = 0.0
-        for j in range(nk):
-            ii = i - n_pad + j
-            if ii > nx - 1:
-                s += padleft * kf[j]
-            else:
-                s += x[ii] * kf[j]
-        out[i] = s
+#     # Right values
+#     for i in range(nx-n_pad, nx):
+#         s = 0.0
+#         for j in range(nk):
+#             ii = i - n_pad + j
+#             if ii > nx - 1:
+#                 s += padleft * kf[j]
+#             else:
+#                 s += x[ii] * kf[j]
+#         out[i] = s
 
-    # Return out
-    return out
+#     # Return out
+#     return out
+
+
+def convolve1d(y, kernel):
+    nk = len(kernel)
+    assert nk % 2 == 1
+    yp = np.pad(y, pad_width=(int(nk / 2), int(nk / 2)), mode='constant', constant_values=(y[0], y[-1]))
+    yc = np.convolve(yp, kernel, mode='valid')
+    return yc
+
 
 def convolve_flux(wave, flux, R=None, width=None, interp=None, lsf=None, croplsf=False):
     """Convolves flux.
@@ -574,7 +579,6 @@ def convolve_flux(wave, flux, R=None, width=None, interp=None, lsf=None, croplsf
 
     # Convolve
     fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
-    #fluxlinc = convolve1d(fluxlin, lsf, fluxlin[0], fluxlin[-1])
     
     # Interpolate back to the default grid
     if interp:
@@ -798,14 +802,15 @@ def cross_correlate_doppler(x1, y1, x2, y2, vels, kind="rms"):
         good = np.where(np.isfinite(y2_shifted) & np.isfinite(y1))[0]
         if good.size < 3:
             continue
-        vec_cross = y1 * y2_shifted
         weights = np.ones(n1, dtype=np.float64)
-        bad = np.where(~np.isfinite(vec_cross))[0]
-        if bad.size > 0:
-            weights[bad] = 0
         if kind.lower() == "rms":
+            bad = np.where(~np.isfinite(y1) | ~np.isfinite(y2_shifted))[0]
+            weights[bad] = 0
             corrfun[i] = rmsloss(y1, y2_shifted, weights=weights)
         else:
+            vec_cross = y1 * y2_shifted
+            bad = np.where(~np.isfinite(vec_cross))[0]
+            weights[bad] = 0
             corrfun[i] = np.nansum(vec_cross * weights) / np.nansum(weights)
 
     return corrfun

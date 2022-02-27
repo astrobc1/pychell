@@ -259,7 +259,6 @@ read_noise = 0
 ###########################
 
 lsf_width = [0.1, 0.25, 0.4]
-rv_zero_point = 0
 
 # Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
 quad_pixel_set_points = [1, 512, 1023]

@@ -2,40 +2,50 @@
 import os
 import copy
 import glob
-import sys
+
+# Astropy
+from astropy.io import fits
+import astropy.coordinates
+import astropy.time
+import astropy.units as units
 
 # Maths
 import numpy as np
 import scipy.constants as cs
 
-# Astropy
-from astropy.io import fits
-from astropy.coordinates import EarthLocation
-from astropy.coordinates import SkyCoord
-from astropy.time import Time, TimeDelta
-import astropy.units as units
-
-# Barycorrpy
-from barycorrpy import get_BC_vel
-from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
-
 # Pychell deps
+import pychell.data as pcdata
 import pychell.maths as pcmath
-import pychell.data.spectraldata as pcspecdata
+import pychell.spectralmodeling.barycenter
 from pychell.reduce.recipes import ReduceRecipe
 
+# Site
+observatory = "palomar"
 
-#######################
-#### NAME AND SITE ####
-#######################
-
-spectrograph = "PARVI"
-observatory = {
-    "name" : "Palomar",
-    "site" : EarthLocation.of_site("Palomar")
-}
-
+# Orders
 echelle_orders = [84, 129]
+
+# Detector
+detector = {"dark_current": 0.0, "gain": 1, "read_noise": 0}
+
+# fwhm
+lsf_sigma = [0.008, 0.008, 0.008]
+
+# Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
+wls_pixel_lagrange_points = [199, 1023.5, 1847]
+
+# LFC info
+lfc_f0 = cs.c / (1559.91370 * 1E-9) # freq of pump line in Hz.
+lfc_df = 10.0000000 * 1E9 # spacing of peaks [Hz]
+
+# When orientated with orders along detector rows and concave down (vertex at top)
+# Top fiber is 1 (sci)
+# Bottom fiber is 3 (cal)
+
+# Approximate quadratic length solution coeffs as a starting point
+wls_coeffs_fiber1 = {84: [-6.53864897e-07, 0.00980298331, 1759.3386699999999], 85: [-6.46148117e-07, 0.009687404909999999, 1738.1397000000002], 86: [-6.38707844e-07, 0.00957457761, 1717.4456300000002], 87: [-6.31519485e-07, 0.00946445759, 1697.2385], 88: [-6.2456208e-07, 0.00935698607, 1677.5012599999998], 89: [-6.17817854e-07, 0.00925209401, 1658.21769], 90: [-6.11271815e-07, 0.00914970599, 1639.37234], 91: [-6.04911393e-07, 0.00904974352, 1620.95044], 92: [-5.98726128e-07, 0.0089521276, 1602.93786], 93: [-5.927073890000001e-07, 0.00885678082, 1585.32111], 94: [-5.86848138e-07, 0.00876362894, 1568.08726], 95: [-5.81142717e-07, 0.00867260208, 1551.22395], 96: [-5.75586675e-07, 0.0085836355, 1534.71932], 97: [-5.70176616e-07, 0.008496670080000001, 1518.56205], 98: [-5.6491008e-07, 0.00841165252, 1502.74127], 99: [-5.597854419999999e-07, 0.0083285353, 1487.24659], 100: [-5.548018420000001e-07, 0.00824727647, 1472.06801], 101: [-5.49959126e-07, 0.00816783919, 1457.19597], 102: [-5.45257819e-07, 0.0080901913, 1442.6212799999998], 103: [-5.40699106e-07, 0.00801430459, 1428.33509], 104: [-5.36284833e-07, 0.0079401542, 1414.32889], 105: [-5.32017532e-07, 0.00786771778, 1400.5945], 106: [-5.27900446e-07, 0.007796974789999999, 1387.1240400000002], 107: [-5.239375849999999e-07, 0.007727905679999999, 1373.90993], 108: [-5.20133781e-07, 0.00766049115, 1360.94491], 109: [-5.16494762e-07, 0.0075947114400000005, 1348.2220499999999], 110: [-5.13027239e-07, 0.0075305456500000005, 1335.73479], 111: [-5.09738999e-07, 0.00746797114, 1323.47699], 112: [-5.06639013e-07, 0.00740696303, 1311.44298], 113: [-5.03737548e-07, 0.0073474937700000005, 1299.62767], 114: [-5.010462919999999e-07, 0.00728953285, 1288.02668], 115: [-4.98578489e-07, 0.00723304661, 1276.63645], 116: [-4.963490739999999e-07, 0.00717799821, 1265.45444], 117: [-4.94374825e-07, 0.007124347709999999, 1254.47935], 118: [-4.92674517e-07, 0.007072052299999999, 1243.7113100000001], 119: [-4.9126908e-07, 0.00702106679, 1233.15224], 120: [-4.901817699999999e-07, 0.00697134412, 1222.80613], 121: [-4.894383380000001e-07, 0.00692283618, 1212.67945], 122: [-4.89067214e-07, 0.0068754947, 1202.78154], 123: [-4.890996849999999e-07, 0.0068292725, 1193.12513], 124: [-4.895700870000001e-07, 0.0067841247300000004, 1183.72687], 125: [-4.90515998e-07, 0.00674001048, 1174.6079100000002], 126: [-4.91978434e-07, 0.0066968945500000005, 1165.79459], 127: [-4.940020500000001e-07, 0.006654749409999999, 1157.31918], 128: [-4.96635349e-07, 0.00661355741, 1149.22064], 129: [-4.99930888e-07, 0.006573313209999999, 1141.5455900000002]}
+
+wls_coeffs_fiber3 = {84: [-6.51759531e-07, 0.009800088580000001, 1760.1343499999998], 85: [-6.45430063e-07, 0.00968709018, 1738.92538], 86: [-6.386198559999999e-07, 0.00957541455, 1718.2215], 87: [-6.31621058e-07, 0.00946560766, 1698.0049800000002], 88: [-6.24631195e-07, 0.00935802387, 1678.25877], 89: [-6.17773991e-07, 0.00925286629, 1658.96656], 90: [-6.11117352e-07, 0.0091502223, 1640.11279], 91: [-6.046887470000001e-07, 0.00905009435, 1621.68261], 92: [-5.98488157e-07, 0.00895242649, 1603.6618700000001], 93: [-5.924988049999999e-07, 0.008857126810000001, 1586.0370699999999], 94: [-5.86695809e-07, 0.00876408587, 1568.79531], 95: [-5.81052925e-07, 0.00867319152, 1551.92427], 96: [-5.75547508e-07, 0.00858434015, 1535.4121300000002], 97: [-5.701638329999999e-07, 0.00849744455, 1519.24756], 98: [-5.64894883e-07, 0.008412438599999999, 1503.4196900000002], 99: [-5.597427150000001e-07, 0.00832927882, 1487.91809], 100: [-5.54717499e-07, 0.00824794307, 1472.73271], 101: [-5.49835342e-07, 0.0081684263, 1457.8539500000002], 102: [-5.45114946e-07, 0.00809073365, 1443.2725500000001], 103: [-5.40573212e-07, 0.008014870890000001, 1428.97968], 104: [-5.36219842e-07, 0.00794083236, 1414.96685], 105: [-5.32051014e-07, 0.00786858642, 1401.22593], 106: [-5.28042184e-07, 0.00779805856, 1387.74911], 107: [-5.24140082e-07, 0.00772911219, 1374.52888], 108: [-5.20253946e-07, 0.0076615272299999995, 1361.5579], 109: [-5.16246045e-07, 0.0075949765099999995, 1348.82899], 110: [-5.11921536e-07, 0.00752900004, 1336.33496], 111: [-5.07017706e-07, 0.0074629772900000006, 1324.06847], 112: [-5.01192617e-07, 0.007396097379999999, 1312.0218300000001], 113: [-4.94013215e-07, 0.007327327390000001, 1300.18676], 114: [-4.849429149999999e-07, 0.00725537869, 1288.55405], 115: [-4.7332870899999994e-07, 0.00717867142, 1277.11326], 116: [-4.5838782e-07, 0.00709529713, 1265.85223], 117: [-4.39193925e-07, 0.00700297962, 1254.7566000000002], 118: [-4.1466298200000005e-07, 0.006899034010000001, 1243.8092199999999], 119: [-3.83538672e-07, 0.00678032403, 1232.98942], 120: [-3.4437749600000004e-07, 0.00664321764, 1222.2723099999998], 121: [-2.9553352500000003e-07, 0.00648354095, 1211.62779], 122: [-2.3514284199999999e-07, 0.0062965304900000005, 1201.01966], 123: [-1.61107682e-07, 0.00607678378, 1190.40438], 124: [-7.10802964e-08, 0.0058182083699999994, 1179.72991], 125: [3.75534581e-08, 0.00551396921, 1168.93427], 126: [1.6769077e-07, 0.00515643447, 1157.944], 127: [3.22528768e-07, 0.00473711982, 1146.6725000000001], 128: [5.05581638e-07, 0.00424663111, 1135.0181], 129: [7.20697948e-07, 0.00367460556, 1122.86214]}
 
 ######################
 #### DATA PARSING ####
@@ -65,11 +75,11 @@ def categorize_raw_data(data_input_path, output_path, full_flats_path=None, fibe
     sci_files = list(set(all_files) - set(lfc_files) - set(dark_files) - set(full_flat_files) - set(fiber_flat_files))
 
     # Create Echellograms from raw data
-    data['science'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in sci_files]
-    data['fiber_flats'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in fiber_flat_files]
-    data['darks'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in dark_files]
-    data['flats'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in full_flat_files]
-    data['lfc'] = [pcspecdata.RawEchellogram(input_file=f, spectrograph=spectrograph) for f in lfc_files]
+    data['science'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in sci_files]
+    data['fiber_flats'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in fiber_flat_files]
+    data['darks'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in dark_files]
+    data['flats'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in full_flat_files]
+    data['lfc'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in lfc_files]
 
     # Only get latest cals
     dark_group = get_latest_darks(data)
@@ -79,14 +89,14 @@ def categorize_raw_data(data_input_path, output_path, full_flats_path=None, fibe
 
     # Master Darks
     if len(dark_files) > 0:
-        data['master_darks'] = [pcspecdata.MasterCal(dark_group, output_path + "calib" + os.sep)]
+        data['master_darks'] = [pcdata.MasterCal(dark_group, output_path + "calib" + os.sep)]
 
     # Master Flats
     if len(full_flat_files) > 0:
-        data['master_flats'] = [pcspecdata.MasterCal(full_flat_group, output_path + "calib" + os.sep)]
+        data['master_flats'] = [pcdata.MasterCal(full_flat_group, output_path + "calib" + os.sep)]
     
     # Master fiber flats
-    data['master_fiber_flats'] = [pcspecdata.MasterCal(fiber_flat_group1, output_path + "calib" + os.sep), pcspecdata.MasterCal(fiber_flat_group3, output_path + "calib" + os.sep)]
+    data['master_fiber_flats'] = [pcdata.MasterCal(fiber_flat_group1, output_path + "calib" + os.sep), pcdata.MasterCal(fiber_flat_group3, output_path + "calib" + os.sep)]
 
     # Order maps
     data['order_maps'] = data['master_fiber_flats']
@@ -112,6 +122,16 @@ def categorize_raw_data(data_input_path, output_path, full_flats_path=None, fibe
 
     return data
 
+def parse_utdate(data):
+    jd_start = astropy.time.Time(parse_exposure_start_time(data), scale='utc', format='jd')
+    y, m, d = str(jd_start.datetime.year), str(jd_start.datetime.month), str(jd_start.datetime.day)
+    if len(m) == 1:
+        m = f"0{m}"
+    if len(d) == 1:
+        d = f"0{d}"
+    utdate = "".join([str(y), str(m), str(d)])
+    return utdate
+
 def get_latest_darks(data):
     dates = [parse_utdate(d) for d in data["darks"]]
     dates_unq = np.unique(dates)
@@ -136,36 +156,6 @@ def get_latest_fiber_flats(data, fiber):
     date_use = dates_unq[-1]
     group = [d for i, d in enumerate(data["fiber_flats"]) if dates[i] == date_use and fibers[i] == fiber]
     return group
-
-def parse_image_header(data):
-        
-    # Parse the fits HDU
-    fits_hdu = fits.open(data.input_file)[0]
-    
-    # Just in case
-    try:
-        fits_hdu.verify('fix')
-    except:
-        pass
-    
-    # Store the header
-    data.header = fits_hdu.header
-    
-    # Parse the sky coord and time of obs
-    try:
-        parse_utdate(data)
-    except:
-        print(f"No ut date found for {data}")
-
-    try:
-        parse_sky_coord(data)
-    except:
-        print(f"No sky coord found for {data}")
-    parse_exposure_start_time(data)
-    parse_object(data)
-    parse_itime(data)
-    
-    return data.header
 
 def parse_image(data, scale_to_itime=True):
     image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float)
@@ -197,40 +187,24 @@ def pair_order_maps(data, order_maps):
             order_maps_out.append(order_maps[k[0]])
     data.order_maps = order_maps_out
 
-def parse_image_num(data):
-    return 1
+def parse_header(input_file):
+    return fits.open(input_file)[0].header
 
 def parse_object(data):
-    data.object = data.header["OBJECT"]
-    return data.object
-    
-def parse_utdate(data):
-    utc_offset = -8
-    jdlocstart = parse_exposure_start_time(data) + TimeDelta(utc_offset*3600, format='sec')
-    y, m, d = str(jdlocstart.datetime.year), str(jdlocstart.datetime.month), str(jdlocstart.datetime.day)
-    if len(m) == 1:
-        m = f"0{m}"
-    if len(d) == 1:
-        d = f"0{d}"
-    utdate = [str(y), str(m), str(d)]
-    utdate = "".join(utdate)
-    data.utdate = utdate
-    return data.utdate
+    return data.header["OBJECT"]
     
 def parse_sky_coord(data):
     if data.header['P200RA'] is not None and data.header['P200DEC'] is not None:
-        data.skycoord = SkyCoord(ra=data.header['P200RA'], dec=data.header['P200DEC'], unit=(units.hourangle, units.deg))
+        coord = astropy.coordinates.SkyCoord(ra=data.header['P200RA'], dec=data.header['P200DEC'], unit=(units.hourangle, units.deg))
     else:
-        data.skycoord = SkyCoord(ra=np.nan, dec=np.nan, unit=(units.hourangle, units.deg))
-    return data.skycoord
+        coord = SkyCoord(ra=np.nan, dec=np.nan, unit=(units.hourangle, units.deg))
+    return coord
 
 def parse_itime(data):
-    data.itime = data.header["EXPTIME"]
-    return data.itime
+    return data.header["EXPTIME"]
     
 def parse_exposure_start_time(data):
-    data.time_obs_start = Time(float(data.header["TIMEI00"]) / 1E9, format="unix")
-    return data.time_obs_start
+    return astropy.time.Time(float(data.header["TIMEI00"]) / 1E9, format="unix").jd
 
 def parse_fiber_nums(data):
     if "fiberflat" in data.base_input_file.lower() or "fibreflat" in data.base_input_file.lower():
@@ -238,23 +212,21 @@ def parse_fiber_nums(data):
     else:
         return ["1", "3"]
 
-def compute_echelle_order_num(data=None, order_num=None):
-    if order_num is None:
-        order_num = data.order_num
-    m = np.polyval([-1, 130], order_num)
-    return m
 
-def parse_spec1d(data):
-    fits_data = fits.open(data.input_file)
-    fits_data.verify('fix')
-    data.header = fits_data[0].header
-    oi = (echelle_orders[1] - echelle_orders[0]) - (data.order_num - echelle_orders[0])
-    data.wave = fits_data[0].data[oi, :, 0]
-    #data.flux = fits_data[0].data[oi, :, 1] / fits_data[0].data[oi, :, 4] # continuum correction from fiber flat
-    data.flux = fits_data[0].data[oi, :, 1]
-    #breakpoint()
-    data.flux_unc = fits_data[0].data[oi, :, 2]
-    data.mask = fits_data[0].data[oi, :, 3]
+def parse_spec1d(input_file, sregion):
+    f = fits.open(input_file)
+    f.verify('fix')
+    oi = (echelle_orders[1] - echelle_orders[0]) - (sregion.order - echelle_orders[0])
+    #wave = f[0].data[oi, :, 0] / 10
+    wave = estimate_order_wls(sregion.order, 1)
+    flux = f[0].data[oi, :, 1]
+    fluxerr = f[0].data[oi, :, 2]
+    medval = pcmath.weighted_median(flux, percentile=0.99)
+    flux /= medval
+    fluxerr /= medval
+    mask = f[0].data[oi, :, 3]
+    data = {"wave": wave, "flux": flux, "fluxerr": fluxerr, "mask": mask}
+    return data
 
 #######################
 #### GROUPING CALS ####
@@ -268,16 +240,18 @@ def group_flats(flats):
 
 def gen_master_calib_filename(master_cal):
     fname0 = master_cal.group[0].base_input_file.lower()
+    utdate = parse_utdate(master_cal.group[0])
     if "dark" in fname0:
-        return f"master_dark_{master_cal.group[0].utdate}{master_cal.group[0].itime}s.fits"
+        itime = parse_itime(master_cal.group[0])
+        return f"master_dark_{itime}s.fits"
     elif "fiberflat" in fname0 or "fibreflat" in fname0:
-        return f"master_fiberflat_{master_cal.group[0].utdate}_fiber{parse_fiber_nums(master_cal.group[0])[0]}.fits"
+        return f"master_fiberflat_{utdate}_fiber{parse_fiber_nums(master_cal.group[0])[0]}.fits"
     elif "fullflat" in fname0:
-        return f"master_fullflat_{master_cal.group[0].utdate}.fits"
+        return f"master_fullflat_{utdate}.fits"
     elif "lfc" in fname0:
-        return f"master_lfc_{master_cal.group[0].utdate}.fits"
+        return f"master_lfc_{utdate}.fits"
     else:
-        return f"master_calib_{master_cal.group[0].utdate}.fits"
+        return f"master_calib_{utdate}.fits"
 
 def gen_master_calib_header(master_cal):
     return copy.deepcopy(master_cal.group[0].header)
@@ -287,48 +261,39 @@ def gen_master_calib_header(master_cal):
 #### BARYCENTER CORRECTIONS ####
 ################################
 
-def compute_barycenter_corrections(data, star_name):
-        
-    # Star name
-    star_name = star_name.replace('_', ' ')
-    
-    # Compute the JD UTC mid point (possibly weighted)
-    jdmid = compute_exposure_midpoint(data)
-    
-    # BJD
-    bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
-    
-    # bc vel
-    bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
-    
-    # Add to data
-    data.bjd = bjd
-    data.bc_vel = bc_vel
-    
+def get_barycenter_corrections(data, star_name):
+    jdmid = get_exposure_midpoint(data)
+    bjd, bc_vel = pychell.spectralmodeling.barycenter.compute_barycenter_corrections(jdmid, star_name, observatory)
     return bjd, bc_vel
 
-def compute_exposure_midpoint(data):
+def get_exposure_midpoint(data):
     jdsi, jdsf = [], []
     for key in data.header:
         if key.startswith("TIMEI"):
-            jdsi.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
+            jdsi.append(astropy.time.Time(float(data.header[key]) / 1E9, format="unix").jd)
         if key.startswith("TIMEF"):
-            jdsf.append(Time(float(data.header[key]) / 1E9, format="unix").jd)
-    mean_jd = (np.nanmax(jdsf) - np.nanmin(jdsi)) / 2 + np.nanmin(jdsi)
-    return mean_jd
+            jdsf.append(astropy.time.Time(float(data.header[key]) / 1E9, format="unix").jd)
+    jdmid = (np.nanmax(jdsf) - np.nanmin(jdsi)) / 2 + np.nanmin(jdsi)
+    return jdmid
 
 ###################
 #### WAVE INFO ####
 ###################
 
-
-def estimate_wls(data=None, order_num=None, fiber_num=1):
-    if order_num is None:
-        order_num = data.order_num
-    if fiber_num == 1:
-        pcoeffs = wls_coeffs_fiber1[order_num]
+def estimate_wls(data, sregion):
+    if sregion.fiber == 1:
+        pcoeffs = wls_coeffs_fiber1[sregion.order]
     else:
-        pcoeffs = wls_coeffs_fiber3[order_num]
+        pcoeffs = wls_coeffs_fiber3[sregion.order]
+    wls = np.polyval(pcoeffs, np.arange(2048).astype(float))
+    return wls
+
+
+def estimate_order_wls(order, fiber=1):
+    if fiber == 1:
+        pcoeffs = wls_coeffs_fiber1[order]
+    else:
+        pcoeffs = wls_coeffs_fiber3[order]
     wls = np.polyval(pcoeffs, np.arange(2048).astype(float))
     return wls
 
@@ -372,8 +337,6 @@ psf_fiber3_theta_cc_coeffs = np.array([[-4246.43437619, 6728.54941002, -3143.752
                                        [269.08091673, -423.29234646, 194.52566234, -42.84035417]])
 
 
-read_noise = 0.0 # Needs updated
-gain = 1.0 # Needs updated
 
 class PARVIReduceRecipe(ReduceRecipe):
     
@@ -428,9 +391,9 @@ class PARVIReduceRecipe(ReduceRecipe):
         sci_files = list(set(all_files) - set(lfc_files) - set(fiber_flat_files))
 
         # Create temporary objects to parse header info
-        scis = [pcspecdata.RawEchellogram(f, spectrograph="PARVI") for f in sci_files]
-        lfc_cals = [pcspecdata.RawEchellogram(f, spectrograph="PARVI") for f in lfc_files]
-        fiber_flats = [pcspecdata.RawEchellogram(f, spectrograph="PARVI") for f in fiber_flat_files]
+        scis = [pcdata.Echellogram(f, spectrograph="PARVI") for f in sci_files]
+        lfc_cals = [pcdata.Echellogram(f, spectrograph="PARVI") for f in lfc_files]
+        fiber_flats = [pcdata.Echellogram(f, spectrograph="PARVI") for f in fiber_flat_files]
 
         # Parse times of lfc cals
         times_lfc_cal = np.array([compute_exposure_midpoint(d) for d in lfc_cals], dtype=float)
@@ -515,122 +478,7 @@ class PARVIReduceRecipe(ReduceRecipe):
         hdul = fits.HDUList([fits.PrimaryHDU(data_out, header=header)])
         fname = f"{sci_file[:-5]}_calibrated.fits"
         hdul.writeto(fname, overwrite=True, output_verify='ignore')
-    
 
-#######################################
-##### GENERATING RADIAL VELOCITIES ####
-#######################################
 
-# RV Zero point [m/s] (approx, fiber 3, Sci)
-rv_zero_point = -5604.0
 
-# LFC info
-# l*f = c
-# dlf + ldf=0, df=-dlf/l=-dl/l*c/l=-dl/c^2
-# f = c / l
-# l = c / f
-lfc_f0 = cs.c / (1559.91370 * 1E-9) # freq of pump line in Hz.
-lfc_df = 10.0000000 * 1E9 # spacing of peaks [Hz]
 
-# When orientated with orders along detector rows and concave down (vertex at top)
-# Top fiber is 1 (sci)
-# Bottom fiber is 3 (cal)
-
-# Approximate quadratic length solution coeffs as a starting point
-wls_coeffs_fiber1 = {
-    84: [-6.53864897e-06, 0.0980298331, 17593.3867],
-    85: [-6.46148117e-06, 0.0968740491, 17381.397],
-    86: [-6.38707844e-06, 0.0957457761, 17174.4563],
-    87: [-6.31519485e-06, 0.0946445759, 16972.385],
-    88: [-6.2456208e-06, 0.0935698607, 16775.0126],
-    89: [-6.17817854e-06, 0.0925209401, 16582.1769],
-    90: [-6.11271815e-06, 0.0914970599, 16393.7234],
-    91: [-6.04911393e-06, 0.0904974352, 16209.5044],
-    92: [-5.98726128e-06, 0.089521276, 16029.3786],
-    93: [-5.92707389e-06, 0.0885678082, 15853.2111],
-    94: [-5.86848138e-06, 0.0876362894, 15680.8726],
-    95: [-5.81142717e-06, 0.0867260208, 15512.2395],
-    96: [-5.75586675e-06, 0.085836355, 15347.1932],
-    97: [-5.70176616e-06, 0.0849667008, 15185.6205],
-    98: [-5.6491008e-06, 0.0841165252, 15027.4127],
-    99: [-5.59785442e-06, 0.083285353, 14872.4659],
-    100: [-5.54801842e-06, 0.0824727647, 14720.6801],
-    101: [-5.49959126e-06, 0.0816783919, 14571.9597],
-    102: [-5.45257819e-06, 0.080901913, 14426.2128],
-    103: [-5.40699106e-06, 0.0801430459, 14283.3509],
-    104: [-5.36284833e-06, 0.079401542, 14143.2889],
-    105: [-5.32017532e-06, 0.0786771778, 14005.945],
-    106: [-5.27900446e-06, 0.0779697479, 13871.2404],
-    107: [-5.23937585e-06, 0.0772790568, 13739.0993],
-    108: [-5.20133781e-06, 0.0766049115, 13609.4491],
-    109: [-5.16494762e-06, 0.0759471144, 13482.2205],
-    110: [-5.13027239e-06, 0.0753054565, 13357.3479],
-    111: [-5.09738999e-06, 0.0746797114, 13234.7699],
-    112: [-5.06639013e-06, 0.0740696303, 13114.4298],
-    113: [-5.03737548e-06, 0.0734749377, 12996.2767],
-    114: [-5.01046292e-06, 0.0728953285, 12880.2668],
-    115: [-4.98578489e-06, 0.0723304661, 12766.3645],
-    116: [-4.96349074e-06, 0.0717799821, 12654.5444],
-    117: [-4.94374825e-06, 0.0712434771, 12544.7935],
-    118: [-4.92674517e-06, 0.070720523, 12437.1131],
-    119: [-4.9126908e-06, 0.0702106679, 12331.5224],
-    120: [-4.9018177e-06, 0.0697134412, 12228.0613],
-    121: [-4.89438338e-06, 0.0692283618, 12126.7945],
-    122: [-4.89067214e-06, 0.068754947, 12027.8154],
-    123: [-4.89099685e-06, 0.068292725, 11931.2513],
-    124: [-4.89570087e-06, 0.0678412473, 11837.2687],
-    125: [-4.90515998e-06, 0.0674001048, 11746.0791],
-    126: [-4.91978434e-06, 0.0669689455, 11657.9459],
-    127: [-4.9400205e-06, 0.0665474941, 11573.1918],
-    128: [-4.96635349e-06, 0.0661355741, 11492.2064],
-    129: [-4.99930888e-06, 0.0657331321, 11415.4559]
-}
-
-wls_coeffs_fiber3 = {
-    84: [-6.51759531e-06, 0.0980008858, 17601.3435],
-    85: [-6.45430063e-06, 0.0968709018, 17389.2538],
-    86: [-6.38619856e-06, 0.0957541455, 17182.215],
-    87: [-6.31621058e-06, 0.0946560766, 16980.0498],
-    88: [-6.24631195e-06, 0.0935802387, 16782.5877],
-    89: [-6.17773991e-06, 0.0925286629, 16589.6656],
-    90: [-6.11117352e-06, 0.091502223, 16401.1279],
-    91: [-6.04688747e-06, 0.0905009435, 16216.8261],
-    92: [-5.98488157e-06, 0.0895242649, 16036.6187],
-    93: [-5.92498805e-06, 0.0885712681, 15860.3707],
-    94: [-5.86695809e-06, 0.0876408587, 15687.9531],
-    95: [-5.81052925e-06, 0.0867319152, 15519.2427],
-    96: [-5.75547508e-06, 0.0858434015, 15354.1213],
-    97: [-5.70163833e-06, 0.0849744455, 15192.4756],
-    98: [-5.64894883e-06, 0.084124386, 15034.1969],
-    99: [-5.59742715e-06, 0.0832927882, 14879.1809],
-    100: [-5.54717499e-06, 0.0824794307, 14727.3271],
-    101: [-5.49835342e-06, 0.081684263, 14578.5395],
-    102: [-5.45114946e-06, 0.0809073365, 14432.7255],
-    103: [-5.40573212e-06, 0.0801487089, 14289.7968],
-    104: [-5.36219842e-06, 0.0794083236, 14149.6685],
-    105: [-5.32051014e-06, 0.0786858642, 14012.2593],
-    106: [-5.28042184e-06, 0.0779805856, 13877.4911],
-    107: [-5.24140082e-06, 0.0772911219, 13745.2888],
-    108: [-5.20253946e-06, 0.0766152723, 13615.579],
-    109: [-5.16246045e-06, 0.0759497651, 13488.2899],
-    110: [-5.11921536e-06, 0.0752900004, 13363.3496],
-    111: [-5.07017706e-06, 0.0746297729, 13240.6847],
-    112: [-5.01192617e-06, 0.0739609738, 13120.2183],
-    113: [-4.94013215e-06, 0.0732732739, 13001.8676],
-    114: [-4.84942915e-06, 0.0725537869, 12885.5405],
-    115: [-4.73328709e-06, 0.0717867142, 12771.1326],
-    116: [-4.5838782e-06, 0.0709529713, 12658.5223],
-    117: [-4.39193925e-06, 0.0700297962, 12547.566],
-    118: [-4.14662982e-06, 0.0689903401, 12438.0922],
-    119: [-3.83538672e-06, 0.0678032403, 12329.8942],
-    120: [-3.44377496e-06, 0.0664321764, 12222.7231],
-    121: [-2.95533525e-06, 0.0648354095, 12116.2779],
-    122: [-2.35142842e-06, 0.0629653049, 12010.1966],
-    123: [-1.61107682e-06, 0.0607678378, 11904.0438],
-    124: [-7.10802964e-07, 0.0581820837, 11797.2991],
-    125: [3.75534581e-07, 0.0551396921, 11689.3427],
-    126: [1.6769077e-06, 0.0515643447, 11579.44],
-    127: [3.22528768e-06, 0.0473711982, 11466.725],
-    128: [5.05581638e-06, 0.0424663111, 11350.181],
-    129: [7.20697948e-06, 0.0367460556, 11228.6214]
-}

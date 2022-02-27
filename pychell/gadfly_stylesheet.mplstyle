@@ -398,7 +398,7 @@ ytick.labelsize      : 12 ## fontsize of the tick labels
 grid.color       :   93939c    ## grid color
 grid.linestyle   :   --         ## solid
 #grid.linewidth   :   0.8       ## in points
-grid.alpha       :   0.2       ## transparency, between 0.0 and 1.0
+grid.alpha       :   0.12       ## transparency, between 0.0 and 1.0
 
 #### Legend
 #legend.loc           : best

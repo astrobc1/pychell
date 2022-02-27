@@ -164,8 +164,11 @@ def get_stellar_rv(star_name):
     rv = result[0]["rv"]
     return rv
 
-def get_spec_module(spectrograph):
-    return importlib.import_module(f"pychell.data.{spectrograph.lower()}")
+def get_spec_module(spectrograph, spec_mod_func=None):
+    spec_mod = getattr(importlib.import_module("pychell.data"), spectrograph.lower())
+    if spec_mod_func is not None:
+        spec_mod_func(spec_mod)
+    return spec_mod
 
 
 def flatten_jagged_list(x):
@@ -176,12 +179,6 @@ def flatten_jagged_list(x):
         x_out = np.concatenate((x_out, x[i]))
         inds += [(i, j) for j in range(len(x[i]))]
     return x_out, inds
-
-def modify_and_import_module(module_name, modification_func):
-    module = importlib.import_module(module_name)
-    if modification_func is not None:
-        modification_func(module)
-    return module
 
 def get_utc_offset(site=None, lon=None):
     if site is not None:

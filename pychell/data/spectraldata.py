@@ -3,12 +3,12 @@ import os
 import pickle
 import importlib
 
-# Maths
 import numpy as np
+
+# Fits
 from astropy.io import fits
 
 # Pychell deps
-import pychell.maths as pcmath
 import pychell.utils as pcutils
 
 ####################
@@ -16,19 +16,25 @@ import pychell.utils as pcutils
 ####################
 
 class SpecData:
+
+    __slots__ = ['input_file', 'header', 'spectrograph', 'spec_mod_func']
     
-    def __init__(self, input_file, spectrograph, spec_mod_func=None):
+    def __init__(self, input_file, spectrograph, spec_mod_func=None, parse_header=True):
         """Base constructor for a SpecData object.
 
         Args:
-            input_file (str): The path + filename.
+            fits (str): The astropy fits object.
+            spectrograph (str): The name of the spectrographf for dispatch.
+            spec_module_func (method): A method to modify an existing spectrograph module.
         """
         self.input_file = input_file
         self.spectrograph = spectrograph
         self.spec_mod_func = spec_mod_func
-    
-    def __eq__(self, other):
-        return self.input_file == other.input_file
+        if parse_header:
+            self.header = self.parse_header()
+
+    def parse_header(self):
+        return self.spec_module.parse_header(self.input_file)
 
     @property
     def base_input_file(self):
@@ -68,11 +74,22 @@ class SpecData:
 
     @property
     def spec_module(self):
-        #return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
-        return pcutils.modify_and_import_module(f"pychell.data.{self.spectrograph.lower()}", self.spec_mod_func)
+        return pcutils.get_spec_module(self.spectrograph, self.spec_mod_func)
+
+    def __repr__(self):
+        return self.base_input_file_noext
+
 
 class Echellogram(SpecData):
-    
+
+    def parse_image(self):
+        """Parses the image.
+
+        Returns:
+            numpy.ndarray: The image.
+        """
+        return self.spec_module.parse_image(self)
+
     @staticmethod
     def generate_cube(data):
         """Generates a data-cube (i.e., stack) of images.
@@ -91,41 +108,7 @@ class Echellogram(SpecData):
             data_cube[idata, :, :] = data[idata].parse_image()
             
         return data_cube
-        
-    def parse_image(self):
-        """Parses the image.
 
-        Returns:
-            np.ndarray: The image.
-        """
-        return self.spec_module.parse_image(self)
-    
-    def parse_header(self):
-        """Parses and stores the header.
-
-        Returns:
-            fits.Header: The fits file header.
-        """
-        return self.spec_module.parse_image_header(self)
-    
-    def __repr__(self):
-        return self.base_input_file
-
-class RawEchellogram(Echellogram):
-
-    def __init__(self, input_file, spectrograph, spec_mod_func=None):
-        """Construct a RawEchellogram object.
-
-        Args:
-            input_file (str): The path + filename.
-        """
-        
-        # Call super init
-        super().__init__(input_file, spectrograph, spec_mod_func)
-
-        # Parse the header
-        if self.spectrograph is not None:
-            self.spec_module.parse_image_header(self)
 
 class MasterCal(Echellogram):
 
@@ -144,7 +127,7 @@ class MasterCal(Echellogram):
         input_file = output_path + self.group[0].spec_module.gen_master_calib_filename(self)
         
         # Call super init
-        super().__init__(input_file, self.group[0].spectrograph)
+        super().__init__(input_file, self.group[0].spectrograph, parse_header=False)
 
         # Create a header
         self.header = self.spec_module.gen_master_calib_header(self)
@@ -157,102 +140,34 @@ class MasterCal(Echellogram):
 #### 1D SPECTRUM ####
 #####################
 
-class Spec1d(SpecData):
+class SpecData1d(SpecData):
+
+    __slots__ = ['input_file', 'header', 'data', 'spectrograph', 'spec_mod_func', 'sregion']
     
-    # Store the input file, spec, and order num
-    def __init__(self, input_file, order_num, spec_num, spectrograph, crop_pix, spec_mod_func=None):
-        """Constructs a SpecData1d object.
-
-        Args:
-            input_file (str): The path + filename.
-            order_num (int): The image order number [1, 2, 3, ...].
-            spec_num (int): The spectrum number in order of time.
-            spectrograph (str): The spectrograph.
-            crop_pix (list): How many pixels to crop on the left (crop_pix[0]) and right (crop_pix[1]).
-        """
-
+    def __init__(self, input_file, spectrograph, sregion, spec_mod_func=None):
+        self.sregion = sregion # This might not be needed here!
         super().__init__(input_file, spectrograph, spec_mod_func)
-        
-        # Order number and observation number
-        self.order_num = order_num
-        self.spec_num = spec_num
-            
-        # Default wavelength and LSF grid, may be overwritten in custom parse method.
-        self.wave = None
-        self.lsf_width = None
-        
-        # Extra cropping
-        self.crop_pix = crop_pix
-        
-        # Parse
-        self.parse()
+        self.data = self.parse_spec1d(sregion)
 
-    def parse(self):
+
+    def parse_spec1d(self, sregion):
         """Parse the 1d spectrum (including wavelength, flux, flux uncertainty, and mask).
         """
-        
-        # Parse the data
-        self.spec_module.parse_spec1d(self)
-        
-        # Normalize to 98th percentile
-        if not hasattr(self, "is_good") or self.is_good:
-            medflux = pcmath.weighted_median(self.flux, percentile=0.98)
-            self.flux /= medflux
-            self.flux_unc /= medflux
-            
-            # Enforce the pixels are cropped (ideally they are already cropped and this has no effect, but still optional)
-            if self.crop_pix is not None:
-                if self.crop_pix[0] > 0:
-                    self.flux[0:self.crop_pix[0]] = np.nan
-                    self.flux_unc[0:self.crop_pix[0]] = np.nan
-                    self.mask[0:self.crop_pix[0]] = 0
-                if self.crop_pix[1] > 0:
-                    self.flux[-self.crop_pix[1]:] = np.nan
-                    self.flux_unc[-self.crop_pix[1]:] = np.nan
-                    self.mask[-self.crop_pix[1]:] = 0
-                
-            # Sanity
-            bad = np.where((self.flux <= 0.0) | ~np.isfinite(self.flux) | (self.mask == 0) | ~np.isfinite(self.mask) | ~np.isfinite(self.flux_unc))[0]
-            if bad.size > 0:
-                self.flux[bad] = np.nan
-                self.flux_unc[bad] = np.nan
-                self.mask[bad] = 0
-                
-            # More sanity
-            if self.wave is not None:
-                bad = np.where(~np.isfinite(self.wave))[0]
-                if bad.size > 0:
-                    self.wave[bad] = np.nan
-                    self.flux[bad] = np.nan
-                    self.flux_unc[bad] = np.nan
-                    self.mask[bad] = 0
-                
-            # Further flag any clearly deviant pixels
-            flux_smooth = pcmath.median_filter1d(self.flux, width=7)
-            bad = np.where(np.abs(flux_smooth - self.flux) > 0.3)[0]
-            if bad.size > 0:
-                self.flux[bad] = np.nan
-                self.flux_unc[bad] = np.nan
-                self.mask[bad] = 0
-                
-            # Check if 1d spectrum is even worth using
-            is_good = True
-            nx = len(self.flux)
-            if np.nansum(self.mask) < nx / 4 or np.where(np.isfinite(self.flux))[0].size < nx / 4:
-                is_good = False
-            if self.wave is not None and np.where(np.isfinite(self.wave))[0].size < nx / 4:
-                is_good = False
-            self.is_good = is_good
+        return self.spec_module.parse_spec1d(self.input_file, sregion)
 
-            
-    def parse_header(self):
-        """Parse the 1d spectrum fits header.
 
-        Returns:
-            fits.Header: The fits header for the 1d spectrum.
-        """
-        self.header = fits.open(self.input_file)[0].header
-        return self.header
+    @property
+    def wave(self):
+        return self.data["wave"]
 
-    def __repr__(self):
-        return f"1d spectrum: {self.base_input_file}"
+    @property
+    def flux(self):
+        return self.data["flux"]
+
+    @property
+    def fluxerr(self):
+        return self.data["fluxerr"]
+
+    @property
+    def mask(self):
+        return self.data["mask"]

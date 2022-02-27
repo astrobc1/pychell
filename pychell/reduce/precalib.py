@@ -1,29 +1,9 @@
-# Default Python modules
-import os
 
-# Graphics
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import pychell
-plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
-
-# Science/Math
 import numpy as np
-import astropy.units as units
-import scipy.interpolate
-from astropy.io import fits
 
-# Clustering algorithms (DBSCAN)
-import sklearn.cluster
-import scipy.signal
-
-# LLVM
-from numba import jit, njit, prange
-
-# Pychell modules
+# pychell
 import pychell.maths as pcmath
-import pychell.data.spectraldata as pcspecdata
+import pychell.data as pcdata
 
 def gen_master_calib_images(data, do_bias, do_dark, do_flat, flat_percentile=None):
     """Generates the master calibration images.
@@ -74,7 +54,7 @@ def gen_master_flat(master_flat, do_bias, do_dark, flat_percentile=0.5):
     """
     
     # Generate a data cube
-    flats_cube = pcspecdata.Echellogram.generate_cube(master_flat.group)
+    flats_cube = pcdata.Echellogram.generate_cube(master_flat.group)
 
     # Median crunch
     master_flat_image = np.nanmedian(flats_cube, axis=0)
@@ -110,7 +90,7 @@ def gen_master_dark(master_dark, do_bias):
     """
     # Generate a data cube
     n_darks = len(master_dark.group)
-    darks_cube = pcspecdata.Echellogram.generate_cube(master_dark.group)
+    darks_cube = pcdata.Echellogram.generate_cube(master_dark.group)
 
     # Median crunch
     master_dark_image = np.nanmedian(darks_cube, axis=0)
@@ -155,7 +135,7 @@ def gen_master_fiber_flat(master_fiber_flat, do_bias, do_dark, do_flat):
     """
     # Generate a data cube
     n_fiber_flats = len(master_fiber_flat.group)
-    fiber_flats_cube = pcspecdata.Echellogram.generate_cube(master_fiber_flat.group)
+    fiber_flats_cube = pcdata.Echellogram.generate_cube(master_fiber_flat.group)
 
     # Median crunch
     master_fiber_flat_image = np.nanmedian(fiber_flats_cube, axis=0)

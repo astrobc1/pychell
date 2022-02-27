@@ -18,11 +18,11 @@ import pychell.maths as pcmath
 import pychell.utils as pcutils
 
 
-#########################################
-#### COMPUTE PER-NIGHT JDS (OR BJDS) ####
-#########################################
+#################
+#### BIN JDS ####
+#################
 
-def bin_jds_for_site(jds, site, sep=0.5):
+def bin_jds_for_site(jds, site=None, utc_offset=None, sep=0.5):
     """Computes binned times for a multiple observations.
 
     Args:
@@ -34,7 +34,9 @@ def bin_jds_for_site(jds, site, sep=0.5):
     """
 
     # UTC offset
-    utc_offset = pcutils.get_utc_offset(site)
+    if utc_offset is None and site is not None:
+        utc_offset = pcutils.get_utc_offset(site)
+
     
     # Number of spectra
     n_obs_tot = len(jds)
@@ -69,51 +71,51 @@ def bin_jds_for_site(jds, site, sep=0.5):
 
     return jds_binned, indices_binned
 
-####################################
-#### CROSS-CORRELATION ROUTINES ####
-####################################
 
-def brute_force_ccf(p0, spectral_model, iter_index, vel_window=400_000):
+######################
+#### CCF ROUTINES ####
+######################
+
+def brute_force_ccf(p0, data, model, iter_index, measure_unc=False, vel_window_coarse=400_000, vel_step_coarse=200, vel_window_fine=1000, vel_step_fine=2):
     
     # Copy init params
     pars = copy.deepcopy(p0)
     
     # Get current star vel
-    v0 = p0[spectral_model.star.par_names[0]].value
+    v0 = p0[model.star.par_names[0]].value
     
     # Make coarse and fine vel grids
-    vel_step_coarse = 200
     vels_coarse = np.arange(v0 - vel_window / 2, v0 + vel_window / 2, vel_step_coarse)
 
     # Stores the rms as a function of velocity
-    rmss_coarse = np.full(vels_coarse.size, dtype=np.float64, fill_value=np.nan)
+    rmss_coarse = np.full(len(vels_coarse), fill_value=np.nan)
     
     # Starting weights are bad pixels
-    weights_init = np.copy(spectral_model.data.mask)
+    weights_init = np.copy(data.mask)
 
     # Wavelength grid for the data
-    wave_data = spectral_model.wls.build(pars)
+    wave_data = model.wls.build(pars)
 
     # Compute RV info content
-    rvc_per_pix, _ = compute_rv_content(p0, spectral_model, snr=100) # S/N here doesn't matter
+    #rvc_per_pix, _ = compute_rv_content(p0, model, snr=100) # S/N here doesn't matter
 
     # Weights are 1 / rv info^2
-    star_weights_init = 1 / rvc_per_pix**2
+    #star_weights_init = 1 / rvc_per_pix**2
 
     # Data flux
-    data_flux = np.copy(spectral_model.data.flux)
+    data_flux = np.copy(model.data.flux)
     
     # Compute RMS for coarse vels
     for i in range(vels_coarse.size):
         
         # Set the RV parameter to the current step
-        pars[spectral_model.star.par_names[0]].value = vels_coarse[i]
+        pars[model.star.par_names[0]].value = vels_coarse[i]
         
         # Build the model
-        _, model_lr = spectral_model.build(pars)
+        _, model_lr = model.build(pars)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        _, star_weights_shifted = pcmath.doppler_shift_flux(wave_data, star_weights_init, vels_coarse[i], wave_out=wave_data)
+        #_, star_weights_shifted = pcmath.doppler_shift_flux(wave_data, star_weights_init, vels_coarse[i], wave_out=wave_data)
         
         # Final weights
         weights = weights_init * star_weights_shifted
@@ -131,17 +133,12 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=400_000):
     xcorr_rv_init = vels_coarse[M]
 
     # Determine the uncertainty from the coarse ccf
-    try:
-        n = np.nansum(spectral_model.data.mask)
-        xcorr_rv_stddev, skew = compute_ccf_moments(vels_coarse, rmss_coarse)
-        n_used = np.nansum(spectral_model.data.mask)
-        xcorr_rv_unc = xcorr_rv_stddev / np.sqrt(n_used)
-    except:
-        return np.nan, np.nan, np.nan
+    n = np.nansum(model.data.mask)
+    xcorr_rv_stddev, skew = compute_ccf_moments(vels_coarse, rmss_coarse)
+    n_used = np.nansum(model.data.mask)
+    xcorr_rv_unc = xcorr_rv_stddev / np.sqrt(n_used)
 
     # Define the fine vels
-    vel_step_fine = 2
-    vel_window_fine = 1000  # For now
     vels_fine = np.arange(xcorr_rv_init - vel_window_fine / 2, xcorr_rv_init + vel_window_fine / 2, vel_step_fine)
     rmss_fine = np.full(vels_fine.size, fill_value=np.nan)
     
@@ -149,10 +146,10 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=400_000):
     for i in range(vels_fine.size):
         
         # Set the RV parameter to the current step
-        pars[spectral_model.star.par_names[0]].value = vels_fine[i]
+        pars[model.star.par_names[0]].value = vels_fine[i]
         
         # Build the model
-        _, model_lr = spectral_model.build(pars)
+        _, model_lr = model.build(pars)
         
         # Shift the stellar weights instead of recomputing the rv content.
         _, star_weights_shifted = pcmath.doppler_shift_flux(wave_data, star_weights_init, vels_fine[i], wave_out=wave_data)
@@ -174,7 +171,7 @@ def brute_force_ccf(p0, spectral_model, iter_index, vel_window=400_000):
     use = np.arange(M - 2, M + 3, 1).astype(int)
     try:
         pfit = np.polyfit(vels_fine[use], rmss_fine[use], 2)
-        xcorr_rv = -0.5 * pfit[1] / pfit[0] + spectral_model.data.bc_vel
+        xcorr_rv = -0.5 * pfit[1] / pfit[0] + model.data.bc_vel
     except:
         xcorr_rv = np.nan
 
@@ -200,37 +197,6 @@ def fit_ccf_skewnorm(pars, vels, rmss):
     n_good = np.where(np.isfinite(residuals))[0].size
     rms = np.sqrt(np.nansum(residuals**2) / n_good)
     return rms
-
-
-def brute_force_ccf_crude(p0, data, spectral_model):
-    
-    # Copy the parameters
-    pars = copy.deepcopy(p0)
-    
-    # Velocity grid
-    vels = np.arange(spectral_model.p0[spectral_model.star.par_names[0]].lower_bound, spectral_model.p0[spectral_model.star.par_names[0]].upper_bound, 500)
-
-    # Stores the rms as a function of velocity
-    rmss = np.full(vels.size, dtype=float, fill_value=np.nan)
-    
-    # Weights are only bad pixels
-    weights = np.copy(data.mask)
-        
-    for i in range(vels.size):
-        
-        # Set the RV parameter to the current step
-        pars[spectral_model.star.par_names[0]].value = vels[i]
-        
-        # Build the model
-        _, model_lr = spectral_model.build(pars)
-        
-        # Compute the RMS
-        rmss[i] = pcmath.rmsloss(data.flux, model_lr, weights=weights)
-
-    # Extract the best rv
-    xcorr_star_vel = vels[np.nanargmin(rmss)]
-    
-    return xcorr_star_vel
 
 def compute_bis(cc_vels, ccf, v0, n_bs=1000, depth_range_bottom=None, depth_range_top=None):
     """Computes the Bisector inverse slope of a given cross-correlation (RMS brute force) function.
@@ -300,90 +266,50 @@ def compute_bis(cc_vels, ccf, v0, n_bs=1000, depth_range_bottom=None, depth_rang
     return line_bisectors, bis
 
 
-########################
-#### CRUDE DETREND #####
-########################
-
-def detrend_rvs(rvs, vec, thresh=None, poly_order=1):
-    
-    if thresh is None:
-        thresh = 0.5
-        
-    pcc, _ = scipy.stats.pearsonr(vec, rvs)
-    if np.abs(pcc) < thresh:
-        return rvs
-    else:
-        pfit = np.polyfit(vec, rvs, poly_order)
-        rvs_out = rvs - np.polyval(pfit, vec)
-        return rvs_out
-
-
 #########################
 #### RV INFO CONTENT ####
 #########################
 
-def compute_rv_content(pars, spectral_model, snr=100):
+def compute_rv_content(model, pars, data, snr=100, gain=1):
+
+    # Ai = Star * Gascell * tell
+    # dAi_dl = dStar/dl * Gas * tell + dGas/dl * Star * tell
+    # dAi_dl = tell * (dStar/dl * Gas + dGas/dl * Star)
+    # Scale each by S/N and gain
 
     # Data wave grid
-    data_wave = spectral_model.wls.build(pars)
+    data_wave = model.wls.build(pars, data)
 
     # Model wave grid
-    model_wave = spectral_model.model_wave
+    model_wave = model.templates["wave"]
 
-    # Star flux on model data wave grid
-    star_flux = spectral_model.star.build(pars, spectral_model.templates_dict["star"], model_wave)
-
-    # Convolve stellar flux
-    if spectral_model.lsf is not None:
-        lsf = spectral_model.lsf.build(pars)
-        star_flux = pcmath.convolve_flux(model_wave, star_flux, lsf=lsf)
-    
-    # Interpolate star flux onto data grid
+    # Star
+    star_flux = model.star.build(pars, model.templates)
+    if model.lsf is not None:
+        star_flux = model.lsf.convolve(star_flux, pars=pars)
     star_flux = pcmath.cspline_interp(model_wave, star_flux, data_wave)
-
-    # Gas cell flux on model wave grid for kth observation
-    if spectral_model.gas_cell is not None:
-        gas_flux = spectral_model.gas_cell.build(pars, spectral_model.templates_dict["gas_cell"], model_wave)
-        if spectral_model.lsf is not None:
-            gas_flux = pcmath.convolve_flux(model_wave, gas_flux, lsf=lsf)
-        
-        # Interpolate gas cell flux onto data grid
-        gas_flux = pcmath.cspline_interp(model_wave, gas_flux, data_wave)
-    
-    else:
-        gas_flux = None
-
-    # Telluric flux on model wave grid for kth observation
-    if spectral_model.tellurics is not None:
-        tell_flux = spectral_model.tellurics.build(pars, spectral_model.templates_dict["tellurics"], model_wave)
-        if spectral_model.lsf is not None:
-            tell_flux = pcmath.convolve_flux(model_wave, tell_flux, lsf=lsf)
-
-        # Interpolate telluric flux onto data grid
-        tell_flux = pcmath.cspline_interp(model_wave, tell_flux, data_wave)
-    
-    else:
-        tell_flux = None
-
-    # Find good pixels
-    good = np.where(np.isfinite(data_wave) & np.isfinite(star_flux))[0]
-
-    # Create a spline for the stellar flux to compute derivatives
+    good = np.where(np.isfinite(data_wave) & np.isfinite(star_flux))
     cspline_star = scipy.interpolate.CubicSpline(data_wave[good], star_flux[good], extrapolate=False)
 
-    # Stores rv content for star
-    rvc_per_pix_star = np.full(len(data_wave), np.nan)
-
-    # Create a spline for the gas cell flux to compute derivatives
-    if gas_flux is not None:
-
-        # Find good pixels
-        good = np.where(np.isfinite(data_wave) & np.isfinite(gas_flux))[0]
-
+    # Gas cell
+    if model.gascell is not None:
+        gas_flux = model.gascell.build(pars, model.templates)
+        if model.lsf is not None:
+            gas_flux = model.lsf.convolve(gas_flux, pars=pars)
+        gas_flux = pcmath.cspline_interp(model_wave, gas_flux, data_wave)
+        good = np.where(np.isfinite(data_wave) & np.isfinite(gas_flux))
         cspline_gas = scipy.interpolate.CubicSpline(data_wave[good], gas_flux[good], extrapolate=False)
 
-        # Stores rv content for gas cell
-        rvc_per_pix_gas = np.full(len(data_wave), np.nan)
+    # Tellurics
+    if model.tellurics is not None:
+        tell_flux = model.tellurics.build(pars, model.templates)
+        if model.lsf is not None:
+            tell_flux = model.lsf.convolve(tell_flux, pars=pars)
+        tell_flux = pcmath.cspline_interp(model_wave, tell_flux, data_wave)
+        cspline_tell = scipy.interpolate.CubicSpline(data_wave[good], tell_flux[good], extrapolate=False)
+            
+    # Stores rv content for star
+    rvc_per_pix = np.full(len(data_wave), np.nan)
 
     # Loop over pixels
     for i in range(len(data_wave)):
@@ -393,55 +319,27 @@ def compute_rv_content(pars, spectral_model, snr=100):
             continue
 
         # Compute stellar flux at this wavelength
-        Ai = star_flux[i]
+        Ai = cspline_star(data_wave[i])
+        dAidw = cspline_star(data_wave[i], 1)
 
-        # Include gas and tell flux
-        if gas_flux is not None:
-           Ai *= gas_flux[i]
-        if tell_flux is not None:
-           Ai *= tell_flux[i]
+        if model.gascell is not None:
+            Ai *= cspline_gas(data_wave[i])
+            dAidw = dAidw * cspline_gas(data_wave[i]) + cspline_gas(data_wave[i], 1) * cspline_star(data_wave[i])
 
-        # Scale to S/N (assumes gain = 1)
-        Ai = Ai * snr**2
-
-        # Compute derivative of stellar flux and gas flux
-        dAi_dw_star = cspline_star(data_wave[i], 1)
-        if gas_flux is not None:
-            dAi_dw_star *= gas_flux[i]
-        if tell_flux is not None:
-            dAi_dw_star *= tell_flux[i]
-
-        # Make sure slope is finite
-        if not np.isfinite(dAi_dw_star):
-            continue
+        if model.tellurics is not None:
+           Ai *= cspline_tell(data_wave[i])
+           dAidw *= cspline_tell(data_wave[i])
 
         # Scale to S/N
-        dAi_dw_star *= snr**2
+        Ai *= snr**2 * gain
+        dAidw *= snr**2 * gain
 
-        # Compute stellar rv content
-        rvc_per_pix_star[i] = SPEED_OF_LIGHT * np.sqrt(Ai) / (data_wave[i] * np.abs(dAi_dw_star))
+        # Make sure slope is finite
+        if not np.isfinite(Ai) or not np.isfinite(dAidw):
+            continue
 
-        # Compute derivative of gas cell flux
-        if gas_flux is not None:
-            dAi_dw_gas = cspline_gas(data_wave[i], 1)
-
-            dAi_dw_gas *= star_flux[i]
-            
-            if tell_flux is not None:
-                dAi_dw_gas *= tell_flux[i]
-
-            # Scale to S/N
-            dAi_dw_gas *= snr**2
-
-            # Compute gas cell rv content
-            rvc_per_pix_gas[i] = SPEED_OF_LIGHT * np.sqrt(Ai) / (data_wave[i] * np.abs(dAi_dw_gas))
-
-    
-    # Full RV Content per pixel
-    if gas_flux is not None:
-        rvc_per_pix = np.sqrt(rvc_per_pix_star**2 + rvc_per_pix_gas**2)
-    else:
-        rvc_per_pix = rvc_per_pix_star
+        # Compute final rv content per detector pixel
+        rvc_per_pix[i] = SPEED_OF_LIGHT * np.sqrt(Ai) / (data_wave[i] * np.abs(dAidw))
 
     # Full RV Content
     rvc_tot = np.nansum(1 / rvc_per_pix**2)**-0.5
@@ -454,49 +352,24 @@ def compute_rv_content(pars, spectral_model, snr=100):
 #### CO-ADDING RVS ####
 #######################
 
-def bin_rvs_single_order(rvs, weights, indices):
-    """Computes binned RVs for a single order.
-
-    Args:
-        rvs (np.ndarray): The individual rvs array of shape (n_obs, n_chunks).
-        weights (np.ndarray): The weights, also of shape (n_obs, n_chunks).
-        indices (np.ndarray): Array of length n_bins where each entry is a list of length 2 containing the start, stop index of each bin.
-    """
-    
-    # The number of spectra and nights
-    n_spec = len(rvs)
-    n_nights = len(indices)
-    
-    # Initialize the binned rvs and uncertainties
-    rvs_binned = np.full(n_nights, np.nan)
-    unc_binned = np.full(n_nights, np.nan)
-    
-    for i in range(n_nights):
-        f, l = indices[i]
-        rr = rvs[f:l+1].flatten()
-        ww = weights[f:l+1].flatten()
-        rvs_binned[i], unc_binned[i] = pcmath.weighted_combine(rr, ww, yerr=None, err_type="empirical")
-            
-    return rvs_binned, unc_binned
-
-def combine_relative_rvs(rvs, weights, indices):
+def combine_relative_rvs(bjds, rvs, weights, indices):
     """Combines RVs considering the differences between all the data points.
     
     Args:
-        rvs (np.ndarray): RVs of shape n_orders, n_spec
+        rvs (np.ndarray): RVs of shape n_chunks, n_spec
         weights (np.ndarray): Corresponding uncertainties of the same shape.
-        n_obs_nights (np.ndarray): The number of oobservations on each night.
+        indices (np.ndarray): The indices for each bin
     """
     
     # Numbers
-    n_orders, n_spec = rvs.shape
-    n_nights = len(indices)
+    n_chunks, n_spec = rvs.shape
+    n_bins = len(indices)
     
     # Determine differences and weights tensors
-    rvlij = np.full((n_orders, n_spec, n_spec), np.nan)
-    wlij = np.full((n_orders, n_spec, n_spec), np.nan)
-    wli = np.full((n_orders, n_spec), np.nan)
-    for l in range(n_orders):
+    rvlij = np.full((n_chunks, n_spec, n_spec), np.nan)
+    wlij = np.full((n_chunks, n_spec, n_spec), np.nan)
+    wli = np.full((n_chunks, n_spec), np.nan)
+    for l in range(n_chunks):
         for i in range(n_spec):
             wli[l, i] = np.copy(weights[l, i])
             for j in range(n_spec):
@@ -504,8 +377,8 @@ def combine_relative_rvs(rvs, weights, indices):
                 wlij[l, i, j] = np.sqrt(weights[l, i] * weights[l, j])
 
     # Average over differences
-    rvli = np.full(shape=(n_orders, n_spec), fill_value=np.nan)
-    for l in range(n_orders):
+    rvli = np.full(shape=(n_chunks, n_spec), fill_value=np.nan)
+    for l in range(n_chunks):
         for i in range(n_spec):
             rr = np.copy(rvlij[l, i, :])
             ww = np.copy(wlij[l, i, :])
@@ -514,8 +387,9 @@ def combine_relative_rvs(rvs, weights, indices):
     # Output arrays
     rvs_single_out = np.full(n_spec, fill_value=np.nan)
     unc_single_out = np.full(n_spec, fill_value=np.nan)
-    rvs_binned_out = np.full(n_nights, fill_value=np.nan)
-    unc_binned_out = np.full(n_nights, fill_value=np.nan)
+    t_binned_out = np.full(n_bins, fill_value=np.nan)
+    rvs_binned_out = np.full(n_bins, fill_value=np.nan)
+    unc_binned_out = np.full(n_bins, fill_value=np.nan)
     bad = np.where(~np.isfinite(wli))
     if bad[0].size > 0:
         wli[bad] = 0
@@ -525,15 +399,19 @@ def combine_relative_rvs(rvs, weights, indices):
         rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rvli[:, i].flatten(), wli[:, i].flatten())
         
     # Per-night RVs
-    for i in range(n_nights):
+    for i in range(n_bins):
         f, l = indices[i]
         rr = rvli[:, f:l+1].flatten()
         ww = wli[:, f:l+1].flatten()
+        bad = np.where(~np.isfinite(rr))[0]
+        if bad.size > 0:
+            ww[bad] = 0
         rvs_binned_out[i], unc_binned_out[i] = pcmath.weighted_combine(rr, ww, err_type="empirical")
+        t_binned_out[i] = np.nanmean(bjds[f:l+1])
         
-    return rvs_single_out, unc_single_out, rvs_binned_out, unc_binned_out
+    return rvs_single_out, unc_single_out, t_binned_out, rvs_binned_out, unc_binned_out
 
-def combine_rvs_weighted_mean(rvs, weights, indices):
+def combine_rvs_simple(bjds, rvs, weights, indices):
     """Combines RVs considering the differences between all the data points.
     
     Args:
@@ -542,18 +420,18 @@ def combine_rvs_weighted_mean(rvs, weights, indices):
     """
     
     # Numbers
-    n_orders, n_spec = rvs.shape
-    n_nights = len(n_obs_nights)
+    n_chunks, n_spec = rvs.shape
+    n_bins = len(indices)
     
     # Output arrays
     rvs_single_out = np.full(n_spec, fill_value=np.nan)
     unc_single_out = np.full(n_spec, fill_value=np.nan)
-    rvs_binned_out = np.full(n_nights, fill_value=np.nan)
-    unc_binned_out = np.full(n_nights, fill_value=np.nan)
+    rvs_binned_out = np.full(n_bins, fill_value=np.nan)
+    unc_binned_out = np.full(n_bins, fill_value=np.nan)
     
     # Offset each order and chunk
     rvs_offset = np.copy(rvs)
-    for o in range(n_orders):
+    for o in range(n_chunks):
         rvs_offset[o, :] = rvs[o, :] - pcmath.weighted_mean(rvs[o, :].flatten(), weights[o, :].flatten())
             
     for i in range(n_spec):
@@ -561,10 +439,11 @@ def combine_rvs_weighted_mean(rvs, weights, indices):
         ww = weights[:, i]
         rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rr.flatten(), ww.flatten())
         
-    for i in range(n_nights):
+    for i in range(n_chunks):
         f, l = indices[i]
         rr = rvs_offset[:, f:l+1].flatten()
         ww = weights[:, f:l+1].flatten()
         rvs_binned_out[i], unc_binned_out[i] = pcmath.weighted_combine(rr, ww)
+        t_binned_out[i] = np.nanmean(bjds[f:l+1])
         
-    return rvs_single_out, unc_single_out, rvs_binned_out, unc_binned_out
+    return rvs_single_out, unc_single_out, t_binned_out, rvs_binned_out, unc_binned_out

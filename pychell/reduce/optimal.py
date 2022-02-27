@@ -98,7 +98,7 @@ class OptimalExtractor(SpectralExtractor):
                        n_iterations=5, badpix_threshold=5, min_profile_flux=1E-3, _extract_aperture=None):
         
         # Read noise
-        read_noise = data.spec_module.parse_itime(data) * data.spec_module.read_noise
+        read_noise = data.spec_module.parse_itime(data) * data.spec_module.detector["read_noise"]
 
         # dims
         nx = image.shape[1]

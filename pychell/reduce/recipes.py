@@ -1,20 +1,10 @@
 # Default Python modules
 import os
 import pickle
-import warnings
 import importlib
 
 # Maths
 import numpy as np
-np.seterr(invalid='ignore', divide='ignore')
-warnings.filterwarnings('ignore')
-
-# Graphics
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import pychell
-plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
 
 # Parallelization
 from joblib import Parallel, delayed
@@ -121,6 +111,9 @@ class ReduceRecipe:
         # Create the output directories
         self.create_output_dirs()
 
+        # init data
+        self.init_data()
+
         # Generate pre calibration images
         pccalib.gen_master_calib_images(self.data, self.do_bias, self.do_dark, self.do_flat, self.flat_percentile)
         
@@ -201,7 +194,7 @@ class ReduceRecipe:
     def print_reduction_summary(self):
         
         n_sci_tot = len(self.data['science'])
-        targets_all = np.array([self.data['science'][i].object for i in range(n_sci_tot)], dtype='<U50')
+        targets_all = np.array([self.data['science'][i].spec_module.parse_object(self.data['science'][i]) for i in range(n_sci_tot)], dtype='<U50')
         targets_unique = np.unique(targets_all)
         for i in range(len(targets_unique)):
             
@@ -227,5 +220,5 @@ class ReduceRecipe:
 
     @property
     def spec_module(self):
-        return importlib.import_module(f"pychell.data.{self.spectrograph.lower()}")
+        return pcutils.get_spec_module(self.spectrograph)
 

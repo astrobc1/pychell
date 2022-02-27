@@ -2,12 +2,10 @@
 # Python default modules
 import os
 import copy
-import pickle
 
 # Science / Math
 import numpy as np
 import scipy.interpolate
-import scipy.signal
 from astropy.io import fits
 
 # Graphics
@@ -16,9 +14,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pychell
 plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mplstyle")
-
-# LLVM
-from numba import jit, njit
 
 # Pychell modules
 import pychell.utils as pcutils
@@ -72,7 +67,7 @@ class SpectralExtractor:
 
             # Which orders
             if self.extract_orders is None:
-                self.extract_orders = np.arange(1, len(order_map.orders_list) + 1).astype(int)
+                self.extract_orders = np.arange(recipe.tracer.orders[0], recipe.tracer.orders[1] + 1).astype(int)
             
             # Alias orders list
             orders_list = order_map.orders_list
@@ -80,13 +75,10 @@ class SpectralExtractor:
             # A trace mask
             trace_map_image = recipe.tracer.gen_image(orders_list, ny, nx, xrange=recipe.xrange, poly_mask_top=recipe.poly_mask_top, poly_mask_bottom=recipe.poly_mask_bottom)
         
-            # Mask edge pixels as nan
-            #self.mask_image(data_image, recipe.xrange, recipe.poly_mask_bottom, recipe.poly_mask_top)
-        
             # Loop over orders, possibly multi-trace
             for order_index, trace_dict in enumerate(orders_list):
 
-                if order_index + 1 in self.extract_orders:
+                if order_index + recipe.tracer.orders[0] in self.extract_orders:
                 
                     # Timer
                     stopwatch.lap(trace_dict['label'])
@@ -97,7 +89,7 @@ class SpectralExtractor:
                     # Extract trace
                     try:
                         spec1d, spec1d_unc, badpix1d = self.extract_trace(data, data_image, trace_map_image, trace_dict, badpix_mask=badpix_mask)
-                        
+                    
                         # Store result
                         reduced_data[order_index, fiber_index, :, :] = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
 
@@ -108,7 +100,7 @@ class SpectralExtractor:
                         print(f"Warning! Could not extract trace [{trace_dict['label']}] for observation [{data}]")
 
         # Plot reduced data
-        fig = self.plot_extracted_spectra(data, reduced_data)
+        self.plot_extracted_spectra(recipe, data, reduced_data)
         
         # Create a filename
         obj = data.spec_module.parse_object(data).replace(' ', '_')
@@ -147,7 +139,7 @@ class SpectralExtractor:
         return snr
 
     @staticmethod
-    def plot_extracted_spectra(data, reduced_data):
+    def plot_extracted_spectra(recipe, data, reduced_data):
         """Primary method to plot the extracted 1d spectrum for all orders.
 
         Args:
@@ -183,8 +175,8 @@ class SpectralExtractor:
                 
                 # The order index
                 order_index = n_cols * row + col
-                order_num = order_index + 1
-                if order_num > n_orders:
+                order_num = order_index + recipe.tracer.orders[0]
+                if order_index + 1 > n_orders:
                     continue
 
                 # Loop over traces
