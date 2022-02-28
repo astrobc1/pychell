@@ -417,64 +417,65 @@ def median_filter2d(x, width, preserve_nans=True):
         
     return out
 
-# @njit
-# def convolve1d(x, k, padleft, padright):
-#     """Numerical convolution for a 1d signal.
+@njit
+def convolve1djit(x, k):
+    """Numerical convolution for a 1d signal.
 
-#     Args:
-#         x (np.ndarray): The input signal, must be uniform spacing.
-#         k (np.ndarray): The kernel, must have the same grid spacing as x.
-#         padleft (int): The left pad.
-#         padright (int): The right pad.
+    Args:
+        x (np.ndarray): The input signal, must be uniform spacing.
+        k (np.ndarray): The kernel, must have the same grid spacing as x.
 
-#     Returns:
-#         np.ndarray: The convolved signal.
-#     """
+    Returns:
+        np.ndarray: The convolved signal.
+    """
 
-#     # Length of each
-#     nx = len(x)
-#     nk = len(k)
+    # Length of each
+    nx = len(x)
+    nk = len(k)
 
-#     # The left and right padding
-#     n_pad = numba.int64(nk / 2)
+    # The left and right padding
+    n_pad = numba.int64(nk / 2)
 
-#     # Output vector
-#     out = np.zeros(x.shape)
+    valleft = x[0]
+    valright = x[0]
 
-#     # Flip the kernel (just a view, no new vector is allocated)
-#     kf = k[::-1]
+    # Output vector
+    out = np.zeros(x.shape)
 
-#     # Left values
-#     for i in range(n_pad):
-#         s = 0.0
-#         for j in range(nk):
-#             ii = i - n_pad + j
-#             if ii < 0:
-#                 s += padleft * kf[j]
-#             else:
-#                 s += x[ii] * kf[j]
-#         out[i] = s
+    # Flip the kernel (just a view, no new vector is allocated)
+    kf = k[::-1]
 
-#     # Middle values
-#     for i in range(n_pad, nx-n_pad):
-#         s = 0.0
-#         for j in range(nk):
-#             s += x[i - n_pad + j] * kf[j]
-#         out[i] = s
+    # Left values
+    for i in range(n_pad):
+        s = 0.0
+        for j in range(nk):
+            ii = i - n_pad + j
+            if ii < 0:
+                s += valleft * kf[j]
+            else:
+                s += x[ii] * kf[j]
+        out[i] = s
 
-#     # Right values
-#     for i in range(nx-n_pad, nx):
-#         s = 0.0
-#         for j in range(nk):
-#             ii = i - n_pad + j
-#             if ii > nx - 1:
-#                 s += padleft * kf[j]
-#             else:
-#                 s += x[ii] * kf[j]
-#         out[i] = s
+    # Middle values
+    for i in range(n_pad, nx-n_pad):
+        s = 0.0
+        for j in range(nk):
+            s += x[i - n_pad + j] * kf[j]
+        out[i] = s
 
-#     # Return out
-#     return out
+    # Right values
+    for i in range(nx-n_pad, nx):
+        s = 0.0
+        for j in range(nk):
+            ii = i - n_pad + j
+            if ii > nx - 1:
+                s += valright * kf[j]
+            else:
+                s += x[ii] * kf[j]
+        out[i] = s
+
+    # Return out
+    return out
 
 
 def convolve1d(y, kernel):

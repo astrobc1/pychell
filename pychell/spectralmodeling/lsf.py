@@ -9,12 +9,12 @@ class LSF(SpectralModelComponent1d):
     """ A base class for an LSF (line spread function) model.
     """
 
-    def convolve(self, raw_flux, pars=None, lsf=None, interp=False):
-        if lsf is None and pars is None:
+    def convolve(self, raw_flux, pars=None, kernel=None):
+        if kernel is None and pars is None:
             raise ValueError("Cannot construct LSF with no parameters")
-        if lsf is None:
-            lsf = self.build(pars)
-        flux = pcmath.convolve1d(raw_flux, lsf) # reforward this method to ignore the options of pcmath.convolve_flux
+        if kernel is None:
+            kernel = self.build(pars)
+        flux = pcmath.convolve1d(raw_flux, kernel)
         return flux
             
 class HermiteLSF(LSF):
@@ -59,7 +59,7 @@ class HermiteLSF(LSF):
         return pars
 
     def get_wave_grid(self, sregion, dl):
-        nx = int(14 * self.sigma[2] / dl)
+        nx = int(16 * self.sigma[2] / dl)
         if nx % 2 == 0:
             nx += 1
         wave_rel = np.arange(int(-nx / 2), int(nx / 2) + 1) * dl

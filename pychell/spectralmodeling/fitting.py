@@ -117,7 +117,11 @@ def compute_rvs_iteratively(specrvprob, obj, optimizer, augmenter, output_path, 
             # Augment the template
             if iter_index < n_iterations - 1:
                 augmenter.augment_template(specrvprob, _opt_results, iter_index)
-                stellar_templates[:, iter_index+1] = np.copy(specrvprob.model.templates["star"])
+                if specrvprob.model.star.from_flat:
+                    stellar_templates[:, iter_index+1] = np.copy(specrvprob.model.templates["star"])
+                else:
+                    stellar_templates[:, iter_index+2] = np.copy(specrvprob.model.templates["star"])
+                    
             
 
     # Save forward model outputs
