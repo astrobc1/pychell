@@ -166,30 +166,29 @@ def optimize_and_plot_observation(p0, data, model, obj, optimizer, iter_index, o
     # Lock parameters for lower_bound == upper_bound
     p0.sanity_lock()
 
-    #try:
-
     # Time the fit
     stopwatch = pcutils.StopWatch()
 
     # Fit
-    opt_result = optimizer.optimize(p0, lambda pars: obj.compute_obj(pars, data, model))
+    try:
+        opt_result = optimizer.optimize(p0, lambda pars: obj.compute_obj(pars, data, model))
 
-    # Print diagnostics
-    print(f"Fit {data} in {round((stopwatch.time_since())/60, 2)} min", flush=True)
-    if verbose:
-        print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
-        print(f" Calls = {opt_result['fcalls']}", flush=True)
-        print(f" Best Fit Parameters:\n{model.summary(opt_result['pbest'])}", flush=True)
+        # Print diagnostics
+        print(f"Fit {data} in {round((stopwatch.time_since())/60, 2)} min", flush=True)
+        if verbose:
+            print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
+            print(f" Calls = {opt_result['fcalls']}", flush=True)
+            print(f" Best Fit Parameters:\n{model.summary(opt_result['pbest'])}", flush=True)
 
-    # Plot
-    pychell.spectralmodeling.plotting.plot_spectum_fit(data, model, opt_result["pbest"], obj, iter_index, output_path)
+        # Plot
+        pychell.spectralmodeling.plotting.plot_spectum_fit(data, model, opt_result["pbest"], obj, iter_index, output_path)
 
-    #except:
+    except:
 
-    # print(f"Failed to fit observation {data}")
+        print(f"Failed to fit observation {data}")
 
-    # # Return nan pars and set to bad
-    # opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
+        # Return nan pars and set to bad
+        opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
     
     # Return result
     return opt_result
