@@ -2,6 +2,8 @@
 import os
 import glob
 
+import pychell.spectralmodeling.barycenter
+
 # Maths
 import numpy as np
 
@@ -59,7 +61,12 @@ def parse_spec1d(input_file, sregion):
 def parse_telescope(data):
     return int(data.base_input_file_noext[-1:])
 
-def compute_exposure_midpoint(data):
+def get_barycenter_corrections(data, star_name):
+    jdmid = get_exposure_midpoint(data)
+    bjd, bc_vel = pychell.spectralmodeling.barycenter.compute_barycenter_corrections(jdmid, star_name, observatory)
+    return bjd, bc_vel
+
+def get_exposure_midpoint(data):
     return parse_exposure_start_time(data) + parse_itime(data) / (2 * 86400)
 
 def estimate_wls(data, sregion):
