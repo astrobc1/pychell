@@ -669,7 +669,6 @@ def weighted_median(data, weights=None, percentile=0.5):
 
     return w_median
 
-#@njit
 def weighted_stddev(x, w):
     """Computes the weighted standard deviation of a dataset with bias correction.
 
@@ -698,6 +697,7 @@ def weighted_mean(x, w, axis=None):
         float: The weighted mean.
     """
     return np.nansum(x * w, axis=axis) / np.nansum(w, axis=axis)
+
 
 def weighted_combine(y, w, yerr=None, err_type="empirical"):
     """Performs a weighted coadd.

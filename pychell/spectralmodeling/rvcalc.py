@@ -8,10 +8,7 @@ import scipy.stats
 from scipy.constants import c as SPEED_OF_LIGHT
 
 # Numba
-from numba import jit
-
-# Plotting
-import matplotlib.pyplot as plt
+from numba import njit
 
 # Pychell deps
 import pychell.maths as pcmath
@@ -306,6 +303,7 @@ def compute_rv_content(model, pars, data, snr=100, gain=1):
         if model.lsf is not None:
             tell_flux = model.lsf.convolve(tell_flux, pars=pars)
         tell_flux = pcmath.cspline_interp(model_wave, tell_flux, data_wave)
+        good = np.where(np.isfinite(data_wave) & np.isfinite(tell_flux))
         cspline_tell = scipy.interpolate.CubicSpline(data_wave[good], tell_flux[good], extrapolate=False)
             
     # Stores rv content for star
@@ -352,18 +350,31 @@ def compute_rv_content(model, pars, data, snr=100, gain=1):
 #### CO-ADDING RVS ####
 #######################
 
-def combine_relative_rvs(bjds, rvs, weights, indices):
-    """Combines RVs considering the differences between all the data points.
-    
-    Args:
-        rvs (np.ndarray): RVs of shape n_chunks, n_spec
-        weights (np.ndarray): Corresponding uncertainties of the same shape.
-        indices (np.ndarray): The indices for each bin
-    """
-    
-    # Numbers
+def combine_relative_rvs(bjds, rvs, weights, indices, n_iterations=20, n_sigma=4):
+    rvs, weights = np.copy(rvs), np.copy(weights) # Copy so as to not overwrite
     n_chunks, n_spec = rvs.shape
     n_bins = len(indices)
+    for i in range(n_iterations):
+        print(f"Combining RVs, iteration {i+1}")
+        rvs_single_out, unc_single_out, t_binned_out, rvs_binned_out, unc_binned_out = _combine_relative_rvs(bjds, rvs, weights, indices)
+        n_bad = 0
+        for j in range(n_bins):
+            f, l = indices[j][0], indices[j][1]
+            res = rvs_binned_out[j] - (rvs[:, f:l+1] - pcmath.weighted_mean(rvs, weights, axis=1)[:, np.newaxis])
+            bad = np.where(np.abs(res) > n_sigma * pcmath.weighted_stddev(res, weights[:, f:l+1]))
+            if bad[0].size > 0:
+                n_bad += bad[0].size
+                rvs[:, f:l+1][bad] = np.nan
+                weights[:, f:l+1][bad] = 0
+        if n_bad == 0:
+            break
+
+    return rvs_single_out, unc_single_out, t_binned_out, rvs_binned_out, unc_binned_out
+
+
+def align_chunks(rvs, weights):
+
+    n_chunks, n_spec = rvs.shape
     
     # Determine differences and weights tensors
     rvlij = np.full((n_chunks, n_spec, n_spec), np.nan)
@@ -383,6 +394,43 @@ def combine_relative_rvs(bjds, rvs, weights, indices):
             rr = np.copy(rvlij[l, i, :])
             ww = np.copy(wlij[l, i, :])
             rvli[l, i], _ = pcmath.weighted_combine(rr, ww)
+
+    return rvli, wli
+
+def _combine_relative_rvs(bjds, rvs, weights, indices):
+    """Combines RVs considering the differences between all the data points.
+    
+    Args:
+        rvs (np.ndarray): RVs of shape n_chunks, n_spec
+        weights (np.ndarray): Corresponding uncertainties of the same shape.
+        indices (np.ndarray): The indices for each bin
+    """
+    
+    # Numbers
+    n_chunks, n_spec = rvs.shape
+    n_bins = len(indices)
+    
+    # # Determine differences and weights tensors
+    # rvlij = np.full((n_chunks, n_spec, n_spec), np.nan)
+    # wlij = np.full((n_chunks, n_spec, n_spec), np.nan)
+    # wli = np.full((n_chunks, n_spec), np.nan)
+    # for l in range(n_chunks):
+    #     for i in range(n_spec):
+    #         wli[l, i] = np.copy(weights[l, i])
+    #         for j in range(n_spec):
+    #             rvlij[l, i, j] = rvs[l, i] - rvs[l, j]
+    #             wlij[l, i, j] = np.sqrt(weights[l, i] * weights[l, j])
+
+    # # Average over differences
+    # rvli = np.full(shape=(n_chunks, n_spec), fill_value=np.nan)
+    # for l in range(n_chunks):
+    #     for i in range(n_spec):
+    #         rr = np.copy(rvlij[l, i, :])
+    #         ww = np.copy(wlij[l, i, :])
+    #         rvli[l, i], _ = pcmath.weighted_combine(rr, ww)
+
+    # Align chunks
+    rvli, wli = align_chunks(rvs, weights)
     
     # Output arrays
     rvs_single_out = np.full(n_spec, fill_value=np.nan)
