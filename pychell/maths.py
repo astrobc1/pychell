@@ -1,58 +1,43 @@
-#### A helper file containing math routines
-# Default python modules
-# Debugging
-import warnings
-import sys
-
-# Science/Math
-import scipy.interpolate # spline interpolation
+import scipy.interpolate
 from scipy import constants as cs # cs.c = speed of light in m/s
+SPEED_OF_LIGHT = cs.c
 import scipy.stats
 import numpy as np
 import scipy.ndimage.filters
 import numpy.polynomial.chebyshev
-
-from astropy.coordinates import SkyCoord
 import astropy.modeling.functional_models
-import astropy.units as units
-
-# Graphics for debugging
-import matplotlib.pyplot as plt
-
-# LLVM
-from numba import jit, njit, prange
+from numba import jit, njit
 import numba
-import numba.types as nt
 from llc import jit_filter_function
 
-def compute_R2_stat(ydata, ymodel, w=None):
+def r2stat(ydata, ymodel, weights):
     """Computes the weighted R2 stat.
 
     Args:
         ydata (np.ndarray): The observations.
         ymodel (np.ndarray): The model.
-        w (np.ndarray, optional): The weights. Defaults to uniform weights (so unweighted).
+        weights (np.ndarray, optional): The weights. Defaults to unweighted.
 
     Returns:
         float: The weighted R2 stat.
     """
     
     # Weights
-    if w is None:
-        w = np.ones_like(ydata)
-    w = w / np.nansum(w)
+    if weights is None:
+        weights = np.ones_like(ydata)
+    weights = weights / np.nansum(weights)
     
     # Weighted mean of the data
-    ybardata = weighted_mean(ydata, w)
+    ybardata = weighted_mean(ydata, weights)
     
     # SStot (total sum of squares)
-    sstot = np.nansum(w * (ydata - ybardata)**2)
+    sstot = np.nansum(weights * (ydata - ybardata)**2)
     
     # Residuals
     resid = ydata - ymodel
     
     # SSres
-    ssres = np.nansum(w * resid**2)
+    ssres = np.nansum(weights * resid**2)
     
     # R2 stat
     r2 = 1 - (ssres / sstot)
@@ -77,27 +62,6 @@ def outer_diff(x, y):
         for j in range(n2):
             out[i, j] = np.abs(x[i] - y[j])
     return out
-
-@njit
-def outer_fun(fun, x, y):
-    """Generalized outer function (like an outer product). Creates the matrix D_ij = fun(xi, yj)
-
-    Args:
-        fun (function): A function decorated with numba.jit.
-        x (np.ndarray): The x variable.
-        y (np.ndarray): The y variable.
-
-    Returns:
-        np.ndarray: The matrix D_ij.
-    """
-    n1 = len(x)
-    n2 = len(x)
-    out = np.zeros((n1, n2))
-    for i in range(n1):
-        for j in range(n2):
-            out[i, j] = fun(x[i], y[j])
-    return out
-
 
 def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
     """Convenient method to compute the weighted RMS between two vectors x and y.
@@ -147,29 +111,6 @@ def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
 
     return rms
 
-def measure_fwhm(x, y):
-    """Measures the fwhm of a signal.
-
-    Args:
-        x (np.ndarray): The grid the signal is sampled on.
-        y (np.ndarray): The signal.
-
-    Returns:
-        float: The full width half max of the signal in units of x.
-    """
-    
-    max_loc = np.nanargmax(y)
-    max_val = np.nanmax(y)
-    
-    left = np.where((x < x[max_loc]) & (y < 0.7 * max_val))[0]
-    right = np.where((x > x[max_loc]) & (y < 0.7 * max_val))[0]
-    
-    left_x = intersection(x[left], y[left], 0.5 * max_val, precision = 1000)[0]
-    right_x = intersection(x[right], y[right], 0.5 * max_val, precision = 1000)[0]
-    fwhm = right_x - left_x
-    
-    return fwhm
-
 def sigmatofwhm(sigma):
     """Converts sigma to fwhm assuming a normal distribution.
 
@@ -193,16 +134,26 @@ def fwhmtosigma(fwhm):
     return fwhm / np.sqrt(8 * np.log(2))
 
 def doppler_shift_wave(wave, vel):
+    """Doppler shifts a wavelength grid.
+
+    Args:
+        wave (float or np.ndarray): The wavelengths
+        vel (float or np.ndarray): The velocities
+        mode (str): Whether to apply the classical ("cm") or relativistic ("sr") Doppler formula. Defaults to "sr".
+
+    Returns:
+        float or np.ndarray: The Doppler shifted wavelength grid
+    """
     wave_shifted = doppler_shift_SR(wave, vel)
     return wave_shifted
 
 def doppler_shift_flux(wave, flux, vel):
-    """Doppler shifts a signal according to the standard SR Doppler formula (radial only) or a differential version of the classical Doppler equation.
+    """Doppler shifts a signal and interpolate it back onto the original grid
 
     Args:
         wave (np.ndarray): The initial wavelengths.
         vel (float): The velocity in m/s.
-        flux (np.ndarray, optional): The spectrum corresponding to wave. Defaults to None.
+        flux (np.ndarray): The spectrum.
 
     Returns:
         np.ndarray: The Doppler shifted wave vector if flux is None, or the Doppler shifted flux on the wave_out grid otherwise.
@@ -273,20 +224,8 @@ def doppler_shift_SR(wave, vel):
     Returns:
         np.ndarray or float: The Doppler-shifted wavelength.
     """
-    beta = vel / cs.c
+    beta = vel / SPEED_OF_LIGHT
     return wave * np.sqrt((1 + beta) / (1 - beta))
-
-def doppler_shift_CM(wave, vel):
-    """Doppler-shift according to the classical eq.
-
-    Args:
-        wave (np.ndarray or float): The input wavelengths.
-        vel (float): The velocity in m/s.
-
-    Returns:
-        np.ndarray or float: The Doppler-shifted wavelength.
-    """
-    return wave * np.exp(vel / cs.c)
 
 @jit_filter_function
 def fmedian(x):
@@ -341,13 +280,13 @@ def generalized_median_filter1d(x, width, percentile=0.5):
 
 @njit
 def gauss(x, amp, mu, sigma):
-    """Constructs a standard Gaussian
+    """Constructs a standard Gaussian = amp * exp(-0.5 * ((x - mu)/sigma)^2)
 
     Args:
-        x (np.ndarray): The independent variable.
+        x (np.ndarray): The x grid.
         amp (float): The amplitude (height).
         mu (float): The mean (center point).
-        sigma (float): The standard deviation.
+        sigma (float): An effective standard deviation.
 
     Returns:
         np.ndarray: The Gaussian
@@ -363,25 +302,18 @@ def robust_stddev(x):
     Returns:
         float: The robust standard deviation
     """
-    eps = 1E-20
     x0 = np.nanmedian(x)
 
     # First, the median absolute deviation MAD about the median:
     mad_ = mad(x)
 
-    if mad_ < eps:
-        mad_ = np.nanmean(np.abs(x - x0)) / 0.8
-
-    if mad_ < eps:
-        return 0
-
     # Now the biweighted value:
     u = (x - x0) / (6 * mad_)
     uu = u * u
     q = np.where(uu <= 1)[0]
-    count = q.size
-    if count < 3:
-        return -1
+    n = q.size
+    if n < 3:
+        return np.nan
 
     numerator = np.nansum((x[q] - x0)**2 * (1 - uu[q])**4)
     n = x.size
@@ -391,14 +323,14 @@ def robust_stddev(x):
     if sigma > 0:
         return np.sqrt(sigma)
     else:
-        return 0
+        return np.nan
 
 def median_filter2d(x, width, preserve_nans=True):
     """Computes a median 2d filter.
 
     Args:
         x (np.ndarray): The array to filter.
-        width (int): The width of the filter.
+        width (int): The width of the filter in index units.
         preserve_nans (bool, optional): Whether or not to preserve any nans or infs which may get overwritten. Defaults to True.
 
     Returns:
@@ -418,8 +350,8 @@ def median_filter2d(x, width, preserve_nans=True):
     return out
 
 @njit
-def convolve1djit(x, k):
-    """Numerical convolution for a 1d signal.
+def convolve1dd(x, k):
+    """Numerical/direct convolution for a 1d signal.
 
     Args:
         x (np.ndarray): The input signal, must be uniform spacing.
@@ -484,115 +416,6 @@ def convolve1d(y, kernel):
     yp = np.pad(y, pad_width=(int(nk / 2), int(nk / 2)), mode='constant', constant_values=(y[0], y[-1]))
     yc = np.convolve(yp, kernel, mode='valid')
     return yc
-
-
-def convolve_flux(wave, flux, R=None, width=None, interp=None, lsf=None, croplsf=False):
-    """Convolves flux.
-
-    Args:
-        wave (np.ndarray): The wavelength grid.
-        flux (np.ndarray): The corresponding flux to convolve.
-        R (float, optional): The resolution to convolve down to. Defaults to None.
-        width (float, optional): The LSF width in units of wave. Defaults to None.
-        compress (int, optional): The number of LSF points is only int(nwave / compress). Defaults to 64.
-        uniform (bool, optional): Whether or not the wave grid is already uniform, which is necessary for standard convolution. Defaults to False.
-        lsf (np.ndarray, optional): The LSF to convolve with.
-    Returns:
-        np.ndarray: The convolved flux
-    """
-    
-    # Get good initial points
-    if wave is not None:
-        good = np.where(np.isfinite(wave) & np.isfinite(flux))[0]
-        wavegood, fluxgood = wave[good], flux[good]
-    else:
-        good = np.where(np.isfinite(flux))[0]
-        wavegood, fluxgood = None, flux[good]
-        
-    # Whether or not to interpolate onto a uniform grid
-    if interp or interp is None and wavegood is not None:
-        interp = np.unique(np.diff(wavegood)).size > 1 or good.size < wave.size
-    else:
-        interp = False
-    
-    # Interpolate onto a uniform grid if set or values were masked
-    if interp:
-        wavelin = np.linspace(wavegood[0], wavegood[-1], num=good.size)
-        fluxlin = scipy.interpolate.CubicSpline(wavegood, fluxgood, extrapolate=False)(wavelin)
-    else:
-        wavelin, fluxlin = wavegood, fluxgood
-    
-    # Derive LSF from width or R
-    if lsf is None:
-        
-        # The grid spacing
-        dl = wavelin[1] - wavelin[0]
-    
-        # The mean wavelength
-        ml = np.nanmean(wavelin)
-        
-        # Sigma
-        sig = width_from_R(R, ml) if R is not None else width
-    
-        # Initial LSF grid that's way too big
-        nlsf = int(0.1 * wavelin.size)
-        xlsf = np.arange(np.floor(-nlsf / 2), np.floor(nlsf / 2) + 1) * dl
-
-        # Construct and max-normalize LSF
-        lsf = np.exp(-0.5 * (xlsf / sig)**2)
-        lsf /= np.nanmax(lsf)
-        
-        # Only consider > 1E-10
-        goodlsf = np.where(lsf > 1E-10)[0]
-        nlsf = goodlsf.size
-        if nlsf % 2 == 0:
-            nlsf += 1
-        xlsf = np.arange(-np.floor(nlsf / 2), np.floor(nlsf / 2) + 1) * dl
-
-        # Construct and sum-normalize LSF
-        lsf = np.exp(-0.5 * (xlsf / sig)**2)
-        lsf /= np.nansum(lsf)
-    
-    else:
-        
-        # Get the approx index of the max of the LSF
-        if croplsf:
-            lsf = lsf / np.nanmax(lsf)
-            max_ind = np.nanargmax(lsf)
-            goodlsf = np.where(lsf > 1E-10)[0]
-            nlsf = goodlsf.size
-            if nlsf % 2 == 0:
-                nlsf += 1
-            f, l = goodlsf[0], goodlsf[-1]
-            k = np.max([np.abs(f - max_loc), np.abs(l - max_loc)])
-            nlsf = 2 * k + 1
-            lsf = lsf[(max_loc - k):(max_loc + k + 1)]
-            
-        else:
-            
-            nlsf = lsf.size
-            
-    # Ensure the lsf size is odd
-    assert lsf.size % 2 == 1
-        
-    # Pad
-    fluxlinp = np.pad(fluxlin, pad_width=(int(nlsf / 2), int(nlsf / 2)), mode='constant', constant_values=(fluxlin[0], fluxlin[-1]))
-
-    # Convolve
-    fluxlinc = np.convolve(fluxlinp, lsf, mode='valid')
-    
-    # Interpolate back to the default grid
-    if interp:
-        goodlinc = np.where(np.isfinite(fluxlinc))[0]
-        fluxc = scipy.interpolate.CubicSpline(wavelin[goodlinc], fluxlinc[goodlinc], extrapolate=False)(wave)
-    elif flux.size > fluxlinc.size:
-        fluxc = np.full(flux.size, fill_value=np.nan)
-        fluxc[good] = fluxlinc
-    else:
-        fluxc = fluxlinc
-    
-    return fluxc
-
 
 def hermfun(x, deg):
     """Computes Hermite Gaussian Functions via the recursion relation.
@@ -741,7 +564,7 @@ def weighted_combine(y, w, yerr=None, err_type="empirical"):
     return yc, yc_unc
 
 def cross_correlate(x1, y1, x2, y2, lags, kind="rms"):
-    """Cross-correlation in "pixel" space.
+    """Cross-correlation in indexing space, can perofrm direct rms or ccf calculation.
 
     Args:
         y1 (np.ndarray): The array to cross-correlate.
@@ -757,6 +580,7 @@ def cross_correlate(x1, y1, x2, y2, lags, kind="rms"):
     n2 = y2.size
   
     nlags = lags.size
+    kind = kind.lower()
     
     corrfun = np.zeros(nlags, dtype=float)
     corrfun[:] = np.nan
@@ -770,7 +594,7 @@ def cross_correlate(x1, y1, x2, y2, lags, kind="rms"):
         bad = np.where(~np.isfinite(vec_cross))[0]
         if bad.size > 0:
             weights[bad] = 0
-        if kind.lower() == "rms":
+        if kind == "rms":
             corrfun[i] = rmsloss(y1, y2_shifted, weights=weights)
         else:
             corrfun[i] = np.nansum(vec_cross * weights) / np.nansum(weights)
@@ -803,7 +627,7 @@ def cross_correlate_doppler(x1, y1, x2, y2, vels, kind="rms"):
         good = np.where(np.isfinite(y2_shifted) & np.isfinite(y1))[0]
         if good.size < 3:
             continue
-        weights = np.ones(n1, dtype=np.float64)
+        weights = np.ones(n1, dtype=float)
         if kind.lower() == "rms":
             bad = np.where(~np.isfinite(y1) | ~np.isfinite(y2_shifted))[0]
             weights[bad] = 0
@@ -864,19 +688,6 @@ def legpoly_coeffs(x, y, deg=None):
     coeffs = np.linalg.solve(V, y)
     return coeffs
 
-def poly_coeffs(x, y):
-    """Computes the polynomial coefficients (of order len(x)) given a set of x and y points.
-
-    Args:
-        x (np.ndarray): The x vector.
-        y (np.ndarray): The y vector.
-
-    Returns:
-        np.ndarray: The nominal polynomial coefficients.
-    """
-    V = np.vander(x)
-    coeffs = np.linalg.solve(V, y)
-    return coeffs
 
 def gauss_modified(x, amp, mu, sigma, p):
     """Constructs a modified Gaussian (variable exponent p)
@@ -893,6 +704,7 @@ def gauss_modified(x, amp, mu, sigma, p):
     """
     return amp * np.exp(-0.5 * (np.abs((x - mu) / sigma))**p)
 
+
 def shiftint1d(x, n, cval=np.nan):
     result = np.empty(x.size)
     if n > 0:
@@ -904,6 +716,7 @@ def shiftint1d(x, n, cval=np.nan):
     else:
         result[:] = x
     return result
+
 
 def voigt(x, amp, mu, sigma, fwhm_L):
     """Alias for astropy.modeling.functional_models.Voigt1D.
@@ -946,13 +759,10 @@ def generalized_voigt(x, amp, mu_L, fwhm_L, kernel):
 
     return out
 
-def normal(x):
-    return gauss(x, 1 / np.sqrt(2 * np.pi), 0, 1)
-
-
 def skew_normal(x, loc, scale, alpha):
     xx = (x - loc) / scale
-    return (2 / scale) * normal(xx) * scipy.stats.norm.cdf(alpha * xx)
+    norm = gauss(xx, 1 / np.sqrt(2 * np.pi), 0, 1)
+    return (2 / scale) * norm * scipy.stats.norm.cdf(alpha * xx)
 
 @njit
 def lorentz(x, amp, mu, fwhm):
@@ -1057,7 +867,6 @@ def normalize_image(image, height, order_spacing, percentile=0.99, downsample=4)
     if bad[0].size > 0:
         out[bad] = np.nan
     return out
-
 
 
 def cspline_fit_fancy(x, y, window=None, n_knots=50, percentile=0.99):

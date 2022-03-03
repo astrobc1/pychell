@@ -1,0 +1,8 @@
+icm.2016B107.161016.data.00033.a_GJ699_reduced.fits
+icm.2016B107.161016.data.00034.a_GJ699_reduced.fits
+icm.2016B107.161023.data.00114.a_GJ699_reduced.fits
+icm.2016B107.161023.data.00115.a_GJ699_reduced.fits
+icm.2016B107.161106.data.00095.a_GJ699_reduced.fits
+icm.2016B107.161106.data.00096.a_GJ699_reduced.fits
+icm.2016B107.161107.data.00089.a_GJ699_reduced.fits
+icm.2016B107.161107.data.00090.a_GJ699_reduced.fits

@@ -1,7 +1,6 @@
 # Pychell deps
 import pychell.spectralmodeling as pcsm
 from pychell.data import ishell
-import pychell.maths as pcmath
 
 # Optimize deps
 from optimize import IterativeNelderMead
@@ -11,9 +10,13 @@ spectrograph = "iSHELL"
 data_input_path = "data/"
 filelist = "filelist.txt"
 star_name = "GJ_699" # Must be recognized by simbad
-tag = "example"
+tag = "example" # Final output directory is {spectrograph}_{tag}
 do_orders = [221, 222, 223]
-templates_path = "/Users/cale/Research/pychell_templates/" # Must set this
+
+#### MUST SET THIS ####
+templates_path = "/Users/cale/Research/pychell_templates/"
+
+#### This can be as is ####
 output_path = "./"
 
 # Loop over chunks (orders for ishell)
@@ -33,8 +36,7 @@ for order in do_orders:
     
     # Create the "Problem" object.
     specrvprob = pcsm.SpectralRVProblem(spectrograph=spectrograph, model=model,
-                                        data_input_path=data_input_path, filelist=filelist,
-                                        spec_mod_func=spec_mod_func)
+                                        data_input_path=data_input_path, filelist=filelist)
     
     # Run RVs for this order
     pcsm.compute_rvs_iteratively(specrvprob,

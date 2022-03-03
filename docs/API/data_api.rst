@@ -1,10 +1,10 @@
 pychell API reference
 =====================
 
-pychell makes use of specific data objects for echellograms, 1-dimensional spectra, and radial velocities which are all instrument independent.
-
 Data Containers
 +++++++++++++++
+
+pychell makes use of the following instrument-independent data objects for echellograms, 1-dimensional spectra, and radial velocities.
 
 .. automodule:: pychell.data.spectraldata
     :members:
@@ -15,53 +15,29 @@ Data Containers
     :show-inheritance:
 
 
-pychell currently supports the following spectrographs. Only iSHELL, PARVI, and NIRSPEC come with support for spectral extraction. For spectrographs with multiple modes, typically only the ideal mode for precise RVs is supported. pychell is able to support RVs for all spectrographs from 1-dimensional spectra.
-
 Spectrographs
 +++++++++++++
 
-CHIRON
-------
+pychell currently supports the following tested spectrograph configurations.
 
-.. automodule:: pychell.data.chiron
-    :members:
-
-
-ESPRESSO
---------
-
-.. automodule:: pychell.data.espresso
-    :members:
-
-
-HARPS
------
-
-.. automodule:: pychell.data.harps
-    :members:
+#. iSHELL
+    Reduction: Kgas mode, optimal
+    RV generation: Order by order, Kgas mode, 13 CH4 gas cell.
+#. PARVI
+    Reduction: optimal and SP
+    RV generation: Kgas mode
+#. HARPS
+    RV generation: Chunked, based on ThAr wavelength solution.
+#. ESPRESSO
+    RV generation: Chunked, based on comb wavelength solution.
+#. CHIRON
+    RV generation: Order-by-order, iodine gas cell
+#. MINERVA
+    RV generation: Order-by-order, iodine gas cell.
 
 
-iSHELL
-------
+Coming Soon
+-----------
 
-.. automodule:: pychell.data.ishell
-    :members:
-
-MINERVA
--------
-
-.. automodule:: pychell.data.minerva
-    :members:
-
-NIRSPEC
--------
-
-.. automodule:: pychell.data.nirspec
-    :members:
-
-
-PARVI
------
-
-.. automodule:: pychell.data.parvi
-    :members:
+#. NIRSPEC/KPIC
+#. NEID
