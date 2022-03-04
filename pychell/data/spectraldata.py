@@ -23,9 +23,10 @@ class SpecData:
         """Base constructor for a SpecData object.
 
         Args:
-            fits (str): The astropy fits object.
-            spectrograph (str): The name of the spectrographf for dispatch.
+            input_file (str): The full path+filename of the fits file.
+            spectrograph (str): The name of the spectrograph, used for dispatching with the spectrographs module.
             spec_module_func (method): A method to modify an existing spectrograph module.
+            parse_header (bool): Whether or not to parse the header.
         """
         self.input_file = input_file
         self.spectrograph = spectrograph
@@ -34,6 +35,11 @@ class SpecData:
             self.header = self.parse_header()
 
     def parse_header(self):
+        """Parses the fits header.
+
+        Returns:
+            fits.Header: The fits header.
+        """
         return self.spec_module.parse_header(self.input_file)
 
     @property
@@ -74,6 +80,11 @@ class SpecData:
 
     @property
     def spec_module(self):
+        """Gets the modified spectrograph module
+
+        Returns:
+            module: The module for this spectrograph.
+        """
         return pcutils.get_spec_module(self.spectrograph, self.spec_mod_func)
 
     def __repr__(self):
@@ -92,7 +103,7 @@ class Echellogram(SpecData):
 
     @staticmethod
     def generate_cube(data):
-        """Generates a data-cube (i.e., stack) of images.
+        """Generates a data-cube (a stack) of images.
 
         Args:
             data_list (list): A list of data objects.
@@ -124,7 +135,7 @@ class MasterCal(Echellogram):
         self.group = group
 
         # The input filename
-        input_file = output_path + self.group[0].spec_module.gen_master_calib_filename(self)
+        input_file = output_path + self.spec_module.gen_master_calib_filename(self)
         
         # Call super init
         super().__init__(input_file, self.group[0].spectrograph, parse_header=False)
@@ -134,6 +145,15 @@ class MasterCal(Echellogram):
 
     def save(self, image):
         fits.writeto(self.input_file, image, self.header, overwrite=True, output_verify='ignore')
+
+    @property
+    def spec_module(self):
+        """Gets the modified spectrograph module
+
+        Returns:
+            module: The module for this spectrograph.
+        """
+        return self.group[0].spec_module
 
 
 #####################

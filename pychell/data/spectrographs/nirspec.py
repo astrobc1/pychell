@@ -1,160 +1,154 @@
-# Base Python
+# imports
 import os
-import importlib
 import copy
 import glob
-import sys
-
-# Maths
-import numpy as np
-
-# Astropy
+import pickle
 from astropy.io import fits
-from astropy.coordinates import SkyCoord
-from astropy.time import Time
+import astropy.coordinates
+import astropy.time
 import astropy.units as units
-
-# Barycorrpy
-from barycorrpy import get_BC_vel
-from barycorrpy.utc_tdb import JDUTC_to_BJDTDB
-
-
-# Pychell deps
+import numpy as np
+import sklearn.cluster
+import pychell.data as pcdata
 import pychell.maths as pcmath
-import pychell.data.spectraldata as pcspecdata
+import pychell.spectralmodeling.barycenter
+from pychell.reduce.recipes import ReduceRecipe
 
-#############################
-####### Name and Site #######
-#############################
+# Site
+observatory = "keck"
 
-spectrograph = 'NIRSPEC'
-observatory = {
-    "name": "Keck"
+# Orders
+echelle_orders = [212, 240]
+
+# Detector
+detector = {"dark_current": 0.0, "gain": 1, "read_noise": 0}
+
+# fwhm
+lsf_sigma = [0.016 , 0.022, 0.03]
+
+# Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
+wls_pixel_lagrange_points = [100, 500, 1000]
+
+# Approximate for Kgas, correspond to wls_pixel_lagrange_points for each order in kgas
+wls_wave_lagrange_points = {
+
+    # Absolute echelle orders
+    212: [2454.557561435, 2462.837672608, 2470.5724728630003],
+    213: [2443.148444449, 2451.379686837, 2459.091231465],
+    214: [2431.8408307639997, 2440.032734124, 2447.699298677],
+    215: [2420.635776048, 2428.785495107, 2436.412010878],
+    216: [2409.533986576, 2417.64424356, 2425.231443701],
+    217: [2398.537381209, 2406.6078806220003, 2414.1555270910003],
+    218: [2387.643046386, 2395.67243081, 2403.182506843],
+    219: [2376.848974584, 2384.839610577, 2392.3122912139997],
+    220: [2366.154443537, 2374.105658955, 2381.540789995],
+    221: [2355.5563592089998, 2363.468688897, 2370.8701069070003],
+    222: [2345.0551363570003, 2352.929771645, 2360.295596074],
+    223: [2334.64923953, 2342.486836784, 2349.8186079409998],
+    224: [2324.338904298, 2332.1379387, 2339.435163611],
+    225: [2314.119183839, 2321.880573474, 2329.144815827],
+    226: [2303.9902726249998, 2311.71876433, 2318.949231662],
+    227: [2293.950127095, 2301.64487031, 2308.842080084],
+    228: [2284.0009072420003, 2291.661245655, 2298.826540094],
+    229: [2274.1403442250003, 2281.7657688890004, 2288.897654584],
+    230: [2264.36481698, 2271.9564668020003, 2279.057559244],
+    231: [2254.674892171, 2262.234315996, 2269.302942496],
+    232: [2245.0709341770003, 2252.596723597, 2259.633915038],
+    233: [2235.549187891, 2243.041612825, 2250.049456757],
+    234: [2226.108953053, 2233.571472399, 2240.549547495],
+    235: [2216.742305394, 2224.183394135, 2231.1255745589997],
+    236: [2207.4728481360003, 2214.8736803809998, 2221.791297633],
+    237: [2198.275611957, 2205.642903627, 2212.533774808],
+    238: [2189.149178289, 2196.491093944, 2203.3503565250003],
+    239: [2180.107332421, 2187.420764171, 2194.241058186],
+    240: [2171.143496504, 2178.420091295, 2185.2242535550004]
 }
 
-utc_offset = -10
+######################
+#### DATA PARSING ####
+######################
+
+def parse_header(input_file):
+    return fits.open(input_file)[0].header
+
+def parse_itime(data):
+    return data.header["ITIME"]
+
+def parse_object(data):
+    return data.header["OBJECT"]
+
+def parse_utdate(data):
+    return "".join(data.header["DATE_OBS"].split('-'))
+
+def parse_sky_coord(data):
+    coord = astropy.coordinates.SkyCoord(ra=data.header['TCS_RA'], dec=data.header['TCS_DEC'], unit=(units.hourangle, units.deg))
+    return coord
     
+def parse_exposure_start_time(data):
+    return astropy.time.Time(float(data.header['TCS_UTC']) + 2400000.5, scale='utc', format='jd').jd
+
+def parse_image(data):
+    image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float)
+    correct_readmath(data, image)
+    return image
+
+def parse_spec1d(input_file, sregion):
+    
+    # Extract and flip
+    oi = sregion.order - echelle_orders[0]
+    f = fits.open(input_file)
+    flux = f[0].data[oi, 0, ::-1, 0].astype(float)
+    medval = pcmath.weighted_median(flux, percentile=0.99)
+    flux = flux / medval
+    fluxerr = f[0].data[oi, 0, ::-1, 1].astype(float) / medval
+    mask = f[0].data[oi, 0, ::-1, 2].astype(float)
+    data = {"flux": flux,
+            "fluxerr": fluxerr,
+            "mask": mask}
+
+    return data
+
+
+###################
+#### REDUCTION ####
+###################
+
+
 def categorize_raw_data(data_input_path, output_path):
 
     # Stores the data as above objects
     data = {}
     
     # iSHELL science files are files that contain spc or data
-    sci_files = glob.glob(data_input_path + "*data*.fits")
-    data['science'] = [pcspecdata.RawEchellogram(input_file=sci_file, specmod=sys.modules[__name__]) for sci_file in sci_files]
-        
-    # Darks assumed to contain dark in filename
-    dark_files = glob.glob(data_input_path + '*dark*.fits')
-
-    # NIRSPEC flats must contain flat in the filename
+    sci_files = glob.glob(data_input_path + "*data*.fits") + glob.glob(data_input_path + "*spc*.fits")
+    sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
+    data['science'] = [pcdata.Echellogram(input_file=sci_file, spectrograph="iSHELL") for sci_file in sci_files]
+    
+    # iSHELL flats must contain flat in the filename
     flat_files = glob.glob(data_input_path + '*flat*.fits')
-
-
-    if len(dark_files) > 0:
-        data['darks'] = [pcspecdata.RawEchellogram(input_file=dark_files[f], specmod=sys.modules[__name__]) for f in range(len(dark_files))]
-        dark_groups = group_darks(data['darks'])
-        data['master_darks'] = [pcspecdata.MasterCal(dark_group, output_path + "calib" + os.sep) for dark_groups in dark_group]
-
     if len(flat_files) > 0:
-        data['flats'] = [pcspecdata.RawEchellogram(input_file=flat_files[f], specmod=sys.modules[__name__]) for f in range(len(flat_files))]
+        data['flats'] = [pcdata.Echellogram(input_file=flat_files[f], spectrograph="iSHELL") for f in range(len(flat_files))]
         flat_groups = group_flats(data['flats'])
-        data['master_flats'] = [pcspecdata.MasterCal(flat_group, output_path + "calib" + os.sep) for flat_group in flat_groups]
-
-
-    if len(dark_files) > 0:
-        for sci in data['science']:
-            pair_master_dark(sci, data['master_darks'])
-        
-
-        if len(flat_files) > 0:
-            for flat in data['flats']:
-                pair_master_dark(flat, data['master_darks'])
-
-    if len(flat_files) > 0:
+        data['master_flats'] = [pcdata.MasterCal(flat_group, output_path + "calib" + os.sep) for flat_group in flat_groups]
+    
         for sci in data['science']:
             pair_master_flat(sci, data['master_flats'])
         
-    # Order maps for iSHELL are the flat fields closest in time and space (RA+Dec) to the science target
-    data['order_maps'] = data['master_flats']
-    for sci_data in data['science']:
-        pair_order_maps(sci_data, data['order_maps'])
+        # Order maps for iSHELL are the flat fields closest in time and space (RA+Dec) to the science target
+        data['order_maps'] = data['master_flats']
+        for sci_data in data['science']:
+            pair_order_maps(sci_data, data['order_maps'])
 
     # Which to extract
     data['extract'] = data['science']
-    
-    # Print reduction summary
-    print_reduction_summary(data)
 
     # Return the data dict
     return data
-
-def group_flats(flats):
-    return [flats]
 
 def pair_order_maps(data, order_maps):
     for order_map in order_maps:
         if order_map == data.master_flat:
             data.order_maps = [order_map]
-
-def parse_image_num(data):
-    string_list = data.base_input_file.split('.')
-    data.image_num = string_list[1]
-    return data.image_num
-    
-def parse_itime(data):
-    data.itime = data.header["ITIME"]
-    return data.itime
-
-def pair_master_flat(data, master_flats):
-    data.master_flat = master_flats[0]
-
-def parse_object(data):
-    data.object = data.header["OBJECT"].replace(" ", "")
-    return data.object
-    
-def parse_utdate(data):
-    utdate = "".join(data.header["DATE-OBS"].split('-'))
-    data.utdate = utdate
-    return data.utdate
-    
-def parse_sky_coord(data):
-    data.skycoord = SkyCoord(ra=data.header['RA'], dec=data.header['DEC'], unit=(units.hourangle, units.deg))
-    return data.skycoord
-    
-def parse_exposure_start_time(data):
-    data.time_obs_start = Time(float(data.header['MJD-OBS']) + 2400000.5, scale='utc', format='jd')
-    return data.time_obs_start
-
-def gen_master_calib_filename(master_cal):
-    fname0 = master_cal.group[0].base_input_file.lower()
-    if "dark" in fname0:
-        return f"master_dark_{master_cal.group[0].utdate}{group[0].itime}s.fits"
-    elif "flat" in fname0:
-        img_nums = np.array([parse_image_num(d) for d in master_cal.group], dtype=int)
-        img_start, img_end = img_nums.min(), img_nums.max()
-        return f"master_flat_{master_cal.group[0].utdate}imgs{img_start}-{img_end}.fits"
-    else:
-        return f"master_calib_{master_cal.group[0].utdate}.fits"
-
-def gen_master_calib_header(master_cal):
-    master_cal.skycoord = master_cal.group[0].skycoord
-    master_cal.time_obs_start = master_cal.group[0].time_obs_start
-    master_cal.object = master_cal.group[0].object
-    master_cal.itime = master_cal.group[0].itime
-    return copy.deepcopy(master_cal.group[0].header)
-    
-def parse_spec1d(data):
-    
-    # Load the flux, flux unc, and bad pix arrays
-    fits_data = fits.open(data.input_file, output_verify='ignore')[0]
-    data.header = fits_data.header
-    oi = data.order_num - 1
-    data.flux, data.flux_unc, data.mask = fits_data.data[oi, 0, :, 0].astype(np.float64), fits_data.data[oi, 0, :, 1].astype(np.float64), fits_data.data[oi, 0, :, 2].astype(np.float64)
-
-def parse_image(data):
-    image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float)
-    correct_readmath(data, image)
-    return image
 
 def correct_readmath(data, data_image):
     # Corrects NDRs - Number of dynamic reads, or Non-destructive reads, take your pick.
@@ -167,107 +161,180 @@ def correct_readmath(data, data_image):
         if 'BSCALE' in data.header:
             data_image /= float(data.header['BSCALE'])
 
-def parse_image_header(data):
-        
-    # Parse the fits HDU
-    fits_hdu = fits.open(data.input_file)[0]
-    
-    # Just in case
-    try:
-        fits_hdu.verify('fix')
-    except:
-        pass
-    
-    # Store the header
-    data.header = fits_hdu.header
-    
-    # Parse the sky coord and time of obs
-    parse_utdate(data)
-    parse_sky_coord(data)
-    parse_exposure_start_time(data)
-    parse_object(data)
-    parse_itime(data)
-    
-    return data.header
+def gen_master_calib_filename(master_cal):
+    fname0 = master_cal.group[0].base_input_file.lower()
+    if "dark" in fname0:
+        return f"master_dark_{group[0].itime}s.fits"
+    elif "flat" in fname0:
+        img_nums = np.array([parse_image_num(d) for d in master_cal.group], dtype=int)
+        img_start, img_end = img_nums.min(), img_nums.max()
+        return f"master_flat_imgs{img_start}-{img_end}.fits"
+    else:
+        return f"master_calib.fits"
 
-def print_reduction_summary(data):
-    
-    n_sci_tot = len(data['science'])
-    targets_all = np.array([data['science'][i].object for i in range(n_sci_tot)], dtype='<U50')
-    targets_unique = np.unique(targets_all)
-    for i in range(len(targets_unique)):
-        
-        target = targets_unique[i]
-        
-        locs_this_target = np.where(targets_all == target)[0]
-        
-        sci_this_target = [data['science'][j] for j in locs_this_target]
-        
-        print('Target: ' + target)
-        print('    N Exposures: ' + str(locs_this_target.size))
-        if hasattr(sci_this_target[0], 'master_bias'):
-            print('  Master Bias: ')
-            print('    ' + str(sci_this_target[0].master_bias))
-            
-        if hasattr(sci_this_target[0], 'master_dark'):
-            print('  Master Dark: ')
-            print('    ' + str(sci_this_target[0].master_dark))
-            
-        if hasattr(sci_this_target[0], 'master_flat'):
-            print('  Master Flat: ')
-            print('    ' + str(sci_this_target[0].master_flat))
+def gen_master_calib_header(master_cal):
+    return copy.deepcopy(master_cal.group[0].header)
 
+def parse_image_num(data):
+    return data.base_input_file.split('.')[4]
 
-def compute_exposure_midpoint(data):
-    return parse_exposure_start_time(data).jd + parse_itime(data) / (2 * 86400)
+def pair_master_bias(data, master_bias):
+    data.master_bias = master_bias
 
-def compute_barycenter_corrections(data, star_name):
+def pair_master_dark(data, master_darks):
+    itimes = np.array([master_darks[i].itime for i in range(len(master_darks))], dtype=float)
+    good = np.where(data.itime == itimes)[0]
+    if good.size != 1:
+        raise ValueError(str(good.size) + " master dark(s) found for\n" + str(data))
+    else:
+        data.master_dark = master_darks[good[0]]
+
+def pair_master_flat(data, master_flats):
+    ang_seps = np.array([np.abs(parse_sky_coord(master_flat.group[0]).separation(parse_sky_coord(data)).value) for master_flat in master_flats], dtype=float)
+    ang_seps /= 90
+    time_seps = np.array([np.abs(parse_exposure_start_time(master_flat.group[0]) - parse_exposure_start_time(data)) for master_flat in master_flats], dtype=float)
+    time_seps /= 100
+    ds = np.sqrt(ang_seps**2 + time_seps**2)
+    minds_loc = np.argmin(ds)
+    data.master_flat = master_flats[minds_loc]
+
+def group_darks(darks):
+    groups = []
+    itimes = np.array([dark.itime for dark in darks])
+    itimes_unq = np.unique(itimes)
+    for t in itimes_unq:
+        good = np.where(itimes == t)[0]
+        indiv_darks = [darks[i] for i in good]
+        groups.append(indiv_darks)
+    return groups
+
+def group_flats(flats):
+    
+    # Groups
+    groups = []
+    
+    # Number of total flats
+    n_flats = len(flats)
+    
+    # Create a clustering object
+    density_cluster = sklearn.cluster.DBSCAN(eps=0.01745, min_samples=2, metric='euclidean', algorithm='auto', p=None, n_jobs=1)
+    
+    # Points are the ra and dec and time
+    dist_matrix = np.empty(shape=(n_flats, n_flats), dtype=float)
+    for i in range(n_flats):
+        for j in range(n_flats):
+            coordi = parse_sky_coord(flats[i])
+            coordj = parse_sky_coord(flats[j])
+            dpsi = coordi.separation(coordj).value
+            dt = np.abs(parse_exposure_start_time(flats[i]) - parse_exposure_start_time(flats[j]))
+            dt /= 100
+            dpsi /= 90
+            dist_matrix[i, j] = np.sqrt(dpsi**2 + dt**2)
+    
+    # Fit
+    db = density_cluster.fit(dist_matrix)
+    
+    # Extract the labels
+    labels = db.labels_
+    good_labels = np.where(labels >= 0)[0]
+    if good_labels.size == 0:
+        raise ValueError('The flat pairing algorithm failed!')
+    good_labels_init = labels[good_labels]
+    labels_unique = np.unique(good_labels_init)
+    
+    # The number of master flats
+    n_mflats = len(labels_unique)
+
+    for l in range(n_mflats):
+        this_label = np.where(good_labels_init == labels_unique[l])[0]
+        indiv_flats = [flats[lb] for lb in this_label]
+        groups.append(indiv_flats)
         
-    # Star name
-    star_name = star_name.replace('_', ' ')
-    
-    # Compute the JD UTC mid point (possibly weighted)
-    jdmid = compute_exposure_midpoint(data)
-    
-    # BJD
-    bjd = JDUTC_to_BJDTDB(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
-    
-    # bc vel
-    bc_vel = get_BC_vel(JDUTC=jdmid, starname=star_name, obsname=observatory['name'], leap_update=True)[0][0]
-    
-    # Add to data
-    data.bjd = bjd
-    data.bc_vel = bc_vel
-    
+    return groups
+
+################################
+#### BARYCENTER CORRECTIONS ####
+################################
+
+def get_exposure_midpoint(data):
+    return parse_exposure_start_time(data) + parse_itime(data) / (2 * 86400)
+
+def get_barycenter_corrections(data, star_name):
+    jdmid = get_exposure_midpoint(data)
+    bjd, bc_vel = pychell.spectralmodeling.barycenter.compute_barycenter_corrections(jdmid, star_name, observatory)
     return bjd, bc_vel
 
 #########################
 #### BASIC WAVE INFO ####
 #########################
 
-def estimate_wls(data):
-    oi = data.order_num - 1
-    waves = np.array([quad_set_point_1[oi], quad_set_point_2[oi], quad_set_point_3[oi]])
-    pcoeffs = pcmath.poly_coeffs(quad_pixel_set_points, waves)
-    wls = np.polyval(pcoeffs, np.arange(data.flux.size))
+def estimate_wls(data, sregion):
+    return estimate_order_wls(sregion.order)
+
+def estimate_order_wls(order):
+    pcoeffs = pcmath.poly_coeffs(wls_pixel_lagrange_points, wls_wave_lagrange_points[order])
+    wls = np.polyval(pcoeffs, np.arange(2048))
     return wls
 
-read_noise = 0
 
-###########################
-#### RADIAL VELOCITIES ####
-###########################
+################################
+#### REDUCTION / EXTRACTION ####
+################################
 
-lsf_width = [0.1, 0.25, 0.4]
+class iSHELLReduceRecipe(ReduceRecipe):
 
-# Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
-quad_pixel_set_points = [1, 512, 1023]
+    def __init__(self, data_input_path, output_path, base_flat_field_file, do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5, xrange=None, poly_mask_bottom=None, poly_mask_top=None, tracer=None, extractor=None, n_cores=1):
+        super().__init__(spectrograph="iSHELL",
+                         data_input_path=data_input_path, output_path=output_path,
+                         do_bias=do_bias, do_dark=do_dark, do_flat=do_flat, flat_percentile=flat_percentile,
+                         xrange=xrange, poly_mask_top=poly_mask_top, poly_mask_bottom=poly_mask_bottom,
+                         tracer=tracer, extractor=extractor, n_cores=n_cores)
+        self.base_flat_field_file = base_flat_field_file
 
-# Left most set point for the quadratic wavelength solution
-quad_set_point_1 = np.array([19900.00 - 36, 19900.00 - 36 + 470, 20600.00,21500.00,22200.00,22800.00,23600.00])
+    def trace(self):
+        """Traces the orders.
+        """
+        poly_mask_bottom0, poly_mask_top0 = np.copy(self.poly_mask_bottom), np.copy(self.poly_mask_top)
+        for order_map in self.data["order_maps"]:
+            print(f"Tracing orders for {order_map} ...", flush=True)
+            #self.poly_mask_bottom, self.poly_mask_top = self.compute_poly_masks(order_map)
+            self.tracer.trace(self, order_map)
+            with open(f"{self.output_path}{os.sep}trace{os.sep}{order_map.base_input_file_noext}_order_map.pkl", 'wb') as f:
+                pickle.dump(order_map.orders_list, f)
 
-# Middle set point for the quadratic wavelength solution
-quad_set_point_2 = np.array([20050.00 - 40.5, 20050.00 - 40.5 + 470, 20950.00, 21600.00, 22350.00, 23000.00, 23750.00])
+            # Reset mask
+            self.poly_mask_bottom, self.poly_mask_top = poly_mask_bottom0, poly_mask_top0
 
-# Right most set point for the quadratic wavelength solution
-quad_set_point_3 = np.array([20200.00 - 40, 20200.00 - 40 + 470, 21300.00, 21700.00, 22500.00, 23200.00, 23900.00])
+    def compute_poly_masks(self, data):
+        image1 = pcdata.Echellogram(self.base_flat_field_file, spectrograph="iSHELL").parse_image()
+        image2 = data.parse_image()
+        offset = self.compute_mask_offset(image1, image2)
+        poly_mask_bottom_new, poly_mask_top_new = copy.deepcopy(self.poly_mask_bottom), copy.deepcopy(self.poly_mask_top)
+        poly_mask_bottom_new[0][1] -= offset
+        poly_mask_bottom_new[1][1] -= offset
+        poly_mask_bottom_new[2][1] -= offset
+        poly_mask_top_new[0][1] -= offset
+        poly_mask_top_new[1][1] -= offset
+        poly_mask_top_new[2][1] -= offset
+        return poly_mask_bottom_new, poly_mask_top_new
+
+    @staticmethod
+    def compute_mask_offset(image1, image2):
+        ny, nx = image1.shape
+        lags = np.arange(-200, 201)
+        n_lags = len(lags)
+        n_slices = 100
+        ccfs = np.full((n_lags, n_slices), np.nan)
+        yarr = np.arange(2048)
+        slices = np.linspace(500, ny-500-1, num=n_slices).astype(int)
+        for i in range(n_slices):
+            ii = slices[i]
+            s1 = image1[:, ii] / pcmath.weighted_median(image1[:, ii], percentile=0.95)
+            s2 = image2[:, ii] / pcmath.weighted_median(image2[:, ii], percentile=0.95)
+            ccfs[:, i] = pcmath.cross_correlate(yarr, s1, yarr, s2, lags, kind='xc')
+        ccf = np.nanmedian(ccfs, axis=1)
+        lag_best = lags[np.nanargmax(ccf)]
+        return lag_best
+
+
+

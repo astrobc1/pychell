@@ -168,11 +168,11 @@ def correct_readmath(data, data_image):
 def gen_master_calib_filename(master_cal):
     fname0 = master_cal.group[0].base_input_file.lower()
     if "dark" in fname0:
-        return f"master_dark_{group[0].itime}s.fits"
+        return f"master_dark_{parse_utdate(master_cal.group[0])}_{parse_itime(master_cal.group[0])}s.fits"
     elif "flat" in fname0:
         img_nums = np.array([parse_image_num(d) for d in master_cal.group], dtype=int)
         img_start, img_end = img_nums.min(), img_nums.max()
-        return f"master_flat_imgs{img_start}-{img_end}.fits"
+        return f"master_flat_{parse_utdate(master_cal.group[0])}_imgs{img_start}-{img_end}.fits"
     else:
         return f"master_calib.fits"
 
@@ -276,8 +276,8 @@ def estimate_wls(data, sregion):
     return estimate_order_wls(sregion.order)
 
 def estimate_order_wls(order):
-    pcoeffs = pcmath.poly_coeffs(wls_pixel_lagrange_points, wls_wave_lagrange_points[order])
-    wls = np.polyval(pcoeffs, np.arange(2048))
+    pfit = np.polyfit(wls_pixel_lagrange_points, wls_wave_lagrange_points[order], 2)
+    wls = np.polyval(pfit, np.arange(2048))
     return wls
 
 
@@ -301,7 +301,10 @@ class iSHELLReduceRecipe(ReduceRecipe):
         poly_mask_bottom0, poly_mask_top0 = np.copy(self.poly_mask_bottom), np.copy(self.poly_mask_top)
         for order_map in self.data["order_maps"]:
             print(f"Tracing orders for {order_map} ...", flush=True)
-            #self.poly_mask_bottom, self.poly_mask_top = self.compute_poly_masks(order_map)
+            try:
+                self.poly_mask_bottom, self.poly_mask_top = self.compute_poly_masks(order_map)
+            except:
+                print(f"Warning! Could not calculate the order map offset from the flat fields with {self.base_flat_field_file}")
             self.tracer.trace(self, order_map)
             with open(f"{self.output_path}{os.sep}trace{os.sep}{order_map.base_input_file_noext}_order_map.pkl", 'wb') as f:
                 pickle.dump(order_map.orders_list, f)

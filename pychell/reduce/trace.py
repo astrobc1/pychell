@@ -71,7 +71,7 @@ class PeakTracer(OrderTracer):
         """Construct a PeakTracer object.
 
         Args:
-            n_orders (int): The number of orders.
+            orders (list): The start and ending echelle orders [m_start, m_end]. m_start >= m_end or m_end =< m_start.
             deg (int, optional): The polynomial degree to fit the positions with. A higher order polynomial can be used in extraction to further refine these positions if desired. Defaults to 2.
             order_spacing (int, optional): The minimum spacing between the edges of orders. Defaults to 10.
             order_heights (int, optional): The minimum height (in spatial direction) of the orders. Defaults to 10.
@@ -89,7 +89,7 @@ class PeakTracer(OrderTracer):
             iter(order_heights)
             self.order_heights = order_heights
         except:
-            self.order_heights = np.full(self.orders[1] - self.orders[0] + 1, order_heights)
+            self.order_heights = np.full(np.abs(self.orders[0] - self.orders[1]) + 1, order_heights)
 
 
     ######################
@@ -136,7 +136,7 @@ class PeakTracer(OrderTracer):
     @staticmethod
     def _trace(image, orders, deg=2, order_spacing=None, order_heights=None, xrange=None, poly_mask_bottom=None, poly_mask_top=None, fiber=None, xleft=None, xright=None, n_slices=10):
 
-        n_orders = orders[1] - orders[0] + 1
+        n_orders = np.max(orders) - np.min(orders) + 1
 
         try:
             iter(order_heights)
@@ -217,11 +217,19 @@ class PeakTracer(OrderTracer):
 
         # Now build the orders list
         orders_list = []
-        for i in range(len(poly_coeffs)):
-            if fiber is not None:
-                label = float(str(int(i + orders[0])) + "." + str(int(fiber)))
-            else:
-                label = i + orders[0]
-            orders_list.append({'label': label, 'height': order_heights[i], 'pcoeffs': poly_coeffs[i]})
-        
+        if orders[0] <= orders[1]:
+            for i in range(len(poly_coeffs)):
+                if fiber is not None:
+                    label = float(str(int(i + orders[0])) + "." + str(int(fiber)))
+                else:
+                    label = i + orders[0]
+                orders_list.append({'label': label, 'height': order_heights[i], 'pcoeffs': poly_coeffs[i]})
+        else:
+            for i in range(len(poly_coeffs)):
+                if fiber is not None:
+                    label = float(str(int(orders[0] - i)) + "." + str(int(fiber)))
+                else:
+                    label = orders[0] - i
+                orders_list.append({'label': label, 'height': order_heights[i], 'pcoeffs': poly_coeffs[i]})
+
         return orders_list

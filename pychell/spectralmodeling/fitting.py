@@ -39,9 +39,9 @@ def compute_rvs_iteratively(specrvprob, obj, optimizer, augmenter, output_path, 
     # Store rvs in dict of arrays and save to npz file
     rvs = {}
     rvs["bjds"] = np.array([float(d.header["bjd"]) for d in specrvprob.data])
-    rvs["rvsfwm"] = np.full((len(specrvprob), n_iterations+1), np.nan)
+    rvs["rvsfwm"] = np.full((len(specrvprob), n_iterations), np.nan)
     if do_ccf:
-        rvs["rvsxc"] = np.full((len(specrvprob), n_iterations+1), np.nan)
+        rvs["rvsxc"] = np.full((len(specrvprob), n_iterations), np.nan)
 
     # Get templates
     specrvprob.model.load_templates(specrvprob.data)
@@ -185,7 +185,7 @@ def optimize_and_plot_observation(p0, data, model, obj, optimizer, iter_index, o
 
     except:
 
-        print(f"Failed to fit observation {data}")
+        print(f"Failed to fit observation {data}", flush=True)
 
         # Return nan pars and set to bad
         opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)

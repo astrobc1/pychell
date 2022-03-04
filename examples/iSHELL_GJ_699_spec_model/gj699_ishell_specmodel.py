@@ -16,7 +16,7 @@ do_orders = [221, 222, 223]
 #### MUST SET THIS ####
 templates_path = "/Users/cale/Research/pychell_templates/"
 
-#### This can be as is ####
+#### This will save outputs in the directory this file is run ####
 output_path = "./"
 
 # Loop over chunks (orders for ishell)
@@ -26,9 +26,9 @@ for order in do_orders:
     wave_estimate = ishell.estimate_order_wls(order)
     pixmin, pixmax = 200, 1800
     sregion = pcsm.SpecRegion1d(pixmin=pixmin, pixmax=pixmax, wavemin=wave_estimate[pixmin], wavemax=wave_estimate[pixmax], order=order)
-    model = pcsm.SpectralForwardModel(wls=pcsm.SplineWls(n_splines=6, bounds=[-0.05, 0.05]),
-                                      continuum=pcsm.SplineContinuum(n_splines=14),
-                                      lsf=pcsm.HermiteLSF(deg=6, sigma=ishell.lsf_sigma, coeff=[-0.05, 0.01, 0.05]),
+    model = pcsm.SpectralForwardModel(wls=pcsm.SplineWls(n_splines=4, bounds=[-0.05, 0.05]),
+                                      continuum=pcsm.SplineContinuum(n_splines=4),
+                                      lsf=pcsm.HermiteLSF(deg=6, sigma=ishell.lsf_sigma, coeff=[-0.5, 0.01, 0.5]),
                                       star=pcsm.AugmentedStar(input_file="/Users/cale/Research/SpectralTemplates/gj699_btsettl_kband.txt", star_name=star_name),
                                       gascell=pcsm.GasCell(input_file=templates_path + ishell.gascell_file, depth=ishell.gascell_depth),
                                       tellurics=pcsm.TelluricsTAPAS(input_file=templates_path + "TAPAS_tellurics_maunakea.npz"),

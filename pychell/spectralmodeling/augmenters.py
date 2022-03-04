@@ -77,16 +77,16 @@ class WeightedMeanAugmenter(TemplateAugmenter):
                     tell_flux = pcmath.doppler_shift_flux(wave_data, tell_flux, vel)
                     tell_weights = tell_flux**2
                     weights_lr *= tell_weights
+
+                # Interpolate to a high res grid
+                weights_hr = pcmath.lin_interp(wave_star_rest, weights_lr, specrvprob.model.templates['wave'])
+                bad = np.where((weights_hr < 0) | ~np.isfinite(weights_hr))[0]
+                weights_hr[bad] = 0
+                weights[:, ispec] = weights_hr
             
             except:
 
                 weights_lr = specrvprob.data[ispec].mask * fit_weights[ispec]
-            
-            # Interpolate to a high res grid
-            weights_hr = pcmath.lin_interp(wave_star_rest, weights_lr, specrvprob.model.templates['wave'])
-            bad = np.where((weights_hr < 0) | ~np.isfinite(weights_hr))[0]
-            weights_hr[bad] = 0
-            weights[:, ispec] = weights_hr
 
         
         # Sync

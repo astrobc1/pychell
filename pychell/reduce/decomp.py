@@ -33,7 +33,7 @@ class DecompExtractor(SpectralExtractor):
     
     def __init__(self, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05,
                  trace_pos_poly_order=4, oversample=4,
-                 n_trace_refine_iterations=3, n_extract_iterations=3, trace_pos_refine_window=None,
+                 n_trace_refine_iterations=3, n_extract_iterations=3,
                  badpix_threshold=5,
                  extract_orders=None,
                  chunk_width=400,
@@ -48,7 +48,6 @@ class DecompExtractor(SpectralExtractor):
         self.background_smooth_width = background_smooth_width
         self.flux_cutoff = flux_cutoff
         self.n_trace_refine_iterations = n_trace_refine_iterations
-        self.trace_pos_refine_window = trace_pos_refine_window
         self.n_extract_iterations = n_extract_iterations
         self.trace_pos_poly_order = trace_pos_poly_order
         self.oversample = oversample
@@ -69,10 +68,10 @@ class DecompExtractor(SpectralExtractor):
         ny, nx = trace_image.shape
         tilt = self.tilt[:, int(trace_dict['label'])-1] if self.tilt is not None else np.zeros(nx)
         shear = self.shear[:, int(trace_dict['label'])-1] if self.shear is not None else np.zeros(nx)
-        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, tilt, shear, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.trace_pos_refine_window, self.n_extract_iterations, self.badpix_threshold, self.extract_orders, self._extract_aperture, self.lambda_sf, self.lambda_sp)
+        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask, read_noise, tilt, shear, self.remove_background, self.background_smooth_poly_order, self.background_smooth_width, self.flux_cutoff, self.trace_pos_poly_order, self.oversample, self.n_trace_refine_iterations, self.n_extract_iterations, self.badpix_threshold, self.extract_orders, self._extract_aperture, self.lambda_sf, self.lambda_sp)
 
     @staticmethod
-    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, tilt=None, shear=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, trace_pos_refine_window=None, n_extract_iterations=3, badpix_threshold=5, extract_orders=None, _extract_aperture=None, lambda_sf=0.5, lambda_sp=0):
+    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask, read_noise=None, tilt=None, shear=None, remove_background=True, background_smooth_poly_order=3, background_smooth_width=51, flux_cutoff=0.05, trace_pos_poly_order=4, oversample=4, n_trace_refine_iterations=3, n_extract_iterations=3, badpix_threshold=5, extract_orders=None, _extract_aperture=None, lambda_sf=0.5, lambda_sp=0):
 
         if read_noise is None:
             read_noise = data.spec_module.parse_itime(data) * data.spec_module.read_noise
@@ -98,8 +97,7 @@ class DecompExtractor(SpectralExtractor):
         trace_image[bad] = np.nan
 
         # Initiate trace_pos_refine_window
-        if trace_pos_refine_window is None:
-            trace_pos_refine_window = trace_dict['height'] / 2
+        trace_pos_refine_window = trace_dict['height'] / 2
 
         # Initial trace positions
         trace_positions = np.polyval(trace_dict['pcoeffs'], xarr)

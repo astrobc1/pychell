@@ -196,6 +196,8 @@ class CompositeRVData(dict):
         return indices
     
     def __setitem__(self, instname, data):
+        if data.instname is None:
+            data.instname = instname
         super().__setitem__(instname, data)
         self.indices = self.gen_indices()
 

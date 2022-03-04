@@ -83,7 +83,7 @@ def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
         xx, yy, ww = x[good], y[good], weights[good]
         diffs2 = ww * (xx - yy)**2
     else:
-        good = np.where(np.isfinite(y))[0]
+        good = np.where(np.isfinite(x) & np.isfinite(y))[0]
         xx, yy = x[good], y[good]
         diffs2 = (xx - yy)**2
     

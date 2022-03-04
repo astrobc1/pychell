@@ -31,4 +31,3 @@ from .barycenter import compute_barycenter_corrections #, compute_barycenter_cor
 from .fitting import *
 from .plotting import *
 from .rvcalc import *
-from .postplayground import *

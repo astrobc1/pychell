@@ -1,21 +1,10 @@
-# Python default modules
-from functools import reduce
-import operator
 import numpy as np
 import sys
 import time
-import pickle
-import traceback
 import importlib
-import pathlib
-import logging
-import pychell
 from itertools import chain, combinations
 from barycorrpy.utils import get_stellar_data
 from datetime import datetime
-import glob
-import os
-from google_drive_downloader import GoogleDriveDownloader as gdd
 import webcolors
 
 PLOTLY_COLORS = ['darkmagenta', 'mediumslateblue', 'orangered', 'sienna', 'darkblue', 'teal', 'springgreen', 'seagreen', 'darkseagreen', 'plum', 'indianred', 'lawngreen', 'mediumorchid', 'rosybrown', 'turquoise', 'lightgreen', 'cadetblue', 'mediumblue', 'darkorchid', 'olivedrab', 'darkgreen', 'royalblue', 'mediumspringgreen', 'darkviolet', 'yellowgreen', 'mediumturquoise', 'lightpink', 'mediumaquamarine', 'forestgreen', 'slateblue', 'blue', 'mediumpurple', 'burlywood', 'deepskyblue', 'palegreen', 'magenta', 'darkgoldenrod', 'goldenrod', 'cornflowerblue', 'salmon', 'wheat', 'lime', 'coral', 'chartreuse', 'darkturquoise', 'paleturquoise', 'fuchsia', 'purple', 'maroon', 'mediumvioletred', 'palevioletred', 'violet', 'darkkhaki', 'aquamarine', 'darkred', 'darksalmon', 'black', 'darkcyan', 'dodgerblue', 'gold', 'lightblue', 'moccasin', 'lightseagreen', 'orchid', 'palegoldenrod', 'aqua', 'chocolate', 'tan', 'powderblue', 'orange', 'navy', 'lightskyblue', 'darkorange', 'saddlebrown', 'greenyellow', 'green', 'hotpink', 'blueviolet', 'brown', 'limegreen', 'skyblue', 'firebrick', 'darkolivegreen', 'lightsteelblue', 'khaki', 'cyan', 'indigo', 'olive', 'linen', 'sandybrown', 'lightcyan', 'mediumseagreen', 'peru', 'steelblue', 'pink', 'red', 'midnightblue', 'deeppink', 'crimson', 'tomato']
@@ -52,60 +41,6 @@ class StopWatch:
     def lap(self, name):
         self.laps[name] = time.time()
    
-# finds all items within a dictionary recursively.
-def find_all_items(obj, key, keys=None):
-    ret = []
-    if not keys:
-        keys = []
-    if key in obj:
-        out_keys = keys + [key]
-        ret.append((out_keys, obj[key]))
-    for k, v in obj.items():
-        if isinstance(v, dict):
-            found_items = find_all_items(v, key, keys=(keys+[k]))
-            ret += found_items
-    return ret
-
-# Helper
-def getFromDict(dataDict, mapList):
-    return reduce(operator.getitem, mapList, dataDict)
-
-# Helper
-def setInDict(dataDict, mapList, value):
-    getFromDict(dataDict, mapList[:-1])[mapList[-1]] = value
-
-# Downlaod templates from google drive
-def download_templates(dest, file_id=None):
-    
-    if file_id is None:
-        file_id = '1ubwYyH6DidtDfxRdg707-8M9iORS-jql'
-    
-    if not os.path.exists(dest):
-        os.makedirs(dest)
-        
-    if os.path.exists(dest + 'templates'):
-        raise ValueError("Move existing templates sub folder in templates_path")
-        
-    print('Downloading Templates to')
-    print('  ' + dest)
-    
-    now = datetime.now()
-    dt_string = now.strftime("%Y%m%d_%H%M%S")
-    dest_zip = dest + 'templates_' + dt_string + '.zip'
-        
-    try:
-        gdd.download_file_from_google_drive(file_id=file_id, dest_path=dest_zip, unzip=True, showsize=True, overwrite=False)
-        os.remove(dest_zip)
-        template_files = glob.glob(dest + 'templates' + os.sep + '*')
-        for tfile in template_files:
-            p = pathlib.Path(tfile).absolute()
-            parent_dir = p.parents[1]
-            p.rename(parent_dir / p.name)
-        os.rmdir(dest + 'templates')
-        print('Success! Remember to set force_download_templates to False for future runs!')
-    except Exception as e:
-        print("ERROR: Unable to download templates!")
-        logging.error(traceback.format_exc())
 
 def get_size(obj, seen=None):
     
@@ -145,9 +80,11 @@ def dict_diff(d1, d2):
             out[key] = d1[key]
     return out
 
+
 def powerset(iterable):
     s = list(iterable)
     return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
+
 
 def module_from_file(fname):
     spec = importlib.util.spec_from_file_location("user_mod", fname)
@@ -160,6 +97,14 @@ def list_diff(l1, l2):
 
 
 def get_stellar_rv(star_name):
+    """Fetches the absolute stellar rv from a simbad recognizable name.
+
+    Args:
+        star_name (str): The name of the star, must be simbad recognizable. Any underscorse are replaced with a space.
+
+    Returns:
+        float: The stellar rv in m/s
+    """
     result = get_stellar_data(star_name.replace("_", " "))
     rv = result[0]["rv"]
     return rv

@@ -67,7 +67,10 @@ class SpectralExtractor:
 
             # Which orders
             if self.extract_orders is None:
-                self.extract_orders = np.arange(recipe.tracer.orders[0], recipe.tracer.orders[1] + 1).astype(int)
+                if recipe.tracer.orders[0] <= recipe.tracer.orders[1]:
+                    self.extract_orders = np.arange(recipe.tracer.orders[0], recipe.tracer.orders[1] + 1).astype(int)
+                else:
+                    self.extract_orders = np.arange(recipe.tracer.orders[1], recipe.tracer.orders[0] + 1).astype(int)
             
             # Alias orders list
             orders_list = order_map.orders_list
@@ -78,13 +81,15 @@ class SpectralExtractor:
             # Loop over orders, possibly multi-trace
             for order_index, trace_dict in enumerate(orders_list):
 
-                if order_index + recipe.tracer.orders[0] in self.extract_orders:
+                if recipe.tracer.orders[0] <= recipe.tracer.orders[1]:
+                    order = recipe.tracer.orders[0] + order_index
+                else:
+                    order = recipe.tracer.orders[0] - order_index
+
+                if order in self.extract_orders:
                 
                     # Timer
                     stopwatch.lap(trace_dict['label'])
-
-                    # Print start of trace
-                    print(f" [{data}] Extracting Trace {trace_dict['label']} ...", flush=True)
                     
                     # Extract trace
                     try:
@@ -175,7 +180,10 @@ class SpectralExtractor:
                 
                 # The order index
                 order_index = n_cols * row + col
-                order_num = order_index + recipe.tracer.orders[0]
+                if recipe.tracer.orders[0] <= recipe.tracer.orders[1]:
+                    order_num = order_index + recipe.tracer.orders[0]
+                else:
+                    order_num = recipe.tracer.orders[0] - order_index
                 if order_index + 1 > n_orders:
                     continue
 
@@ -298,11 +306,11 @@ class SpectralExtractor:
         tpy /= np.nanmax(tpy)
         good = np.where(tpy >= min_profile_flux)[0]
         xi, xf = good.min(), good.max()
-        extract_aperture = [int(np.abs(np.floor(tpx[xi]))), int(np.ceil(tpx[xf]))]
+        extract_aperture = [-1 * int(np.abs(np.ceil(tpx[xi]))), int(np.ceil(tpx[xf]))]
         return extract_aperture
 
     @staticmethod
-    def compute_background_1d(trace_image, badpix_mask, trace_positions, extract_aperture, background_smooth_width=None, background_smooth_poly_order=None):
+    def compute_background_1d(trace_image, badpix_mask, trace_positions, extract_aperture):
         """Computes the background signal based on regions of low flux. This works best for slit-fed spectrographs where there is still signal on either side of the trace. Fiber-fed spectrographs must resort to other methods not yet implemented.
 
         Args:
@@ -327,6 +335,7 @@ class SpectralExtractor:
         # Empty arrays
         background = np.full(nx, np.nan)
         background_err = np.full(nx, np.nan)
+        n_pix_used = np.full(nx, np.nan)
 
         # Smooth image
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
@@ -347,6 +356,7 @@ class SpectralExtractor:
             # Compute background
             if background[x] >= 0 and np.isfinite(background[x]):
                 n_good = np.where(np.isfinite(trace_image_smooth[background_locs, x]))[0].size
+                n_pix_used[x] = n_good
                 if n_good <= 1:
                     background[x] = np.nan
                 else:
@@ -356,9 +366,10 @@ class SpectralExtractor:
                 background_err[x] = np.nan
 
         # Polynomial filter
-        if background_smooth_width is not None and background_smooth_poly_order is not None:
-            background = pcmath.poly_filter(background, width=background_smooth_width, poly_order=background_smooth_poly_order)
-            background_err = pcmath.poly_filter(background, width=background_smooth_width, poly_order=background_smooth_poly_order)
+        #breakpoint()
+        #if background_smooth_width is not None and background_smooth_poly_order is not None:
+        background = pcmath.poly_filter(background, width=31, poly_order=2)
+        background_err = np.sqrt(background / (n_pix_used - 1))
 
         # Flag negative values
         bad = np.where(background < 0)[0]
@@ -466,6 +477,7 @@ class SpectralExtractor:
         # Return
         return trace_profile_cspline
 
+
     @staticmethod
     def compute_trace_positions_ccf(trace_image, badpix_mask, trace_profile_cspline, extract_aperture, trace_positions_estimate=None, spec1d=None, ccf_window=10, remove_background=False, background=None, trace_pos_poly_order=2):
         """Computes the trace positions by cross-correlating the trace profile with each column and fitting a polynomial to the nominal ccf locs.
@@ -537,16 +549,16 @@ class SpectralExtractor:
             # Perform CCF
             ccf = pcmath.cross_correlate(yarr, data_x, trace_profile_cspline.x, trace_profile, lags, kind="xc")
 
-            # Normalize to max
-            ccf /= np.nanmax(ccf)
-
             # Fit ccf
             try:
                 iymax = np.nanargmax(ccf)
-                pfit = np.polyfit(lags[iymax-1:iymax+2], ccf[iymax-1:iymax+2], 2)
-                ypos = -0.5 * pfit[1] / pfit[0]
-                if ypos >= 0 and ypos <= ny - 1:
-                    y_positions_xc[x] = ypos
+                if iymax - 1 > 0 and iymax + 1 < len(lags):
+                    pfit = np.polyfit(lags[iymax-1:iymax+2], ccf[iymax-1:iymax+2], 2)
+                    ypos = -0.5 * pfit[1] / pfit[0]
+                    if ypos >= 0 and ypos <= ny - 1:
+                        y_positions_xc[x] = ypos
+                else:
+                    continue
             except:
                 continue
         

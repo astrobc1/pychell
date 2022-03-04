@@ -161,13 +161,16 @@ def parse_image(data, scale_to_itime=True):
     image = fits.open(data.input_file, do_not_scale_image_data=True)[0].data.astype(float)
     if "master" in data.base_input_file:
         return image
-    else:
-        image = image.T
-        if scale_to_itime:
-            image *= parse_itime(data)
-            return image
-        else:
-            return image
+    
+    # Transpose
+    image = image.T
+
+    # Scale slope to itime
+    if scale_to_itime:
+        image *= parse_itime(data)
+    
+    return image
+    
 
 def pair_master_dark(data, master_darks):
     data.master_dark = master_darks[0]

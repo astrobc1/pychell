@@ -25,7 +25,7 @@ echelle_orders = [94, 122]
 gascell_file = "iodine_gas_cell_minervanorth_nist.npz"
 
 # lsf sigma
-lsf_sigma = [0.0015, 0.0021, 0.0025]
+lsf_sigma = [0.0015, 0.0022, 0.003]
 
 
 ######################
