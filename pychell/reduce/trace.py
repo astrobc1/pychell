@@ -8,55 +8,56 @@ import pychell.maths as pcmath
 class OrderTracer:
     """Base class for Order tracing algorithms.
     """
+    pass
     
-    @staticmethod
-    def gen_image(orders_list, ny, nx, xrange=None, poly_mask_top=None, poly_mask_bottom=None):
-        """Generates a synthetic echellogram where the value of each pixel is the label of that trace.
+    # @staticmethod
+    # def gen_image(orders_list, ny, nx, xrange=None, poly_mask_top=None, poly_mask_bottom=None):
+    #     """Generates a synthetic echellogram where the value of each pixel is the label of that trace.
 
-        Args:
-            orders_list (list): The list of dictionaries for each trace.
-            shape (tuple): The dimensions of the image (ny, nx).
-            xrange (list, optional): The bounding left and right pixels. Defaults to [0, nx-1].
-            poly_mask_top (list, optional): A list of points (each point a list of length 2 containing an (x, y) pair) that define the bounding polynomial at the top of the image. Defaults to None.
-            poly_mask_bottom (list, optional): Same but for the bottom bounding polynomial. Defaults to None.
+    #     Args:
+    #         orders_list (list): The list of dictionaries for each trace.
+    #         shape (tuple): The dimensions of the image (ny, nx).
+    #         xrange (list, optional): The bounding left and right pixels. Defaults to [0, nx-1].
+    #         poly_mask_top (list, optional): A list of points (each point a list of length 2 containing an (x, y) pair) that define the bounding polynomial at the top of the image. Defaults to None.
+    #         poly_mask_bottom (list, optional): Same but for the bottom bounding polynomial. Defaults to None.
 
-        Returns:
-            np.ndarray: The image.
-        """
+    #     Returns:
+    #         np.ndarray: The image.
+    #     """
         
-        # Initiate order image
-        order_image = np.full((ny, nx), np.nan)
+    #     # Initiate order image
+    #     order_image = np.full((ny, nx), np.nan)
 
-        # Helpful arr
-        xarr = np.arange(nx)
+    #     # Helpful arr
+    #     xarr = np.arange(nx)
 
-        # Xrange
-        if xrange is None:
-            xrange = [0, nx - 1]
+    #     # Xrange
+    #     if xrange is None:
+    #         xrange = [0, nx - 1]
         
-        # Top polynomial
-        x_bottom = np.array([p[0] for p in poly_mask_bottom], dtype=float)
-        y_bottom = np.array([p[1] for p in poly_mask_bottom], dtype=float)
-        pfit_bottom = np.polyfit(x_bottom, y_bottom, len(x_bottom) - 1)
-        poly_bottom = np.polyval(pfit_bottom, xarr)
+    #     # Top polynomial
+    #     x_bottom = np.array([p[0] for p in poly_mask_bottom], dtype=float)
+    #     y_bottom = np.array([p[1] for p in poly_mask_bottom], dtype=float)
+    #     pfit_bottom = np.polyfit(x_bottom, y_bottom, len(x_bottom) - 1)
+    #     poly_bottom = np.polyval(pfit_bottom, xarr)
 
-        # Bottom polynomial
-        x_top = np.array([p[0] for p in poly_mask_top], dtype=float)
-        y_top = np.array([p[1] for p in poly_mask_top], dtype=float)
-        pfit_top = np.polyfit(x_top, y_top, len(x_top) - 1)
-        poly_top = np.polyval(pfit_top, xarr)
+    #     # Bottom polynomial
+    #     x_top = np.array([p[0] for p in poly_mask_top], dtype=float)
+    #     y_top = np.array([p[1] for p in poly_mask_top], dtype=float)
+    #     pfit_top = np.polyfit(x_top, y_top, len(x_top) - 1)
+    #     poly_top = np.polyval(pfit_top, xarr)
         
-        for o in range(len(orders_list)):
-            order_center = np.polyval(orders_list[o]['pcoeffs'], xarr)
-            for x in range(xrange[0], xrange[1] + 1):
-                ymid = order_center[x]
-                y_low = int(np.floor(ymid - orders_list[o]['height'] / 2))
-                y_high = int(np.ceil(ymid + orders_list[o]['height'] / 2))
-                if y_low < poly_bottom[x] or y_high > poly_top[x]:
-                    continue
-                order_image[y_low:y_high + 1, x] = orders_list[o]['label']
+    #     for o in range(len(orders_list)):
+    #         order_center = np.polyval(orders_list[o]['pcoeffs'], xarr)
+    #         for x in range(xrange[0], xrange[1] + 1):
+    #             ymid = order_center[x]
+    #             y_low = int(np.floor(ymid - orders_list[o]['height'] / 2))
+    #             y_high = int(np.ceil(ymid + orders_list[o]['height'] / 2))
+    #             if y_low < poly_bottom[x] or y_high > poly_top[x]:
+    #                 continue
+    #             order_image[y_low:y_high + 1, x] = orders_list[o]['label']
 
-        return order_image
+    #     return order_image
 
 
 class PeakTracer(OrderTracer):

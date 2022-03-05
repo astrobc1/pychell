@@ -75,9 +75,6 @@ class SpectralExtractor:
             # Alias orders list
             orders_list = order_map.orders_list
         
-            # A trace mask
-            trace_map_image = recipe.tracer.gen_image(orders_list, ny, nx, xrange=recipe.xrange, poly_mask_top=recipe.poly_mask_top, poly_mask_bottom=recipe.poly_mask_bottom)
-        
             # Loop over orders, possibly multi-trace
             for order_index, trace_dict in enumerate(orders_list):
 
@@ -93,7 +90,7 @@ class SpectralExtractor:
                     
                     # Extract trace
                     try:
-                        spec1d, spec1d_unc, badpix1d = self.extract_trace(data, data_image, trace_map_image, trace_dict, badpix_mask=badpix_mask)
+                        spec1d, spec1d_unc, badpix1d = self.extract_trace(data, data_image, recipe.xrange, trace_dict, badpix_mask=badpix_mask)
                     
                         # Store result
                         reduced_data[order_index, fiber_index, :, :] = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
@@ -366,8 +363,6 @@ class SpectralExtractor:
                 background_err[x] = np.nan
 
         # Polynomial filter
-        #breakpoint()
-        #if background_smooth_width is not None and background_smooth_poly_order is not None:
         background = pcmath.poly_filter(background, width=31, poly_order=2)
         background_err = np.sqrt(background / (n_pix_used - 1))
 

@@ -78,15 +78,15 @@ class OptimalExtractor(SpectralExtractor):
     #################################################################
 
     def extract_trace(self, data, trace_image,
-                      trace_map_image, trace_dict,
+                      xrange, trace_dict,
                       badpix_mask=None):
-        return self._extract_trace(data, trace_image, trace_map_image, trace_dict, badpix_mask,
+        return self._extract_trace(data, trace_image, xrange, trace_dict, badpix_mask,
                                    self.chunk_width, self.chunk_overlap, self.oversample, self.trace_pos_poly_order,
                                    self.remove_background,
                                    self.n_iterations, self.badpix_threshold, self.min_profile_flux, self._extract_aperture)
 
     @staticmethod
-    def _extract_trace(data, image, trace_map_image, trace_dict, badpix_mask,
+    def _extract_trace(data, image, xrange, trace_dict, badpix_mask,
                        chunk_width=None, chunk_overlap=None, oversample=1, trace_pos_poly_order=4,
                        remove_background=False,
                        n_iterations=5, badpix_threshold=5, min_profile_flux=1E-3, _extract_aperture=None):
@@ -95,7 +95,7 @@ class OptimalExtractor(SpectralExtractor):
         read_noise = data.spec_module.parse_itime(data) * data.spec_module.detector["read_noise"]
 
         # dims
-        nx = image.shape[1]
+        ny, nx = image.shape
 
         # Chunk width
         if chunk_width is None:
@@ -103,24 +103,52 @@ class OptimalExtractor(SpectralExtractor):
 
         # Don't overwrite image
         trace_image = np.copy(image)
-
-        # Helpful array
-        xarr = np.arange(nx)
+        trace_image[:, 0:xrange[0]] = np.nan
+        trace_image[:, xrange[1]+1:] = np.nan
 
         # Initiate mask
         if badpix_mask is None:
-            badpix_mask = np.ones(trace_map_image.shape)
+            badpix_mask = np.ones(trace_image.shape)
         else:
             badpix_mask = np.copy(badpix_mask)
-        bad = np.where((trace_map_image != trace_dict['label']) | ~np.isfinite(trace_image) | (badpix_mask == 0))
-        badpix_mask[bad] = 0
-        trace_image[bad] = np.nan
 
-        # Crop the image
-        goody, goodx = np.where(badpix_mask)
-        yi, yf = np.min(goody), np.max(goody)
-        trace_image = trace_image[yi:yf + 1, :]
-        badpix_mask = badpix_mask[yi:yf + 1, :]
+        # Crop image
+        trace_positions = np.polyval(trace_dict['pcoeffs'], np.arange(nx))
+        for x in range(nx):
+            ymid = trace_positions[x]
+            y_low = int(np.floor(ymid - trace_dict['height'] / 2))
+            y_high = int(np.ceil(ymid + trace_dict['height'] / 2))
+            if y_low >= 0 and y_low <= ny - 1:
+                trace_image[0:y_low, x] = np.nan
+            if y_high >= 0 and y_high + 1 <= ny-1:
+                trace_image[y_high+1:, x] = np.nan
+
+        # New trace positions
+        trace_positions = OptimalExtractor.compute_trace_positions_centroids(trace_image, badpix_mask, trace_pos_poly_order=len(trace_dict['pcoeffs'])-1)
+
+        # Crop image again
+        trace_image = np.copy(image)
+        trace_image[:, 0:xrange[0]] = np.nan
+        trace_image[:, xrange[1]+1:] = np.nan
+        for x in range(nx):
+            ymid = trace_positions[x]
+            y_low = int(np.floor(ymid - trace_dict['height'] / 2))
+            y_high = int(np.ceil(ymid + trace_dict['height'] / 2))
+            if y_low >= 0:
+                trace_image[0:y_low, x] = np.nan
+            if y_high + 1 <= nx-1:
+                trace_image[y_high+1:, x] = np.nan
+
+        # Sync mask and trace image
+        bad = np.where(~np.isfinite(trace_image) | (badpix_mask == 0))
+        trace_image[bad] = np.nan
+        badpix_mask[bad] = 0
+
+        # Crop in the y direction
+        goody, _ = np.where(np.isfinite(trace_image))
+        yi, yf = np.max([goody.min(), 0]), np.min([goody.max(), ny - 1])
+        trace_image = trace_image[yi:yf+1, :]
+        badpix_mask = badpix_mask[yi:yf+1, :]
 
         # Flag obvious bad pixels
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
@@ -137,7 +165,6 @@ class OptimalExtractor(SpectralExtractor):
         # Storage arrays
         spec1d_chunks = np.full((nx, n_chunks), np.nan)
         spec1d_unc_chunks = np.full((nx, n_chunks), np.nan)
-
 
         # Extract chunk by chunk
         for i in range(n_chunks):
