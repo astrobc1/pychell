@@ -1,5 +1,5 @@
 import os
-
+import copy
 import dill
 
 import numpy as np
@@ -80,11 +80,11 @@ def compute_rvs_iteratively(specrvprob, obj, optimizer, augmenter, output_path, 
 
             # Starting parameters
             if iter_index > 0:
-                p0s = [opt_result["pbest"] for opt_result in opt_results[-1]]
+                p0s = [copy.deepcopy(opt_result["pbest"]) for opt_result in opt_results[-1]]
+                # Star
                 if iter_index == 1 and specrvprob.model.star.from_flat:
                     for ispec in range(len(specrvprob)):
                         p0s[ispec][specrvprob.model.star.par_names[0]].vary = True
-
 
             # Run the fit for all spectra and do a cross correlation analysis as well.
             _opt_results = optimize_all_observations(specrvprob, p0s, obj, optimizer, iter_index, output_path, n_cores, verbose)
