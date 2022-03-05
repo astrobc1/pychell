@@ -220,14 +220,13 @@ def parse_spec1d(input_file, sregion):
     f = fits.open(input_file)
     f.verify('fix')
     oi = (echelle_orders[1] - echelle_orders[0]) - (sregion.order - echelle_orders[0])
-    #wave = f[0].data[oi, :, 0] / 10
     wave = estimate_order_wls(sregion.order, 1)
-    flux = f[0].data[oi, :, 1]
-    fluxerr = f[0].data[oi, :, 2]
+    flux = f[0].data[oi, 0, :, 0]
+    fluxerr = f[0].data[oi, 0, :, 1]
+    mask = f[0].data[oi, 0, :, 2]
     medval = pcmath.weighted_median(flux, percentile=0.99)
     flux /= medval
     fluxerr /= medval
-    mask = f[0].data[oi, :, 3]
     data = {"wave": wave, "flux": flux, "fluxerr": fluxerr, "mask": mask}
     return data
 
