@@ -29,7 +29,7 @@ echelle_orders = [84, 129]
 detector = {"dark_current": 0.0, "gain": 1, "read_noise": 0}
 
 # fwhm
-lsf_sigma = [0.008, 0.008, 0.008]
+lsf_sigma = [0.007, 0.008, 0.009]
 
 # Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
 wls_pixel_lagrange_points = [199, 1023.5, 1847]
