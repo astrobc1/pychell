@@ -73,7 +73,7 @@ def bin_jds_for_site(jds, site=None, utc_offset=None, sep=0.5):
 #### CCF ROUTINES ####
 ######################
 
-def brute_force_ccf(p0, data, model, iter_index, measure_unc=False, vel_window_coarse=400_000, vel_step_coarse=200, vel_window_fine=1000, vel_step_fine=2):
+def brute_force_ccf(p0, data, model, iter_index, measure_unc=False, vel_window_coarse=400_000, vel_step_coarse=200, vel_window_fine=2000, vel_step_fine=5):
     
     # Copy init params
     pars = copy.deepcopy(p0)
@@ -82,7 +82,7 @@ def brute_force_ccf(p0, data, model, iter_index, measure_unc=False, vel_window_c
     v0 = p0[model.star.par_names[0]].value
     
     # Make coarse and fine vel grids
-    vels_coarse = np.arange(v0 - vel_window / 2, v0 + vel_window / 2, vel_step_coarse)
+    vels_coarse = np.arange(v0 - vel_window_coarse / 2, v0 + vel_window_coarse / 2, vel_step_coarse)
 
     # Stores the rms as a function of velocity
     rmss_coarse = np.full(len(vels_coarse), fill_value=np.nan)
@@ -91,16 +91,16 @@ def brute_force_ccf(p0, data, model, iter_index, measure_unc=False, vel_window_c
     weights_init = np.copy(data.mask)
 
     # Wavelength grid for the data
-    wave_data = model.wls.build(pars)
+    wave_data = model.wls.build(pars, data)
 
     # Compute RV info content
-    #rvc_per_pix, _ = compute_rv_content(p0, model, snr=100) # S/N here doesn't matter
+    rvc_per_pix, _ = compute_rv_content(model, p0, data, snr=100) # S/N here doesn't matter
 
     # Weights are 1 / rv info^2
-    #star_weights_init = 1 / rvc_per_pix**2
+    star_weights_init = 1 / rvc_per_pix**2
 
     # Data flux
-    data_flux = np.copy(model.data.flux)
+    data_flux = np.copy(data.flux)
     
     # Compute RMS for coarse vels
     for i in range(vels_coarse.size):
@@ -109,14 +109,14 @@ def brute_force_ccf(p0, data, model, iter_index, measure_unc=False, vel_window_c
         pars[model.star.par_names[0]].value = vels_coarse[i]
         
         # Build the model
-        _, model_lr = model.build(pars)
+        _, model_lr = model.build(pars, data)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        #_, star_weights_shifted = pcmath.doppler_shift_flux(wave_data, star_weights_init, vels_coarse[i], wave_out=wave_data)
+        #star_weights_shifted = pcmath.doppler_shift_flux(wave_data, star_weights_init, vels_coarse[i])
         
         # Final weights
-        weights = weights_init * star_weights_shifted
-        bad = np.where(weights < 0)[0]
+        weights = np.copy(weights_init) # * star_weights_shifted
+        bad = np.where((weights < 0) | ~np.isfinite(weights))[0]
         weights[bad] = 0
         good = np.where(weights > 0)[0]
         if good.size == 0:
@@ -129,10 +129,13 @@ def brute_force_ccf(p0, data, model, iter_index, measure_unc=False, vel_window_c
     M = np.nanargmin(rmss_coarse)
     xcorr_rv_init = vels_coarse[M]
 
+    #breakpoint() #import matplotlib; import matplotlib.pyplot as plt; matplotlib.use("MacOSX");
+    #plt.plot(vels_coarse, rmss_coarse); plt.show()
+
     # Determine the uncertainty from the coarse ccf
-    n = np.nansum(model.data.mask)
-    xcorr_rv_stddev, skew = compute_ccf_moments(vels_coarse, rmss_coarse)
-    n_used = np.nansum(model.data.mask)
+    xcorr_rv_mean, xcorr_rv_stddev, skew = compute_ccf_moments(vels_coarse, rmss_coarse)
+    return xcorr_rv_mean + data.header['bc_vel'], xcorr_rv_stddev, skew
+    n_used = np.nansum(data.mask)
     xcorr_rv_unc = xcorr_rv_stddev / np.sqrt(n_used)
 
     # Define the fine vels
@@ -146,14 +149,14 @@ def brute_force_ccf(p0, data, model, iter_index, measure_unc=False, vel_window_c
         pars[model.star.par_names[0]].value = vels_fine[i]
         
         # Build the model
-        _, model_lr = model.build(pars)
+        _, model_lr = model.build(pars, data)
         
         # Shift the stellar weights instead of recomputing the rv content.
-        _, star_weights_shifted = pcmath.doppler_shift_flux(wave_data, star_weights_init, vels_fine[i], wave_out=wave_data)
+        #star_weights_shifted = pcmath.doppler_shift_flux(wave_data, star_weights_init, vels_coarse[i])
         
         # Final weights
-        weights = weights_init * star_weights_shifted
-        bad = np.where(weights < 0)[0]
+        weights = np.copy(weights_init) # * star_weights_shifted
+        bad = np.where((weights < 0) | ~np.isfinite(weights))[0]
         weights[bad] = 0
         good = np.where(weights > 0)[0]
         if good.size == 0:
@@ -164,11 +167,12 @@ def brute_force_ccf(p0, data, model, iter_index, measure_unc=False, vel_window_c
 
     # Fit (M-2, M-1, ..., M+1, M+2) with parabola to determine true minimum
     # Extract the best coarse rv
+    #breakpoint() # import matplotlib; import matplotlib.pyplot as plt; matplotlib.use("MacOSX");
     M = np.nanargmin(rmss_fine)
     use = np.arange(M - 2, M + 3, 1).astype(int)
     try:
         pfit = np.polyfit(vels_fine[use], rmss_fine[use], 2)
-        xcorr_rv = -0.5 * pfit[1] / pfit[0] + model.data.bc_vel
+        xcorr_rv = -0.5 * pfit[1] / pfit[0] + data.header["bc_vel"]
     except:
         xcorr_rv = np.nan
 
@@ -178,11 +182,12 @@ def compute_ccf_moments(vels, rmss):
     p0 = [1.0, vels[np.nanargmin(rmss)], 5000, 10, 0.1] # amp, mean, sigma, alpha (~skewness), offset
     bounds = [(0.8, 1.2), (p0[1] - 2000, p0[1] + 2000), (100, 1E5), (-100, 100), (-0.5, 0.5)]
     opt_result = scipy.optimize.minimize(fit_ccf_skewnorm, x0=p0, bounds=bounds, args=(vels, rmss), method="Nelder-Mead")
+    ccf_mean = opt_result.x[1]
     ccf_stddev = opt_result.x[2]
     alpha = opt_result.x[3]
     delta = alpha / np.sqrt(1 + alpha**2)
     skewness = (4 - np.pi) / 2 * (delta * np.sqrt(2 / np.pi))**3 / (1 - 2 * delta**2 / np.pi)**1.5
-    return ccf_stddev, skewness
+    return ccf_mean, ccf_stddev, skewness
 
 def fit_ccf_skewnorm(pars, vels, rmss):
     y = -1 * rmss - np.nanmin(-1 * rmss)

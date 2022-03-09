@@ -60,7 +60,7 @@ class WeightedMeanAugmenter(TemplateAugmenter):
                 residuals_lr = specrvprob.data[ispec].flux - model_lr
 
                 # Shift to a pseudo rest frame
-                if specrvprob.model.star.from_flat:
+                if specrvprob.model.star.from_flat and iter_index == 0:
                     vel = float(specrvprob.data[ispec].header["bc_vel"])
                 else:
                     vel = -1 * pars[specrvprob.model.star.par_names[0]].value

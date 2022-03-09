@@ -199,8 +199,10 @@ def parse_object(data):
 def parse_sky_coord(data):
     if data.header['P200RA'] is not None and data.header['P200DEC'] is not None:
         coord = astropy.coordinates.SkyCoord(ra=data.header['P200RA'], dec=data.header['P200DEC'], unit=(units.hourangle, units.deg))
+    elif data.header['RA'] is not None and data.header['DEC'] is not None:
+        coord = astropy.coordinates.SkyCoord(ra=data.header['RA'], dec=data.header['DEC'], unit=(units.hourangle, units.deg))
     else:
-        coord = SkyCoord(ra=np.nan, dec=np.nan, unit=(units.hourangle, units.deg))
+        coord = astropy.coordinates.SkyCoord(ra=np.nan, dec=np.nan, unit=(units.hourangle, units.deg))
     return coord
 
 def parse_itime(data):

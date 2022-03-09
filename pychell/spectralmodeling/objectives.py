@@ -21,16 +21,6 @@ class SpectralObjectiveFunction:
 
     def __call__(self, *args, **kwargs):
         return self.compute_obj(*args, **kwargs)
-    
-    def initialize(self, spectral_model):
-        self.spectral_model = spectral_model
-
-    def mask_tellurics(self):
-        self.spectral_model.mask_tellurics(self.templates['tellurics'])
-        
-    @property
-    def p0(self):
-        return self.spectral_model.p0
 
 class RMSSpectralObjective(SpectralObjectiveFunction):
     """Objective function which returns the weighted RMS. The weights are prop. to 1 / flux_unc^2. The LSF is further enforced to be positive.
@@ -55,10 +45,10 @@ class RMSSpectralObjective(SpectralObjectiveFunction):
         wave_model, flux_model = model.build(pars, data)
 
         # Weights are prop. to 1 / unc^2
-        if self.weight_snr:
-            weights = data.mask * data.flux / data.fluxerr**2
-        else:
-            weights = np.copy(data.mask)
+        #if self.weight_snr:
+        #weights = data.mask / data.fluxerr**2
+        #else:
+        weights = np.copy(data.mask)
 
         # Flag tellurics
         # if self.spectral_model.tellurics is not None and self.spectral_model.tellurics.mask:
@@ -67,7 +57,7 @@ class RMSSpectralObjective(SpectralObjectiveFunction):
 
         # Compute rms ignoring bad pixels
         try:
-            rms = pcmath.rmsloss(data.flux, flux_model, weights=weights, flag_worst=self.flag_worst, remove_edges=self.remove_edges)
+            rms = pcmath.rmsloss(np.copy(data.flux), flux_model, weights=weights, flag_worst=self.flag_worst, remove_edges=self.remove_edges)
         except:
             return 1E6
         

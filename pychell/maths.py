@@ -77,7 +77,7 @@ def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
         float: The weighted RMS.
     """
     
-    # Compute diffs2
+    # Compute diffs^2
     if weights is not None:
         good = np.where(np.isfinite(x) & np.isfinite(y) & np.isfinite(weights) & (weights > 0))[0]
         xx, yy, ww = x[good], y[good], weights[good]
@@ -96,8 +96,8 @@ def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
                 
     # Remove edges
     if remove_edges > 0:
-        diffs2[0:remove_edges] = 0
-        diffs2[-remove_edges:] = 0
+        diffs2[0:remove_edges] = np.nan
+        diffs2[-remove_edges:] = np.nan
         if weights is not None:
             ww[0:remove_edges] = 0
             ww[-remove_edges:] = 0
@@ -106,7 +106,7 @@ def rmsloss(x, y, weights=None, flag_worst=0, remove_edges=0):
     if weights is not None:
         rms = np.sqrt(np.nansum(diffs2) / np.nansum(ww))
     else:
-        n_good = diffs2.size
+        n_good = np.where(np.isfinite(diffs2))[0].size
         rms = np.sqrt(np.nansum(diffs2) / n_good)
 
     return rms

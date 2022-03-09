@@ -21,7 +21,7 @@ def plot_rvs_single_chunk(specrvprob, rvs, iter_index, output_path, time_offset=
 
     # Individual XC
     if "rvsxc" in rvs:
-        plt.plot(rvs["bjds"] - time_offset, rvs["rvsxc"][:, iter_index] - np.nanmedian(rvs["rvsxc"][:, iter_index]), marker='x', linewidth=0, color='black', alpha=0.5, label="XC")
+        plt.plot(rvs["bjds"] - time_offset, rvs["rvsxc"][:, iter_index] - np.nanmedian(rvs["rvsxc"][:, iter_index]), marker='X', linewidth=0, color='black', alpha=0.5, label="XC")
     
     # Plot labels
     plt.title(f"{specrvprob.model.star.star_name.replace('_', ' ')}, {specrvprob.model.sregion.label}, iteration {iter_index + 1}")

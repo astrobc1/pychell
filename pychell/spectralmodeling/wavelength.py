@@ -38,11 +38,11 @@ class PolyWls(WavelengthSolution):
 
     def get_init_parameters(self, data, templates, sregion):
         pars = BoundedParameters()
-        self.pixel_knots = np.linspace(sregion.pixmin, sregion.pixmax, num=self.deg+1).astype(int)
+        self.pixel_knots = np.linspace(sregion.pixmin + 1, sregion.pixmax - 1, num=self.deg+1).astype(int)
         wls_estimate = data.spec_module.estimate_wls(data, sregion)
-        self.x = np.arange(len(wls_estimate))
+        self.x = np.arange(sregion.pixmin, sregion.pixmax + 1)
         for i in range(self.deg + 1):
-            v = wls_estimate[self.pixel_knots[i]]
+            v = wls_estimate[self.pixel_knots[i] - sregion.pixmin]
             pars[self.par_names[i]] = BoundedParameter(value=v, vary=True,
                                                        lower_bound=v + self.bounds[0],
                                                        upper_bound=v + self.bounds[1])
@@ -91,11 +91,11 @@ class SplineWls(WavelengthSolution):
 
     def get_init_parameters(self, data, templates, sregion):
         pars = BoundedParameters()
-        self.pixel_knots = np.linspace(sregion.pixmin, sregion.pixmax, num=self.n_splines+1).astype(int)
+        self.pixel_knots = np.linspace(sregion.pixmin + 1, sregion.pixmax - 1, num=self.deg+1).astype(int)
         wls_estimate = data.spec_module.estimate_wls(data, sregion)
-        self.x = np.arange(len(wls_estimate))
+        self.x = np.arange(sregion.pixmin, sregion.pixmax + 1)
         for i in range(self.n_splines + 1):
-            v = wls_estimate[self.pixel_knots[i]]
+            v = wls_estimate[self.pixel_knots[i] - sregion.pixmin]
             pars[self.par_names[i]] = BoundedParameter(value=v, vary=True,
                                                        lower_bound=v + self.bounds[0],
                                                        upper_bound=v + self.bounds[1])

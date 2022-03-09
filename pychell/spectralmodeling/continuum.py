@@ -17,7 +17,7 @@ class PolyContinuum(Continuum):
 
     __slots__ = ['par_names', 'deg', 'coeffs', 'wave0']
     
-    def __init__(self, deg=2, coeffs={0: [0.95, 1.0, 1.2], 1: [-1E-2, 1E-4, 1E-2], 2: [-1E-3, -1E-4, 1E-3]}):
+    def __init__(self, deg=2, coeffs={0: [0.95, 1.0, 1.2], 1: [-0.5, 0.1, 0.5], 2: [-0.1, 0.01, 0.1]}):
         """Initiate a polynomial continuum model.
 
         Args:

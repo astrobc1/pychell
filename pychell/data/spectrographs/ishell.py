@@ -102,14 +102,17 @@ def parse_spec1d(input_file, sregion):
     oi = sregion.order - echelle_orders[0]
     f = fits.open(input_file)
     flux = f[0].data[oi, 0, ::-1, 0].astype(float)
+    fluxerr = f[0].data[oi, 0, ::-1, 1].astype(float)
+    mask = f[0].data[oi, 0, ::-1, 2].astype(float)
+    flux = flux[sregion.pixmin:sregion.pixmax+1]
+    fluxerr = fluxerr[sregion.pixmin:sregion.pixmax+1]
+    mask = mask[sregion.pixmin:sregion.pixmax+1]
     medval = pcmath.weighted_median(flux, percentile=0.99)
     flux = flux / medval
-    fluxerr = f[0].data[oi, 0, ::-1, 1].astype(float) / medval
-    mask = f[0].data[oi, 0, ::-1, 2].astype(float)
+    fluxerr = fluxerr / medval
     data = {"flux": flux,
             "fluxerr": fluxerr,
             "mask": mask}
-
     return data
 
 
@@ -273,7 +276,9 @@ def get_barycenter_corrections(data, star_name):
 #########################
 
 def estimate_wls(data, sregion):
-    return estimate_order_wls(sregion.order)
+    wls = estimate_order_wls(sregion.order)
+    wls = wls[sregion.pixmin:sregion.pixmax+1]
+    return wls
 
 def estimate_order_wls(order):
     pfit = np.polyfit(wls_pixel_lagrange_points, wls_wave_lagrange_points[order], 2)

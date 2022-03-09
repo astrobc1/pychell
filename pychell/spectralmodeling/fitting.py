@@ -5,6 +5,7 @@ import dill
 import numpy as np
 
 import pychell.utils as pcutils
+import pychell.spectralmodeling.rvcalc
 import pychell.spectralmodeling.plotting
 
 from joblib import Parallel, delayed
@@ -94,8 +95,9 @@ def compute_rvs_iteratively(specrvprob, obj, optimizer, augmenter, output_path, 
         
             # Run the ccf for all spectra
             if do_ccf:
-                p0s = [_opt_result["pbest"] for opt_result in _opt_results[-1]]
-                rvs["rvsxc"][:, iter_index] = cross_correlate_all_observations(specrvprob, p0s, iter_index, output_path, n_cores)
+                p0s = [copy.deepcopy(opt_result["pbest"]) for opt_result in _opt_results]
+                ccf_results = cross_correlate_all_observations(specrvprob, p0s, iter_index, n_cores)
+                rvs["rvsxc"][:, iter_index] = np.array([ccf_result[0] for ccf_result in ccf_results])
         
             # Plot the rvs
             pychell.spectralmodeling.plotting.plot_rvs_single_chunk(specrvprob, rvs, iter_index, output_path, time_offset=2450000)
@@ -140,9 +142,6 @@ def compute_rvs_iteratively(specrvprob, obj, optimizer, augmenter, output_path, 
 ###############################
 
 def optimize_all_observations(specrvprob, p0s, obj, optimizer, iter_index, output_path, n_cores, verbose):
-        
-    # Timer
-    stopwatch = pcutils.StopWatch()
 
     # Parallel fitting
     if n_cores > 1:
@@ -170,25 +169,25 @@ def optimize_and_plot_observation(p0, data, model, obj, optimizer, iter_index, o
     stopwatch = pcutils.StopWatch()
 
     # Fit
-    try:
-        opt_result = optimizer.optimize(p0, lambda pars: obj.compute_obj(pars, data, model))
+    #try:
+    opt_result = optimizer.optimize(p0, lambda pars: obj.compute_obj(pars, data, model))
 
-        # Print diagnostics
-        print(f"Fit {data} in {round((stopwatch.time_since())/60, 2)} min", flush=True)
-        if verbose:
-            print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
-            print(f" Calls = {opt_result['fcalls']}", flush=True)
-            print(f" Best Fit Parameters:\n{model.summary(opt_result['pbest'])}", flush=True)
+    # Print diagnostics
+    print(f"Fit {data} in {round((stopwatch.time_since())/60, 2)} min", flush=True)
+    if verbose:
+        print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
+        print(f" Calls = {opt_result['fcalls']}", flush=True)
+        print(f" Best Fit Parameters:\n{model.summary(opt_result['pbest'])}", flush=True)
 
-        # Plot
-        pychell.spectralmodeling.plotting.plot_spectum_fit(data, model, opt_result["pbest"], obj, iter_index, output_path)
+    # Plot
+    pychell.spectralmodeling.plotting.plot_spectum_fit(data, model, opt_result["pbest"], obj, iter_index, output_path)
 
-    except:
+    # except:
 
-        print(f"Failed to fit observation {data}", flush=True)
+    #     print(f"Failed to fit observation {data}", flush=True)
 
-        # Return nan pars and set to bad
-        opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
+    #     # Return nan pars and set to bad
+    #     opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
     
     # Return result
     return opt_result
@@ -198,19 +197,18 @@ def optimize_and_plot_observation(p0, data, model, obj, optimizer, iter_index, o
 #### CCF WRAPPERS ####
 ######################
 
-def cross_correlate_all_observations(specrvprob, p0s, iter_index, output_path, n_cores):
-    stopwatch = pcutils.StopWatch()
+def cross_correlate_all_observations(specrvprob, p0s, iter_index, n_cores):
     if n_cores > 1:
         ccf_results = Parallel(n_jobs=n_cores, verbose=0, batch_size=1)(delayed(cross_correlate_observation)(p0s[ispec], specrvprob.data[ispec], specrvprob.model, iter_index) for ispec in range(len(specrvprob)))
         
     else:
-        ccf_results = [cross_correlate_observation(p0s[ispec], specrvprob.model, iter_index) for ispec in range(len(specrvprob))]
+        ccf_results = [cross_correlate_observation(p0s[ispec], specrvprob.data[ispec], specrvprob.model, iter_index) for ispec in range(len(specrvprob))]
 
     return ccf_results
 
 def cross_correlate_observation(p0, data, model, iter_index):
     try:
-        ccf_result = pcrvcalc.brute_force_ccf(p0, data, model, iter_index)
+        ccf_result = pychell.spectralmodeling.rvcalc.brute_force_ccf(p0, data, model, iter_index)   
     except:
         print(f"Warning! Could not perform CCF for {data} [{model.sregion.label}]")
         ccf_result = np.nan, np.nan, np.nan

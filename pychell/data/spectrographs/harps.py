@@ -17,7 +17,7 @@ import pychell.maths as pcmath
 observatory = "la silla observatory"
 
 # lsf sigma
-lsf_sigma = [0.0008, 0.0013, 0.02]
+lsf_sigma = [0.0013, 0.0013, 0.0013]
 
 ######################
 #### DATA PARSING ####
@@ -49,9 +49,9 @@ def parse_spec1d(input_file, sregion):
     header = f[0].header
     wave = f[1].data.WAVE.flatten().astype(float) / 10
     flux = f[1].data.FLUX.flatten().astype(float)
-    good = np.where((wave > sregion.wavemin) & (wave < sregion.wavemax))[0]
-    wave = wave[good]
     wave = pcmath.doppler_shift_wave(wave, float(header['HIERARCH ESO DRS BERV']) * -1000)
+    good = np.where((wave >= sregion.wavemin) & (wave <= sregion.wavemax))[0]
+    wave = wave[good]
     flux = flux[good]
     fluxerr = np.full(len(flux), 1E-3)
     mask = np.ones(len(flux))

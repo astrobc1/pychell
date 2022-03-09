@@ -109,7 +109,8 @@ class CompositeRVData(dict):
         rvs = self.get_vec('rv', sort=True)
         rvserr = self.get_vec('rverr', sort=True)
         tel_vec = self.gen_instname_vec()
-        out = np.array([times, rvs, rvserr, tel_vec], dtype=object).T
+        good = np.where(np.isfinite(times) & np.isfinite(rvs) & np.isfinite(rvserr))[0]
+        out = np.atleast_2d(np.array([times[good], rvs[good], rvserr[good], tel_vec[good]], dtype=object).T)
         with open(fname, 'w') as f:
             f.write('time,mnvel,errvel,tel\n')
             np.savetxt(f, out, fmt='%f,%f,%f,%s')

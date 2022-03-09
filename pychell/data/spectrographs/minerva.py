@@ -23,6 +23,7 @@ echelle_orders = [94, 122]
 
 # Gas cell
 gascell_file = "iodine_gas_cell_minervanorth_nist.npz"
+#gascell_file = "iodine_gas_cell_minervanorth_0.1nm.npz"
 
 # lsf sigma
 lsf_sigma = [0.0015, 0.0022, 0.003]
@@ -48,10 +49,14 @@ def parse_spec1d(input_file, sregion):
     wave = f.data[oi, :, 0].astype(float) / 10
     flux = f.data[oi, :, 1].astype(float)
     fluxerr = f.data[oi, :, 2].astype(float)
-    mask = f.data[oi, :, 3].astype(float) 
+    mask = f.data[oi, :, 3].astype(float)
     bad = np.where(~np.isfinite(flux) | ~np.isfinite(wave))[0]
     if bad.size > 0:
         mask[bad] = 0
+    wave = wave[sregion.pixmin:sregion.pixmax+1]
+    flux = flux[sregion.pixmin:sregion.pixmax+1]
+    fluxerr = fluxerr[sregion.pixmin:sregion.pixmax+1]
+    mask = mask[sregion.pixmin:sregion.pixmax+1]
     medval = pcmath.weighted_median(flux, percentile=0.99)
     flux /= medval
     fluxerr /= medval
