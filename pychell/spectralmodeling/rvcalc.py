@@ -414,25 +414,6 @@ def _combine_relative_rvs(bjds, rvs, weights, indices):
     # Numbers
     n_chunks, n_spec = rvs.shape
     n_bins = len(indices)
-    
-    # # Determine differences and weights tensors
-    # rvlij = np.full((n_chunks, n_spec, n_spec), np.nan)
-    # wlij = np.full((n_chunks, n_spec, n_spec), np.nan)
-    # wli = np.full((n_chunks, n_spec), np.nan)
-    # for l in range(n_chunks):
-    #     for i in range(n_spec):
-    #         wli[l, i] = np.copy(weights[l, i])
-    #         for j in range(n_spec):
-    #             rvlij[l, i, j] = rvs[l, i] - rvs[l, j]
-    #             wlij[l, i, j] = np.sqrt(weights[l, i] * weights[l, j])
-
-    # # Average over differences
-    # rvli = np.full(shape=(n_chunks, n_spec), fill_value=np.nan)
-    # for l in range(n_chunks):
-    #     for i in range(n_spec):
-    #         rr = np.copy(rvlij[l, i, :])
-    #         ww = np.copy(wlij[l, i, :])
-    #         rvli[l, i], _ = pcmath.weighted_combine(rr, ww)
 
     # Align chunks
     rvli, wli = align_chunks(rvs, weights)
@@ -481,6 +462,7 @@ def combine_rvs_simple(bjds, rvs, weights, indices):
     unc_single_out = np.full(n_spec, fill_value=np.nan)
     rvs_binned_out = np.full(n_bins, fill_value=np.nan)
     unc_binned_out = np.full(n_bins, fill_value=np.nan)
+    t_binned_out = np.full(n_bins, fill_value=np.nan)
     
     # Offset each order and chunk
     rvs_offset = np.copy(rvs)
@@ -492,7 +474,7 @@ def combine_rvs_simple(bjds, rvs, weights, indices):
         ww = weights[:, i]
         rvs_single_out[i], unc_single_out[i] = pcmath.weighted_combine(rr.flatten(), ww.flatten())
         
-    for i in range(n_chunks):
+    for i in range(n_bins):
         f, l = indices[i]
         rr = rvs_offset[:, f:l+1].flatten()
         ww = weights[:, f:l+1].flatten()
