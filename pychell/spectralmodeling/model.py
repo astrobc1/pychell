@@ -66,6 +66,12 @@ class SpectralForwardModel:
         if self.gascell is not None:
             self.templates["gascell"] = self.gascell.load_template(self.templates["wave"])
         if self.tellurics is not None:
+            #breakpoint()
+            #if self.lsf is not None:
+            #    wave_rel = get_wave_grid(self.sregion, dl)
+            #    kernel = pcmath.gauss(wave_rel, amp, 0, self.lsf.sigma[2])
+            #else:
+            #    kernel = None
             self.templates["tellurics"] = self.tellurics.load_template(self.templates["wave"])
         
     def get_init_parameters(self, data):

@@ -33,13 +33,14 @@ class GasCell(SpectralModelComponent1d):
         
     def load_template(self, wave_out):
         print('Loading Gas Cell Template', flush=True)
-        template = np.load(self.input_file)
-        wave, flux = template['wavelength'], template['flux']
+        template_raw = np.load(self.input_file)
+        wave, flux = template_raw['wavelength'], template_raw['flux']
         wi, wf = np.nanmin(wave_out), np.nanmax(wave_out)
         good = np.where((wave > wi) & (wave < wf))[0]
         wave, flux = wave[good], flux[good]
         flux = pcmath.cspline_interp(wave, flux, wave_out)
         flux /= pcmath.weighted_median(flux, percentile=0.999)
+        template_raw.close()
         return flux
 
     def build(self, pars, templates):

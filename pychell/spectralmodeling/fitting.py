@@ -34,7 +34,7 @@ def compute_rvs_iteratively(specrvprob, obj, optimizer, augmenter, output_path, 
     os.makedirs(output_path + "Templates", exist_ok=True)
 
     # Store optimization results in a list of lists of dicts: List[List[dict]]
-    # The outer list indexes iteration, the inner list the observation
+    # The outer list indexes iteration, the inner list indexes the observation
     opt_results = []
 
     # Store rvs in dict of arrays and save to npz file
@@ -49,9 +49,9 @@ def compute_rvs_iteratively(specrvprob, obj, optimizer, augmenter, output_path, 
 
     # Get initial parameters
     p0s = [specrvprob.model.get_init_parameters(d) for d in specrvprob.data]
-
+    
     # Stellar templates
-    stellar_templates = np.full((len(specrvprob.model.templates["wave"]), n_iterations + 1), np.nan)
+    stellar_templates = np.full((len(specrvprob.model.templates["wave"]), n_iterations+1), np.nan)
     stellar_templates[:, 0] = np.copy(specrvprob.model.templates["wave"])
     if not specrvprob.model.star.from_flat:
         stellar_templates[:, 1] = np.copy(specrvprob.model.templates["star"])
@@ -88,6 +88,7 @@ def compute_rvs_iteratively(specrvprob, obj, optimizer, augmenter, output_path, 
                         p0s[ispec][specrvprob.model.star.par_names[0]].vary = True
 
             # Run the fit for all spectra and do a cross correlation analysis as well.
+            
             _opt_results = optimize_all_observations(specrvprob, p0s, obj, optimizer, iter_index, output_path, n_cores, verbose)
             opt_results.append(_opt_results)
 
@@ -169,25 +170,26 @@ def optimize_and_plot_observation(p0, data, model, obj, optimizer, iter_index, o
     stopwatch = pcutils.StopWatch()
 
     # Fit
-    #try:
-    opt_result = optimizer.optimize(p0, lambda pars: obj.compute_obj(pars, data, model))
+    try:
+        opt_result = optimizer.optimize(p0, lambda pars: obj.compute_obj(pars, data, model))
 
-    # Print diagnostics
-    print(f"Fit {data} in {round((stopwatch.time_since())/60, 2)} min", flush=True)
-    if verbose:
-        print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
-        print(f" Calls = {opt_result['fcalls']}", flush=True)
-        print(f" Best Fit Parameters:\n{model.summary(opt_result['pbest'])}", flush=True)
+        # Print diagnostics
+        print(f"Fit {data} in {round((stopwatch.time_since())/60, 2)} min", flush=True)
 
-    # Plot
-    pychell.spectralmodeling.plotting.plot_spectum_fit(data, model, opt_result["pbest"], obj, iter_index, output_path)
+        if verbose:
+            print(f" RMS = {round(opt_result['fbest'], 3)}", flush=True)
+            print(f" Calls = {opt_result['fcalls']}", flush=True)
+            print(f" Best Fit Parameters:\n{model.summary(opt_result['pbest'])}", flush=True)
 
-    # except:
+        # Plot
+        pychell.spectralmodeling.plotting.plot_spectum_fit(data, model, opt_result["pbest"], obj, iter_index, output_path)
 
-    #     print(f"Failed to fit observation {data}", flush=True)
+    except:
 
-    #     # Return nan pars and set to bad
-    #     opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
+        print(f"Failed to fit observation {data}", flush=True)
+
+        # Return nan pars and set to bad
+        opt_result = dict(pbest=p0.gen_nan_pars(), fbest=np.nan, fcalls=np.nan)
     
     # Return result
     return opt_result

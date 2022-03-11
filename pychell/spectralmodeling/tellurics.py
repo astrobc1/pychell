@@ -55,22 +55,22 @@ class TelluricsTAPAS(Tellurics):
         
         # Velocity
         pars[self.par_names[0]] = BoundedParameter(value=self.vel[1],
-                                                   vary=(self.has_water_features or self.has_airmass_features),
+                                                   vary=((self.has_water_features or self.has_airmass_features) and not self.mask),
                                                    lower_bound=self.vel[0], upper_bound=self.vel[2])
         
         # Water Depth
         pars[self.par_names[1]] = BoundedParameter(value=self.water_depth[1],
-                                                   vary=self.has_water_features,
+                                                   vary=(self.has_water_features and not self.mask),
                                                    lower_bound=self.water_depth[0], upper_bound=self.water_depth[2])
         
         # Remaining Components
         pars[self.par_names[2]] = BoundedParameter(value=self.airmass_depth[1],
-                                                   vary=self.has_airmass_features,
+                                                   vary=(self.has_airmass_features and not self.mask),
                                                    lower_bound=self.airmass_depth[0], upper_bound=self.airmass_depth[2])
         
         return pars
 
-    def load_template(self, wave_out):
+    def load_template(self, wave_out, kernel=None):
 
         print('Loading Telluric Template', flush=True)
 
@@ -85,6 +85,7 @@ class TelluricsTAPAS(Tellurics):
         wave, flux_water = wave[good], flux_water[good]
         flux_water_temp = np.copy(flux_water)
         flux_water_temp /= np.nanmax(flux_water_temp)
+        #breakpoint()
         if np.nanmax(flux_water_temp) - np.nanmin(flux_water_temp) < self.feature_depth:
             self.has_water_features = False
         flux_water = pcmath.cspline_interp(wave, flux_water, wave_out)
@@ -102,6 +103,8 @@ class TelluricsTAPAS(Tellurics):
             
         flux_airmass /= pcmath.weighted_median(flux_airmass, percentile=0.999)
         templates[:, 1] = flux_airmass
+
+        template_raw.close()
             
         return templates
     

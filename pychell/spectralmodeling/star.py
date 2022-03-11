@@ -68,6 +68,7 @@ class AugmentedStar(Star):
             wave, flux = wave[good], flux[good]
             flux = pcmath.cspline_interp(wave, flux, wave_out)
             flux /= pcmath.weighted_median(flux, percentile=0.999)
+            del template_raw
         else:
             flux = np.ones(len(wave_out))
         return flux

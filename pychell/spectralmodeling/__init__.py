@@ -2,10 +2,8 @@ name = 'spectralmodeling'
 
 # Spectral region for 1d forward modeling
 from .sregion import SpecRegion1d
-
 # Main Spectral model object for 1d forward modeling
 from .model import SpectralForwardModel
-
 # Model components for 1d forward modeling
 from .component import SpectralModelComponent1d
 from .star import *
