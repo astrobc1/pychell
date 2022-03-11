@@ -398,6 +398,9 @@ class SpectralExtractor:
         # Helpful array
         xarr = np.arange(nx)
         yarr = np.arange(ny)
+
+        # Smooth
+        trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
         
         # Create a fiducial high resolution grid centered at zero
         yarr_hr0 = np.arange(int(np.floor(-ny / 2)), int(np.ceil(ny / 2)) + 1 / oversample, 1 / oversample)
@@ -414,16 +417,22 @@ class SpectralExtractor:
             good = np.where(np.isfinite(trace_image[:, x]) & (badpix_mask[:, x] == 1))[0]
             if good.size >= 3 and spec1d_smooth[x] > 0.2:
                 if remove_background:
-                    col_hr_shifted = pcmath.lin_interp(yarr - trace_positions[x], trace_image[:, x] - background[x], yarr_hr0)
+                    col_hr_shifted = pcmath.lin_interp(yarr - trace_positions[x], trace_image_smooth[:, x] - background[x], yarr_hr0)
                 else:
-                    col_hr_shifted = pcmath.lin_interp(yarr - trace_positions[x], trace_image[:, x], yarr_hr0)
+                    col_hr_shifted = pcmath.lin_interp(yarr - trace_positions[x], trace_image_smooth[:, x], yarr_hr0)
                 bad = np.where(col_hr_shifted < 0)[0]
                 if bad.size > 0:
                     col_hr_shifted[bad] = np.nan
                 trace_image_rect_norm[:, x] = col_hr_shifted / np.nansum(col_hr_shifted)
         
         # Compute trace profile
+        mask_temp = np.ones_like(trace_image_rect_norm)
+        bad = np.where(~np.isfinite(trace_image_rect_norm))
+        mask_temp[bad] = 0
+        n_pix_per_row = np.sum(mask_temp, axis=1)
+        bad = np.where(n_pix_per_row < nx / 100)[0]
         trace_profile_median = np.nanmedian(trace_image_rect_norm, axis=1)
+        trace_profile_median[bad] = np.nan
         weights = 1 / (trace_image_rect_norm - np.outer(trace_profile_median, np.ones(nx)))**2
         bad = np.where(~np.isfinite(weights))
         weights[bad] = 0

@@ -13,6 +13,8 @@ import pychell.data as pcdata
 import pychell.maths as pcmath
 import pychell.spectralmodeling.barycenter
 from pychell.reduce.recipes import ReduceRecipe
+import pychell.utils as pcutils
+import pychell.reduce.precalib as pccalib
 
 # Site
 observatory = "irtf"
@@ -130,6 +132,12 @@ def categorize_raw_data(data_input_path, output_path):
     sci_files = glob.glob(data_input_path + "*data*.fits") + glob.glob(data_input_path + "*spc*.fits")
     sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
     data['science'] = [pcdata.Echellogram(input_file=sci_file, spectrograph="iSHELL") for sci_file in sci_files]
+
+    # Delete bad objects
+    target_names = np.array([parse_object(d).lower() for d in data['science']], dtype='<U100')
+    bad = np.where(target_names == "dark")[0]
+    for i in sorted(bad, reverse=True):
+        del data['science'][i]
     
     # iSHELL flats must contain flat in the filename
     flat_files = glob.glob(data_input_path + '*flat*.fits')
@@ -304,10 +312,12 @@ class iSHELLReduceRecipe(ReduceRecipe):
         """Traces the orders.
         """
         poly_mask_bottom0, poly_mask_top0 = np.copy(self.poly_mask_bottom), np.copy(self.poly_mask_top)
+        self.poly_masks = {}
         for order_map in self.data["order_maps"]:
             print(f"Tracing orders for {order_map} ...", flush=True)
             try:
                 self.poly_mask_bottom, self.poly_mask_top = self.compute_poly_masks(order_map)
+                self.poly_masks[order_map] = [self.poly_mask_bottom, self.poly_mask_top]
             except:
                 print(f"Warning! Could not calculate the order map offset from the flat fields with {self.base_flat_field_file}")
             self.tracer.trace(self, order_map)
@@ -348,5 +358,79 @@ class iSHELLReduceRecipe(ReduceRecipe):
         lag_best = lags[np.nanargmax(ccf)]
         return lag_best
 
+    def reduce(self):
+        """Primary method to reduce a given directory.
+        """
+
+        # Start the main clock
+        stopwatch = pcutils.StopWatch()
+
+        # Create the output directories
+        self.create_output_dirs()
+
+        # init data
+        self.init_data()
+
+        # Generate pre calibration images
+        pccalib.gen_master_calib_images(self.data, self.do_bias, self.do_dark, self.do_flat, self.flat_percentile)
+        
+        # Trace orders for appropriate images
+        self.trace()
+
+        ny, nx = 2048, 2048
+
+        # Fix in between orders
+        for order_map in self.data['order_maps']:
+            flat_image = order_map.parse_image()
+            order_map_image = self.tracer.gen_image(order_map.orders_list, ny, nx, xrange=self.xrange, poly_mask_top=self.poly_masks[order_map][1], poly_mask_bottom=self.poly_masks[order_map][0])
+            bad = np.where(~np.isfinite(order_map_image))
+            flat_image[bad] = np.nan
+            order_map.save(flat_image)
+        
+        # Extract all desired images
+        self.extract()
+        
+        # Run Time
+        print(f"REDUCTION COMPLETE! TOTAL TIME: {round(stopwatch.time_since() / 3600, 2)} hours")
 
 
+
+    @staticmethod
+    def extract_image_wrapper(recipe, data):
+        """Wrapper to extract an image for parallel processing. Performs the pre calibration.
+
+        Args:
+            recipe (ReduceRecipe): The recpe object.
+            data (RawEchellogram): The data object.
+        """
+
+        # Stopwatch
+        stopwatch = pcutils.StopWatch()
+
+        # Print start
+        print(f"Extracting {data} ...")
+
+        # Load image
+        data_image = data.parse_image()
+        ny, nx = data_image.shape
+        
+        # Calibrate image
+        pccalib.pre_calibrate(data, data_image, recipe.do_bias, recipe.do_dark, recipe.do_flat)
+
+        # Mask
+        if 'badpix_mask' in recipe.data:
+            badpix_mask = recipe.data['badpix_mask']
+        else:
+            badpix_mask = None
+        
+        # Extract image
+        poly_mask_bottom = recipe.poly_mask_bottom
+        poly_mask_top = recipe.poly_mask_top
+        recipe.poly_mask_bottom = recipe.poly_masks[data.order_maps[0]][0]
+        recipe.poly_mask_top = recipe.poly_masks[data.order_maps[0]][1]
+        recipe.extractor.extract_image(recipe, data, data_image, badpix_mask=badpix_mask)
+        recipe.poly_mask_bottom = poly_mask_bottom
+        recipe.poly_mask_top = poly_mask_top
+        
+        # Print end
+        print(f"Extracted {data} in {round(stopwatch.time_since() / 60, 2)} min")

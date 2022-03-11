@@ -120,8 +120,12 @@ class OptimalExtractor(SpectralExtractor):
             y_high = int(np.ceil(ymid + trace_dict['height'] / 2))
             if y_low >= 0 and y_low <= ny - 1:
                 trace_image[0:y_low, x] = np.nan
+            else:
+                trace_image[:, x] = np.nan
             if y_high >= 0 and y_high + 1 <= ny-1:
                 trace_image[y_high+1:, x] = np.nan
+            else:
+                trace_image[:, x] = np.nan
 
         # New trace positions
         trace_positions = OptimalExtractor.compute_trace_positions_centroids(trace_image, badpix_mask, trace_pos_poly_order=len(trace_dict['pcoeffs'])-1)
@@ -134,10 +138,14 @@ class OptimalExtractor(SpectralExtractor):
             ymid = trace_positions[x]
             y_low = int(np.floor(ymid - trace_dict['height'] / 2))
             y_high = int(np.ceil(ymid + trace_dict['height'] / 2))
-            if y_low >= 0:
+            if y_low >= 0 and y_low <= ny - 1:
                 trace_image[0:y_low, x] = np.nan
-            if y_high + 1 <= nx-1:
+            else:
+                trace_image[:, x] = np.nan
+            if y_high >= 0 and y_high + 1 <= ny-1:
                 trace_image[y_high+1:, x] = np.nan
+            else:
+                trace_image[:, x] = np.nan
 
         # Sync mask and trace image
         bad = np.where(~np.isfinite(trace_image) | (badpix_mask == 0))
