@@ -12,7 +12,7 @@ import sklearn.cluster
 import pychell.data as pcdata
 import pychell.maths as pcmath
 import pychell.spectralmodeling.barycenter
-from pychell.reduce.recipes import ReduceRecipe
+from pychell.reduce.recipe import ReduceRecipe
 
 # Site
 observatory = "keck"

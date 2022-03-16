@@ -1,4 +1,5 @@
 # imports
+from concurrent.futures import ProcessPoolExecutor
 import os
 import copy
 import glob
@@ -12,7 +13,7 @@ import sklearn.cluster
 import pychell.data as pcdata
 import pychell.maths as pcmath
 import pychell.spectralmodeling.barycenter
-from pychell.reduce.recipes import ReduceRecipe
+from pychell.reduce.recipe import ReduceRecipe
 import pychell.utils as pcutils
 import pychell.reduce.precalib as pccalib
 
@@ -168,13 +169,9 @@ def pair_order_maps(data, order_maps):
 def correct_readmath(data, data_image):
     # Corrects NDRs - Number of dynamic reads, or Non-destructive reads, take your pick.
     # This reduces the read noise by sqrt(NDR)
-    if hasattr(data, "header"):
+    if hasattr(data, "header") and type(data) is not pcdata.MasterCal:
         if 'NDR' in data.header:
             data_image /= float(data.header['NDR'])
-        if 'BZERO' in data.header:
-            data_image -= float(data.header['BZERO'])
-        if 'BSCALE' in data.header:
-            data_image /= float(data.header['BSCALE'])
 
 def gen_master_calib_filename(master_cal):
     fname0 = master_cal.group[0].base_input_file.lower()
@@ -300,48 +297,37 @@ def estimate_order_wls(order):
 
 class iSHELLReduceRecipe(ReduceRecipe):
 
-    def __init__(self, data_input_path, output_path, base_flat_field_file, do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5, xrange=None, poly_mask_bottom=None, poly_mask_top=None, tracer=None, extractor=None, n_cores=1):
+    def __init__(self, data_input_path, output_path, base_flat_field_file, do_bias=False, do_dark=True, do_flat=True, tracer=None, extractor=None, sregion=None, n_cores=1):
         super().__init__(spectrograph="iSHELL",
                          data_input_path=data_input_path, output_path=output_path,
-                         do_bias=do_bias, do_dark=do_dark, do_flat=do_flat, flat_percentile=flat_percentile,
-                         xrange=xrange, poly_mask_top=poly_mask_top, poly_mask_bottom=poly_mask_bottom,
-                         tracer=tracer, extractor=extractor, n_cores=n_cores)
+                         do_bias=do_bias, do_dark=do_dark, do_flat=do_flat,
+                         tracer=tracer, extractor=extractor,
+                         sregion=sregion, n_cores=n_cores)
+
+        # Used to track the polynomial mask
         self.base_flat_field_file = base_flat_field_file
+        self.sregion0 = copy.deepcopy(self.sregion)
 
     def trace(self):
         """Traces the orders.
         """
-        poly_mask_bottom0, poly_mask_top0 = np.copy(self.poly_mask_bottom), np.copy(self.poly_mask_top)
-        self.poly_masks = {}
+        self.sregions = {}
         for order_map in self.data["order_maps"]:
             print(f"Tracing orders for {order_map} ...", flush=True)
             try:
-                self.poly_mask_bottom, self.poly_mask_top = self.compute_poly_masks(order_map)
-                self.poly_masks[order_map] = [self.poly_mask_bottom, self.poly_mask_top]
+                offset = self.compute_vertical_order_drift(order_map)
+                self.sregions[order_map] = copy.deepcopy(self.sregion0)
+                self.sregions[order_map].poly_bottom[2] -= offset
+                self.sregions[order_map].poly_top[2] -= offset
             except:
-                print(f"Warning! Could not calculate the order map offset from the flat fields with {self.base_flat_field_file}")
-            self.tracer.trace(self, order_map)
+                print(f"Warning! Could not calculate the order map offset with {self.base_flat_field_file}")
+            self.tracer.trace(order_map, self.sregions[order_map])
             with open(f"{self.output_path}{os.sep}trace{os.sep}{order_map.base_input_file_noext}_order_map.pkl", 'wb') as f:
                 pickle.dump(order_map.orders_list, f)
 
-            # Reset mask
-            self.poly_mask_bottom, self.poly_mask_top = poly_mask_bottom0, poly_mask_top0
-
-    def compute_poly_masks(self, data):
+    def compute_vertical_order_drift(self, data):
         image1 = pcdata.Echellogram(self.base_flat_field_file, spectrograph="iSHELL").parse_image()
         image2 = data.parse_image()
-        offset = self.compute_mask_offset(image1, image2)
-        poly_mask_bottom_new, poly_mask_top_new = copy.deepcopy(self.poly_mask_bottom), copy.deepcopy(self.poly_mask_top)
-        poly_mask_bottom_new[0][1] -= offset
-        poly_mask_bottom_new[1][1] -= offset
-        poly_mask_bottom_new[2][1] -= offset
-        poly_mask_top_new[0][1] -= offset
-        poly_mask_top_new[1][1] -= offset
-        poly_mask_top_new[2][1] -= offset
-        return poly_mask_bottom_new, poly_mask_top_new
-
-    @staticmethod
-    def compute_mask_offset(image1, image2):
         ny, nx = image1.shape
         lags = np.arange(-200, 201)
         n_lags = len(lags)
@@ -372,7 +358,7 @@ class iSHELLReduceRecipe(ReduceRecipe):
         self.init_data()
 
         # Generate pre calibration images
-        pccalib.gen_master_calib_images(self.data, self.do_bias, self.do_dark, self.do_flat, self.flat_percentile)
+        self.gen_master_calib_images()
         
         # Trace orders for appropriate images
         self.trace()
@@ -382,7 +368,7 @@ class iSHELLReduceRecipe(ReduceRecipe):
         # Fix in between orders
         for order_map in self.data['order_maps']:
             flat_image = order_map.parse_image()
-            order_map_image = self.tracer.gen_image(order_map.orders_list, ny, nx, xrange=self.xrange, poly_mask_top=self.poly_masks[order_map][1], poly_mask_bottom=self.poly_masks[order_map][0])
+            order_map_image = self.tracer.gen_image(order_map.orders_list, ny, nx, self.sregions[order_map])
             bad = np.where(~np.isfinite(order_map_image))
             flat_image[bad] = np.nan
             order_map.save(flat_image)
@@ -393,7 +379,14 @@ class iSHELLReduceRecipe(ReduceRecipe):
         # Run Time
         print(f"REDUCTION COMPLETE! TOTAL TIME: {round(stopwatch.time_since() / 3600, 2)} hours")
 
-
+    def gen_master_calib_images(self):
+        if self.do_dark:
+            master_dark = pccalib.gen_master_dark(self.data['master_dark'], self.do_bias)
+            self.data['master_dark'].save(master_dark)
+        if self.do_flat:
+            for mflat in self.data['master_flats']:
+                image = pccalib.gen_master_flat(mflat, self.do_bias, self.do_dark)
+                mflat.save(image)
 
     @staticmethod
     def extract_image_wrapper(recipe, data):
@@ -412,7 +405,6 @@ class iSHELLReduceRecipe(ReduceRecipe):
 
         # Load image
         data_image = data.parse_image()
-        ny, nx = data_image.shape
         
         # Calibrate image
         pccalib.pre_calibrate(data, data_image, recipe.do_bias, recipe.do_dark, recipe.do_flat)
@@ -424,13 +416,7 @@ class iSHELLReduceRecipe(ReduceRecipe):
             badpix_mask = None
         
         # Extract image
-        poly_mask_bottom = recipe.poly_mask_bottom
-        poly_mask_top = recipe.poly_mask_top
-        recipe.poly_mask_bottom = recipe.poly_masks[data.order_maps[0]][0]
-        recipe.poly_mask_top = recipe.poly_masks[data.order_maps[0]][1]
-        recipe.extractor.extract_image(recipe, data, data_image, badpix_mask=badpix_mask)
-        recipe.poly_mask_bottom = poly_mask_bottom
-        recipe.poly_mask_top = poly_mask_top
+        recipe.extractor.extract_image(data, data_image, recipe.sregions[data.order_maps[0]], recipe.output_path, badpix_mask=badpix_mask)
         
         # Print end
         print(f"Extracted {data} in {round(stopwatch.time_since() / 60, 2)} min")

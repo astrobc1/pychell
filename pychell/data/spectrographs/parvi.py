@@ -2,6 +2,7 @@
 import os
 import copy
 import glob
+import pickle
 
 # Astropy
 from astropy.io import fits
@@ -17,7 +18,10 @@ import scipy.constants as cs
 import pychell.data as pcdata
 import pychell.maths as pcmath
 import pychell.spectralmodeling.barycenter
-from pychell.reduce.recipes import ReduceRecipe
+from pychell.reduce.recipe import ReduceRecipe
+import pychell.utils as pcutils
+import pychell.reduce.precalib as pccalib
+import pychell.spectralmodeling.combs as pccombs
 
 # Site
 observatory = "palomar"
@@ -51,71 +55,85 @@ wls_coeffs_fiber3 = {84: [-6.51759531e-07, 0.009800088580000001, 1760.1343499999
 #### DATA PARSING ####
 ######################
 
-def categorize_raw_data(data_input_path, output_path, full_flats_path=None, fiber_flats_path=None, darks_path=None, lfc_path=None, badpix_mask_file=None):
+def categorize_raw_data(target_paths, utdate, calib_output_path, full_flat_files=None, fiber_flat_files=None, dark_files=None, lfc_zero_point_files=None, badpix_mask_file=None):
 
-    # Defaults
-    if full_flats_path is None:
-        full_flats_path = data_input_path
-    if fiber_flats_path is None:
-        fiber_flats_path = data_input_path
-    if darks_path is None:
-        darks_path = data_input_path
-    if lfc_path is None:
-        lfc_path = data_input_path
-
-    # Stores the data as above objects
     data = {}
 
     # Classify files
-    all_files = glob.glob(data_input_path + '*.fits')
-    lfc_files = glob.glob(lfc_path + 'LFC_*.fits')
-    dark_files = glob.glob(darks_path + '*DARK*.fits')
-    full_flat_files = glob.glob(full_flats_path + '*FULLFLAT*.fits')
-    fiber_flat_files = glob.glob(fiber_flats_path + '*FIBERFLAT*.fits') + glob.glob(fiber_flats_path + '*FIBREFLAT*.fits')
-    sci_files = list(set(all_files) - set(lfc_files) - set(dark_files) - set(full_flat_files) - set(fiber_flat_files))
+    sci_files = []
+    for t in target_paths:
+        sci_files += glob.glob(t + f"*{utdate}*.fits")[0:2]
 
     # Create Echellograms from raw data
     data['science'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in sci_files]
-    data['fiber_flats'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in fiber_flat_files]
+    data['fiber_flats_fiber1'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in fiber_flat_files[1]]
+    data['fiber_flats_fiber3'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in fiber_flat_files[3]]
     data['darks'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in dark_files]
-    data['flats'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in full_flat_files]
-    data['lfc'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in lfc_files]
-
-    # Only get latest cals
-    dark_group = get_latest_darks(data)
-    full_flat_group = get_latest_full_flats(data)
-    fiber_flat_group1 = get_latest_fiber_flats(data, fiber='1')
-    fiber_flat_group3 = get_latest_fiber_flats(data, fiber='3')
+    data['full_flats'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in full_flat_files]
+    data['lfc_fiber1'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in lfc_zero_point_files[1]]
+    data['lfc_fiber3'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in lfc_zero_point_files[3]]
 
     # Master Darks
     if len(dark_files) > 0:
-        data['master_darks'] = [pcdata.MasterCal(dark_group, output_path + "calib" + os.sep)]
+        data['master_dark'] = pcdata.MasterCal(data['darks'], calib_output_path)
 
     # Master Flats
     if len(full_flat_files) > 0:
-        data['master_flats'] = [pcdata.MasterCal(full_flat_group, output_path + "calib" + os.sep)]
+        data['master_flat'] = pcdata.MasterCal(data['full_flats'], calib_output_path)
     
     # Master fiber flats
-    data['master_fiber_flats'] = [pcdata.MasterCal(fiber_flat_group1, output_path + "calib" + os.sep), pcdata.MasterCal(fiber_flat_group3, output_path + "calib" + os.sep)]
+    data['master_fiber_flat_fiber1'] = pcdata.MasterCal(data['fiber_flats_fiber1'], calib_output_path)
+    data['master_fiber_flat_fiber3'] = pcdata.MasterCal(data['fiber_flats_fiber3'], calib_output_path)
 
-    # Order maps
-    data['order_maps'] = data['master_fiber_flats']
+    data['master_lfc_fiber1'] = pcdata.MasterCal(data['lfc_fiber1'], calib_output_path)
+    data['master_lfc_fiber3'] = pcdata.MasterCal(data['lfc_fiber3'], calib_output_path)
+
+    # Pair cals for science
+    for d in data['science']:
+        d.order_maps = [data['master_fiber_flat_fiber1'], data['master_fiber_flat_fiber3']]
+        d.master_dark = data['master_dark']
+        d.master_flat = data['master_flat']
+
+    # Pair cals for individual full frame flats
+    for d in data['full_flats']:
+        if len(dark_files) > 0:
+            d.master_dark = data['master_dark']
+
+    # Pair cals for individual fiber flats
+    d = data['master_fiber_flat_fiber1']
+    d.order_maps = [data['master_fiber_flat_fiber1']]
+    d.master_flat = data['master_flat']
+    if len(dark_files) > 0:
+        d.master_dark = data['master_dark']
+
+    d = data['master_fiber_flat_fiber3']
+    d.order_maps = [data['master_fiber_flat_fiber3']]
+    d.master_flat = data['master_flat']
+    if len(dark_files) > 0:
+        d.master_dark = data['master_dark']
+
+    # Pair cals for individual lfc cals
+    d = data['master_fiber_flat_fiber1']
+    d.order_maps = [data['master_fiber_flat_fiber1']]
+    d.master_flat = data['master_flat']
+    if len(dark_files) > 0:
+        d.master_dark = data['master_dark']
+
+    # Pair cals for individual lfc cals
+    d = data['master_lfc_fiber1']
+    d.order_maps = [data['master_fiber_flat_fiber1']]
+    d.master_flat = data['master_flat']
+    if len(dark_files) > 0:
+        d.master_dark = data['master_dark']
+
+    d = data['master_lfc_fiber3']
+    d.order_maps = [data['master_fiber_flat_fiber3']]
+    d.master_flat = data['master_flat']
+    if len(dark_files) > 0:
+        d.master_dark = data['master_dark']
 
     # Which to extract
-    data['extract'] = data['science'] + data['master_fiber_flats'] + data['lfc']
-
-    # Pair order maps for the spectra to extract
-    for d in data['extract']:
-        pair_order_maps(d, data['order_maps'])
-        if len(dark_files) > 0:
-            pair_master_dark(d, data['master_darks'])
-        if len(full_flat_files) > 0:
-            pair_master_flat(d, data['master_flats'])
-
-    # Pair darks with full frame flats
-    if len(full_flat_files) > 0 and len(dark_files) > 0:
-        for flat in data['flats']:
-            pair_master_dark(flat, data['master_darks'])
+    data['extract'] = data['science'] + [data['master_fiber_flat_fiber1']] + [data['master_fiber_flat_fiber3']] + [data['master_lfc_fiber1']] + [data['master_lfc_fiber3']]
 
     # Bad pixel mask (only one, load into memory)
     data['badpix_mask'] = 1 - fits.open(badpix_mask_file)[0].data.astype(float)
@@ -170,25 +188,6 @@ def parse_image(data, scale_to_itime=True):
         image *= parse_itime(data)
     
     return image
-    
-
-def pair_master_dark(data, master_darks):
-    data.master_dark = master_darks[0]
-
-def pair_master_flat(data, master_flats):
-    data.master_flat = master_flats[0]
-
-def pair_order_maps(data, order_maps):
-    fibers_sci = parse_fiber_nums(data)
-    fibers_order_maps = np.array([parse_fiber_nums(order_map)[0] for order_map in order_maps], dtype='<U10')
-    order_maps_out = []
-    for fiber in fibers_sci:
-        k = np.where(fibers_order_maps == fiber)[0]
-        if len(k) == 0:
-            raise ValueError(f"No fiber flat corresponding to {data}")
-        else:
-            order_maps_out.append(order_maps[k[0]])
-    data.order_maps = order_maps_out
 
 def parse_header(input_file):
     return fits.open(input_file)[0].header
@@ -212,10 +211,14 @@ def parse_exposure_start_time(data):
     return astropy.time.Time(float(data.header["TIMEI00"]) / 1E9, format="unix").jd
 
 def parse_fiber_nums(data):
-    if "fiberflat" in data.base_input_file.lower() or "fibreflat" in data.base_input_file.lower():
-        return [str(data.header["FIBER"])]
-    else:
-        return ["1", "3"]
+    #if "fiberflat" in data.base_input_file.lower() or "fibreflat" in data.base_input_file.lower():
+    #    return [str(data.header["FIBER"])]
+    #else:
+    #    return ["1", "3"]
+    return [str(data.header["FIBER"])]
+
+
+
 
 
 def parse_spec1d(input_file, sregion):
@@ -253,7 +256,7 @@ def gen_master_calib_filename(master_cal):
     elif "fullflat" in fname0:
         return f"master_fullflat_{utdate}.fits"
     elif "lfc" in fname0:
-        return f"master_lfc_{utdate}.fits"
+        return f"master_lfc_{utdate}_fiber{parse_fiber_nums(master_cal.group[0])[0]}.fits"
     else:
         return f"master_calib_{utdate}.fits"
 
@@ -348,28 +351,42 @@ class PARVIReduceRecipe(ReduceRecipe):
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, data_input_path, output_path,
-                 full_flats_path=None, fiber_flats_path=None, darks_path=None, lfc_path=None, badpix_mask_file=None,
-                 do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5,
-                 xrange=[49, 1997],
-                 poly_mask_bottom=np.array([-6.560e-05,  1.524e-01, -4.680e+01]),
-                 poly_mask_top=np.array([-6.03508772e-05,  1.23052632e-01,  1.97529825e+03]),
-                 tracer=None, extractor=None,
+    def __init__(self, target_input_paths, utdate, output_path,
+                 full_flat_files=None, fiber_flat_files=None, dark_files=None, lfc_zero_point_files=None, badpix_mask_file=None,
+                 do_bias=False, do_dark=True, do_flat=True,
+                 sregion=None, tracer=None, extractor=None,
                  n_cores=1):
 
-        # Super init
-        super().__init__(spectrograph="PARVI",
-                         data_input_path=data_input_path, output_path=output_path,
-                         do_bias=do_bias, do_dark=do_dark, do_flat=do_flat, flat_percentile=flat_percentile,
-                         xrange=xrange, poly_mask_top=poly_mask_top, poly_mask_bottom=poly_mask_bottom,
-                         tracer=tracer, extractor=extractor, n_cores=n_cores)
-        
+        # The spectrograph
+        self.spectrograph = "PARVI"
+
         # Store additional PARVI related params
-        self.full_flats_path = full_flats_path
-        self.fiber_flats_path = fiber_flats_path
-        self.darks_path = darks_path
-        self.lfc_path = lfc_path
+        self.target_input_paths = target_input_paths
+        self.full_flat_files = full_flat_files
+        self.fiber_flat_files = fiber_flat_files
+        self.dark_files = dark_files
+        self.lfc_zero_point_files = lfc_zero_point_files
+        self.utdate = utdate
         self.badpix_mask_file = badpix_mask_file
+        
+        # Number of cores
+        self.n_cores = n_cores
+        
+        # The output path
+        self.target_output_paths = {t.split(os.sep)[-2]: output_path + t.split(os.sep)[-2] + os.sep for t in target_input_paths}
+        self.calib_output_path = output_path + "calib_" + self.utdate + os.sep
+
+        # Pre calibration
+        self.do_bias = do_bias
+        self.do_flat = do_flat
+        self.do_dark = do_dark
+
+        # Image area
+        self.sregion = sregion
+
+        # Reduction steps
+        self.tracer = tracer
+        self.extractor = extractor
 
         # Init the data
         self.init_data()
@@ -380,11 +397,133 @@ class PARVIReduceRecipe(ReduceRecipe):
         
         # Identify what's what.
         print("Categorizing Data ...", flush=True)
-        self.data = self.spec_module.categorize_raw_data(self.data_input_path, self.output_path, self.full_flats_path, self.fiber_flats_path, self.darks_path, self.lfc_path, self.badpix_mask_file)
+        self.data = self.spec_module.categorize_raw_data(self.target_input_paths, self.utdate, self.calib_output_path, self.full_flat_files, self.fiber_flat_files, self.dark_files, self.lfc_zero_point_files, self.badpix_mask_file)
 
         # Print reduction summary
         self.print_reduction_summary()
 
+
+    def create_output_dirs(self):
+        """Creates the output folder and subfolders trace, spectra, calib.
+        """
+    
+        # Make the root output directory for this run
+        for t in self.target_output_paths:
+            os.makedirs(t, exist_ok=True)
+
+        # Trace information (positions, profiles)
+        os.makedirs(self.calib_output_path, exist_ok=True)
+
+    def reduce(self):
+        """Primary method to reduce a given directory.
+        """
+
+        # Start the main clock
+        stopwatch = pcutils.StopWatch()
+
+        # Create the output directories
+        self.create_output_dirs()
+
+        # Generate pre calibration images
+        self.gen_master_calib_images()
+        
+        # Trace orders for appropriate images
+        self.trace()
+        
+        # Extract all desired images
+        self.extract()
+        
+        # Run Time
+        print(f"REDUCTION COMPLETE! TOTAL TIME: {round(stopwatch.time_since() / 3600, 2)} hours")
+
+    def trace(self):
+        """Traces the orders.
+        """
+        order_map = self.data['master_fiber_flat_fiber1']
+        print(f"Tracing orders for {order_map} ...", flush=True)
+        self.tracer.trace(order_map, self.sregion)
+        with open(f"{self.calib_output_path}{order_map.base_input_file_noext}_order_map.pkl", 'wb') as f:
+            pickle.dump(order_map.orders_list, f)
+
+        order_map = self.data['master_fiber_flat_fiber3']
+        print(f"Tracing orders for {order_map} ...", flush=True)
+        self.tracer.trace(order_map, self.sregion)
+        with open(f"{self.calib_output_path}{order_map.base_input_file_noext}_order_map.pkl", 'wb') as f:
+            pickle.dump(order_map.orders_list, f)
+
+    def gen_master_calib_images(self):
+        if self.do_dark:
+            master_dark = pccalib.gen_master_dark(self.data['master_dark'], self.do_bias)
+            self.data['master_dark'].save(master_dark)
+        if self.do_flat:
+            master_full_flat = pccalib.gen_master_flat(self.data['master_flat'], self.do_bias, self.do_dark)
+            self.data['master_flat'].save(master_full_flat)
+
+        image = pccalib.gen_coadded_master_image(self.data['master_fiber_flat_fiber1'])
+        self.data['master_fiber_flat_fiber1'].save(image)
+
+        image = pccalib.gen_coadded_master_image(self.data['master_fiber_flat_fiber3'])
+        self.data['master_fiber_flat_fiber3'].save(image)
+
+        image = pccalib.gen_coadded_master_image(self.data['master_lfc_fiber1'])
+        self.data['master_lfc_fiber1'].save(image)
+
+        image = pccalib.gen_coadded_master_image(self.data['master_lfc_fiber3'])
+        self.data['master_lfc_fiber3'].save(image)
+
+
+    @staticmethod
+    def extract_image_wrapper(recipe, data):
+        """Wrapper to extract an image for parallel processing. Performs the pre calibration.
+
+        Args:
+            recipe (ReduceRecipe): The recpe object.
+            data (RawEchellogram): The data object.
+        """
+
+        # Stopwatch
+        stopwatch = pcutils.StopWatch()
+
+        # Print start
+        print(f"Extracting {data} ...")
+
+        # Load image
+        data_image = data.parse_image()
+
+        # Calibrate image
+        pccalib.pre_calibrate(data, data_image, recipe.do_bias, recipe.do_dark, recipe.do_flat)
+
+        # Mask
+        if 'badpix_mask' in recipe.data:
+            badpix_mask = recipe.data['badpix_mask']
+        else:
+            badpix_mask = None
+        
+        # Extract image
+        if data in recipe.data['science']:
+            output_path = recipe.target_output_paths[parse_object(data)]
+        else:
+            output_path = recipe.calib_output_path
+        recipe.extractor.extract_image(data, data_image, recipe.sregion, output_path, badpix_mask=badpix_mask)
+        
+        # Print end
+        print(f"Extracted {data} in {round(stopwatch.time_since() / 60, 2)} min")
+        
+
+    def gen_wavelength_solutions(self):
+
+        wls0_sci_fiber = pccombs.compute_chebyshev_wls_2d()
+        wls0_cal_fiber = pccombs.compute_chebyshev_wls_2d()
+        
+        # Generate wls for science
+        for i, sci in enumerate(blah):
+            vel_drift = pccombs.compute_drift()
+            wls_sci_fiber[i, :, :] = pcmath.doppler_shift_SR(wls0_sci_fiber[:, i], vel_drift)
+        
+        # Return wls for all science observations
+        return wls_sci_fiber
+
+        
     @staticmethod
     def prep_post_reduction_products(path):
 
@@ -480,7 +619,7 @@ class PARVIReduceRecipe(ReduceRecipe):
 
         # Save
         hdul = fits.HDUList([fits.PrimaryHDU(data_out, header=header)])
-        fname = f"{sci_file[:-5]}_calibrated.fits"
+        fname = sci_file[:-5]
         hdul.writeto(fname, overwrite=True, output_verify='ignore')
 
 

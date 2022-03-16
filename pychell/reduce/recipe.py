@@ -11,8 +11,6 @@ from joblib import Parallel, delayed
 
 # Pychell modules
 import pychell.utils as pcutils
-import pychell.maths as pcmath
-import pychell.spectralmodeling as pcdata
 import pychell.reduce.precalib as pccalib
 
 class ReduceRecipe:
@@ -23,7 +21,7 @@ class ReduceRecipe:
     #### CONSTRUCTOR + HELPERS ####
     ###############################
     
-    def __init__(self, spectrograph, data_input_path, output_path, do_bias=False, do_dark=True, do_flat=True, flat_percentile=0.5, xrange=None, poly_mask_bottom=None, poly_mask_top=None, tracer=None, extractor=None, n_cores=1):
+    def __init__(self, spectrograph, data_input_path, output_path, do_bias=False, do_dark=True, do_flat=True, tracer=None, extractor=None, sregion=None, n_cores=1):
         """Construct a recipe to reduce a directory of data.
 
         Args:
@@ -33,10 +31,7 @@ class ReduceRecipe:
             do_bias (bool, optional): Whether or not to perform a bias correction. Defaults to False.
             do_dark (bool, optional): Whether or not to perform a dark subtraction. Defaults to True.
             do_flat (bool, optional): Whether or not to perform flat fielding. Defaults to True.
-            flat_percentile (float, optional): The flat field percentile. Defaults to 0.5.
-            xrange (list, optional): The range of x pixels to consider.
-            poly_mask_bottom (np.ndarray, optional): The polynomial to mask the bottom of the image.
-            poly_mask_top (np.ndarray, optional): The polynomial to mask the top of the image.
+            sregion
             tracer (OrderTracer, optional): The tracer object.
             extractor (SpectralExtractor, optional): The extractor object.
             n_cores (int, optional): The number of cpus to use. Defaults to 1.
@@ -59,12 +54,9 @@ class ReduceRecipe:
         self.do_bias = do_bias
         self.do_flat = do_flat
         self.do_dark = do_dark
-        self.flat_percentile = flat_percentile
 
         # Image area
-        self.xrange = xrange
-        self.poly_mask_top = poly_mask_top
-        self.poly_mask_bottom = poly_mask_bottom
+        self.sregion = sregion
 
         # Reduction steps
         self.tracer = tracer
@@ -86,6 +78,7 @@ class ReduceRecipe:
         # Calibration (master bias, darks, flats, tellurics, wavecal, etc.)
         os.makedirs(self.output_path + "calib", exist_ok=True)
         
+
     def init_data(self):
         """Initialize the data by calling self.categorize_raw_data.
         """
@@ -96,6 +89,7 @@ class ReduceRecipe:
 
         # Print reduction summary
         self.print_reduction_summary()
+
     
     ##########################
     #### PRIMARY ROUTINES ####
@@ -115,7 +109,7 @@ class ReduceRecipe:
         self.init_data()
 
         # Generate pre calibration images
-        pccalib.gen_master_calib_images(self.data, self.do_bias, self.do_dark, self.do_flat, self.flat_percentile)
+        pccalib.gen_master_calib_images(self.data, self.do_bias, self.do_dark, self.do_flat)
         
         # Trace orders for appropriate images
         self.trace()
@@ -131,7 +125,7 @@ class ReduceRecipe:
         """
         for order_map in self.data["order_maps"]:
             print(f"Tracing orders for {order_map} ...", flush=True)
-            self.tracer.trace(self, order_map)
+            self.tracer.trace(order_map, self.sregion)
             with open(f"{self.output_path}{os.sep}trace{os.sep}{order_map.base_input_file_noext}_order_map.pkl", 'wb') as f:
                 pickle.dump(order_map.orders_list, f)
 
@@ -181,7 +175,7 @@ class ReduceRecipe:
             badpix_mask = None
         
         # Extract image
-        recipe.extractor.extract_image(recipe, data, data_image, badpix_mask=badpix_mask)
+        recipe.extractor.extract_image(data, data_image, recipe.sregion, recipe.output_path, badpix_mask=badpix_mask)
         
         # Print end
         print(f"Extracted {data} in {round(stopwatch.time_since() / 60, 2)} min")
@@ -217,6 +211,7 @@ class ReduceRecipe:
             if hasattr(sci_this_target[0], 'master_flat'):
                 print('  Master Flat: ')
                 print('    ' + str(sci_this_target[0].master_flat))
+
 
     @property
     def spec_module(self):

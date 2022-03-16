@@ -18,124 +18,92 @@ plt.style.use(os.path.dirname(pychell.__file__) + os.sep + "gadfly_stylesheet.mp
 # pychell deps
 import pychell.maths as pcmath
 
+
 ################
-#### 1d LSF ####
+#### 2d WLS ####
 ################
 
-def compute_lsf_width_all(times_sci, times_lfc_cal, wls_cal_scifiber, lfc_cal_scifiber, f0, df, do_orders=None):
-    """Wrapper to compute the LSF for all spectra.
+def compute_chebyshev_wls_2d(f0, df, wave_estimates, flux, echelle_orders, use_orders, poly_order_intra_order=4, poly_order_inter_order=6):
 
-    Args:
-        times_sci (np.ndarray): The times of the science spectra.
-        times_lfc_cal (np.ndarray): The times of the LFC calibration spectra.
-        wls_cal_scifiber (np.ndarray): The wavelength grids for the LFC exposures for the science fiber with shape (n_pixels, n_orders, n_spectra)
-        lfc_cal_scifiber (np.ndarray): The LFC spectra for LFC exposures for the science fiber with the same shape.
-        do_orders (list, optional): Which orders to do. Defaults to all orders.
+    # Number of pixels for each order
+    nx = len(wave_estimate_sci)
 
-    Returns:
-        np.ndarray: The LSF widths of each order and spectrum for the science spectra (science fiber) with shape=(n_orders, n_spectra).
-    """
+    # Max order
+    max_order = np.max(echelle_orders)
 
-    # Numbers
-    nx, n_orders, n_cal_spec = wls_cal_scifiber.shape
-    n_sci_spec = len(times_sci)
-    xarr = np.arange(nx).astype(float)
-    if do_orders is None:
-        do_orders = np.arange(1, n_orders + 1).astype(int).tolist()
+    # xrange
+    if xrange is None:
+        xrange = [0, nx - 1]
 
-    lsfwidths_cal_scifiber = np.full((n_orders, n_cal_spec), np.nan)
-    lsfwidths_sci_scifiber = np.full((n_orders, n_sci_spec), np.nan)
+    # Get pixel peak centers for each order
+    pixel_peaks = {}
+    for i in range(len(echelle_orders)):
+        order = echelle_orders[i]
+        if order in use_orders:
+            pixel_peaks[order] = compute_peaks(wave_estimates[i], lfc_fluxes[i], f0, df, xrange)
 
-    # Loop over orders
-    for order_index in range(n_orders):
+    # Flat arrays
+    echelle_orders_flat = []
+    waves_flat = []
+    for order in pixel_peaks:
+        for i in len(pixel_peaks[order]):
+            pixels_flat.append(pixel_peaks[order][i])
+            waves_flat.append(wave_peaks[order][i])
+            weights_flat.append(1 / rms[order][i]**2)
+            echelle_orders_flat.append(order)
 
-        if order_index + 1 not in do_orders:
-            continue
+    # Convert to numpy arrays
+    pixels_flat = np.array(pixels_flat)
+    waves_flat = np.array(waves_flat)
+    weights_flat = np.array(weights_flat)
+    echelle_orders_flat = np.array(echelle_orders_flat)
 
-        # Loop over calibration fiber spectra for sci fiber
-        for i in range(n_cal_spec):
-            try:
-                lsfwidths_cal_scifiber[order_index, i] = compute_lsf_width(wls_cal_scifiber[:, order_index, i], lfc_cal_scifiber[:, order_index, i], f0, df)
-            except:
-                print(f"Warning! Could not compute LSF for order {order_index+1} cal spectrum {i+1}")
+    # 2d Fit for all orders
+    p0 = np.ones((poly_order_intra_order + 1) * (poly_order_inter_order + 1))
+    result = scipy.optimize.least_squares(solve_chebyshev_wls_2d, p0, loss='soft_l1', args=(pixels_flat, waves_flat, weights_flat, echelle_orders_flat, nx, max_order, poly_order_intra_order, poly_order_inter_order))
+    pcoeffs_best = result.x
 
-    for order_index in range(n_orders):
+    # Generate best fit wls
+    wls = chebyval2d_model_builder(pcoeffs_best, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order)
 
-        if order_index + 1 not in do_orders:
-            continue
+    # Return
+    return wls
 
-        lsfwidths_sci_scifiber[order_index, :] = np.interp(times_sci, times_lfc_cal, lsfwidths_cal_scifiber[order_index, :], left=lsfwidths_cal_scifiber[order_index, 0], right=lsfwidths_cal_scifiber[order_index, -1])
+
+#def compute_differential_wls(pcoeffs0, )
+    #MIN(wls2(pcoeffs1) = (1 + vel_drift / SPEED_OF_LIGHT) * model(pcoeffs0)) as a function of vel_drift by lsq
     
-    return lsfwidths_sci_scifiber
-
-def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
-    """Computes the LSF width for a single order given the LFC spectrum.
-
-    Args:
-        lfc_wave (np.ndarray): The wavelength grid.
-        lfc_flux (np.ndarray): The LFC flux.
-
-    Returns:
-        float: The LSF width.
-    """
-
-    # Flag bad pixels
-    lfc_flux = flag_bad_pixels(lfc_flux)
-
-    # Pixel grid
-    nx = len(lfc_wave)
-    xarr = np.arange(nx).astype(float)
-
-    # Generate theoretical LFC peaks
-    good = np.where(np.isfinite(lfc_wave) & np.isfinite(lfc_flux))[0]
-    wi, wf = lfc_wave[good[0]], lfc_wave[good[-1]]
-    integers, lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
-
-    # Remove background flux
-    background = estimate_background(lfc_wave, lfc_flux, f0, df)
-    lfc_flux_no_bg = lfc_flux - background
-    lfc_peak_max = pcmath.weighted_median(lfc_flux_no_bg, percentile=0.75)
-    
-    # Estimate continuum
-    continuum = estimate_continuum(lfc_wave, lfc_flux_no_bg, f0, df)
-    lfc_flux_norm = lfc_flux_no_bg / continuum
-
-    # Peak spacing in wavelength space
-    peak_spacing = np.polyval(np.polyfit(lfc_centers_wave_theoretical[1:], np.diff(lfc_centers_wave_theoretical), 1), lfc_centers_wave_theoretical)
-
-    # Loop over theoretical peaks and shift
-    waves_all = []
-    flux_all = []
-    for i in range(len(lfc_centers_wave_theoretical)):
-        use = np.where((lfc_wave >= lfc_centers_wave_theoretical[i] - peak_spacing[i] / 2) & (lfc_wave < lfc_centers_wave_theoretical[i] + peak_spacing[i] / 2))[0]
-        if len(use) >= 5:
-            waves_all += list(lfc_wave[use] - lfc_centers_wave_theoretical[i])
-            flux_all += list(lfc_flux_no_bg[use] / np.nansum(lfc_flux_no_bg[use]))
-    
-    # Prep for Gaussian fit
-    waves_all = np.array(waves_all, dtype=float)
-    flux_all = np.array(flux_all, dtype=float)
-    ss = np.argsort(waves_all)
-    waves_all = waves_all[ss]
-    flux_all = flux_all[ss]
-    good = np.where(np.isfinite(waves_all) & np.isfinite(flux_all))[0]
-    waves_all = waves_all[good]
-    flux_all = flux_all[good]
-
-    p0 = [pcmath.weighted_median(flux_all, percentile=0.95), 0.1]
-    bounds = [(0.5 * p0[0], 1.5 * p0[0]), (0.005, 1)]
-    opt_result = scipy.optimize.minimize(solve_lsf_model, p0, args=(waves_all, flux_all), method='Nelder-Mead', bounds=bounds)
-    pbest = opt_result.x
-    sigma = pbest[1]
-    #breakpoint()
-    #matplotlib.use("MacOSX"); plt.plot(lfc_wave, lfc_flux); plt.vlines(lfc_centers_wave_theoretical, ymin=0, ymax=np.nanmax(lfc_flux), color='red')
-
-    return sigma
+    #result = scipy.optimize.least_squares(solve_chebyshev_wls_2d_drift, wls, loss='soft_l1', args=(pcoeffs0, pixels_flat, waves_flat, weights_flat, echelle_orders_flat, nx, max_order, poly_order_intra_order, poly_order_inter_order))
+    #return vel_drift
 
 
-#############
-#### WLS ####
-#############
+#def solve_chebyshev_wls_2d_drift():
+    #model0 = build_chebyshev_wls_2d(pcoeffs, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order)
+    #return model0.
+
+
+def build_chebyshev_wls_2d(pcoeffs, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order):
+    model = chebyval2d(pcoeffs, echelle_orders_flat, pixels_flat / nx, echelle_orders_flat / max_order, poly_order_inter_order, poly_order_intra_order)
+    return model
+
+
+def solve_chebyshev_wls_2d(pcoeffs, pixels_flat, waves_flat, weights_flat, echelle_orders_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order):
+    model_flat = build_chebyshev_wls_2d(pcoeffs, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order)
+    good = np.where((weights_flat > 0) & np.isfinite(weights_flat))[0]
+    w = weights_flat[good]
+    m = model_flat[good]
+    s = waves_flat[good]
+    w = w / np.nansum(w)
+    wres = w * (m - s)
+    return wres
+
+
+
+
+
+
+
+
 
 def compute_wls_all(f0, df, times_sci, times_lfc_cal, wave_estimate_scifiber, wave_estimate_calfiber, lfc_sci_calfiber, lfc_cal_calfiber, lfc_cal_scifiber, do_orders=None, mode="static", poly_order=4, n_cores=1, static_index=0):
     """Wrapper to compute the wavelength solution for all spectra.
@@ -534,3 +502,125 @@ def peak_model2d(pars, xarr, yarr):
 
     # Return model
     return model
+
+
+
+
+
+
+
+
+
+################
+#### 1d LSF ####
+################
+
+def compute_lsf_width_all(times_sci, times_lfc_cal, wls_cal_scifiber, lfc_cal_scifiber, f0, df, do_orders=None):
+    """Wrapper to compute the LSF for all spectra.
+
+    Args:
+        times_sci (np.ndarray): The times of the science spectra.
+        times_lfc_cal (np.ndarray): The times of the LFC calibration spectra.
+        wls_cal_scifiber (np.ndarray): The wavelength grids for the LFC exposures for the science fiber with shape (n_pixels, n_orders, n_spectra)
+        lfc_cal_scifiber (np.ndarray): The LFC spectra for LFC exposures for the science fiber with the same shape.
+        do_orders (list, optional): Which orders to do. Defaults to all orders.
+
+    Returns:
+        np.ndarray: The LSF widths of each order and spectrum for the science spectra (science fiber) with shape=(n_orders, n_spectra).
+    """
+
+    # Numbers
+    nx, n_orders, n_cal_spec = wls_cal_scifiber.shape
+    n_sci_spec = len(times_sci)
+    xarr = np.arange(nx).astype(float)
+    if do_orders is None:
+        do_orders = np.arange(1, n_orders + 1).astype(int).tolist()
+
+    lsfwidths_cal_scifiber = np.full((n_orders, n_cal_spec), np.nan)
+    lsfwidths_sci_scifiber = np.full((n_orders, n_sci_spec), np.nan)
+
+    # Loop over orders
+    for order_index in range(n_orders):
+
+        if order_index + 1 not in do_orders:
+            continue
+
+        # Loop over calibration fiber spectra for sci fiber
+        for i in range(n_cal_spec):
+            try:
+                lsfwidths_cal_scifiber[order_index, i] = compute_lsf_width(wls_cal_scifiber[:, order_index, i], lfc_cal_scifiber[:, order_index, i], f0, df)
+            except:
+                print(f"Warning! Could not compute LSF for order {order_index+1} cal spectrum {i+1}")
+
+    for order_index in range(n_orders):
+
+        if order_index + 1 not in do_orders:
+            continue
+
+        lsfwidths_sci_scifiber[order_index, :] = np.interp(times_sci, times_lfc_cal, lsfwidths_cal_scifiber[order_index, :], left=lsfwidths_cal_scifiber[order_index, 0], right=lsfwidths_cal_scifiber[order_index, -1])
+    
+    return lsfwidths_sci_scifiber
+
+def compute_lsf_width(lfc_wave, lfc_flux, f0, df):
+    """Computes the LSF width for a single order given the LFC spectrum.
+
+    Args:
+        lfc_wave (np.ndarray): The wavelength grid.
+        lfc_flux (np.ndarray): The LFC flux.
+
+    Returns:
+        float: The LSF width.
+    """
+
+    # Flag bad pixels
+    lfc_flux = flag_bad_pixels(lfc_flux)
+
+    # Pixel grid
+    nx = len(lfc_wave)
+    xarr = np.arange(nx).astype(float)
+
+    # Generate theoretical LFC peaks
+    good = np.where(np.isfinite(lfc_wave) & np.isfinite(lfc_flux))[0]
+    wi, wf = lfc_wave[good[0]], lfc_wave[good[-1]]
+    integers, lfc_centers_wave_theoretical = gen_theoretical_peaks(wi, wf, f0, df)
+
+    # Remove background flux
+    background = estimate_background(lfc_wave, lfc_flux, f0, df)
+    lfc_flux_no_bg = lfc_flux - background
+    lfc_peak_max = pcmath.weighted_median(lfc_flux_no_bg, percentile=0.75)
+    
+    # Estimate continuum
+    continuum = estimate_continuum(lfc_wave, lfc_flux_no_bg, f0, df)
+    lfc_flux_norm = lfc_flux_no_bg / continuum
+
+    # Peak spacing in wavelength space
+    peak_spacing = np.polyval(np.polyfit(lfc_centers_wave_theoretical[1:], np.diff(lfc_centers_wave_theoretical), 1), lfc_centers_wave_theoretical)
+
+    # Loop over theoretical peaks and shift
+    waves_all = []
+    flux_all = []
+    for i in range(len(lfc_centers_wave_theoretical)):
+        use = np.where((lfc_wave >= lfc_centers_wave_theoretical[i] - peak_spacing[i] / 2) & (lfc_wave < lfc_centers_wave_theoretical[i] + peak_spacing[i] / 2))[0]
+        if len(use) >= 5:
+            waves_all += list(lfc_wave[use] - lfc_centers_wave_theoretical[i])
+            flux_all += list(lfc_flux_no_bg[use] / np.nansum(lfc_flux_no_bg[use]))
+    
+    # Prep for Gaussian fit
+    waves_all = np.array(waves_all, dtype=float)
+    flux_all = np.array(flux_all, dtype=float)
+    ss = np.argsort(waves_all)
+    waves_all = waves_all[ss]
+    flux_all = flux_all[ss]
+    good = np.where(np.isfinite(waves_all) & np.isfinite(flux_all))[0]
+    waves_all = waves_all[good]
+    flux_all = flux_all[good]
+
+    p0 = [pcmath.weighted_median(flux_all, percentile=0.95), 0.1]
+    bounds = [(0.5 * p0[0], 1.5 * p0[0]), (0.005, 1)]
+    opt_result = scipy.optimize.minimize(solve_lsf_model, p0, args=(waves_all, flux_all), method='Nelder-Mead', bounds=bounds)
+    pbest = opt_result.x
+    sigma = pbest[1]
+    #breakpoint()
+    #matplotlib.use("MacOSX"); plt.plot(lfc_wave, lfc_flux); plt.vlines(lfc_centers_wave_theoretical, ymin=0, ymax=np.nanmax(lfc_flux), color='red')
+
+    return sigma
