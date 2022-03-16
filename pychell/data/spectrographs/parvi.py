@@ -62,7 +62,7 @@ def categorize_raw_data(target_paths, utdate, calib_output_path, full_flat_files
     # Classify files
     sci_files = []
     for t in target_paths:
-        sci_files += glob.glob(t + f"*{utdate}*.fits")[0:2]
+        sci_files += glob.glob(t + f"*{utdate}*.fits")
 
     # Create Echellograms from raw data
     data['science'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in sci_files]
@@ -512,10 +512,12 @@ class PARVIReduceRecipe(ReduceRecipe):
 
     def gen_wavelength_solutions(self):
 
-        wls0_sci_fiber = pccombs.compute_chebyshev_wls_2d()
-        wls0_cal_fiber = pccombs.compute_chebyshev_wls_2d()
+        # Generate wls for zero point
+        breakpoint()
+        wls0_sci_fiber = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates, flux, echelle_orders, use_orders, poly_order_intra_order=4, poly_order_inter_order=6)
+        wls0_cal_fiber = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates, flux, echelle_orders, use_orders, poly_order_intra_order=4, poly_order_inter_order=6)
         
-        # Generate wls for science
+        # Generate wls for science from drift
         for i, sci in enumerate(blah):
             vel_drift = pccombs.compute_drift()
             wls_sci_fiber[i, :, :] = pcmath.doppler_shift_SR(wls0_sci_fiber[:, i], vel_drift)
