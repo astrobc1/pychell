@@ -408,7 +408,7 @@ class PARVIReduceRecipe(ReduceRecipe):
         """
     
         # Make the root output directory for this run
-        for t in self.target_output_paths:
+        for t in self.target_output_paths.values():
             os.makedirs(t, exist_ok=True)
 
         # Trace information (positions, profiles)
