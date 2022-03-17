@@ -39,6 +39,7 @@ lsf_sigma = [0.007, 0.008, 0.009]
 wls_pixel_lagrange_points = [199, 1023.5, 1847]
 
 # LFC info
+192.1852839999997
 lfc_f0 = cs.c / (1559.91370 * 1E-9) # freq of pump line in Hz.
 lfc_df = 10.0000000 * 1E9 # spacing of peaks [Hz]
 
@@ -95,9 +96,9 @@ def categorize_raw_data(target_paths, utdate, calib_output_path, full_flat_files
         d.master_flat = data['master_flat']
 
     # Pair cals for individual full frame flats
-    for d in data['full_flats']:
-        if len(dark_files) > 0:
-            d.master_dark = data['master_dark']
+    d = data['master_flat']
+    if len(dark_files) > 0:
+        d.master_dark = data['master_dark']
 
     # Pair cals for individual fiber flats
     d = data['master_fiber_flat_fiber1']
@@ -184,8 +185,8 @@ def parse_image(data, scale_to_itime=True):
     image = image.T
 
     # Scale slope to itime
-    if scale_to_itime:
-        image *= parse_itime(data)
+    #if scale_to_itime:
+        #image *= parse_itime(data)
     
     return image
 
@@ -301,7 +302,7 @@ def estimate_order_wls(order, fiber=1):
         pcoeffs = wls_coeffs_fiber1[order]
     else:
         pcoeffs = wls_coeffs_fiber3[order]
-    wls = np.polyval(pcoeffs, np.arange(2048).astype(float))
+    wls = np.polyval(pcoeffs, np.arange(2048) - 65)
     return wls
 
 
@@ -510,20 +511,47 @@ class PARVIReduceRecipe(ReduceRecipe):
         print(f"Extracted {data} in {round(stopwatch.time_since() / 60, 2)} min")
         
 
-    def gen_wavelength_solutions(self):
+    def gen_wavelength_solutions(self, use_orders=None, poly_order_intra_order=4, poly_order_inter_order=6):
+
+        nx = 2048
+        n_orders = self.sregion.n_orders
+        n_sci = len(self.data['science'])
+
+        # Wave estimates for each order and fiber
+        wave_estimates_fiber1 = np.full((n_orders, nx), np.nan)
+        wave_estimates_fiber3 = np.full((n_orders, nx), np.nan)
+        for o in range(n_orders):
+            order = self.sregion.ordermin + o
+            wave_estimates_fiber1[o, :] = estimate_order_wls(order, fiber=1)
+            wave_estimates_fiber3[o, :] = estimate_order_wls(order, fiber=3)
+
+        # Echelle orders
+        echelle_orders = np.arange(self.sregion.ordermin, self.sregion.ordermax + 1)
+        if use_orders is None:
+            use_orders = echelle_orders
+
+        # Parse LFC flux results
+        #fname_lfc_fiber1 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber1*reduced*")[0]
+        fname_lfc_fiber3 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber3*reduced*")[0]
+        #lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[:, 0, :, 0]
+        lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[:, 0, :, 0]
+        #import matplotlib; matplotlib.use("MacOSX")
+        #import matplotlib.pyplot as plt;
+        #plt.plot(wave_estimates_fiber3[10, :], lfc_flux_fiber3[10, :]); plt.show()
+        breakpoint()
 
         # Generate wls for zero point
-        breakpoint()
-        wls0_sci_fiber = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates, flux, echelle_orders, use_orders, poly_order_intra_order=4, poly_order_inter_order=6)
-        wls0_cal_fiber = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates, flux, echelle_orders, use_orders, poly_order_intra_order=4, poly_order_inter_order=6)
+        #wls0_fiber1 = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates_fiber1, lfc_flux_fiber1, echelle_orders, use_orders, poly_order_intra_order, poly_order_inter_order)
+        wls0_fiber3 = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates_fiber3, lfc_flux_fiber3, echelle_orders, use_orders, poly_order_intra_order, poly_order_inter_order)
         
         # Generate wls for science from drift
-        for i, sci in enumerate(blah):
-            vel_drift = pccombs.compute_drift()
-            wls_sci_fiber[i, :, :] = pcmath.doppler_shift_SR(wls0_sci_fiber[:, i], vel_drift)
+        for i, sci in enumerate(self.data['science']):
+            breakpoint()
+            vel_drift = pccombs.compute_wls_drift(wls0_cal_fiber, peaks_sci)
+            wls_fiber1[i, :, :] = pcmath.doppler_shift_SR(wls0_fiber3, vel_drift)
         
         # Return wls for all science observations
-        return wls_sci_fiber
+        return wls_fiber1
 
         
     @staticmethod

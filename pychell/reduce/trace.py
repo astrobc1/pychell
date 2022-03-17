@@ -144,7 +144,7 @@ class PeakTracer(OrderTracer):
             pfit = np.polyfit(xx, yy, self.deg)
             poly_coeffs.append(pfit)
 
-        # Ensure the labels are properly sorted
+        # Ensure the peaks are sorted from the bottom of the image to the top
         y_mean = np.array([np.nanmean(np.polyval(poly_coeffs[i], xarr)) for i in range(len(poly_coeffs))], dtype=float)
         ss = np.argsort(y_mean)
         poly_coeffs = [poly_coeffs[ss[i]] for i in range(len(ss))]
@@ -160,7 +160,9 @@ class PeakTracer(OrderTracer):
                 label = float(str(int(order)) + "." + str(int(fiber)))
             else:
                 label = order
-            orders_list.append({'label': label, 'height': self.order_heights[i], 'pcoeffs': poly_coeffs[i]})
+            orders_list.append({'fiber': fiber, 'height': self.order_heights[i], 'pcoeffs': poly_coeffs[i], 'order': order, 'label': label})
+
+        orders_list = sorted(orders_list, key=lambda d: d['order'])
 
         # Return
         order_map.orders_list = orders_list

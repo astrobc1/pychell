@@ -121,8 +121,6 @@ class OptimalExtractor(SpectralExtractor):
             self.trace_pos_refine_window_x = [sregion.pixmin, sregion.pixmax]
         trace_positions = self.compute_trace_positions_centroids(trace_image, trace_mask, self.trace_pos_poly_order, xrange=self.trace_pos_refine_window_x)
 
-        #breakpoint() matplotlib.use("MacOSX"); plt.imshow(trace_image); plt.plot(trace_positions, c='red', lw=0.8); plt.show()
-
         # Mask image again based on new positions
         trace_image = np.copy(image)
         trace_mask = np.copy(badpix_mask)
@@ -159,7 +157,7 @@ class OptimalExtractor(SpectralExtractor):
             trace_image[bad] = np.nan
             trace_mask[bad] = 0
 
-        # Starting trace positions
+        # New starting trace positions
         trace_positions = self.compute_trace_positions_centroids(trace_image, trace_mask, trace_pos_poly_order=self.trace_pos_poly_order, xrange=self.trace_pos_refine_window_x)
 
         # Estimate background

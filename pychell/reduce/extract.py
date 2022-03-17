@@ -69,10 +69,7 @@ class SpectralExtractor:
             # Loop over orders, possibly multi-trace
             for order_index, trace_dict in enumerate(orders_list):
 
-                if sregion.orderbottom < sregion.ordertop:
-                    order = sregion.orderbottom + order_index
-                else:
-                    order = sregion.orderbottom - order_index
+                order = trace_dict['order']
 
                 if order in self.extract_orders:
                 
@@ -158,10 +155,7 @@ class SpectralExtractor:
                 
                 # The order index
                 order_index = n_cols * row + col
-                if sregion.orderbottom < sregion.ordertop:
-                    order_num = sregion.orderbottom + order_index
-                else:
-                    order_num = sregion.orderbottom - order_index
+                order_num = sregion.ordermin + order_index
                 if order_index + 1 > n_orders or order_num not in self.extract_orders:
                     continue
 
