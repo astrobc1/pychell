@@ -1,5 +1,4 @@
 import scipy.interpolate
-import interpolation
 from scipy import constants as cs # cs.c = speed of light in m/s
 SPEED_OF_LIGHT = cs.c
 import scipy.stats
