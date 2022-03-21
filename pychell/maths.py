@@ -925,9 +925,10 @@ def flatten_jagged_list(x):
         inds = np.concatenate((inds, np.arange(len(x[i]))))
     return x_out, inds
 
+
 def chebyval2d(pcoeffs, echelle_order, norm_pixel, norm_order, poly_order_inter_order, poly_order_intra_order):
     if len(pcoeffs.shape) == 1:
         pcoeffs = pcoeffs.reshape((poly_order_inter_order+1, poly_order_intra_order+1))
-    return 1 / norm_order * numpy.polynomial.chebyshev.chebval2d(norm_pixel, norm_order, pcoeffs)
+    return 1 / echelle_order * numpy.polynomial.chebyshev.chebval2d(norm_pixel, norm_order, pcoeffs)
 
 

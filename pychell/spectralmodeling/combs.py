@@ -23,7 +23,7 @@ import pychell.maths as pcmath
 #### 2d WLS ####
 ################
 
-def compute_chebyshev_wls_2d(f0, df, wave_estimates, lfc_fluxes, echelle_orders, use_orders, poly_order_intra_order=4, poly_order_inter_order=6, xrange=None):
+def compute_chebyshev_wls_2d(f0, df, wave_estimates, lfc_fluxes, echelle_orders, use_orders, poly_order_inter_order=4, poly_order_intra_order=6, xrange=None):
 
     # Number of pixels for each order
     n_orders, nx = wave_estimates.shape
@@ -34,6 +34,95 @@ def compute_chebyshev_wls_2d(f0, df, wave_estimates, lfc_fluxes, echelle_orders,
     # xrange
     if xrange is None:
         xrange = [0, nx - 1]
+
+    # Get pixel peak centers for each order
+    pixel_peaks = {}
+    wave_peaks = {}
+    rms = {}
+    peak_integers = {}
+    for i in range(len(echelle_orders)):
+        order = echelle_orders[i]
+        if order in use_orders:
+            pixel_peaks[order], wave_peaks[order], rms[order], peak_integers[order] = compute_peaks(wave_estimates[i, :], lfc_fluxes[i, :], f0, df, xrange)
+
+    # Flat arrays
+    pixels_flat = []
+    waves_flat = []
+    weights_flat = []
+    echelle_orders_flat = []
+    for order in pixel_peaks:
+        for i in range(len(pixel_peaks[order])):
+            pixels_flat.append(pixel_peaks[order][i])
+            waves_flat.append(wave_peaks[order][i])
+            weights_flat.append(1 / rms[order][i]**2)
+            echelle_orders_flat.append(order)
+
+    # Convert to numpy arrays
+    pixels_flat = np.array(pixels_flat)
+    waves_flat = np.array(waves_flat)
+    weights_flat = np.array(weights_flat)
+    echelle_orders_flat = np.array(echelle_orders_flat)
+
+    # 2d Fit for all orders
+    p0 = np.ones((poly_order_intra_order + 1) * (poly_order_inter_order + 1)) / 100
+    for i in range(20):
+        result = scipy.optimize.least_squares(solve_chebyshev_wls_2d, p0, args=(pixels_flat, waves_flat, weights_flat, echelle_orders_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order), method='lm')
+        pcoeffs_best = result.x
+
+        # Generate best fit wls
+        wls2d_best = build_chebyshev_wls_2d_full(pcoeffs_best, echelle_orders, nx, max_order, poly_order_inter_order, poly_order_intra_order)
+        
+        # Residuals
+        residuals_flat = build_chebyshev_wls_2d(pcoeffs_best, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order) - waves_flat
+
+        # Flag
+        good = np.where(np.isfinite(residuals_flat) & (weights_flat > 0))[0]
+        residuals_flat_vel = pcmath.dl_to_dv(residuals_flat, waves_flat)
+        rms = (np.nansum(residuals_flat_vel[good]**2) / good.size)**0.5
+        bad = np.where((np.abs(residuals_flat_vel) > 3 * rms) & (weights_flat > 0))[0]
+        if bad.size > 0:
+            weights_flat[bad] = 0
+        else:
+            break
+
+    # Return
+    matplotlib.use("MacOSX");
+    # good = np.where(weights_flat > 0)[0]; bad = np.where(weights_flat == 0)[0]
+    # rms = np.full(len(echelle_orders), np.nan)
+    # for o in range(len(echelle_orders)):
+    #     order  = echelle_orders[o]
+    #     if order in use_orders:
+    #         inds = np.where((echelle_orders_flat == order) & (weights_flat > 0))[0]
+    #         res = build_chebyshev_wls_2d(pcoeffs_best, echelle_orders_flat[inds], pixels_flat[inds], nx, max_order, poly_order_inter_order, poly_order_intra_order) - waves_flat[inds]
+    #         res = pcmath.dl_to_dv(res, waves_flat[inds])
+    #         rms[o] = np.nansum(res**2 / res.size)**0.5 / np.sqrt(res.size)
+    # 
+    
+    for o in range(len(echelle_orders)):
+        order  = echelle_orders[o]
+        if order in use_orders:
+            inds = np.where((echelle_orders_flat == order) & (weights_flat > 0))[0]
+            plt.scatter(waves_flat[inds], residuals_flat_vel[inds])
+
+    plt.xlabel("Wavelength [nm]"); plt.ylabel("Residuals [m/s]");
+    plt.show()
+    breakpoint() # matplotlib.use("MacOSX"); plt.scatter(waves_flat[good], residuals_flat_vel[good]); plt.show()
+    # matplotlib.use("MacOSX"); plt.plot(echelle_orders, rms, marker='o', lw=0, markersize=10); plt.xlabel("Echelle Order"); plt.ylabel("RMS / sqrt(# Lines) [m/s]"); plt.show()
+
+    return pcoeffs_best, wls2d_best, pixel_peaks, wave_peaks, rms, peak_integers
+
+
+
+def compute_drift2d(f0, df, pcoeffs0, lfc_fluxes, echelle_orders, use_orders, poly_order_inter_order, poly_order_intra_order, xrange=None):
+    
+    max_order = np.max(echelle_orders)
+    nx = lfc_fluxes.shape[1]
+
+    # xrange
+    if xrange is None:
+        xrange = [0, nx - 1]
+
+    wave_estimates = build_chebyshev_wls_2d_full(pcoeffs0, echelle_orders, nx, max_order, poly_order_inter_order, poly_order_intra_order)
 
     # Get pixel peak centers for each order
     pixel_peaks = {}
@@ -62,45 +151,65 @@ def compute_chebyshev_wls_2d(f0, df, wave_estimates, lfc_fluxes, echelle_orders,
     weights_flat = np.array(weights_flat)
     echelle_orders_flat = np.array(echelle_orders_flat)
 
-    # 2d Fit for all orders
-    p0 = np.ones((poly_order_intra_order + 1) * (poly_order_inter_order + 1))
-    result = scipy.optimize.least_squares(solve_chebyshev_wls_2d, p0, loss='soft_l1', args=(pixels_flat, waves_flat, weights_flat, echelle_orders_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order))
-    pcoeffs_best = result.x
+    # Reference wavelength sampled on new pixel peaks
+    wls2d0 = build_chebyshev_wls_2d(pcoeffs0, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order)
+    res = waves_flat - wls2d0
+    ss = np.argsort(np.abs(res))
+    n = len(res)
+    #breakpoint()
+    from scipy.constants import c as SPEED_OF_LIGHT
+    l = waves_flat[ss[0:int(0.95*n)]]
+    l0 = wls2d0[ss[0:int(0.95*n)]]
+    w = weights_flat[ss[0:int(0.95*n)]]
+    #drift = SPEED_OF_LIGHT / np.nansum(w * l0**2) * (np.nansum(w * l0 * l) - np.nansum(w * l0**2))
+    drift = pcmath.weighted_median(pcmath.dl_to_dv(l - l0, l0), w)
+    l0s = l0 * (1 + drift / SPEED_OF_LIGHT)
+    stddev = np.nanstd(pcmath.dl_to_dv(l0s - l, l)) / len(l)**0.5
+    #drift = pcmath.weighted_median(drifts[ss[0:int(0.95*len(drifts))]], weights_flat[ss[0:int(0.95*len(drifts))]])
+    #stddev = pcmath.weighted_stddev(drifts[ss[0:int(0.95*len(res))]], weights_flat[ss[0:int(0.95*len(res))]]) / np.sqrt(len(drifts[ss[0:int(0.95*len(res))]]))
 
-    # Generate best fit wls
-    wls2d = np.full((n_orders, nx), np.nan)
-    for o in range(n_orders):
-        wls2d[o, :] = build_chebyshev_wls_2d(pcoeffs_best, np.full(nx, echelle_orders[o]), np.arange(nx), nx, max_order, poly_order_inter_order, poly_order_intra_order)
-    
-    breakpoint()
-    residuals_flat = build_chebyshev_wls_2d(pcoeffs_best, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order) - waves_flat
-
-    # Return
-    breakpoint()
-    matplotlib.use("MacOSX"); plt.scatter(pixels_flat, pcmath.dl_to_dv(residuals_flat, waves_flat)); plt.show()
-    return wls2d
+    return drift, stddev
 
 
+# def get_drift2d(wls2d0, waves_flat, weights_flat):
+#     vels = np.arange(-200, 200, 0.01)
+#     rms = np.full(len(vels), np.nan)
+#     for i in range(len(vels)):
+#         wls2d0_shifted = pcmath.doppler_shift_wave(wls2d0, vels[i])
+#         wres = weights_flat * (wls2d0_shifted - waves_flat)
+#         wres = np.sort(np.abs(wres))
+#         #breakpoint()
+#         rms[i] = np.nansum(wres[0:-20]**2)
+#         #rms[i] = np.nansum(wres**2)
 
-#MIN(wls2(pcoeffs1) = (1 + vel_drift / SPEED_OF_LIGHT) * wls0) as a function of vel_drift by lsq
-# def compute_wls_drift(pcoeffs0, lfc_flux):
-#     pcoeffs0
-#     for o in range(n_orders):
-#         peaks[] = 
-#     p0 = [1]
-#     result = scipy.optimize.least_squares(solve_chebyshev_wls_2d_drift, p0, loss='soft_l1', args=(wls0, pixels_flat, waves_flat, weights_flat))
+#     #breakpoint()
+#     vel_drift = vels[np.nanargmin(rms)]
 #     return vel_drift
+    
 
 
-#def solve_chebyshev_wls_2d_drift(vel_drift, pcoeffs0, pixels_flat, waves_flat, weights_flat):
-    wave_shifted = pcmath.doppler_shift_wave(wls0, vel_drift)
-    residuals = wave_shifted - waves_flat
-    #return model0.
+
+
+def solve_chebyshev_wls_2d_drift(pars, wls2d0, waves_flat, weights_flat):
+    vel_drift = pars[0]
+    print(vel_drift)
+    wls2d0_shifted = pcmath.doppler_shift_wave(wls2d0, vel_drift)
+    wres = weights_flat * (wls2d0_shifted - waves_flat) / np.nansum(weights_flat)
+    #return np.sqrt(np.nansum(wres**2) / len(wres))
+    return wres
 
 
 def build_chebyshev_wls_2d(pcoeffs, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order):
     model = pcmath.chebyval2d(pcoeffs, echelle_orders_flat, pixels_flat / nx, echelle_orders_flat / max_order, poly_order_inter_order, poly_order_intra_order)
     return model
+
+
+def build_chebyshev_wls_2d_full(pcoeffs, echelle_orders, nx, max_order, poly_order_inter_order, poly_order_intra_order):
+    wls2d = np.full((len(echelle_orders), nx), np.nan)
+    for o in range(len(echelle_orders)):
+        wls2d[o, :] = pcmath.chebyval2d(pcoeffs, np.full(nx, echelle_orders[o]), np.arange(nx) / nx, np.full(nx, echelle_orders[o]) / max_order, poly_order_inter_order, poly_order_intra_order)
+    return wls2d
+
 
 def solve_chebyshev_wls_2d(pcoeffs, pixels_flat, waves_flat, weights_flat, echelle_orders_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order):
     model_flat = build_chebyshev_wls_2d(pcoeffs, echelle_orders_flat, pixels_flat, nx, max_order, poly_order_inter_order, poly_order_intra_order)
@@ -110,50 +219,46 @@ def solve_chebyshev_wls_2d(pcoeffs, pixels_flat, waves_flat, weights_flat, echel
     s = waves_flat[good]
     w = w / np.nansum(w)
     wres = w * (m - s)
+    #wres = (m - s)
+    #wres = np.sort(wres)
+    #n = len(wres)
+    #wres = wres[0:int(0.95*n)]
     return wres
 
 
 
+def compute_wls1d(wave_estimate, lfc_flux, f0, df, poly_order=None, xrange=None):
+    """Computes the wavelength solution from the LFC spectrum.
 
+    Args:
+        wave_estimate (np.ndarray): The approximate wavelength grid.
+        lfc_flux (np.ndarray): The LFC spectrum.
+        df (np.ndarray): The frequency of the LFC in GHz.
+        f0 (np.ndarray): The frequency of the pump line in GHz.
+        poly_order (int, optional): The polynomial order to fit the LFC line centers with.
+        xrange (list, optional): The range to consider in pixels for each order. Defaults to the whole order.
 
+    Returns:
+        np.ndarray: The wavelength solution.
+    """
 
+    # Number of pixels and range to consider for each order
+    nx = len(wave_estimate)
+    xarr = np.arange(nx)
+    if xrange is None:
+        xrange = [0, nx-1]
+    wave_range = [wave_estimate[xrange[0]], wave_estimate[xrange[1]]]
 
+    # Flag bad pixels
+    lfc_flux = flag_bad_pixels(lfc_flux)
 
+    # Compute centers (wave, pix)
+    lfc_centers_pix, lfc_centers_wave, rms_norm, peak_integers = compute_peaks(wave_estimate, lfc_flux, f0, df, xrange)
 
+    # Polynomial fit to peaks
+    pfit, wls = fit_peaks(xarr, lfc_centers_pix, lfc_centers_wave, 1 / rms_norm**2, poly_order=poly_order)
 
-
-# def compute_wls(wave_estimate, lfc_flux, f0, df, poly_order=None, xrange=None):
-#     """Computes the wavelength solution from the LFC spectrum.
-
-#     Args:
-#         wave_estimate (np.ndarray): The approximate wavelength grid.
-#         lfc_flux (np.ndarray): The LFC spectrum.
-#         df (np.ndarray): The frequency of the LFC in GHz.
-#         f0 (np.ndarray): The frequency of the pump line in GHz.
-#         poly_order (int, optional): The polynomial order to fit the LFC line centers with.
-#         xrange (list, optional): The range to consider in pixels for each order. Defaults to the whole order.
-
-#     Returns:
-#         np.ndarray: The wavelength solution.
-#     """
-
-#     # Number of pixels and range to consider for each order
-#     nx = len(wave_estimate)
-#     xarr = np.arange(nx)
-#     if xrange is None:
-#         xrange = [0, nx-1]
-#     wave_range = [wave_estimate[xrange[0]], wave_estimate[xrange[1]]]
-
-#     # Flag bad pixels
-#     lfc_flux = flag_bad_pixels(lfc_flux)
-
-#     # Compute centers (wave, pix)
-#     lfc_centers_pix, lfc_centers_wave, _, _ = compute_peaks(wave_estimate, lfc_flux, f0, df, xrange)
-
-#     # Polynomial fit to peaks
-#     wls = fit_peaks(xarr, lfc_centers_pix, lfc_centers_wave, poly_order=poly_order)
-
-#     return wls
+    return wls, pfit, lfc_centers_pix, lfc_centers_wave, rms_norm, peak_integers
 
 
 def estimate_peak_spacing(xi, xf, wi, wf, f0, df):
@@ -286,8 +391,8 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
         peak_integers.append(lfc_peak_integers[k])
     lfc_centers_wave = np.array(lfc_centers_wave)
     peak_integers = np.array(peak_integers)
-    # breakpoint()
-    matplotlib.use("MacOSX"); pfit=np.polyfit(lfc_centers_pix, lfc_centers_wave, 4); v=np.polyval(pfit, lfc_centers_pix) - lfc_centers_wave; plt.plot(lfc_centers_pix, pcmath.dl_to_dv(v, lfc_centers_wave), marker='o', lw=1); plt.title(str(np.nanmean(wave_estimate))); plt.show()
+    #breakpoint()
+    # matplotlib.use("MacOSX"); pfit=np.polyfit(lfc_centers_pix, lfc_centers_wave, 17); v=np.polyval(pfit, lfc_centers_pix) - lfc_centers_wave; plt.plot(lfc_centers_pix, pcmath.dl_to_dv(v, lfc_centers_wave), marker='o', lw=1); plt.title(str(np.nanmean(wave_estimate))); plt.show()
     return lfc_centers_pix, lfc_centers_wave, rms_norm, peak_integers
 
 def gen_theoretical_peaks(wi, wf, f0, df):
@@ -384,7 +489,7 @@ def flag_bad_pixels(lfc_flux, smooth_width=3, sigma_thresh=9):
 #### PEAK FITTING ####
 ######################
 
-def fit_peaks(pixel_arr, lfc_centers_pix, lfc_centers_wave, poly_order=6):
+def fit_peaks(pixel_arr, lfc_centers_pix, lfc_centers_wave, weights, poly_order=6):
     """Simple wrapper to fit a polynomial to the lfc centers for a single order.
 
     Args:
@@ -396,9 +501,26 @@ def fit_peaks(pixel_arr, lfc_centers_pix, lfc_centers_wave, poly_order=6):
     Returns:
         np.ndarray: The nominal wls from the polynomial fit on the pixel_arr grid.
     """
-    pfit = np.polyfit(lfc_centers_pix, lfc_centers_wave, poly_order)
+    lfc_centers_pix = np.copy(lfc_centers_pix)
+    lfc_centers_wave = np.copy(lfc_centers_wave)
+    weights = np.copy(weights)
+    for i in range(1):
+        pfit = np.polyfit(lfc_centers_pix, lfc_centers_wave, poly_order, w=weights)
+        model = np.polyval(pfit, lfc_centers_pix)
+        res = lfc_centers_wave - model
+        n_good = np.where(weights > 0)
+        rms = np.sqrt(np.nansum(res**2) / n_good)
+        bad = np.where(np.abs(res) > 4 * rms)[0]
+        if bad.size > 0:
+            weights[bad] = 0
+            lfc_centers_pix[bad] = np.nan
+            lfc_centers_wave[bad] = np.nan
+        else:
+            break
+    
     wls = np.polyval(pfit, pixel_arr)
-    return wls
+
+    return pfit, wls
 
 def solve_fit_peak1d_gaussian(pars, x, data):
     model = pcmath.gauss(x, *pars[0:3]) + pars[3]

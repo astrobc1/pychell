@@ -33,7 +33,7 @@ echelle_orders = [84, 129]
 detector = {"dark_current": 0.0, "gain": 1, "read_noise": 0}
 
 # fwhm
-lsf_sigma = [0.007, 0.008, 0.009]
+lsf_sigma = [0.0095, 0.0095, 0.0095]
 
 # Information to generate a crude ishell wavelength solution for the above method estimate_wavelength_solution
 wls_pixel_lagrange_points = [199, 1023.5, 1847]
@@ -225,14 +225,23 @@ def parse_fiber_nums(data):
 def parse_spec1d(input_file, sregion):
     f = fits.open(input_file)
     f.verify('fix')
-    oi = (echelle_orders[1] - echelle_orders[0]) - (sregion.order - echelle_orders[0])
-    wave = estimate_order_wls(sregion.order, 1)
-    flux = f[0].data[oi, 0, :, 0]
-    fluxerr = f[0].data[oi, 0, :, 1]
-    mask = f[0].data[oi, 0, :, 2]
+    oi = sregion.order - echelle_orders[0]
+    #wave = estimate_order_wls(sregion.order, 1)
+    #wave = pcmath.doppler_shift_wave(wave, f[0].header["lfcdrift"])
+    wave = f[0].data[oi, :, 3]
+    #flux = f[0].data[oi, :, 0]
+    flux = f[0].data[oi, :, 4]
+    fluxerr = f[0].data[oi, :, 1]
+    mask = f[0].data[oi, :, 2]
     medval = pcmath.weighted_median(flux, percentile=0.99)
     flux /= medval
     fluxerr /= medval
+    wave[0:sregion.pixmin] = np.nan
+    wave[sregion.pixmax:] = np.nan
+    flux[0:sregion.pixmin] = np.nan
+    flux[sregion.pixmax:] = np.nan
+    mask[0:sregion.pixmin] = 0
+    mask[sregion.pixmax:] = 0
     data = {"wave": wave, "flux": flux, "fluxerr": fluxerr, "mask": mask}
     return data
 
@@ -275,13 +284,14 @@ def get_barycenter_corrections(data, star_name):
     return bjd, bc_vel
 
 def get_exposure_midpoint(data):
-    jdsi, jdsf = [], []
-    for key in data.header:
-        if key.startswith("TIMEI"):
-            jdsi.append(astropy.time.Time(float(data.header[key]) / 1E9, format="unix").jd)
-        if key.startswith("TIMEF"):
-            jdsf.append(astropy.time.Time(float(data.header[key]) / 1E9, format="unix").jd)
-    jdmid = (np.nanmax(jdsf) - np.nanmin(jdsi)) / 2 + np.nanmin(jdsi)
+    #jdsi, jdsf = [], []
+    # for key in data.header:
+    #     if key.startswith("TIMEI"):
+    #         jdsi.append(astropy.time.Time(float(data.header[key]) / 1E9, format="unix").jd)
+    #     if key.startswith("TIMEF"):
+    #         jdsf.append(astropy.time.Time(float(data.header[key]) / 1E9, format="unix").jd)
+    # jdmid = (np.nanmax(jdsf) - np.nanmin(jdsi)) / 2 + np.nanmin(jdsi)
+    jdmid = parse_exposure_start_time(data) + parse_itime(data) / (2 * 86400)
     return jdmid
 
 ###################
@@ -511,7 +521,61 @@ class PARVIReduceRecipe(ReduceRecipe):
         print(f"Extracted {data} in {round(stopwatch.time_since() / 60, 2)} min")
         
 
-    def gen_wavelength_solutions(self, use_orders=None, poly_order_intra_order=4, poly_order_inter_order=6):
+    def get_wavelength_solutions1d(self, poly_order=6, use_orders=None):
+
+        nx = 2048
+        n_orders = self.sregion.n_orders
+        n_sci = len(self.data['science'])
+
+        # Wave estimates for each order and fiber
+        wave_estimates_fiber1 = np.full((n_orders, nx), np.nan)
+        wave_estimates_fiber3 = np.full((n_orders, nx), np.nan)
+        for o in range(n_orders):
+            order = self.sregion.ordermin + o
+            wave_estimates_fiber1[o, :] = estimate_order_wls(order, fiber=1)
+            wave_estimates_fiber3[o, :] = estimate_order_wls(order, fiber=3)
+
+        # Echelle orders
+        echelle_orders = np.arange(self.sregion.ordermin, self.sregion.ordermax + 1)
+
+        # Parse LFC flux results
+        fname_lfc_fiber1 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber1*reduced.fits")[0]
+        fname_lfc_fiber3 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber3*reduced.fits")[0]
+        lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[:, 0, :, 0]
+        lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[:, 0, :, 0]
+        pcoeffs0_fiber1 = {}
+        pcoeffs0_fiber3 = {}
+        for o in range(len(echelle_orders)):
+            order = echelle_orders[o]
+            if order in use_orders:
+                result = pccombs.compute_wls1d(wave_estimates_fiber1[o, :], lfc_flux_fiber1[o, :], lfc_f0, lfc_df, poly_order=poly_order)
+                pcoeffs0_fiber1[order] = result[1]
+                result = pccombs.compute_wls1d(wave_estimates_fiber3[o, :], lfc_flux_fiber3[o, :], lfc_f0, lfc_df, poly_order=poly_order)
+                pcoeffs0_fiber3[order] = result[1]
+
+        drifts = np.full((n_sci, n_orders), np.nan)
+        stddevs = np.full((n_sci, n_orders), np.nan)
+        wls_fiber1 = np.full((len(self.data['science']), n_orders, nx), np.nan)
+        for i, sci in enumerate(self.data['science']):
+            target = parse_object(sci)
+            fname = glob.glob(f"{self.target_output_paths[target]}{sci.base_input_file_noext}*reduced.fits")[0]
+            lfc_fluxes = fits.open(fname)[0].data[:, 1, :, 0]
+            for o in range(len(echelle_orders)):
+                order = echelle_orders[o]
+                if order in use_orders:
+                    pixel_centers, wave_centers, rms_norm, peak_integers = pccombs.compute_peaks(wave_estimates_fiber3[o, :], lfc_fluxes[o, :], lfc_f0, lfc_df, xrange=[100, 1948])
+                    weights = 1 / rms_norm**2
+                    _drifts = wave_centers - np.polyval(pcoeffs0_fiber3[order], pixel_centers)
+                    _drifts = pcmath.dl_to_dv(_drifts, wave_centers)
+                    drifts[i, o] = pcmath.weighted_mean(_drifts, weights)
+                    stddevs[i, o] = pcmath.weighted_stddev(_drifts, weights) / np.sqrt(len(_drifts))
+                    print(order, drifts[i, o], stddevs[i, o])
+                    wls_fiber1[i, o, :] = pcmath.doppler_shift_wave(np.polyval(pcoeffs0_fiber1[order], np.arange(nx)), drifts[i, o])
+        
+        return wls_fiber1, drifts, stddevs
+
+
+    def get_wavelength_solutions2d(self, use_orders=None, poly_order_inter_order=4, poly_order_intra_order=4):
 
         nx = 2048
         n_orders = self.sregion.n_orders
@@ -529,129 +593,62 @@ class PARVIReduceRecipe(ReduceRecipe):
         echelle_orders = np.arange(self.sregion.ordermin, self.sregion.ordermax + 1)
         if use_orders is None:
             use_orders = echelle_orders
+        max_order = np.max(echelle_orders)
 
         # Parse LFC flux results
-        #fname_lfc_fiber1 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber1*reduced*")[0]
-        fname_lfc_fiber3 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber3*reduced*")[0]
-        #lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[:, 0, :, 0]
+        fname_lfc_fiber1 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber1*reduced.fits")[0]
+        fname_lfc_fiber3 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber3*reduced.fits")[0]
+        lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[:, 0, :, 0]
         lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[:, 0, :, 0]
-        #import matplotlib; matplotlib.use("MacOSX")
-        #import matplotlib.pyplot as plt;
-        #plt.plot(wave_estimates_fiber3[10, :], lfc_flux_fiber3[10, :]); plt.show()
-        breakpoint()
 
         # Generate wls for zero point
-        #wls0_fiber1 = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates_fiber1, lfc_flux_fiber1, echelle_orders, use_orders, poly_order_intra_order, poly_order_inter_order)
-        wls0_fiber3 = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates_fiber3, lfc_flux_fiber3, echelle_orders, use_orders, poly_order_intra_order, poly_order_inter_order)
-        
+        #pcoeffs0_fiber1, wls2d0_fiber1, pixel_peaks0_fiber1, wave_peaks0_fiber1, rms0_fiber1, peak_integers0_fiber1 = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates_fiber1, lfc_flux_fiber1, echelle_orders, use_orders, poly_order_inter_order, poly_order_intra_order)
+        pcoeffs0_fiber3, wls2d0_fiber3, pixel_peaks0_fiber3, wave_peaks0_fiber3, rms0_fiber3, peak_integers0_fiber3 = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates_fiber3, lfc_flux_fiber3, echelle_orders, use_orders, poly_order_inter_order, poly_order_intra_order)
+
         # Generate wls for science from drift
+        #drifts = np.full((n_sci, n_orders), np.nan)
+        #stddevs = np.full((n_sci, n_orders), np.nan)
+        drifts = np.full(n_sci, np.nan)
+        stddevs = np.full(n_sci, np.nan)
+        wls_fiber1 = np.full((n_sci, n_orders, nx), np.nan)
         for i, sci in enumerate(self.data['science']):
-            breakpoint()
-            vel_drift = pccombs.compute_wls_drift(wls0_cal_fiber, peaks_sci)
-            wls_fiber1[i, :, :] = pcmath.doppler_shift_SR(wls0_fiber3, vel_drift)
+            target = parse_object(sci)
+            fname = glob.glob(f"{self.target_output_paths[target]}{sci.base_input_file_noext}*reduced.fits")[0]
+            lfc_fluxes = fits.open(fname)[0].data[:, 1, :, 0]
+
+
+        #     for o in range(len(echelle_orders)):
+        #         order = echelle_orders[o]
+        #         if order in use_orders:
+        #             #pixel_centers, wave_centers, rms, integers = pccombs.compute_peaks(wave_estimates_fiber3[o, :], lfc_fluxes[o, :], lfc_f0, lfc_df, xrange=[150, 1900])
+        #             #breakpoint()
+        #             #echelle_orders_flat = np.full(len(pixel_centers), order)
+        #             #wls2d0 = pccombs.build_chebyshev_wls_2d(pcoeffs0_fiber3, echelle_orders_flat, pixel_centers, nx, max_order, poly_order_inter_order, poly_order_intra_order)
+        #             #weights = 1 / rms**2
+        #             drifts[i, o], stddevs[i, o] = pccombs.compute_drift2d(lfc_f0, lfc_df, pcoeffs0_fiber3, lfc_fluxes, echelle_orders, [order], poly_order_inter_order, poly_order_intra_order)
+        #             print(order, drifts[i, o], stddevs[i, o])
+        #     wls_fiber1[i, :, :] = np.copy(wls2d0_fiber1)
+
+            drifts[i], stddevs[i] = pccombs.compute_drift2d(lfc_f0, lfc_df, pcoeffs0_fiber3, lfc_fluxes, echelle_orders, use_orders, poly_order_inter_order, poly_order_intra_order)
+            wls_fiber1[i, :, :] = np.copy(wls2d0_fiber1)
+
+            print(f"ALL: {drifts[i], stddevs[i]}")
+
         
         # Return wls for all science observations
-        return wls_fiber1
+        return wls_fiber1, drifts, stddevs
 
-        
-    @staticmethod
-    def prep_post_reduction_products(path):
-
-        # Parse folder
-        all_files = glob.glob(f"{path}*_reduced.fits")
-        lfc_files = glob.glob(f"{path}*LFC*_reduced.fits")
-        fiber_flat_files = glob.glob(f"{path}*FIBERFLAT*_reduced.fits") + glob.glob(f"{path}*FIBREFLAT*_reduced.fits")
-        sci_files = list(set(all_files) - set(lfc_files) - set(fiber_flat_files))
-
-        # Create temporary objects to parse header info
-        scis = [pcdata.Echellogram(f, spectrograph="PARVI") for f in sci_files]
-        lfc_cals = [pcdata.Echellogram(f, spectrograph="PARVI") for f in lfc_files]
-        fiber_flats = [pcdata.Echellogram(f, spectrograph="PARVI") for f in fiber_flat_files]
-
-        # Parse times of lfc cals
-        times_lfc_cal = np.array([compute_exposure_midpoint(d) for d in lfc_cals], dtype=float)
-        ss = np.argsort(times_lfc_cal)
-        lfc_files = np.array(lfc_files)
-        lfc_files = lfc_files[ss]
-        times_lfc_cal = times_lfc_cal[ss]
-        lfc_cals = [lfc_cals[ss[i]] for i in range(len(lfc_cals))]
-        
-        # Parse times of sci exposures
-        times_sci = np.array([compute_exposure_midpoint(d) for d in scis], dtype=float)
-        ss = np.argsort(times_sci)
-        sci_files = np.array(sci_files)
-        sci_files = sci_files[ss]
-        times_sci = times_sci[ss]
-        scis = [scis[ss[i]] for i in range(len(scis))]
-
-        # Initialize arrays for lfc spectra
-        n_orders, nx = 46, 2048
-        lfc_cal_scifiber = np.full((nx, n_orders, len(lfc_files)), np.nan)
-        lfc_cal_calfiber = np.full((nx, n_orders, len(lfc_files)), np.nan)
-        lfc_sci_calfiber = np.full((nx, n_orders, len(sci_files)), np.nan)
-
-        # Load in 1d lfc spectra from cal (dual fiber) files
-        for i in range(len(lfc_files)):
-            lfc_data = fits.open(lfc_files[i])[0].data
-            lfc_cal_scifiber[:, :, i] = lfc_data[:, 0, :, 0].T
-            lfc_cal_calfiber[:, :, i] = lfc_data[:, 1, :, 0].T
-
-        # Load in 1d lfc spectra from sci (only cal fiber) files
-        for i in range(len(sci_files)):
-            lfc_sci_calfiber[:, :, i] = fits.open(sci_files[i])[0].data[:, 1, :, 0].T
-
-        # Initialize fiber flat arrays
-        fiber_flat_data = np.full((nx, n_orders, len(fiber_flat_files)), np.nan)
-
-        # Load fiber flat data
-        for i in range(len(fiber_flat_files)):
-            fiber_flat_data[:, :, i] = fits.open(fiber_flat_files[i])[0].data[:, 0, :, 0].T
-
-        return scis, times_sci, lfc_sci_calfiber, lfc_cals, times_lfc_cal, lfc_cal_scifiber, lfc_cal_calfiber, fiber_flats, fiber_flat_data
-
-    # Outputs
-    def save_final(self, sci_file, wls_sciobs_scifiber, wls_sciobs_calfiber, continuum_corrections=None):
-
-        # Load sci file
-        sci_data = fits.open(sci_file)[0].data
-        header = fits.open(sci_file)[0].header
-        n_orders = sci_data.shape[0]
-        nx = sci_data.shape[2]
-
-        # Initiate output array
-        # LAST DIMENSION:
-        # 0: sci_wave
-        # 1: sci_flux
-        # 2: sci_flux_unc
-        # 3: sci_badpix
-        # 4: sci_continuum
-        # 5: simult_lfc_wave
-        # 6: simult_lfc_flux
-        # 7: simult_lfc_flux_unc
-        # 8: simult_lfc_badpix
-        data_out = np.full((n_orders, nx, 9), np.nan)
-
-        # Fill wls
-        data_out[:, :, 0] = wls_sciobs_scifiber.T
-
-        # Fill science
-        data_out[:, :, 1:4] = sci_data[:, 0, :, :]
-
-        # Fill fiber flat
-        if continuum_corrections is not None:
-            data_out[:, :, 4] = continuum_corrections.T
-        else:
-            data_out[:, :, 4] = 1.0
-
-        # Fill simult LFC
-        data_out[:, :, 5] = wls_sciobs_calfiber.T
-        data_out[:, :, 6:] = sci_data[:, 1, :, :]
-
-        # Save
-        hdul = fits.HDUList([fits.PrimaryHDU(data_out, header=header)])
-        fname = sci_file[:-5]
-        hdul.writeto(fname, overwrite=True, output_verify='ignore')
-
-
-
+    def get_continuum_corrections(self):
+        nx = 2048
+        fname_fiber_flat_fiber1 = glob.glob(f"{self.calib_output_path}*master_fiberflat*fiber1*reduced.fits")[0]
+        fiber_flat_fiber1 = fits.open(fname_fiber_flat_fiber1)[0].data
+        xarr = np.arange(nx)
+        n_orders = self.sregion.n_orders
+        continua = np.full((n_orders, nx), np.nan)
+        for o in range(n_orders):
+            order = self.sregion.ordermin + o
+            if order in self.extractor.extract_orders:
+                ff_smooth = pcmath.median_filter1d(fiber_flat_fiber1[o, 0, :, 0], width=31)
+                continua[o, :] = pcmath.poly_filter(ff_smooth, width=501, poly_order=2)
+        return continua
 
