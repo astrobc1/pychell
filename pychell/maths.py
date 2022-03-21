@@ -8,7 +8,6 @@ import numpy.polynomial.chebyshev
 import astropy.modeling.functional_models
 from numba import jit, njit
 import numba
-import interpolation
 from llc import jit_filter_function
 
 def r2stat(ydata, ymodel, weights):
