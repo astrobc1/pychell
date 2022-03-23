@@ -55,7 +55,7 @@ class OptimalExtractor(SpectralExtractor):
         self.remove_background = remove_background
 
         # Aperture
-        self._extract_aperture = extract_aperture
+        self.extract_aperture = extract_aperture
         self.min_profile_flux = min_profile_flux
 
         # Trace pos
@@ -73,7 +73,7 @@ class OptimalExtractor(SpectralExtractor):
     #### PRIMARY METHOD TO EXTRACT SINGLE TRACE FOR ENTIRE ORDER ####
     #################################################################
 
-    def extract_trace(self, data, image, sregion, trace_dict, badpix_mask, read_noise=None, extract_aperture=None):
+    def extract_trace(self, data, image, sregion, trace_dict, badpix_mask, read_noise=None):
 
         # Copy image
         image = np.copy(image)
@@ -173,10 +173,10 @@ class OptimalExtractor(SpectralExtractor):
         trace_profile_cspline = self.compute_vertical_trace_profile(trace_image, trace_mask, trace_positions, background=background)
 
         # Extract Aperture
-        if extract_aperture is None:
+        if self.extract_aperture is None:
             _extract_aperture = self.get_extract_aperture(trace_profile_cspline)
         else:
-            _extract_aperture = extract_aperture
+            _extract_aperture = self.extract_aperture
 
         # Initial opt spectrum
         spec1d, spec1d_unc = self.optimal_extraction(trace_image, trace_mask, trace_positions, trace_profile_cspline, _extract_aperture, background=background, background_err=background_err, read_noise=read_noise, n_iterations=3, spec1d0=None)
@@ -190,10 +190,10 @@ class OptimalExtractor(SpectralExtractor):
             trace_profile_cspline = self.compute_vertical_trace_profile(trace_image, trace_mask, trace_positions, spec1d, background=background)
 
             # Extract Aperture
-            if extract_aperture is None:
+            if self.extract_aperture is None:
                 _extract_aperture = self.get_extract_aperture(trace_profile_cspline)
             else:
-                _extract_aperture = extract_aperture
+                _extract_aperture = self.extract_aperture
 
             # Background
             if self.remove_background:
@@ -510,9 +510,6 @@ class OptimalExtractor(SpectralExtractor):
                 model2d[usey, i] = tp * spec1d_smooth[i] + background[i]
             else:
                 model2d[usey, i] = tp * spec1d_smooth[i]
-        
-        # Smooth again
-        model2d = pcmath.median_filter2d(model2d, width=3)
 
         # Return
         return model2d
@@ -526,7 +523,6 @@ class OptimalExtractor(SpectralExtractor):
             trace_positions (np.ndarray): The trace positions.
             oversample (int, optional): An oversampling factor for the trace profile. Defaults to 1.
             spec1d (np.ndarray, optional): The current 1d spectrum. Defaults to a summation over columns.
-            remove_background (bool, optional): Whether or not to remove the background. Defaults to False.
             background (np.ndarray, optional): If remove_background is True, this vector is removed before computing the trace profile. Defaults to None.
 
         Returns:
@@ -565,7 +561,7 @@ class OptimalExtractor(SpectralExtractor):
                 bad = np.where(col_hr_shifted < 0)[0]
                 if bad.size > 0:
                     col_hr_shifted[bad] = 0
-                trace_image_rect_norm[:, x] = col_hr_shifted / np.nansum(col_hr_shifted)
+                trace_image_rect_norm[:, x] = col_hr_shifted / spec1d[x]
         
         # Compute trace profile
         mask_temp = np.ones_like(trace_image_rect_norm)
@@ -574,50 +570,52 @@ class OptimalExtractor(SpectralExtractor):
         n_pix_per_row = np.sum(mask_temp, axis=1)
         bad = np.where(n_pix_per_row < nx / 100)[0]
         trace_profile_median = np.nanmedian(trace_image_rect_norm, axis=1)
-        trace_profile_median[bad] = np.nan
-        weights = 1 / (trace_image_rect_norm - np.outer(trace_profile_median, np.ones(nx)))**2
-        bad = np.where(~np.isfinite(weights))
-        weights[bad] = 0
-        trace_profile_mean = pcmath.weighted_mean(trace_image_rect_norm, weights, axis=1)
+        #trace_profile_median[bad] = np.nan
+        #weights = 1 / (trace_image_rect_norm - np.outer(trace_profile_median, np.ones(nx)))**2
+        #bad = np.where(~np.isfinite(weights))
+        #weights[bad] = 0
+        #trace_profile_mean = pcmath.weighted_mean(trace_image_rect_norm, weights, axis=1)
         
         # Compute cubic spline for profile
-        good = np.where(np.isfinite(trace_profile_mean))[0]
-        trace_profile_cspline = scipy.interpolate.CubicSpline(yarr_hr0[good], trace_profile_mean[good], extrapolate=False)
+        good = np.where(np.isfinite(trace_profile_median))[0]
+        trace_profile_cspline = scipy.interpolate.CubicSpline(yarr_hr0[good], trace_profile_median[good], extrapolate=False)
 
-        # Trim 2 pixels on each end
+        # Trim 1 pixel on each end
         tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
         trace_profile_cspline = scipy.interpolate.CubicSpline(tpx[1*self.oversample_profile:len(tpx)-1*self.oversample_profile], tpy[1*self.oversample_profile:len(tpx)-1*self.oversample_profile], extrapolate=False)
-        
-        # Ensure trace profile is centered at zero
-        # prec = 1000
-        # yhr = np.arange(trace_profile_cspline.x[0], trace_profile_cspline.x[-1], 1 / prec)
-        # tphr = trace_profile_cspline(yhr)
-        # mid = np.nanmean(trace_profile_cspline.x)
-        # consider = np.where((yhr > mid - 3*self.oversample_profile) & (yhr < mid + 3*self.oversample_profile))[0]
-        # trace_max_pos = yhr[consider[np.nanargmax(tphr[consider])]]
-        # trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x - trace_max_pos,
-        #                                                       trace_profile_cspline(trace_profile_cspline.x), extrapolate=False)
 
         # Set profile to zero where is less than min_profile_flux (relative to 1)
-        tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
-        tpys = np.sort(tpy)
-        tpy -= np.nanmean(tpys[0:3])
-        tpy /= np.nanmax(tpy)
+        #breakpoint()# matplotlib.use("MacOSX"); plt.plot(trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)); plt.show()
+        #tpys = np.sort(tpy)
+        #tpy -= np.nanmean(tpys[0:2*self.oversample_profile])
+        #tpy /= np.nanmax(tpy)
+        #breakpoint()
+
+        # Center profile at zero
+        prec = 1000
+        tpxhr = np.arange(tpx[0], tpx[-1], 1 / prec)
+        tpyhr = trace_profile_cspline(tpxhr)
+        mid = tpx[np.nanargmax(tpy)]
+        consider = np.where((tpxhr > mid - 3*self.oversample_profile) & (tpxhr < mid + 3*self.oversample_profile))[0]
+        trace_max_pos = tpxhr[consider[np.nanargmax(tpyhr[consider])]]
+        trace_profile_cspline = scipy.interpolate.CubicSpline(trace_profile_cspline.x - trace_max_pos,
+                                                              trace_profile_cspline(trace_profile_cspline.x), extrapolate=False)
         
-        bad_left = np.where((tpx < 0) & (tpy < self.min_profile_flux))[0]
-        if bad_left.size > 0:
-            tpy[0:bad_left.max()] = 0
-        bad_right = np.where((tpx > 0) & (tpy < self.min_profile_flux))[0]
-        if bad_right.size > 0:
-            tpy[bad_right.min():] = 0
+        # bad_left = np.where((tpx < 0) & (tpy < self.min_profile_flux))[0]
+        # if bad_left.size > 0:
+        #    tpy[0:bad_left.max()] = 0
+        # bad_right = np.where((tpx > 0) & (tpy < self.min_profile_flux))[0]
+        # if bad_right.size > 0:
+        #    tpy[bad_right.min():] = 0
 
         # Subtract min_profile_flux
-        tpy -= self.min_profile_flux
-        bad = np.where(tpy < 0)[0]
-        if bad.size > 0:
-            tpy[bad] = 0
+        # tpy -= self.min_profile_flux
+        # bad = np.where(tpy < 0)[0]
+        # if bad.size > 0:
+        #    tpy[bad] = 0
 
         # Final profile
+        tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
         trace_profile_cspline = scipy.interpolate.CubicSpline(tpx, tpy / np.nanmax(tpy), extrapolate=False)
 
         # Return
@@ -634,7 +632,20 @@ class OptimalExtractor(SpectralExtractor):
         """
         tpx, tpy = trace_profile_cspline.x, trace_profile_cspline(trace_profile_cspline.x)
         tpy /= np.nanmax(tpy)
-        good = np.where(tpy >= self.min_profile_flux)[0]
-        xi, xf = good.min(), good.max()
-        extract_aperture = [-1 * int(np.abs(np.floor(tpx[xi]))) - 1, int(np.ceil(tpx[xf])) + 1]
+        imax = np.nanargmax(tpy)
+        xleft = tpx.min()
+        xright = tpx.max()
+        for i in range(imax, -1, -1):
+            if tpy[i] < self.min_profile_flux:
+                xleft = tpx[i]
+                break
+        for i in range(imax, len(tpx)):
+            if tpy[i] < self.min_profile_flux:
+                xright = tpx[i]
+                break
+        
+        #good = np.where(tpy >= self.min_profile_flux)[0]
+        #xi, xf = good.min(), good.max()
+        #extract_aperture = [-1 * int(np.abs(np.floor(tpx[xi]))) - 1, int(np.ceil(tpx[xf])) + 1]
+        extract_aperture = [np.floor(xleft), np.ceil(xright)]
         return extract_aperture

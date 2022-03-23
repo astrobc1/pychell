@@ -86,7 +86,7 @@ def compute_chebyshev_wls_2d(f0, df, wave_estimates, lfc_fluxes, echelle_orders,
             break
 
     # Return
-    matplotlib.use("MacOSX");
+    #matplotlib.use("MacOSX");
     # good = np.where(weights_flat > 0)[0]; bad = np.where(weights_flat == 0)[0]
     # rms = np.full(len(echelle_orders), np.nan)
     # for o in range(len(echelle_orders)):
@@ -98,15 +98,15 @@ def compute_chebyshev_wls_2d(f0, df, wave_estimates, lfc_fluxes, echelle_orders,
     #         rms[o] = np.nansum(res**2 / res.size)**0.5 / np.sqrt(res.size)
     # 
     
-    for o in range(len(echelle_orders)):
-        order  = echelle_orders[o]
-        if order in use_orders:
-            inds = np.where((echelle_orders_flat == order) & (weights_flat > 0))[0]
-            plt.scatter(waves_flat[inds], residuals_flat_vel[inds])
+    #for o in range(len(echelle_orders)):
+    #    order  = echelle_orders[o]
+    #    if order in use_orders:
+    #        inds = np.where((echelle_orders_flat == order) & (weights_flat > 0))[0]
+    #        plt.scatter(waves_flat[inds], residuals_flat_vel[inds])
 
-    plt.xlabel("Wavelength [nm]"); plt.ylabel("Residuals [m/s]");
-    plt.show()
-    breakpoint() # matplotlib.use("MacOSX"); plt.scatter(waves_flat[good], residuals_flat_vel[good]); plt.show()
+    #plt.xlabel("Wavelength [nm]"); plt.ylabel("Residuals [m/s]");
+    #plt.show()
+    #breakpoint() # matplotlib.use("MacOSX"); plt.scatter(waves_flat[good], residuals_flat_vel[good]); plt.show()
     # matplotlib.use("MacOSX"); plt.plot(echelle_orders, rms, marker='o', lw=0, markersize=10); plt.xlabel("Echelle Order"); plt.ylabel("RMS / sqrt(# Lines) [m/s]"); plt.show()
 
     return pcoeffs_best, wls2d_best, pixel_peaks, wave_peaks, rms, peak_integers
@@ -169,25 +169,6 @@ def compute_drift2d(f0, df, pcoeffs0, lfc_fluxes, echelle_orders, use_orders, po
     #stddev = pcmath.weighted_stddev(drifts[ss[0:int(0.95*len(res))]], weights_flat[ss[0:int(0.95*len(res))]]) / np.sqrt(len(drifts[ss[0:int(0.95*len(res))]]))
 
     return drift, stddev
-
-
-# def get_drift2d(wls2d0, waves_flat, weights_flat):
-#     vels = np.arange(-200, 200, 0.01)
-#     rms = np.full(len(vels), np.nan)
-#     for i in range(len(vels)):
-#         wls2d0_shifted = pcmath.doppler_shift_wave(wls2d0, vels[i])
-#         wres = weights_flat * (wls2d0_shifted - waves_flat)
-#         wres = np.sort(np.abs(wres))
-#         #breakpoint()
-#         rms[i] = np.nansum(wres[0:-20]**2)
-#         #rms[i] = np.nansum(wres**2)
-
-#     #breakpoint()
-#     vel_drift = vels[np.nanargmin(rms)]
-#     return vel_drift
-    
-
-
 
 
 def solve_chebyshev_wls_2d_drift(pars, wls2d0, waves_flat, weights_flat):
@@ -257,6 +238,9 @@ def compute_wls1d(wave_estimate, lfc_flux, f0, df, poly_order=None, xrange=None)
 
     # Polynomial fit to peaks
     pfit, wls = fit_peaks(xarr, lfc_centers_pix, lfc_centers_wave, 1 / rms_norm**2, poly_order=poly_order)
+    #breakpoint()
+    #import matplotlib; import matplotlib.pyplot as plt; matplotlib.use("MacOSX"); plt.plot(lfc_centers_pix, pcmath.dl_to_dv(lfc_centers_wave - np.polyval(pfit, lfc_centers_pix), lfc_centers_wave), marker='o', lw=0); plt.ylabel("Residuals [m/s]"); plt.xlabel("Pixels"); plt.title("March 13, Cal Frame, Cal fiber, Order 96"); plt.ylim(-100, 100); plt.tight_layout(); plt.savefig("residuals2.png", dpi=200); plt.close()
+
 
     return wls, pfit, lfc_centers_pix, lfc_centers_wave, rms_norm, peak_integers
 
@@ -324,7 +308,7 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
     # Only consider peaks with enough flux
     good_peaks = []
     for peak in peaks:
-        if lfc_flux_no_bg[peak] >= 0.2 * lfc_peak_max:
+        if lfc_flux_no_bg[peak] >= 0.05 * lfc_peak_max:
             good_peaks.append(peak)
     del good_peaks[0], good_peaks[-1]
     good_peaks = np.array(good_peaks)
@@ -391,8 +375,7 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
         peak_integers.append(lfc_peak_integers[k])
     lfc_centers_wave = np.array(lfc_centers_wave)
     peak_integers = np.array(peak_integers)
-    #breakpoint()
-    # matplotlib.use("MacOSX"); pfit=np.polyfit(lfc_centers_pix, lfc_centers_wave, 17); v=np.polyval(pfit, lfc_centers_pix) - lfc_centers_wave; plt.plot(lfc_centers_pix, pcmath.dl_to_dv(v, lfc_centers_wave), marker='o', lw=1); plt.title(str(np.nanmean(wave_estimate))); plt.show()
+
     return lfc_centers_pix, lfc_centers_wave, rms_norm, peak_integers
 
 def gen_theoretical_peaks(wi, wf, f0, df):
@@ -504,20 +487,18 @@ def fit_peaks(pixel_arr, lfc_centers_pix, lfc_centers_wave, weights, poly_order=
     lfc_centers_pix = np.copy(lfc_centers_pix)
     lfc_centers_wave = np.copy(lfc_centers_wave)
     weights = np.copy(weights)
-    for i in range(1):
+    for i in range(10):
         pfit = np.polyfit(lfc_centers_pix, lfc_centers_wave, poly_order, w=weights)
         model = np.polyval(pfit, lfc_centers_pix)
         res = lfc_centers_wave - model
-        n_good = np.where(weights > 0)
+        n_good = np.where(weights > 0)[0].size
         rms = np.sqrt(np.nansum(res**2) / n_good)
         bad = np.where(np.abs(res) > 4 * rms)[0]
         if bad.size > 0:
             weights[bad] = 0
-            lfc_centers_pix[bad] = np.nan
-            lfc_centers_wave[bad] = np.nan
         else:
             break
-    
+
     wls = np.polyval(pfit, pixel_arr)
 
     return pfit, wls

@@ -211,12 +211,12 @@ class SpectralExtractor:
 
         # Normalized residuals
         norm_res = (trace_image - model2d) / np.sqrt(trace_image_smooth)
-        norm_res_smooth = pcmath.median_filter2d(norm_res, width=5)
 
         # Flag
-        use = np.where((norm_res != 0) & (trace_mask == 1) & np.isfinite(norm_res_smooth))
+        use = np.where((norm_res != 0) & (trace_mask == 1) & np.isfinite(norm_res))
         rms = np.sqrt(np.nansum(norm_res[use]**2 / use[0].size))
         bad = np.where(np.abs(norm_res) > self.badpix_threshold * rms)
+        #breakpoint() matplotlib.use("MacOSX"); plt.plot(np.abs(norm_res.flatten())); plt.show()
         if bad[0].size > 0:
             trace_mask[bad] = 0
             trace_image[bad] = np.nan

@@ -229,8 +229,8 @@ def parse_spec1d(input_file, sregion):
     #wave = estimate_order_wls(sregion.order, 1)
     #wave = pcmath.doppler_shift_wave(wave, f[0].header["lfcdrift"])
     wave = f[0].data[oi, :, 3]
-    #flux = f[0].data[oi, :, 0]
-    flux = f[0].data[oi, :, 4]
+    flux = f[0].data[oi, :, 0]
+    #flux = f[0].data[oi, :, 4]
     fluxerr = f[0].data[oi, :, 1]
     mask = f[0].data[oi, :, 2]
     medval = pcmath.weighted_median(flux, percentile=0.99)
@@ -541,8 +541,8 @@ class PARVIReduceRecipe(ReduceRecipe):
         # Parse LFC flux results
         fname_lfc_fiber1 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber1*reduced.fits")[0]
         fname_lfc_fiber3 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber3*reduced.fits")[0]
-        lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[:, 0, :, 0]
-        lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[:, 0, :, 0]
+        lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[::-1, 0, :, 0]
+        lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[::-1, 0, :, 0]
         pcoeffs0_fiber1 = {}
         pcoeffs0_fiber3 = {}
         for o in range(len(echelle_orders)):
@@ -565,12 +565,19 @@ class PARVIReduceRecipe(ReduceRecipe):
                 if order in use_orders:
                     pixel_centers, wave_centers, rms_norm, peak_integers = pccombs.compute_peaks(wave_estimates_fiber3[o, :], lfc_fluxes[o, :], lfc_f0, lfc_df, xrange=[100, 1948])
                     weights = 1 / rms_norm**2
+                    #breakpoint()
+                    #import matplotlib; import matplotlib.pyplot as plt; matplotlib.use("MacOSX"); plt.plot(lfc_centers_pix, pcmath.dl_to_dv(lfc_centers_wave - np.polyval(pfit, lfc_centers_pix), lfc_centers_wave), marker='o', lw=0); plt.ylabel("Residuals [m/s]"); plt.xlabel("Pixels"); plt.title("March 13, Cal Frame, Cal fiber, Order 96"); plt.ylim(-100, 100); plt.tight_layout(); plt.savefig("residuals2.png", dpi=200); plt.close()
+                    #import matplotlib; import matplotlib.pyplot as plt; matplotlib.use("MacOSX"); plt.plot(pixel_centers, pcmath.dl_to_dv(wave_centers - np.polyval(pcoeffs0_fiber3[order], pixel_centers), wave_centers), marker='o', lw=0); plt.ylabel("Residuals [m/s]"); plt.xlabel("Pixels"); plt.title("March 13, Sci Frame, Cal fiber, Order 96"); plt.ylim(-100, 100); plt.tight_layout(); plt.savefig("residuals5.png", dpi=200); plt.close()
+                    #breakpoint()
                     _drifts = wave_centers - np.polyval(pcoeffs0_fiber3[order], pixel_centers)
                     _drifts = pcmath.dl_to_dv(_drifts, wave_centers)
-                    drifts[i, o] = pcmath.weighted_mean(_drifts, weights)
-                    stddevs[i, o] = pcmath.weighted_stddev(_drifts, weights) / np.sqrt(len(_drifts))
+                    drifts[i, o] = pcmath.weighted_median(_drifts, weights)
+                    use = np.where((pixel_centers > 300) & (pixel_centers < 2048-300))[0]
+                    #drifts[i, o] = np.nanmedian(_drifts[use])
+                    stddevs[i, o] = pcmath.weighted_stddev(_drifts[use], weights[use]) / np.sqrt(len(_drifts[use]))
                     print(order, drifts[i, o], stddevs[i, o])
-                    wls_fiber1[i, o, :] = pcmath.doppler_shift_wave(np.polyval(pcoeffs0_fiber1[order], np.arange(nx)), drifts[i, o])
+                    #wls_fiber1[i, o, :] = pcmath.doppler_shift_wave(np.polyval(pcoeffs0_fiber1[order], np.arange(nx)), drifts[i, o])
+                    wls_fiber1[i, o, :] = np.copy(np.polyval(pcoeffs0_fiber1[order], np.arange(nx)))
         
         return wls_fiber1, drifts, stddevs
 

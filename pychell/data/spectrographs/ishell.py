@@ -416,7 +416,7 @@ class iSHELLReduceRecipe(ReduceRecipe):
             badpix_mask = None
         
         # Extract image
-        recipe.extractor.extract_image(data, data_image, recipe.sregions[data.order_maps[0]], recipe.output_path, badpix_mask=badpix_mask)
+        recipe.extractor.extract_image(data, data_image, recipe.sregions[data.order_maps[0]], recipe.output_path + "spectra" + os.sep, badpix_mask=badpix_mask)
         
         # Print end
         print(f"Extracted {data} in {round(stopwatch.time_since() / 60, 2)} min")
