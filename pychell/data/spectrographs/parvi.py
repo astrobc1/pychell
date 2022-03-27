@@ -43,10 +43,14 @@ wls_pixel_lagrange_points = [199, 1023.5, 1847]
 lfc_f0 = cs.c / (1559.91370 * 1E-9) # freq of pump line in Hz.
 lfc_df = 10.0000000 * 1E9 # spacing of peaks [Hz]
 
+# Useful area on detector
+poly_bottom = np.array([-6.517857142857155e-05, 0.15125000000000033, -46.07142857142874])
+poly_top = np.array([-6.041666666666651e-05, 0.12291666666666691, 1975.4999999999993])
+
+
 # When orientated with orders along detector rows and concave down (vertex at top)
 # Top fiber is 1 (sci)
 # Bottom fiber is 3 (cal)
-
 # Approximate quadratic length solution coeffs as a starting point
 wls_coeffs_fiber1 = {84: [-6.53864897e-07, 0.00980298331, 1759.3386699999999], 85: [-6.46148117e-07, 0.009687404909999999, 1738.1397000000002], 86: [-6.38707844e-07, 0.00957457761, 1717.4456300000002], 87: [-6.31519485e-07, 0.00946445759, 1697.2385], 88: [-6.2456208e-07, 0.00935698607, 1677.5012599999998], 89: [-6.17817854e-07, 0.00925209401, 1658.21769], 90: [-6.11271815e-07, 0.00914970599, 1639.37234], 91: [-6.04911393e-07, 0.00904974352, 1620.95044], 92: [-5.98726128e-07, 0.0089521276, 1602.93786], 93: [-5.927073890000001e-07, 0.00885678082, 1585.32111], 94: [-5.86848138e-07, 0.00876362894, 1568.08726], 95: [-5.81142717e-07, 0.00867260208, 1551.22395], 96: [-5.75586675e-07, 0.0085836355, 1534.71932], 97: [-5.70176616e-07, 0.008496670080000001, 1518.56205], 98: [-5.6491008e-07, 0.00841165252, 1502.74127], 99: [-5.597854419999999e-07, 0.0083285353, 1487.24659], 100: [-5.548018420000001e-07, 0.00824727647, 1472.06801], 101: [-5.49959126e-07, 0.00816783919, 1457.19597], 102: [-5.45257819e-07, 0.0080901913, 1442.6212799999998], 103: [-5.40699106e-07, 0.00801430459, 1428.33509], 104: [-5.36284833e-07, 0.0079401542, 1414.32889], 105: [-5.32017532e-07, 0.00786771778, 1400.5945], 106: [-5.27900446e-07, 0.007796974789999999, 1387.1240400000002], 107: [-5.239375849999999e-07, 0.007727905679999999, 1373.90993], 108: [-5.20133781e-07, 0.00766049115, 1360.94491], 109: [-5.16494762e-07, 0.0075947114400000005, 1348.2220499999999], 110: [-5.13027239e-07, 0.0075305456500000005, 1335.73479], 111: [-5.09738999e-07, 0.00746797114, 1323.47699], 112: [-5.06639013e-07, 0.00740696303, 1311.44298], 113: [-5.03737548e-07, 0.0073474937700000005, 1299.62767], 114: [-5.010462919999999e-07, 0.00728953285, 1288.02668], 115: [-4.98578489e-07, 0.00723304661, 1276.63645], 116: [-4.963490739999999e-07, 0.00717799821, 1265.45444], 117: [-4.94374825e-07, 0.007124347709999999, 1254.47935], 118: [-4.92674517e-07, 0.007072052299999999, 1243.7113100000001], 119: [-4.9126908e-07, 0.00702106679, 1233.15224], 120: [-4.901817699999999e-07, 0.00697134412, 1222.80613], 121: [-4.894383380000001e-07, 0.00692283618, 1212.67945], 122: [-4.89067214e-07, 0.0068754947, 1202.78154], 123: [-4.890996849999999e-07, 0.0068292725, 1193.12513], 124: [-4.895700870000001e-07, 0.0067841247300000004, 1183.72687], 125: [-4.90515998e-07, 0.00674001048, 1174.6079100000002], 126: [-4.91978434e-07, 0.0066968945500000005, 1165.79459], 127: [-4.940020500000001e-07, 0.006654749409999999, 1157.31918], 128: [-4.96635349e-07, 0.00661355741, 1149.22064], 129: [-4.99930888e-07, 0.006573313209999999, 1141.5455900000002]}
 
@@ -55,91 +59,6 @@ wls_coeffs_fiber3 = {84: [-6.51759531e-07, 0.009800088580000001, 1760.1343499999
 ######################
 #### DATA PARSING ####
 ######################
-
-def categorize_raw_data(target_paths, utdate, calib_output_path, full_flat_files=None, fiber_flat_files=None, dark_files=None, lfc_zero_point_files=None, badpix_mask_file=None):
-
-    data = {}
-
-    # Classify files
-    sci_files = []
-    for t in target_paths:
-        sci_files += glob.glob(t + f"*{utdate}*.fits")
-
-    # Create Echellograms from raw data
-    data['science'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in sci_files]
-    data['fiber_flats_fiber1'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in fiber_flat_files[1]]
-    data['fiber_flats_fiber3'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in fiber_flat_files[3]]
-    data['darks'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in dark_files]
-    data['full_flats'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in full_flat_files]
-    data['lfc_fiber1'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in lfc_zero_point_files[1]]
-    data['lfc_fiber3'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in lfc_zero_point_files[3]]
-
-    # Master Darks
-    if len(dark_files) > 0:
-        data['master_dark'] = pcdata.MasterCal(data['darks'], calib_output_path)
-
-    # Master Flats
-    if len(full_flat_files) > 0:
-        data['master_flat'] = pcdata.MasterCal(data['full_flats'], calib_output_path)
-    
-    # Master fiber flats
-    data['master_fiber_flat_fiber1'] = pcdata.MasterCal(data['fiber_flats_fiber1'], calib_output_path)
-    data['master_fiber_flat_fiber3'] = pcdata.MasterCal(data['fiber_flats_fiber3'], calib_output_path)
-
-    data['master_lfc_fiber1'] = pcdata.MasterCal(data['lfc_fiber1'], calib_output_path)
-    data['master_lfc_fiber3'] = pcdata.MasterCal(data['lfc_fiber3'], calib_output_path)
-
-    # Pair cals for science
-    for d in data['science']:
-        d.order_maps = [data['master_fiber_flat_fiber1'], data['master_fiber_flat_fiber3']]
-        d.master_dark = data['master_dark']
-        d.master_flat = data['master_flat']
-
-    # Pair cals for individual full frame flats
-    d = data['master_flat']
-    if len(dark_files) > 0:
-        d.master_dark = data['master_dark']
-
-    # Pair cals for individual fiber flats
-    d = data['master_fiber_flat_fiber1']
-    d.order_maps = [data['master_fiber_flat_fiber1']]
-    d.master_flat = data['master_flat']
-    if len(dark_files) > 0:
-        d.master_dark = data['master_dark']
-
-    d = data['master_fiber_flat_fiber3']
-    d.order_maps = [data['master_fiber_flat_fiber3']]
-    d.master_flat = data['master_flat']
-    if len(dark_files) > 0:
-        d.master_dark = data['master_dark']
-
-    # Pair cals for individual lfc cals
-    d = data['master_fiber_flat_fiber1']
-    d.order_maps = [data['master_fiber_flat_fiber1']]
-    d.master_flat = data['master_flat']
-    if len(dark_files) > 0:
-        d.master_dark = data['master_dark']
-
-    # Pair cals for individual lfc cals
-    d = data['master_lfc_fiber1']
-    d.order_maps = [data['master_fiber_flat_fiber1']]
-    d.master_flat = data['master_flat']
-    if len(dark_files) > 0:
-        d.master_dark = data['master_dark']
-
-    d = data['master_lfc_fiber3']
-    d.order_maps = [data['master_fiber_flat_fiber3']]
-    d.master_flat = data['master_flat']
-    if len(dark_files) > 0:
-        d.master_dark = data['master_dark']
-
-    # Which to extract
-    data['extract'] = data['science'] + [data['master_fiber_flat_fiber1']] + [data['master_fiber_flat_fiber3']] + [data['master_lfc_fiber1']] + [data['master_lfc_fiber3']]
-
-    # Bad pixel mask (only one, load into memory)
-    data['badpix_mask'] = 1 - fits.open(badpix_mask_file)[0].data.astype(float)
-
-    return data
 
 def parse_utdate(data):
     jd_start = astropy.time.Time(parse_exposure_start_time(data), scale='utc', format='jd')
@@ -320,39 +239,33 @@ def estimate_order_wls(order, fiber=1):
 #### REDUCTION / EXTRACTION ####
 ################################
 
-# 2d PSF Chebyshev coeffs fiber 1 (sci)
-psf_fiber1_sigma_cc_coeffs = np.array([[10817.09583765, -17107.01816095, 7967.16476104, -1811.53741748],
-                                [-18612.91229572, 29436.74986453, -13706.5152384, 3114.74792951],
-                                [9548.27002104, -15096.6068257, 7025.28781907, -1593.86949674],
-                                [-2774.265692, 4383.52793171, -2036.75971941, 460.22238848]])
+ccpoly_coeffs_sigma_fiber1 = np.array([96073.77705017618, -159364.74850970478, 89169.12439151623, -30943.450178612766, 5262.963082028526, -147877.14310955434, 245260.7770622876, -137152.9813391628, 47547.111356818714, -8070.310077940552, 79775.40550393143, -132376.99027062586, 74151.33624405166, -25781.907133836587, 4400.228885654104])
 
-psf_fiber1_q_cc_coeffs = np.array([[-3139.67583903, 4982.58222991, -2335.59395504, 541.54013115],
-                            [5451.17067582, -8645.92564126, 4049.37069305, -936.34868835],
-                            [-3023.09460623, 4791.53953884, -2241.25096312, 516.0933734 ],
-                            [1042.48068141, -1650.82267482, 770.83132352, -176.50370795]])
+ccpoly_coeffs_sigma_fiber3 = np.array([94049.5228651916, -156002.95416474718, 87280.18566312999, -30283.15892820581, 5148.960163410947, -144807.18259649677, 240162.83920815645, -134289.53099277674, 46546.7647985848, -7897.784267636158, 78899.84589777053, -130922.2203709168, 73332.61292589683, -25494.939528154355, 4350.430335676172])
 
-psf_fiber1_theta_cc_coeffs = np.array([[-466.35560876, 721.54578343, -317.54563072, 64.13745968],
-                                [-2780.01076985, 4430.65003473, -2099.62461325, 494.07802169],
-                                [ 2941.86932764, -4677.56860455, 2205.10624142, -514.58119973],
-                                [-3118.18048152, 4937.4176478, -2306.00985419, 526.88079383]])
+ccpoly_coeffs_q_fiber1 = np.array([232.93922991026938, -354.9856514408896, 150.26844346683168, -25.956251261522915, -395.2583109695755, 607.7341170788181, -261.0387359006901, 47.28075765353607, 427.9161319765941, -669.218730381846, 302.5680778372938, -63.46430238829523])
+
+ccpoly_coeffs_q_fiber3 = np.array([191.75618488457476, -290.04886517645383, 120.24041870599879, -19.26114678052877, -341.6917236682601, 523.2717695034502, -221.98241622951923, 38.57307711434833, 395.441504715445, -618.0128368237691, 278.88902247804083, -58.184520689727655])
 
 
+theta_fiber1 = np.pi/2 + np.pi/4
+theta_fiber3 = np.pi/2 + np.pi/4
 
-# 2d PSF Chebyshev coeffs fiber 3 (cal)
-psf_fiber3_sigma_cc_coeffs = np.array([[4173.78757047, -6634.3759457, 3126.71874365, -733.5217621],
-                                       [-7870.64107668, 12510.48265612, -5891.31058062, 1379.60205539],
-                                       [ 3734.51902302, -5940.18282238, 2802.16442712, -659.07742754],
-                                       [-1153.04124161, 1834.24697739, -865.60689009, 203.70287094]])
+def get_psf_parameters(data, order, fiber=1):
+    nx = 2048
+    xarr = np.arange(nx)
+    max_order = echelle_orders[1]
+    if fiber == 1:
+        sigmas = pcmath.chebyval2d2(ccpoly_coeffs_sigma_fiber1, xarr / nx, np.full(nx, order / max_order), poly_order_inter_order=2, poly_order_intra_order=4)
+        qs = pcmath.chebyval2d2(ccpoly_coeffs_q_fiber1, xarr / nx, np.full(nx, order / max_order), poly_order_inter_order=2, poly_order_intra_order=3)
+        thetas = np.full(nx, theta_fiber1)
+    else:
+        sigmas = pcmath.chebyval2d2(ccpoly_coeffs_sigma_fiber3, xarr / nx, np.full(nx, order / max_order), poly_order_inter_order=2, poly_order_intra_order=4)
+        qs = pcmath.chebyval2d2(ccpoly_coeffs_q_fiber3, xarr / nx, np.full(nx, order / max_order), poly_order_inter_order=2, poly_order_intra_order=3)
+        thetas = np.full(nx, theta_fiber3)
 
-psf_fiber3_q_cc_coeffs = np.array([[818.83147371, -1288.47172767, 595.50495886, -131.23586891],
-                                   [-1472.88232812, 2320.12939078, -1073.28662361, 237.5627195],
-                                   [869.43234596, -1370.04895676, 633.84693128, -140.56349015],
-                                   [-168.04075282, 263.69502352, -120.90625017, 26.05078767]])
+    return sigmas, qs, thetas
 
-psf_fiber3_theta_cc_coeffs = np.array([[-4246.43437619, 6728.54941002, -3143.75201881, 722.73701936],
-                                       [6036.75325781, -9557.40480272, 4459.08715798, -1021.00456641],
-                                       [-2358.72363464, 3731.87798627, -1738.49428916, 396.55550374],
-                                       [269.08091673, -423.29234646, 194.52566234, -42.84035417]])
 
 
 
@@ -408,7 +321,7 @@ class PARVIReduceRecipe(ReduceRecipe):
         
         # Identify what's what.
         print("Categorizing Data ...", flush=True)
-        self.data = self.spec_module.categorize_raw_data(self.target_input_paths, self.utdate, self.calib_output_path, self.full_flat_files, self.fiber_flat_files, self.dark_files, self.lfc_zero_point_files, self.badpix_mask_file)
+        self.data = self.categorize_raw_data()
 
         # Print reduction summary
         self.print_reduction_summary()
@@ -452,13 +365,13 @@ class PARVIReduceRecipe(ReduceRecipe):
         """
         order_map = self.data['master_fiber_flat_fiber1']
         print(f"Tracing orders for {order_map} ...", flush=True)
-        self.tracer.trace(order_map, self.sregion)
+        self.tracer.trace(order_map, self.sregion, fiber=1)
         with open(f"{self.calib_output_path}{order_map.base_input_file_noext}_order_map.pkl", 'wb') as f:
             pickle.dump(order_map.orders_list, f)
 
         order_map = self.data['master_fiber_flat_fiber3']
         print(f"Tracing orders for {order_map} ...", flush=True)
-        self.tracer.trace(order_map, self.sregion)
+        self.tracer.trace(order_map, self.sregion, fiber=3)
         with open(f"{self.calib_output_path}{order_map.base_input_file_noext}_order_map.pkl", 'wb') as f:
             pickle.dump(order_map.orders_list, f)
 
@@ -541,8 +454,9 @@ class PARVIReduceRecipe(ReduceRecipe):
         # Parse LFC flux results
         fname_lfc_fiber1 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber1*reduced.fits")[0]
         fname_lfc_fiber3 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber3*reduced.fits")[0]
-        lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[::-1, 0, :, 0]
-        lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[::-1, 0, :, 0]
+        lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[:, 0, :, 0]
+        lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[:, 0, :, 0]
+        import matplotlib.pyplot as plt; import matplotlib; matplotlib.use("MacOSX")
         pcoeffs0_fiber1 = {}
         pcoeffs0_fiber3 = {}
         for o in range(len(echelle_orders)):
@@ -563,6 +477,14 @@ class PARVIReduceRecipe(ReduceRecipe):
             for o in range(len(echelle_orders)):
                 order = echelle_orders[o]
                 if order in use_orders:
+                    #breakpoint() # import matplotlib; import matplotlib.pyplot as plt; matplotlib.use("MacOSX");
+                    # f1 = lfc_flux_fiber3[o, :]
+                    # b1 = pcmath.cspline_fit_fancy(np.arange(nx), f1, window=15, n_knots=100, percentile=0.0001)
+                    # c1 = pcmath.cspline_fit_fancy(np.arange(nx), f1 - b1, window=15, n_knots=100, percentile=0.99999)
+                    # f2 = lfc_fluxes[o, :]
+                    # b2 = pcmath.cspline_fit_fancy(np.arange(nx), f2, window=15, n_knots=100, percentile=0.0001)
+                    # c2 = pcmath.cspline_fit_fancy(np.arange(nx), f2 - b2, window=15, n_knots=100, percentile=0.99999)
+                    #plt.plot((f1 - b1) / c1); plt.plot((f2 - b2) / c2); plt.show()
                     pixel_centers, wave_centers, rms_norm, peak_integers = pccombs.compute_peaks(wave_estimates_fiber3[o, :], lfc_fluxes[o, :], lfc_f0, lfc_df, xrange=[100, 1948])
                     weights = 1 / rms_norm**2
                     #breakpoint()
@@ -609,7 +531,7 @@ class PARVIReduceRecipe(ReduceRecipe):
         lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[:, 0, :, 0]
 
         # Generate wls for zero point
-        #pcoeffs0_fiber1, wls2d0_fiber1, pixel_peaks0_fiber1, wave_peaks0_fiber1, rms0_fiber1, peak_integers0_fiber1 = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates_fiber1, lfc_flux_fiber1, echelle_orders, use_orders, poly_order_inter_order, poly_order_intra_order)
+        pcoeffs0_fiber1, wls2d0_fiber1, pixel_peaks0_fiber1, wave_peaks0_fiber1, rms0_fiber1, peak_integers0_fiber1 = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates_fiber1, lfc_flux_fiber1, echelle_orders, use_orders, poly_order_inter_order, poly_order_intra_order)
         pcoeffs0_fiber3, wls2d0_fiber3, pixel_peaks0_fiber3, wave_peaks0_fiber3, rms0_fiber3, peak_integers0_fiber3 = pccombs.compute_chebyshev_wls_2d(lfc_f0, lfc_df, wave_estimates_fiber3, lfc_flux_fiber3, echelle_orders, use_orders, poly_order_inter_order, poly_order_intra_order)
 
         # Generate wls for science from drift
@@ -659,3 +581,91 @@ class PARVIReduceRecipe(ReduceRecipe):
                 continua[o, :] = pcmath.poly_filter(ff_smooth, width=501, poly_order=2)
         return continua
 
+
+    def categorize_raw_data(self):
+
+        data = {}
+
+        # Classify files
+        sci_files = []
+        for t in self.target_input_paths:
+            sci_files += glob.glob(t + f"*{self.utdate}*.fits")
+
+        # Create Echellograms from raw data
+        data['science'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in sci_files]
+        data['fiber_flats_fiber1'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in self.fiber_flat_files[1]]
+        data['fiber_flats_fiber3'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in self.fiber_flat_files[3]]
+        data['darks'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in self.dark_files]
+        data['full_flats'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in self.full_flat_files]
+        if self.lfc_zero_point_files is not None:
+            data['lfc_fiber1'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in self.lfc_zero_point_files[1]]
+            data['lfc_fiber3'] = [pcdata.Echellogram(input_file=f, spectrograph="PARVI") for f in self.lfc_zero_point_files[3]]
+
+        # Master Darks
+        if len(self.dark_files) > 0:
+            data['master_dark'] = pcdata.MasterCal(data['darks'], self.calib_output_path)
+
+        # Master Flats
+        if len(self.full_flat_files) > 0:
+            data['master_flat'] = pcdata.MasterCal(data['full_flats'], self.calib_output_path)
+        
+        # Master fiber flats
+        data['master_fiber_flat_fiber1'] = pcdata.MasterCal(data['fiber_flats_fiber1'], self.calib_output_path)
+        data['master_fiber_flat_fiber3'] = pcdata.MasterCal(data['fiber_flats_fiber3'], self.calib_output_path)
+
+        if self.lfc_zero_point_files is not None:
+            data['master_lfc_fiber1'] = pcdata.MasterCal(data['lfc_fiber1'], self.calib_output_path)
+            data['master_lfc_fiber3'] = pcdata.MasterCal(data['lfc_fiber3'], self.calib_output_path)
+
+        # Pair cals for science
+        for d in data['science']:
+            d.order_maps = [data['master_fiber_flat_fiber1'], data['master_fiber_flat_fiber3']]
+            d.master_dark = data['master_dark']
+            d.master_flat = data['master_flat']
+
+        # Pair cals for individual full frame flats
+        d = data['master_flat']
+        if len(self.dark_files) > 0:
+            d.master_dark = data['master_dark']
+
+        # Pair cals for individual fiber flats
+        d = data['master_fiber_flat_fiber1']
+        d.order_maps = [data['master_fiber_flat_fiber1']]
+        d.master_flat = data['master_flat']
+        if len(self.dark_files) > 0:
+            d.master_dark = data['master_dark']
+
+        d = data['master_fiber_flat_fiber3']
+        d.order_maps = [data['master_fiber_flat_fiber3']]
+        d.master_flat = data['master_flat']
+        if len(self.dark_files) > 0:
+            d.master_dark = data['master_dark']
+
+        # Pair cals for individual lfc cals
+        d = data['master_fiber_flat_fiber1']
+        d.order_maps = [data['master_fiber_flat_fiber1']]
+        d.master_flat = data['master_flat']
+        if len(self.dark_files) > 0:
+            d.master_dark = data['master_dark']
+
+        # Pair cals for individual lfc cals
+        if self.lfc_zero_point_files is not None:
+            d = data['master_lfc_fiber1']
+            d.order_maps = [data['master_fiber_flat_fiber1']]
+            d.master_flat = data['master_flat']
+            if len(self.dark_files) > 0:
+                d.master_dark = data['master_dark']
+
+            d = data['master_lfc_fiber3']
+            d.order_maps = [data['master_fiber_flat_fiber3']]
+            d.master_flat = data['master_flat']
+            if len(self.dark_files) > 0:
+                d.master_dark = data['master_dark']
+
+        # Which to extract
+        data['extract'] = data['science'] + [data['master_fiber_flat_fiber1']] + [data['master_fiber_flat_fiber3']] + [data['master_lfc_fiber1']] + [data['master_lfc_fiber3']]
+
+        # Bad pixel mask (only one, load into memory)
+        data['badpix_mask'] = 1 - fits.open(self.badpix_mask_file)[0].data.astype(float)
+
+        return data

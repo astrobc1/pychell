@@ -85,10 +85,13 @@ class ReduceRecipe:
         
         # Identify what's what.
         print("Categorizing Data ...", flush=True)
-        self.data = self.spec_module.categorize_raw_data(self.data_input_path, self.output_path)
+        self.categorize_raw_data()
 
         # Print reduction summary
         self.print_reduction_summary()
+
+    def categorize_raw_data():
+        self.data = {}
 
     
     ##########################

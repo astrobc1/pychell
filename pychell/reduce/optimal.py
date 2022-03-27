@@ -115,7 +115,7 @@ class OptimalExtractor(SpectralExtractor):
         if bad[0].size > 0:
             trace_image[bad] = np.nan
             trace_mask[bad] = 0
-
+        #breakpoint()
         # New trace positions (approx.)
         if self.trace_pos_refine_window_x is None:
             self.trace_pos_refine_window_x = [sregion.pixmin, sregion.pixmax]

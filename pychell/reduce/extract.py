@@ -77,17 +77,17 @@ class SpectralExtractor:
                     stopwatch.lap(trace_dict['label'])
                     
                     # Extract trace
-                    try:
-                        spec1d, spec1d_unc, badpix1d = self.extract_trace(data, data_image, sregion, trace_dict, badpix_mask=badpix_mask)
-                
-                        # Store result
-                        reduced_data[order_index, fiber_index, :, :] = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
+                    #try:
+                    spec1d, spec1d_unc, badpix1d = self.extract_trace(data, data_image, sregion, trace_dict, badpix_mask=badpix_mask)
+            
+                    # Store result
+                    reduced_data[order_index, fiber_index, :, :] = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
 
-                        # Print end of trace
-                        print(f" [{data}] Extracted Trace {trace_dict['label']} in {round(stopwatch.time_since(trace_dict['label']) / 60, 3)} min", flush=True)
+                    # Print end of trace
+                    print(f" [{data}] Extracted Trace {trace_dict['label']} in {round(stopwatch.time_since(trace_dict['label']) / 60, 3)} min", flush=True)
 
-                    except:
-                        print(f"Warning! Could not extract trace [{trace_dict['label']}] for observation [{data}]")
+                    #except:
+                    #    print(f"Warning! Could not extract trace [{trace_dict['label']}] for observation [{data}]")
 
         # Plot reduced data
         self.plot_extracted_spectra(data, reduced_data, sregion, output_path)
