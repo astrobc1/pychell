@@ -70,6 +70,9 @@ class GaussianDeconv2dExtractor(SpectralExtractor):
         bad = np.where(~np.isfinite(f))[0]
         f[bad] = pcmath.lin_interp(xarr[good], f[good], xarr[bad])
 
+        bad = np.where(~np.isfinite(f))[0]
+        f[bad] = 0
+
         # Stitch points
         model2d = np.full((ny, nx, len(chunks)), np.nan)
 
@@ -91,10 +94,9 @@ class GaussianDeconv2dExtractor(SpectralExtractor):
             xarr_aperture = np.arange(nnnx)
             A = self.gen_psf_matrix(S, xarr_aperture, tp, sigma[xxi:xxf+1], q[xxi:xxf+1], theta[xxi:xxf+1], extract_aperture)
             Aflat = A.reshape((nnny*nnnx, nnnx))
-            Sflat = S.flatten()
             model2d[yyi:yyf+1, xxi:xxf+1, i] = np.matmul(Aflat, f[xxi:xxf+1]).reshape((nnny, nnnx))
             model2d[:, xxi:xxi+20, i] = np.nan
-            model2d[:, xxf-20:xxf, i] = np.nan
+            model2d[:, xxf-20:xxf+1, i] = np.nan
 
         model2d = np.nanmean(model2d, axis=2)
 
@@ -107,9 +109,8 @@ class GaussianDeconv2dExtractor(SpectralExtractor):
         # Image dims
         ny, nx = image.shape
 
-        # Aperture size
-        aperture_size_x = extract_aperture[1] - extract_aperture[0]
-        aperture_size_y = extract_aperture[1] - extract_aperture[0]
+        # Aperture size (half)
+        aperture_size_half = int(np.ceil((extract_aperture[1] - extract_aperture[0]) / 2))
 
         # Initialize A
         n_apertures = len(xarr_aperture)
@@ -137,7 +138,7 @@ class GaussianDeconv2dExtractor(SpectralExtractor):
                     # Diffs
                     dx = xl - xkc
                     dy = yl - ykc
-                    if np.abs(dx) > aperture_size_x or np.abs(dy) > aperture_size_y:
+                    if np.abs(dx) > aperture_size_half or np.abs(dy) > aperture_size_half:
                         continue
 
                     # PSF params
@@ -206,31 +207,7 @@ class SPExtractor(GaussianDeconv2dExtractor):
         if read_noise is None:
             read_noise = data.spec_module.parse_itime(data) * data.spec_module.detector["read_noise"]
 
-        # Mask image
-        sregion.mask_image(image)
-        trace_image = np.copy(image)
-        trace_mask = np.copy(badpix_mask)
-        xarr = np.arange(nx)
-        trace_positions = np.polyval(trace_dict["pcoeffs"], xarr)
-        for x in range(nx):
-            ymid = trace_positions[x]
-            y_low = int(np.floor(ymid - trace_dict['height'] / 2))
-            y_high = int(np.ceil(ymid + trace_dict['height'] / 2))
-            if y_low >= 0 and y_low <= ny - 1:
-                trace_image[0:y_low, x] = np.nan
-            else:
-                trace_image[:, x] = np.nan
-            if y_high >= 0 and y_high + 1 <= ny-1:
-                trace_image[y_high+1:, x] = np.nan
-            else:
-                trace_image[:, x] = np.nan
-
-        # Sync
-        bad = np.where(~np.isfinite(trace_image) | (trace_mask == 0))
-        if bad[0].size > 0:
-            trace_image[bad] = np.nan
-            trace_mask[bad] = 0
-        trace_positions = self.compute_trace_positions_centroids(trace_image, trace_mask, self.trace_pos_poly_order, xrange=[sregion.pixmin, sregion.pixmax])
+        trace_positions = self.compute_trace_positions_centroids(image, badpix_mask, sregion, trace_dict, self.trace_pos_poly_order, n_iterations=10)
 
         # Mask image again based on new positions
         trace_image = np.copy(image)
@@ -259,6 +236,7 @@ class SPExtractor(GaussianDeconv2dExtractor):
         trace_image = trace_image[yi:yf+1, :]
         trace_mask = trace_mask[yi:yf+1, :]
         ny, nx = trace_image.shape
+        trace_positions -= yi
 
         # Flag obvious bad pixels again
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
@@ -268,13 +246,9 @@ class SPExtractor(GaussianDeconv2dExtractor):
             trace_image[bad] = np.nan
             trace_mask[bad] = 0
 
-        # New starting trace positions
-        trace_positions = self.compute_trace_positions_centroids(trace_image, trace_mask, trace_pos_poly_order=self.trace_pos_poly_order, xrange=[sregion.pixmin, sregion.pixmax])
-
         # Extract Aperture
         if self.extract_aperture is None:
-            mean_sigma = np.nanmean(self.sigma)
-            _extract_aperture = [np.floor(-8 * mean_sigma), np.ceil(8 * mean_sigma)]
+            _extract_aperture = [-int(np.ceil(trace_dict['height'] / 2)), int(np.ceil(trace_dict['height'] / 2))]
         else:
             _extract_aperture = self.extract_aperture
 
@@ -283,14 +257,15 @@ class SPExtractor(GaussianDeconv2dExtractor):
 
             print(f" [{data}] Extracting Trace {trace_dict['label']}, Iter [{i + 1}/{self.n_iterations}] ...", flush=True)
 
-            # Optimal extraction
+            # extraction
             spec1d, spec1d_unc, spec1dt, spec1dt_unc, RR = self.deconv2dextraction(data, trace_dict, trace_image, trace_mask, trace_positions, _extract_aperture, read_noise=read_noise)
 
             # Re-map pixels and flag in the 2d image.
             if i < self.n_iterations - 1:
 
                 # 2d model
-                model2d = self.compute_model2d(data, trace_image, trace_mask, trace_dict, spec1d, trace_positions, _extract_aperture)
+                model2d = self.compute_model2d(data, trace_image, trace_mask, trace_dict, spec1dt, trace_positions, _extract_aperture)
+                #breakpoint() # matplotlib.use("MacOSX")
 
                 # Flag
                 n_bad_current = np.sum(trace_mask)
@@ -317,8 +292,6 @@ class SPExtractor(GaussianDeconv2dExtractor):
             spec1dt[bad] = np.nan
             spec1dt_unc[bad] = np.nan
             badpix1d[bad] = 0
-        #breakpoint()
-        #matplotlib.use("MacOSX"); plt.plot(np.nansum(trace_image, axis=0)); plt.plot(spec1dt*1.2); plt.show()
         
         return spec1dt, spec1dt_unc, badpix1d
 
@@ -331,6 +304,8 @@ class SPExtractor(GaussianDeconv2dExtractor):
         # Copy input
         trace_image_cp = np.copy(trace_image)
         trace_mask_cp = np.copy(trace_mask)
+
+        trace_image_cp = self.fix_nans_2d(trace_image_cp)
 
         # Dims
         ny, nx = trace_image_cp.shape
@@ -394,21 +369,18 @@ class SPExtractor(GaussianDeconv2dExtractor):
 
             # Prep inputs for sparse extraction
             Aflat = A.reshape((nny*nnx, len(xarr_aperture)))
-            #S = self.fix_nans_2d(S, M, tp, extract_aperture)
             Sflat = S.flatten()
-            W = np.zeros((nny, nnx))
-            for k in range(nny):
-                for j in range(nnx):
-                    W[k, j] = A[k, j, :].sum()**2 / (S[k, j] + read_noise**2)
+            #W = np.zeros((nny, nnx))
+            #for k in range(nny):
+            #    for j in range(nnx):
+            #        W[k, j] = A[k, j, :].sum()**2 / (S[k, j] + read_noise**2)
+            W = 1 / (S + read_noise**2)
             bad = np.where(~np.isfinite(W))
             W[bad] = 0
             Wbig = np.diag(W.flatten())
-            Ninv = np.diag(1 / Sflat)
-            bad = np.where(~np.isfinite(Ninv))
-            Ninv[bad] = 0
 
             # Call sparse extraction
-            syhr, sythr, _Rhr = self.extract_SP2d(Aflat, Sflat, Ninv)
+            syhr, sythr, _Rhr = self.extract_SP2d(Aflat, Sflat, Wbig)
 
             # Bin back to detector grid
             sy = self.bin_spec1d(syhr)
@@ -438,8 +410,8 @@ class SPExtractor(GaussianDeconv2dExtractor):
         R[:, 0:xi+distrust_width, 0] = np.nan
         R[:, xf-distrust_width:, -1] = np.nan
 
-        # Correct negatives in reconvolved spectrum
-        bad = np.where(spec1dt < 0)[0]
+        # Correct negatives and zeros in reconvolved spectrum
+        bad = np.where(spec1dt <= 0)
         spec1dt[bad] = np.nan
 
         # Average each chunk
@@ -452,13 +424,6 @@ class SPExtractor(GaussianDeconv2dExtractor):
         RR = np.nanmean(R, axis=2)
         for i in range(nx):
             RR[i, :] /= np.nansum(RR[i, :])
-        for i in range(nx):
-            if not np.isclose(np.nansum(RR[i, :]), 1):
-                RR[i, :] = np.nan
-            else:
-                bad = np.where(~np.isfinite(RR[i, :]))[0]
-                RR[i, bad] = 0
-
         goody, goodx = np.where(np.isfinite(RR))
         xi, xf = goodx.min(), goodx.max()
         for x in range(nx):
@@ -468,14 +433,25 @@ class SPExtractor(GaussianDeconv2dExtractor):
             except:
                 pass
 
-
         bad = np.where(RR < 0)
         RR[bad] = 0
         for x in range(nx):
             RR[x, :] /= np.nansum(RR[x, :])
 
-        RR[0:xi-20, :] = np.nan
-        RR[xf - 20:, :] = np.nan
+        RR[0:xi-20, :] = 0
+        RR[xf - 20:, :] = 0
+
+        bad = np.where((RR <= 0) | ~np.isfinite(RR))
+        RR[bad] = 0
+
+        bad = np.where(~np.isfinite(spec1dt) | (spec1dt <= 0))[0]
+        spec1dt[bad] = np.nan
+
+        # Take average of each
+        #lsf = np.full(nx, np.nan)
+        #for i in range(nx):
+            #lsf[i] = np.nanmean()
+         #matplotlib.use("MacOSX"); plt.imshow(RR); plt.show()
 
         # Return
         return spec1d, spec1d_unc, spec1dt, spec1dt_unc, RR

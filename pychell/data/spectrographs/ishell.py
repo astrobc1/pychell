@@ -24,7 +24,7 @@ observatory = "irtf"
 echelle_orders = [212, 240]
 
 # Detector
-detector = {"dark_current": 0.05, "gain": 1.8, "read_noise": 8.0}
+detector = {"dark_current": 0.1, "gain": 1.8, "read_noise": 4.0}
 
 # Gas cell
 gascell_depth = [0.97, 0.97, 0.97]
@@ -118,49 +118,6 @@ def parse_spec1d(input_file, sregion):
             "mask": mask}
     return data
 
-
-###################
-#### REDUCTION ####
-###################
-
-
-def categorize_raw_data(data_input_path, output_path):
-
-    # Stores the data as above objects
-    data = {}
-    
-    # iSHELL science files are files that contain spc or data
-    sci_files = glob.glob(data_input_path + "*data*.fits") + glob.glob(data_input_path + "*spc*.fits")
-    sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
-    data['science'] = [pcdata.Echellogram(input_file=sci_file, spectrograph="iSHELL") for sci_file in sci_files]
-
-    # Delete bad objects
-    target_names = np.array([parse_object(d).lower() for d in data['science']], dtype='<U100')
-    bad = np.where(target_names == "dark")[0]
-    for i in sorted(bad, reverse=True):
-        del data['science'][i]
-    
-    # iSHELL flats must contain flat in the filename
-    flat_files = glob.glob(data_input_path + '*flat*.fits')
-    if len(flat_files) > 0:
-        data['flats'] = [pcdata.Echellogram(input_file=flat_files[f], spectrograph="iSHELL") for f in range(len(flat_files))]
-        flat_groups = group_flats(data['flats'])
-        data['master_flats'] = [pcdata.MasterCal(flat_group, output_path + "calib" + os.sep) for flat_group in flat_groups]
-    
-        for sci in data['science']:
-            pair_master_flat(sci, data['master_flats'])
-        
-        # Order maps for iSHELL are the flat fields closest in time and space (RA+Dec) to the science target
-        data['order_maps'] = data['master_flats']
-        for sci_data in data['science']:
-            pair_order_maps(sci_data, data['order_maps'])
-
-    # Which to extract
-    data['extract'] = data['science']
-
-    # Return the data dict
-    return data
-
 def pair_order_maps(data, order_maps):
     for order_map in order_maps:
         if order_map == data.master_flat:
@@ -200,6 +157,11 @@ def pair_master_dark(data, master_darks):
         raise ValueError(str(good.size) + " master dark(s) found for\n" + str(data))
     else:
         data.master_dark = master_darks[good[0]]
+
+def compute_read_noise(data):
+    itime = parse_itime(data)
+    ron = itime * detector["dark_current"] + detector["read_noise"]
+    return ron
 
 def pair_master_flat(data, master_flats):
     ang_seps = np.array([np.abs(parse_sky_coord(master_flat.group[0]).separation(parse_sky_coord(data)).value) for master_flat in master_flats], dtype=float)
@@ -308,6 +270,46 @@ class iSHELLReduceRecipe(ReduceRecipe):
         self.base_flat_field_file = base_flat_field_file
         self.sregion0 = copy.deepcopy(self.sregion)
 
+    def categorize_raw_data(self):
+
+        # Stores the data as above objects
+        self.data = {}
+        
+        # iSHELL science files are files that contain spc or data
+        sci_files = glob.glob(self.data_input_path + "*data*.fits") + glob.glob(self.data_input_path + "*spc*.fits")
+        sci_files = np.sort(np.unique(np.array(sci_files, dtype='<U200'))).tolist()
+        self.data['science'] = [pcdata.Echellogram(input_file=sci_file, spectrograph="iSHELL") for sci_file in sci_files]
+
+        # Delete bad objects
+        target_names = np.array([parse_object(d).lower() for d in self.data['science']], dtype='<U100')
+        bad = np.where((target_names == "dark") | (target_names == "flat") | (target_names == "QTH"))[0]
+        for i in sorted(bad, reverse=True):
+            del self.data['science'][i]
+        
+        # iSHELL flats must contain flat in the filename
+        flat_files = glob.glob(self.data_input_path + '*flat*.fits')
+        if len(flat_files) > 0:
+            self.data['flats'] = [pcdata.Echellogram(input_file=flat_files[f], spectrograph="iSHELL") for f in range(len(flat_files))]
+            flat_groups = group_flats(self.data['flats'])
+
+            gas_pos = np.array([d.header["GASCELL"].lower() for d in self.data['flats']])
+            bad = np.where(gas_pos == "in")[0]
+            for i in sorted(bad, reverse=True):
+                del self.data['flats'][i]
+
+            self.data['master_flats'] = [pcdata.MasterCal(flat_group, self.output_path + "calib" + os.sep) for flat_group in flat_groups]
+        
+            for sci in self.data['science']:
+                pair_master_flat(sci, self.data['master_flats'])
+            
+            # Order maps for iSHELL are the flat fields closest in time and space (RA+Dec) to the science target
+            self.data['order_maps'] = self.data['master_flats']
+            for sci_data in self.data['science']:
+                pair_order_maps(sci_data, self.data['order_maps'])
+
+        # Which to extract
+        self.data['extract'] = self.data['science']
+
     def trace(self):
         """Traces the orders.
         """
@@ -386,6 +388,7 @@ class iSHELLReduceRecipe(ReduceRecipe):
         if self.do_flat:
             for mflat in self.data['master_flats']:
                 image = pccalib.gen_master_flat(mflat, self.do_bias, self.do_dark)
+                image /= pcmath.weighted_median(image, percentile=0.95)
                 mflat.save(image)
 
     @staticmethod

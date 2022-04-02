@@ -12,6 +12,7 @@ import astropy.units as units
 
 # Pychell deps
 import pychell.maths as pcmath
+import pychell.spectralmodeling
 
 # Site
 observatory = "ctio"

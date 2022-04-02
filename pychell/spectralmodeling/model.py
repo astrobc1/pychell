@@ -122,6 +122,8 @@ class SpectralForwardModel:
 
         # Generate the wavelength solution of the data
         if self.wls is not None:
+            #breakpoint()
+            #breakpoint() # import matplotlib; import matplotlib.pyplot as plt; matplotlib.use("MacOSX"); plt.plot(model_flux)
             data_wave = self.wls.build(pars, data)
 
         # Interpolate high res model onto data grid

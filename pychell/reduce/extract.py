@@ -77,17 +77,17 @@ class SpectralExtractor:
                     stopwatch.lap(trace_dict['label'])
                     
                     # Extract trace
-                    #try:
-                    spec1d, spec1d_unc, badpix1d = self.extract_trace(data, data_image, sregion, trace_dict, badpix_mask=badpix_mask)
+                    try:
+                        spec1d, spec1d_unc, badpix1d = self.extract_trace(data, data_image, sregion, trace_dict, badpix_mask=badpix_mask)
             
-                    # Store result
-                    reduced_data[order_index, fiber_index, :, :] = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
+                        # Store result
+                        reduced_data[order_index, fiber_index, :, :] = np.array([spec1d, spec1d_unc, badpix1d], dtype=float).T
 
-                    # Print end of trace
-                    print(f" [{data}] Extracted Trace {trace_dict['label']} in {round(stopwatch.time_since(trace_dict['label']) / 60, 3)} min", flush=True)
+                        # Print end of trace
+                        print(f" [{data}] Extracted Trace {trace_dict['label']} in {round(stopwatch.time_since(trace_dict['label']) / 60, 3)} min", flush=True)
 
-                    #except:
-                    #    print(f"Warning! Could not extract trace [{trace_dict['label']}] for observation [{data}]")
+                    except:
+                        print(f"Warning! Could not extract trace [{trace_dict['label']}] for observation [{data}]")
 
         # Plot reduced data
         self.plot_extracted_spectra(data, reduced_data, sregion, output_path)
@@ -214,9 +214,9 @@ class SpectralExtractor:
 
         # Flag
         use = np.where((norm_res != 0) & (trace_mask == 1) & np.isfinite(norm_res))
-        rms = np.sqrt(np.nansum(norm_res[use]**2 / use[0].size))
-        bad = np.where(np.abs(norm_res) > self.badpix_threshold * rms)
-        #breakpoint() matplotlib.use("MacOSX"); plt.plot(np.abs(norm_res.flatten())); plt.show()
+        #rms = np.sqrt(np.nansum(norm_res[use]**2 / use[0].size))
+        stddev = pcmath.robust_stats(norm_res[use].flatten())[1]
+        bad = np.where(np.abs(norm_res) > self.badpix_threshold * stddev)
         if bad[0].size > 0:
             trace_mask[bad] = 0
             trace_image[bad] = np.nan
@@ -229,8 +229,6 @@ class SpectralExtractor:
             trace_mask (np.ndarray): The bad pixel mask (1=good, 0=bad).
             trace_positions (np.ndarray): The trace positions.
             extract_aperture (list): The number of pixels [below, above] the trace (relative to trace_positions) to consider for extraction of the desired signal.
-            background_smooth_width (int, optional): How many pixels to use to smooth the background with a rolling median filter. Defaults to None (no smoothing).
-            background_smooth_poly_order (int, optional): The order of the rolling polynomial filter for the background. Defaults to None (no smoothing).
 
         Returns:
             np.ndarray: The background signal.
@@ -242,6 +240,7 @@ class SpectralExtractor:
         
         # Helper array
         yarr = np.arange(ny)
+        xarr = np.arange(nx)
         
         # Empty arrays
         background = np.full(nx, np.nan)
@@ -255,14 +254,14 @@ class SpectralExtractor:
         for x in range(nx):
             
             # Identify regions low in flux
-            background_locs = np.where(((yarr < np.floor(trace_positions[x] - extract_aperture[0])) | (yarr > np.ceil(trace_positions[x] + extract_aperture[1]))) & np.isfinite(trace_image_smooth[:, x]))[0]
+            background_locs = np.where(((yarr < np.floor(trace_positions[x] + extract_aperture[0])) | (yarr > np.ceil(trace_positions[x] + extract_aperture[1]))) & np.isfinite(trace_image_smooth[:, x]))[0]
             
             # Continue if no locs
             if background_locs.size == 0:
                 continue
             
             # Compute the median counts behind the trace (use 25th percentile to mitigate injecting negative values)
-            background[x] = np.nanmedian(trace_image_smooth[background_locs, x])
+            background[x] = pcmath.weighted_median(trace_image_smooth[background_locs, x], percentile=0.2)
             
             # Compute background
             if background[x] >= 0 and np.isfinite(background[x]):
@@ -277,8 +276,12 @@ class SpectralExtractor:
                 background_err[x] = np.nan
 
         # Polynomial filter
+        background = pcmath.median_filter1d(background, width=5, preserve_nans=False)
+        good = np.where(np.isfinite(background))[0]
+        bad = np.where(~np.isfinite(background))[0]
+        background[bad] = np.interp(xarr[bad], xarr[good], background[good])
         background = pcmath.poly_filter(background, width=31, poly_order=2)
-        background_err = np.sqrt(background / (n_pix_used - 1))
+        background_err = np.sqrt(background / n_pix_used)
 
         # Flag negative values
         bad = np.where(background < 0)[0]
@@ -290,7 +293,7 @@ class SpectralExtractor:
         return background, background_err
 
     @staticmethod
-    def compute_trace_positions_centroids(trace_image, trace_mask, trace_pos_poly_order=2, xrange=None):
+    def compute_trace_positions_centroids(image, badpix_mask, sregion, trace_dict, trace_pos_poly_order=2, n_iterations=10):
         """Computes the trace positions by iteratively computing the centroids of each column.
 
         Args:
@@ -304,42 +307,77 @@ class SpectralExtractor:
         """
 
         # The image dimensions
-        ny, nx = trace_image.shape
+        ny, nx = image.shape
         
         # Helpful arrays
         yarr = np.arange(ny)
         xarr = np.arange(nx)
 
-        # Smooth image
-        trace_image_smooth = pcmath.median_filter2d(trace_image, width=3, preserve_nans=False)
+        # Initial positions
+        trace_positions = np.polyval(trace_dict["pcoeffs"], xarr)
 
-        # Y centroids
-        ycen = np.full(nx, np.nan)
+        for i in range(n_iterations):
 
-        if xrange is None:
-            xrange = [0, nx - 1]
+            # Copy the image
+            image_cp = np.copy(image)
 
-        # Loop over columns
-        for x in range(xrange[0], xrange[1]+1):
-            
-            # See if column is even worth looking at
-            good = np.where((trace_mask[:, x] == 1) & np.isfinite(trace_image_smooth[:, x]))[0]
-            if good.size <= 3:
-                continue
+            # Mask image
+            sregion.mask_image(image_cp)
+            trace_image = np.copy(image_cp)
+            trace_mask = np.copy(badpix_mask)
+            for x in range(nx):
+                ymid = trace_positions[x]
+                y_low = int(np.floor(ymid - trace_dict['height'] / 2))
+                y_high = int(np.ceil(ymid + trace_dict['height'] / 2))
+                if y_low >= 0 and y_low <= ny - 1:
+                    trace_image[0:y_low, x] = np.nan
+                else:
+                    trace_image[:, x] = np.nan
+                if y_high >= 0 and y_high + 1 <= ny-1:
+                    trace_image[y_high+1:, x] = np.nan
+                else:
+                    trace_image[:, x] = np.nan
 
-            # Biased centroid
-            ycen[x] = pcmath.weighted_mean(good, trace_image_smooth[good, x])
-    
-        # Smooth the deviations
-        ycen_smooth = pcmath.median_filter1d(ycen, width=3)
-        bad = np.where(np.abs(ycen - ycen_smooth) > 0.5)[0]
-        if bad.size > 0:
-            ycen[bad] = np.nan
-        good = np.where(np.isfinite(ycen))[0]
-    
-        # Fit with a polynomial
-        pfit = np.polyfit(xarr[good], ycen[good], trace_pos_poly_order)
-        trace_positions = np.polyval(pfit, xarr)
+            # Sync
+            bad = np.where(~np.isfinite(trace_image) | (trace_mask == 0))
+            if bad[0].size > 0:
+                trace_image[bad] = np.nan
+                trace_mask[bad] = 0
+
+            # Fix nans
+            trace_image = SpectralExtractor.fix_nans_2d(trace_image)
+
+            # Smoothed 1d spectrum
+            spec1d = pcmath.median_filter1d(np.nansum(pcmath.median_filter2d(trace_image, width=3), axis=0), width=3)
+            med_val = pcmath.weighted_median(spec1d, percentile=0.98)
+
+            # Y centroids
+            ycen = np.full(nx, np.nan)
+
+            # Loop over columns
+            for x in range(sregion.pixmin, sregion.pixmax+1):
+                
+                # See if column is even worth looking at
+                good = np.where((trace_mask[:, x] == 1) & np.isfinite(trace_image[:, x]))[0]
+                if good.size <= 3 or spec1d[x] < 0.15 * med_val:
+                    continue
+
+                # Centroid
+                ycen[x] = pcmath.weighted_mean(good, trace_image[good, x])
+        
+            # Smooth the deviations
+            ycen_smooth = pcmath.median_filter1d(ycen, width=3)
+            bad = np.where(np.abs(ycen - ycen_smooth) > 1)[0]
+            if bad.size > 0:
+                ycen[bad] = np.nan
+            good = np.where(np.isfinite(ycen))[0]
+        
+            # Fit with a polynomial
+            pfit = np.polyfit(xarr[good], ycen[good], trace_pos_poly_order)
+            res = ycen - np.polyval(pfit, xarr)
+            good = np.where((np.abs(res) < pcmath.robust_stats(res, n_sigma=5)[1]) & np.isfinite(res))[0]
+            pfit = np.polyfit(xarr[good], ycen[good], trace_pos_poly_order)
+            trace_positions = np.polyval(pfit, xarr)
     
         # Return
         return trace_positions
@@ -437,17 +475,19 @@ class SpectralExtractor:
             spec1d_err[x] = np.sqrt(np.nansum(v) / (np.nansum(M) - 1)) / np.nansum(w * P)
 
         return spec1d, spec1d_err
-
-    @staticmethod
-    def fix_bad_baxels_interp(trace_image, trace_mask):
-        bad = np.where(trace_mask == 0)
-        trace_image_out = np.copy(trace_image)
-        ny, nx = trace_image.shape
-        xarr = np.arange(nx)
-        yarr = np.arange(ny)
-        if bad[0].size > 0:
-            for i in range(bad[0].size):
-                trace_image_out[bad[0][i], bad[1][i]] = scipy.interpolate.interp2d(xarr, yarr, trace_image)(bad[1][i], bad[0][i])
-        return trace_image_out
-
         
+    @staticmethod
+    def fix_nans_2d(trace_image):
+        ny, nx = trace_image.shape
+        goody, goodx = np.where(np.isfinite(trace_image))
+        xi, xf = goodx.min(), goodx.max()
+        bady, badx = np.where(~np.isfinite(trace_image))
+        trace_image_out = np.copy(trace_image)
+        trace_image_out = np.ma.masked_invalid(trace_image_out)
+        trace_image_out.fill_value = 0
+        xx, yy = np.meshgrid(np.arange(nx), np.arange(ny))
+        x1 = xx[~trace_image_out.mask]
+        y1 = yy[~trace_image_out.mask]
+        trace_image_out = trace_image[~trace_image_out.mask]
+        trace_image_out = scipy.interpolate.griddata((x1, y1), trace_image_out.ravel(), (xx, yy), method='linear')
+        return trace_image_out

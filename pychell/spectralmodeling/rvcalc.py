@@ -442,7 +442,7 @@ def _combine_relative_rvs(bjds, rvs, weights, indices):
             ww[bad] = 0
         rvs_binned_out[i], unc_binned_out[i] = pcmath.weighted_combine(rr, ww, err_type="empirical")
         t_binned_out[i] = np.nanmean(bjds[f:l+1])
-        
+    
     return rvs_single_out, unc_single_out, t_binned_out, rvs_binned_out, unc_binned_out
 
 def combine_rvs_simple(bjds, rvs, weights, indices):

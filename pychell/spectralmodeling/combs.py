@@ -106,7 +106,7 @@ def compute_chebyshev_wls_2d(f0, df, wave_estimates, lfc_fluxes, echelle_orders,
 
     #plt.xlabel("Wavelength [nm]"); plt.ylabel("Residuals [m/s]");
     #plt.show()
-    breakpoint() # matplotlib.use("MacOSX"); plt.scatter(waves_flat[good], residuals_flat_vel[good]); plt.show()
+    #breakpoint() # matplotlib.use("MacOSX"); plt.scatter(waves_flat[good], residuals_flat_vel[good]); plt.show()
     # matplotlib.use("MacOSX"); plt.plot(echelle_orders, rms, marker='o', lw=0, markersize=10); plt.xlabel("Echelle Order"); plt.ylabel("RMS / sqrt(# Lines) [m/s]"); plt.show()
 
     return pcoeffs_best, wls2d_best, pixel_peaks, wave_peaks, rms, peak_integers
@@ -156,7 +156,6 @@ def compute_drift2d(f0, df, pcoeffs0, lfc_fluxes, echelle_orders, use_orders, po
     res = waves_flat - wls2d0
     ss = np.argsort(np.abs(res))
     n = len(res)
-    #breakpoint()
     from scipy.constants import c as SPEED_OF_LIGHT
     l = waves_flat[ss[0:int(0.95*n)]]
     l0 = wls2d0[ss[0:int(0.95*n)]]
@@ -330,7 +329,7 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
         use = np.where((xarr >= np.floor(good_peaks[i] - peak_spacing[good_peaks[i]] / 2)) & (xarr < np.ceil(good_peaks[i] + peak_spacing[good_peaks[i]] / 2)))[0]
 
         # Crop data
-        xx, yy = np.copy(xarr[use]), np.copy(((lfc_flux - background) / continuum)[use])
+        xx, yy = np.copy(xarr[use]), np.copy((lfc_flux - background)[use])
 
         # Normalize lfc flux to max
         yy -= np.nanmin(yy)
@@ -381,7 +380,7 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
 
         matplotlib.use("MacOSX");
         #breakpoint()
-        plt.plot(residuals_x, residuals_y); plt.show()
+        #plt.plot(residuals_x, residuals_y); plt.show()
         #plt.plot(xx, yy); plt.plot(xx, model); plt.xlabel("Detector Pixels"); plt.show()
     
     residuals_x = np.array(residuals_x)
@@ -402,6 +401,9 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
         peak_integers.append(lfc_peak_integers[k])
     lfc_centers_wave = np.array(lfc_centers_wave)
     peak_integers = np.array(peak_integers)
+
+    #breakpoint()
+    #pfit=np.polyfit(lfc_centers_pix, lfc_centers_wave, 6); v = np.polyval(pfit, lfc_centers_pix); res=lfc_centers_wave-v; res=pcmath.dl_to_dv(res, lfc_centers_wave); plt.plot(lfc_centers_pix, res); plt.show()
 
     return lfc_centers_pix, lfc_centers_wave, rms_norm, peak_integers
 

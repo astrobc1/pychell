@@ -10,6 +10,19 @@ from numba import jit, njit
 import numba
 from llc import jit_filter_function
 
+def robust_stats(x, n_sigma=6):
+    n_good = np.where(np.isfinite(x))[0].size
+    if n_good == 0:
+        return np.nan, np.nan
+    else:
+        med = np.nanmedian(x)
+        _mad = mad(x)
+        good = np.where(np.abs(x - med) < n_sigma * 1.4826 * _mad)
+        if good[0].size > 0:
+            return np.nanmean(x[good]), np.nanstd(x[good])
+        else:
+            return np.nan, np.nan
+
 def r2stat(ydata, ymodel, weights):
     """Computes the weighted R2 stat.
 
@@ -442,7 +455,7 @@ def hermfun(x, deg):
             herm[:, k] = np.sqrt(2 / k) * (x * herm[:, k-1] - np.sqrt((k - 1) / 2) * herm[:, k-2])
         return herm
 
-@njit
+
 def mad(x):
     """Computes the true median absolute deviation.
 
@@ -533,7 +546,7 @@ def weighted_combine(y, w, yerr=None, err_type="empirical"):
     """
     
     # Determine how many good data points.
-    good = np.where((w > 0) & np.isfinite(w))[0]
+    good = np.where((w > 0) & np.isfinite(w) & np.isfinite(y))[0]
     n_good = len(good)
 
     # If none are good, return nan
