@@ -2,7 +2,7 @@ name = 'reduce'
 
 from .deconv2d import *
 from .optimal import *
-from .decomp import *
+#from .decomp import *
 
 
 from .extract import *
