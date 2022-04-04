@@ -10,6 +10,9 @@ from numba import jit, njit
 import numba
 from llc import jit_filter_function
 
+def moffat1d(x, amp, mu, alpha, beta):
+    return amp * (1 + ((x - mu) / alpha)**2)**-beta
+
 def robust_stats(x, n_sigma=6):
     n_good = np.where(np.isfinite(x))[0].size
     if n_good == 0:

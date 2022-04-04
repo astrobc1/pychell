@@ -221,67 +221,42 @@ class SpectralExtractor:
             trace_mask[bad] = 0
             trace_image[bad] = np.nan
 
-    def compute_background_1d(self, trace_image, trace_mask, trace_positions, extract_aperture):
-        """Computes the background signal based on regions of low flux. This works best for slit-fed spectrographs where there is still signal on either side of the trace. Fiber-fed spectrographs can use this as well but may wish to rely on other methods not implemented here.
+    def compute_background_1d(self, trace_image):
+        """Computes the background signal based on regions of low flux.
 
         Args:
             trace_image (np.ndarray): The image containing only one trace.
-            trace_mask (np.ndarray): The bad pixel mask (1=good, 0=bad).
-            trace_positions (np.ndarray): The trace positions.
-            extract_aperture (list): The number of pixels [below, above] the trace (relative to trace_positions) to consider for extraction of the desired signal.
 
         Returns:
             np.ndarray: The background signal.
             np.ndarray: The uncertainty in the background signal.
         """
-        
-        # Image dims
+
+        # Dims
         ny, nx = trace_image.shape
-        
-        # Helper array
-        yarr = np.arange(ny)
+
+        # Helpful arr
         xarr = np.arange(nx)
-        
-        # Empty arrays
-        background = np.full(nx, np.nan)
-        background_err = np.full(nx, np.nan)
-        n_pix_used = np.full(nx, np.nan)
 
         # Smooth image
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
-        
-        # Loop over columns
-        for x in range(nx):
-            
-            # Identify regions low in flux
-            background_locs = np.where(((yarr < np.floor(trace_positions[x] + extract_aperture[0])) | (yarr > np.ceil(trace_positions[x] + extract_aperture[1]))) & np.isfinite(trace_image_smooth[:, x]))[0]
-            
-            # Continue if no locs
-            if background_locs.size == 0:
-                continue
-            
-            # Compute the median counts behind the trace (use 25th percentile to mitigate injecting negative values)
-            background[x] = pcmath.weighted_median(trace_image_smooth[background_locs, x], percentile=0.2)
-            
-            # Compute background
-            if background[x] >= 0 and np.isfinite(background[x]):
-                n_good = np.where(np.isfinite(trace_image_smooth[background_locs, x]))[0].size
-                n_pix_used[x] = n_good
-                if n_good <= 1:
-                    background[x] = np.nan
-                else:
-                    background_err[x] = np.sqrt(background[x] / (n_good - 1))
-            else:
-                background[x] = np.nan
-                background_err[x] = np.nan
 
-        # Polynomial filter
+        # Background
+        background = np.nanmin(trace_image_smooth, axis=0)
+
+        # Smooth
         background = pcmath.median_filter1d(background, width=5, preserve_nans=False)
+
+        # Fix bad pixels
         good = np.where(np.isfinite(background))[0]
         bad = np.where(~np.isfinite(background))[0]
         background[bad] = np.interp(xarr[bad], xarr[good], background[good])
+
+        # Smooth again
         background = pcmath.poly_filter(background, width=31, poly_order=2)
-        background_err = np.sqrt(background / n_pix_used)
+
+        # Error
+        background_err = np.sqrt(background)
 
         # Flag negative values
         bad = np.where(background < 0)[0]

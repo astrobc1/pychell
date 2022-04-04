@@ -69,31 +69,7 @@ class DecompExtractor(SpectralExtractor):
         if read_noise is None:
             read_noise = data.spec_module.parse_itime(data) * data.spec_module.detector["read_noise"]
 
-        # Mask image
-        sregion.mask_image(image)
-        trace_image = np.copy(image)
-        trace_mask = np.copy(badpix_mask)
-        xarr = np.arange(nx)
-        trace_positions = np.polyval(trace_dict["pcoeffs"], xarr)
-        for x in range(nx):
-            ymid = trace_positions[x]
-            y_low = int(np.floor(ymid - trace_dict['height'] / 2))
-            y_high = int(np.ceil(ymid + trace_dict['height'] / 2))
-            if y_low >= 0 and y_low <= ny - 1:
-                trace_image[0:y_low, x] = np.nan
-            else:
-                trace_image[:, x] = np.nan
-            if y_high >= 0 and y_high + 1 <= ny-1:
-                trace_image[y_high+1:, x] = np.nan
-            else:
-                trace_image[:, x] = np.nan
-
-        # Sync
-        bad = np.where(~np.isfinite(trace_image) | (trace_mask == 0))
-        if bad[0].size > 0:
-            trace_image[bad] = np.nan
-            trace_mask[bad] = 0
-        trace_positions = self.compute_trace_positions_centroids(trace_image, trace_mask, self.trace_pos_poly_order, xrange=[sregion.pixmin, sregion.pixmax])
+        trace_positions = self.compute_trace_positions_centroids(image, badpix_mask, sregion, trace_dict, self.trace_pos_poly_order, n_iterations=10)
 
         # Mask image again based on new positions
         trace_image = np.copy(image)
@@ -122,6 +98,7 @@ class DecompExtractor(SpectralExtractor):
         trace_image = trace_image[yi:yf+1, :]
         trace_mask = trace_mask[yi:yf+1, :]
         ny, nx = trace_image.shape
+        trace_positions -= yi
 
         # Flag obvious bad pixels again
         trace_image_smooth = pcmath.median_filter2d(trace_image, width=5)
@@ -131,15 +108,9 @@ class DecompExtractor(SpectralExtractor):
             trace_image[bad] = np.nan
             trace_mask[bad] = 0
 
-        # New starting trace positions
-        trace_positions = self.compute_trace_positions_centroids(trace_image, trace_mask, trace_pos_poly_order=self.trace_pos_poly_order, xrange=[sregion.pixmin, sregion.pixmax])
-
-        #breakpoint() # matplotlib.use("MacOSX"); plt.imshow(trace_image, vmin=0, vmax=5); plt.plot(trace_positions, c='red', lw=0.8); plt.show()
-
         # Extract Aperture
         if self.extract_aperture is None:
-            mean_sigma = np.nanmean(self.sigma)
-            _extract_aperture = [np.floor(-8 * mean_sigma), np.ceil(8 * mean_sigma)]
+            _extract_aperture = [-int(np.ceil(trace_dict['height'] / 2)), int(np.ceil(trace_dict['height'] / 2))]
         else:
             _extract_aperture = self.extract_aperture
 

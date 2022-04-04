@@ -128,10 +128,7 @@ class OptimalExtractor(SpectralExtractor):
 
         # Estimate background
         if self.remove_background:
-            trace_image_smooth = pcmath.median_filter2d(trace_image, width=3)
-            background = np.nanmin(trace_image_smooth, axis=0)
-            background = pcmath.poly_filter(background, width=51, poly_order=2)
-            background_err = np.sqrt(background)
+            background, background_err = self.compute_background_1d(trace_image)
         else:
             background, background_err = None, None
 
@@ -163,7 +160,7 @@ class OptimalExtractor(SpectralExtractor):
 
             # Background
             if self.remove_background:
-                background, background_err = self.compute_background_1d(trace_image, trace_mask, trace_positions, _extract_aperture)
+                background, background_err = self.compute_background_1d(trace_image)
 
             trace_positions = self.compute_trace_positions_ccf(trace_image, trace_mask, trace_profile_cspline, trace_positions_estimate=trace_positions, spec1d=spec1d, ccf_window=np.ceil(trace_dict['height'] / 2), xrange=[sregion.pixmin+3, sregion.pixmax-3], background=background)
 
@@ -379,7 +376,7 @@ class OptimalExtractor(SpectralExtractor):
                 # Variance
                 if self.remove_background:
                     if i == 0 and spec1d0 is None:
-                        v = read_noise**2 + S + background_err[x]**2
+                        v = read_noise**2 + S + background[x] + background_err[x]**2
                     elif i == 0 and np.isfinite(spec1d0[x]):
                         v = read_noise**2 + spec1d0[x] * P + background[x] + background_err[x]**2
                     else:

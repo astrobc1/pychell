@@ -32,6 +32,11 @@ echelle_orders = [84, 129]
 # Detector
 detector = {"dark_current": 0.0, "gain": 1, "read_noise": 0}
 
+def compute_read_noise(data):
+    #itime = parse_itime(data)
+    #ron = itime * detector["dark_current"] + detector["read_noise"]
+    return 0
+
 # fwhm
 lsf_sigma = [0.0095, 0.0095, 0.0095]
 
@@ -454,8 +459,8 @@ class PARVIReduceRecipe(ReduceRecipe):
         # Parse LFC flux results
         fname_lfc_fiber1 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber1*reduced.fits")[0]
         fname_lfc_fiber3 = glob.glob(f"{self.calib_output_path}*master_lfc*fiber3*reduced.fits")[0]
-        lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[::-1, 0, :, 0]
-        lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[::-1, 0, :, 0]
+        lfc_flux_fiber1 = fits.open(fname_lfc_fiber1)[0].data[:, 0, :, 0]
+        lfc_flux_fiber3 = fits.open(fname_lfc_fiber3)[0].data[:, 0, :, 0]
         import matplotlib.pyplot as plt; import matplotlib; matplotlib.use("MacOSX")
         pcoeffs0_fiber1 = {}
         pcoeffs0_fiber3 = {}

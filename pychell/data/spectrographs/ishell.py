@@ -282,7 +282,7 @@ class iSHELLReduceRecipe(ReduceRecipe):
 
         # Delete bad objects
         target_names = np.array([parse_object(d).lower() for d in self.data['science']], dtype='<U100')
-        bad = np.where((target_names == "dark") | (target_names == "flat") | (target_names == "QTH"))[0]
+        bad = np.where((target_names == "dark") | (target_names == "darks") | (target_names == "flat") | (target_names == "QTH"))[0]
         for i in sorted(bad, reverse=True):
             del self.data['science'][i]
         

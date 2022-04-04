@@ -260,7 +260,7 @@ def estimate_peak_spacing(xi, xf, wi, wf, f0, df):
     peak_spacing = (xf - xi) / n_peaks
     return peak_spacing
 
-def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian", sigma_guess=[0.2, 1.4, 3.0], mu_guess=[1, 1E-2, 1]):
+def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, sigma_guess=[0.2, 1.4, 3.0], mu_guess=[1, 1E-2, 1]):
     """Computes the pixel and corresponding wavelength values for each LFC spot peak.
 
     Args:
@@ -329,7 +329,7 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
         use = np.where((xarr >= np.floor(good_peaks[i] - peak_spacing[good_peaks[i]] / 2)) & (xarr < np.ceil(good_peaks[i] + peak_spacing[good_peaks[i]] / 2)))[0]
 
         # Crop data
-        xx, yy = np.copy(xarr[use]), np.copy((lfc_flux - background)[use])
+        xx, yy = np.copy(xarr[use]), np.copy(((lfc_flux - background) / continuum)[use])
 
         # Normalize lfc flux to max
         yy -= np.nanmin(yy)
@@ -341,31 +341,24 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
 
         # Amp
         p0.append(1.0)
-        bounds.append((0.5, 1.5))
+        bounds.append((0.7, 1.3))
 
         # Mu
         p0.append(good_peaks[i] + mu_guess[1])
         bounds.append((good_peaks[i] - mu_guess[0], good_peaks[i] + mu_guess[2]))
 
-        # Sigma or fwhm
-        if peak_model.lower() == "gaussian":
-            p0.append(sigma_guess[1])
-            bounds.append((sigma_guess[0], sigma_guess[2]))
-        else:
-            p0.append(sigma_guess[1] * 2.355)
-            bounds.append((sigma_guess[0] * 2.355, sigma_guess[2] * 2.355))
+        # Sigma
+        p0.append(sigma_guess[1])
+        bounds.append((sigma_guess[0], sigma_guess[2]))
 
-        # Offset
+        # Offset 0
         p0.append(0.1)
         bounds.append((-0.5, 0.5))
         #p0.append(0)
         #bounds.append((0,0))
 
         # Fit
-        if peak_model.lower() == "gaussian":
-            opt_result = scipy.optimize.minimize(solve_fit_peak1d_gaussian, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds, tol=1E-12)
-        else:
-            opt_result = scipy.optimize.minimize(solve_fit_peak1d_lorentz, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds, tol=1E-12)
+        opt_result = scipy.optimize.minimize(solve_fit_peak1d_gaussian, p0, args=(xx, yy), method='Nelder-Mead', bounds=bounds, tol=1E-8)
 
         # Results
         pbest = opt_result.x
@@ -378,9 +371,10 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
         residuals_x += xx.tolist()
         residuals_y += (yy - model).tolist()
 
-        matplotlib.use("MacOSX");
+        #matplotlib.use("MacOSX");
         #breakpoint()
         #plt.plot(residuals_x, residuals_y); plt.show()
+        #print(pbest)
         #plt.plot(xx, yy); plt.plot(xx, model); plt.xlabel("Detector Pixels"); plt.show()
     
     residuals_x = np.array(residuals_x)
@@ -406,9 +400,6 @@ def compute_peaks(wave_estimate, lfc_flux, f0, df, xrange, peak_model="gaussian"
     #pfit=np.polyfit(lfc_centers_pix, lfc_centers_wave, 6); v = np.polyval(pfit, lfc_centers_pix); res=lfc_centers_wave-v; res=pcmath.dl_to_dv(res, lfc_centers_wave); plt.plot(lfc_centers_pix, res); plt.show()
 
     return lfc_centers_pix, lfc_centers_wave, rms_norm, peak_integers
-
-
-#def compute_background()
 
 def gen_theoretical_peaks(wi, wf, f0, df):
     """Generates the theoretical wavelengths given a range of wavelengths.
@@ -537,11 +528,6 @@ def fit_peaks(pixel_arr, lfc_centers_pix, lfc_centers_wave, weights, poly_order=
 
 def solve_fit_peak1d_gaussian(pars, x, data):
     model = pcmath.gauss(x, *pars[0:3]) + pars[3]
-    rms = pcmath.rmsloss(data, model)
-    return rms
-
-def solve_fit_peak1d_lorentz(pars, x, data):
-    model = pcmath.lorentz(x, *pars[0:3]) + pars[3]
     rms = pcmath.rmsloss(data, model)
     return rms
 
