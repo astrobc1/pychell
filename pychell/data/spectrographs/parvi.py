@@ -252,7 +252,6 @@ ccpoly_coeffs_q_fiber1 = np.array([232.93922991026938, -354.9856514408896, 150.2
 
 ccpoly_coeffs_q_fiber3 = np.array([191.75618488457476, -290.04886517645383, 120.24041870599879, -19.26114678052877, -341.6917236682601, 523.2717695034502, -221.98241622951923, 38.57307711434833, 395.441504715445, -618.0128368237691, 278.88902247804083, -58.184520689727655])
 
-
 theta_fiber1 = np.pi/2 + np.pi/4
 theta_fiber3 = np.pi/2 + np.pi/4
 
@@ -496,6 +495,7 @@ class PARVIReduceRecipe(ReduceRecipe):
                     #import matplotlib; import matplotlib.pyplot as plt; matplotlib.use("MacOSX"); plt.plot(lfc_centers_pix, pcmath.dl_to_dv(lfc_centers_wave - np.polyval(pfit, lfc_centers_pix), lfc_centers_wave), marker='o', lw=0); plt.ylabel("Residuals [m/s]"); plt.xlabel("Pixels"); plt.title("March 13, Cal Frame, Cal fiber, Order 96"); plt.ylim(-100, 100); plt.tight_layout(); plt.savefig("residuals2.png", dpi=200); plt.close()
                     #import matplotlib; import matplotlib.pyplot as plt; matplotlib.use("MacOSX"); plt.plot(pixel_centers, pcmath.dl_to_dv(wave_centers - np.polyval(pcoeffs0_fiber3[order], pixel_centers), wave_centers), marker='o', lw=0); plt.ylabel("Residuals [m/s]"); plt.xlabel("Pixels"); plt.title("March 13, Sci Frame, Cal fiber, Order 96"); plt.ylim(-100, 100); plt.tight_layout(); plt.savefig("residuals5.png", dpi=200); plt.close()
                     #breakpoint()
+                    # pixel_centers, wave_centers, rms_norm, peak_integers
                     _drifts = wave_centers - np.polyval(pcoeffs0_fiber3[order], pixel_centers)
                     _drifts = pcmath.dl_to_dv(_drifts, wave_centers)
                     drifts[i, o] = pcmath.weighted_median(_drifts, weights)
@@ -504,7 +504,7 @@ class PARVIReduceRecipe(ReduceRecipe):
                     stddevs[i, o] = pcmath.weighted_stddev(_drifts[use], weights[use]) / np.sqrt(len(_drifts[use]))
                     print(order, drifts[i, o], stddevs[i, o])
                     #wls_fiber1[i, o, :] = pcmath.doppler_shift_wave(np.polyval(pcoeffs0_fiber1[order], np.arange(nx)), drifts[i, o])
-                    wls_fiber1[i, o, :] = np.copy(np.polyval(pcoeffs0_fiber1[order], np.arange(nx)))
+                    #wls_fiber1[i, o, :] = np.copy(np.polyval(pcoeffs0_fiber1[order], np.arange(nx)))
         
         return wls_fiber1, drifts, stddevs
 
