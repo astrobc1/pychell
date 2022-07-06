@@ -1,6 +1,7 @@
 import scipy
 from scipy.linalg import cho_factor, cho_solve
 import numpy as np
+import optimize as opt
 from optimize.bayesobjectives import GaussianLikelihood, Posterior
 from optimize.noise import UnCorrelatedNoiseProcess
 from pychell.orbits.noise import ChromaticProcessJ1, ChromaticProcessJ2
@@ -188,7 +189,36 @@ class RVLikelihood(GaussianLikelihood):
 #### RV POSTERIOR ####
 ######################
 
-# class RVPosterior(Posterior):
-#     """A class for RV Posteriors.
-#     """
-#     pass
+class RVPosterior(Posterior):
+    """A class for RV Posteriors.
+    """
+    
+
+    def compute_redchi2(self, pars):
+        """Computes the reduced chi2 statistic (weighted MSE).
+
+        Args:
+            pars (Parameters): The parameters.
+
+        Returns:
+            float: The reduced chi-squared statistic.
+        """
+        chi2 = 0
+        n_dof = 0
+        for like in self.likes.values():
+            residuals = like.compute_residuals(pars)
+            # Compute the noise model
+            if isinstance(like.noise_process, opt.CorrelatedNoiseProcess):
+                errors = like.compute_data_errors(pars)
+                noise_components = like.compute_noise_components(pars, like.datax)
+                for comp in noise_components:
+                    residuals[noise_components[comp][2]] -= noise_components[comp][0][noise_components[comp][2]]
+            else:
+                errors = like.compute_data_errors(pars)
+            chi2 += np.nansum((residuals / errors)**2)
+            n_dof += len(residuals)
+        n_dof -= pars.num_varied
+        redchi2 = chi2 / n_dof
+        return redchi2
+
+    
