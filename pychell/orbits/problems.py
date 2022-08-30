@@ -547,8 +547,12 @@ class RVProblem(OptProblem):
             for like in _optprob.post.likes.values():
                 like.model.planets_dict = planets_dict
 
-            # Run the max like
             _optprob.p0 = p0
+            optimizer = copy.deepcopy(optimizer)
+            optimizer.max_f_evals = None
+            optimizer.n_iterations = None
+            optimizer.obj = None
+
             opt_result = _optprob.run_mapfit(optimizer, save=False)
             
             # Alias best fit params
